@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Wave Packet Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        
+        .control-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 32px;
+            z-index: 1000;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #60a5fa;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .title::before {
+            content: '⚛';
+            font-size: 20px;
+        }
+        
+        .stat-group {
+            display: flex;
+            gap: 24px;
+            font-size: 13px;
+        }
+        
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .stat-label {
+            color: #94a3b8;
+        }
+        
+        .stat-value {
+            color: #f1f5f9;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            min-width: 45px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-left: auto;
+        }
+        
+        .control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        
+        .control label {
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+        
+        .slider {
+            width: 100px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #60a5fa;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+            background: #3b82f6;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #60a5fa;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .slider-value {
+            color: #60a5fa;
+            font-weight: 600;
+            min-width: 35px;
+            text-align: right;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background: #3b82f6;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 13px;
+        }
+        
+        button:hover {
+            background: #2563eb;
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        canvas {
+            display: block;
+            background: #0f172a;
+        }
+        
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 12px;
+            min-width: 220px;
+            transition: opacity 0.3s;
+        }
+        
+        .info-title {
+            color: #60a5fa;
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+        
+        .info-value {
+            color: #f1f5f9;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-bar">
+        <div class="title">Gaussian Wave Packet</div>
+        
+        <div class="stat-group">
+            <div class="stat">
+                <span class="stat-label">Time:</span>
+                <span class="stat-value" id="time">0.00</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Width σ:</span>
+                <span class="stat-value" id="width">1.00</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Max |ψ|²:</span>
+                <span class="stat-value" id="maxProb">0.40</span>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="control">
+                <label for="k0">Wave Vector k₀:</label>
+                <input type="range" class="slider" id="k0" min="0" max="10" value="5" step="0.1">
+                <span class="slider-value" id="k0Value">5.0</span>
+            </div>
+            <div class="control">
+                <label for="sigma0">Initial Width σ₀:</label>
+                <input type="range" class="slider" id="sigma0" min="0.5" max="3" value="1" step="0.1">
+                <span class="slider-value" id="sigma0Value">1.0</span>
+            </div>
+            <div class="control">
+                <label for="speed">Speed:</label>
+                <input type="range" class="slider" id="speed" min="0.1" max="3" value="1" step="0.1">
+                <span class="slider-value" id="speedValue">1.0</span>
+            </div>
+            <button id="reset">Reset</button>
+            <button id="pausePlay">Pause</button>
+        </div>
+    </div>
+    
+    <div id="canvas-container">
+        <canvas id="waveCanvas"></canvas>
+    </div>
+    
+    <div class="info-panel">
+        <div class="info-title">Wave Packet Properties</div>
+        <div class="info-row">
+            <span>Group Velocity:</span>
+            <span class="info-value" id="groupVel">5.00</span>
+        </div>
+        <div class="info-row">
+            <span>Position ⟨x⟩:</span>
+            <span class="info-value" id="meanPos">0.00</span>
+        </div>
+        <div class="info-row">
+            <span>Uncertainty Δx:</span>
+            <span class="info-value" id="uncertainty">1.00</span>
+        </div>
+        <div class="info-row">
+            <span>Normalization:</span>
+            <span class="info-value" id="norm">1.00</span>
+        </div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Canvas setup
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.width = container.clientWidth - 40;
+            canvas.height = container.clientHeight - 40;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Physics parameters
+        let k0 = 5.0;  // Wave vector
+        let sigma0 = 1.0;  // Initial width
+        let hbar = 1.0;  // Reduced Planck constant (normalized)
+        let m = 1.0;  // Mass (normalized)
+        let time = 0;
+        let animationSpeed = 1.0;
+        let isPaused = false;
+        let lastFrameTime = performance.now();
+        let fps = 60;
+        
+        // Grid parameters
+        const xMin = -15;
+        const xMax = 15;
+        const numPoints = 500;
+        const dx = (xMax - xMin) / numPoints;
+        
+        // UI Elements
+        const k0Slider = document.getElementById('k0');
+        const sigma0Slider = document.getElementById('sigma0');
+        const speedSlider = document.getElementById('speed');
+        const resetBtn = document.getElementById('reset');
+        const pauseBtn = document.getElementById('pausePlay');
+        
+        // Update functions
+        k0Slider.addEventListener('input', (e) => {
+            k0 = parseFloat(e.target.value);
+            document.getElementById('k0Value').textContent = k0.toFixed(1);
+        });
+        
+        sigma0Slider.addEventListener('input', (e) => {
+            sigma0 = parseFloat(e.target.value);
+            document.getElementById('sigma0Value').textContent = sigma0.toFixed(1);
+            reset();
+        });
+        
+        speedSlider.addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value);
+            document.getElementById('speedValue').textContent = animationSpeed.toFixed(1);
+        });
+        
+        resetBtn.addEventListener('click', reset);
+        pauseBtn.addEventListener('click', () => {
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? 'Play' : 'Pause';
+        });
+        
+        function reset() {
+            time = 0;
+        }
+        
+        // Calculate wave packet
+        function calculateWavePacket(t) {
+            const sigma_t = Math.sqrt(sigma0 * sigma0 + (hbar * t / (2 * m * sigma0)) ** 2);
+            const alpha = 1 / (2 * sigma0 * sigma0) - (hbar * hbar * t * t) / (4 * m * m * sigma0 * sigma0 * sigma_t * sigma_t * 4);
+            const beta = (hbar * t) / (2 * m * sigma_t * sigma_t);
+            const groupVelocity = hbar * k0 / m;
+            const x0 = groupVelocity * t;
+            
+            const points = [];
+            let maxProb = 0;
+            let integral = 0;
+            
+            for (let i = 0; i < numPoints; i++) {
+                const x = xMin + i * dx;
+                const xRel = x - x0;
+                
+                // Probability density |ψ|²
+                const normFactor = Math.pow(2 * Math.PI * sigma_t * sigma_t, -0.25);
+                const expFactor = Math.exp(-xRel * xRel / (4 * sigma_t * sigma_t));
+                const prob = normFactor * normFactor * expFactor * expFactor;
+                
+                points.push({ x, prob });
+                maxProb = Math.max(maxProb, prob);
+                integral += prob * dx;
+            }
+            
+            return {
+                points,
+                maxProb,
+                sigma_t,
+                x0,
+                groupVelocity,
+                normalization: integral
+            };
+        }
+        
+        // Drawing functions
+        function drawAxes() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = 60;
+            
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(padding, h - padding);
+            ctx.lineTo(w - padding, h - padding);
+            ctx.stroke();
+            
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, h - padding);
+            ctx.stroke();
+            
+            // Axis labels
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Position x', w / 2, h - 20);
+            
+            ctx.save();
+            ctx.translate(20, h / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Probability Density |ψ|²', 0, 0);
+            ctx.restore();
+            
+            // Tick marks and labels
+            ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            
+            // X-axis ticks
+            for (let x = -10; x <= 10; x += 5) {
+                const xPos = padding + ((x - xMin) / (xMax - xMin)) * (w - 2 * padding);
+                ctx.beginPath();
+                ctx.moveTo(xPos, h - padding);
+                ctx.lineTo(xPos, h - padding + 5);
+                ctx.stroke();
+                ctx.fillText(x.toString(), xPos, h - padding + 20);
+            }
+            
+            // Y-axis ticks
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 5; i++) {
+                const y = h - padding - (i / 5) * (h - 2 * padding);
+                ctx.beginPath();
+                ctx.moveTo(padding - 5, y);
+                ctx.lineTo(padding, y);
+                ctx.stroke();
+                ctx.fillText((i * 0.1).toFixed(1), padding - 10, y + 4);
+            }
+        }
+        
+        function drawWavePacket(data) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = 60;
+            const plotWidth = w - 2 * padding;
+            const plotHeight = h - 2 * padding;
+            
+            // Draw filled area under curve
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(padding, h - padding);
+            
+            for (const point of data.points) {
+                const xPos = padding + ((point.x - xMin) / (xMax - xMin)) * plotWidth;
+                const yPos = h - padding - (point.prob / 0.5) * plotHeight;
+                ctx.lineTo(xPos, yPos);
+            }
+            
+            ctx.lineTo(w - padding, h - padding);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw wave packet line
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            
+            for (let i = 0; i < data.points.length; i++) {
+                const point = data.points[i];
+                const xPos = padding + ((point.x - xMin) / (xMax - xMin)) * plotWidth;
+                const yPos = h - padding - (point.prob / 0.5) * plotHeight;
+                
+                if (i === 0) {
+                    ctx.moveTo(xPos, yPos);
+                } else {
+                    ctx.lineTo(xPos, yPos);
+                }
+            }
+            
+            ctx.stroke();
+            
+            // Draw center line
+            ctx.strokeStyle = '#f472b6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            const centerX = padding + ((data.x0 - xMin) / (xMax - xMin)) * plotWidth;
+            ctx.moveTo(centerX, padding);
+            ctx.lineTo(centerX, h - padding);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw uncertainty bounds
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            
+            const leftBound = padding + ((data.x0 - data.sigma_t - xMin) / (xMax - xMin)) * plotWidth;
+            const rightBound = padding + ((data.x0 + data.sigma_t - xMin) / (xMax - xMin)) * plotWidth;
+            
+            ctx.beginPath();
+            ctx.moveTo(leftBound, padding);
+            ctx.lineTo(leftBound, h - padding);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(rightBound, padding);
+            ctx.lineTo(rightBound, h - padding);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        // Animation loop
+        function animate(currentTime) {
+            if (!isPaused) {
+                const deltaTime = (currentTime - lastFrameTime) / 1000;
+                time += deltaTime * animationSpeed * 0.5;
+                
+                // Calculate FPS
+                fps = Math.round(1 / deltaTime);
+            }
+            lastFrameTime = currentTime;
+            
+            // Clear canvas
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate and draw wave packet
+            const data = calculateWavePacket(time);
+            drawAxes();
+            drawWavePacket(data);
+            
+            // Update stats
+            document.getElementById('time').textContent = time.toFixed(2);
+            document.getElementById('width').textContent = data.sigma_t.toFixed(2);
+            document.getElementById('maxProb').textContent = data.maxProb.toFixed(2);
+            document.getElementById('groupVel').textContent = data.groupVelocity.toFixed(2);
+            document.getElementById('meanPos').textContent = data.x0.toFixed(2);
+            document.getElementById('uncertainty').textContent = data.sigma_t.toFixed(2);
+            document.getElementById('norm').textContent = data.normalization.toFixed(2);
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Start animation
+        animate(performance.now());
+    </script>
+</body>
+</html>
