@@ -1,8 +1,5 @@
 # Capacity Interactive Physics Demos
 
-Lightweight, browser-based demos from our simulation studio, including:
-- **Square Wave Fourier Series** 
-- **Gaussian Wave Packet** 
-- **Infinite Square Well** 
+Lightweight, browser-based demos from our simulation studio.
 
 **Live site:** https://capacity-simulations.github.io/simulations/)
