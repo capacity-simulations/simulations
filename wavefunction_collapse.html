@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Wavepacket Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+        
+        .control-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            display: flex;
+            align-items: center;
+            padding: 0 30px;
+            gap: 40px;
+            z-index: 1000;
+        }
+        
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-right: 20px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+        
+        button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        
+        .btn-measure {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-measure:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+        
+        .btn-measure:disabled {
+            background: #374151;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 30px;
+            margin-left: auto;
+        }
+        
+        .control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+        }
+        
+        .control label {
+            color: #94a3b8;
+            min-width: 80px;
+        }
+        
+        .slider {
+            width: 120px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #60a5fa;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #60a5fa;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .value-display {
+            color: #f1f5f9;
+            font-weight: 600;
+            min-width: 35px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 12px;
+            min-width: 200px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .info-label {
+            color: #94a3b8;
+        }
+        
+        .info-value {
+            color: #60a5fa;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .collapse-indicator {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #475569;
+            font-size: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div class="control-bar">
+        <div class="title">Quantum Wavepacket</div>
+        
+        <div class="button-group">
+            <button id="startBtn" class="btn-primary">Start Simulation</button>
+            <button id="measureBtn" class="btn-measure" disabled>Measure</button>
+        </div>
+        
+        <div class="controls">
+            <div class="control">
+                <label>Initial Width:</label>
+                <input type="range" class="slider" id="widthSlider" min="0.5" max="3" value="1" step="0.1">
+                <span class="value-display" id="widthValue">1.0</span>
+            </div>
+            <div class="control">
+                <label>Speed:</label>
+                <input type="range" class="slider" id="speedSlider" min="0.1" max="3" value="1" step="0.1">
+                <span class="value-display" id="speedValue">1.0</span>
+            </div>
+        </div>
+    </div>
+    
+    <div id="canvas-container"></div>
+    
+    <div class="info-panel">
+        <div class="info-row">
+            <span class="info-label">Time:</span>
+            <span class="info-value" id="timeDisplay">0.00</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Spread (σ):</span>
+            <span class="info-value" id="spreadDisplay">1.00</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Peak Height:</span>
+            <span class="info-value" id="peakDisplay">1.00</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">State:</span>
+            <span class="info-value" id="stateDisplay">Ready</span>
+        </div>
+        <div class="collapse-indicator">Quantum Statistics</div>
+    </div>
+    
+    <script>
+        let scene, camera, renderer;
+        let waveGeometry, waveMesh;
+        let gridHelper, planeGeometry;
+        let isRunning = false;
+        let time = 0;
+        let initialWidth = 1.0;
+        let simulationSpeed = 1.0;
+        let isCollapsed = false;
+        let collapsePosition = { x: 0, y: 0 };
+        let collapseTime = 0;
+        
+        const gridSize = 10;
+        const resolution = 100;
+        const hbar = 1;
+        const mass = 1;
+        
+        function initThree() {
+            if (typeof THREE === 'undefined') {
+                console.log('Waiting for Three.js...');
+                setTimeout(initThree, 50);
+                return;
+            }
+            
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0f172a, 10, 50);
+            
+            // Camera - fixed isometric view
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+            camera.position.set(15, 15, 15);
+            camera.lookAt(0, 0, 0);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+            
+            // Grid plane
+            const gridHelper = new THREE.GridHelper(gridSize * 2, 20, 0x1e293b, 0x1e293b);
+            gridHelper.position.y = -0.01;
+            scene.add(gridHelper);
+            
+            // Create wave surface
+            waveGeometry = new THREE.PlaneGeometry(gridSize * 2, gridSize * 2, resolution, resolution);
+            waveGeometry.rotateX(-Math.PI / 2);
+            
+            const waveMaterial = new THREE.MeshPhongMaterial({
+                color: 0x60a5fa,
+                emissive: 0x1e40af,
+                emissiveIntensity: 0.2,
+                shininess: 100,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9,
+                wireframe: false
+            });
+            
+            waveMesh = new THREE.Mesh(waveGeometry, waveMaterial);
+            scene.add(waveMesh);
+            
+            // Add contour lines effect
+            const wireframeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x3b82f6,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.3
+            });
+            const wireframeMesh = new THREE.Mesh(waveGeometry, wireframeMaterial);
+            scene.add(wireframeMesh);
+            
+            updateWavefunction();
+            animate();
+        }
+        
+        function gaussianWavepacket(x, y, t) {
+            let sigma, x0, y0;
+            
+            if (isCollapsed && t - collapseTime < 0.1) {
+                // Delta function approximation (very narrow Gaussian)
+                sigma = 0.05;
+                x0 = collapsePosition.x;
+                y0 = collapsePosition.y;
+            } else if (isCollapsed) {
+                // Spreading from collapsed position
+                const dt = t - collapseTime;
+                sigma = 0.05 + Math.sqrt(0.0025 + (hbar * dt / (2 * mass)) ** 2);
+                x0 = collapsePosition.x;
+                y0 = collapsePosition.y;
+            } else {
+                // Normal spreading from origin
+                sigma = Math.sqrt(initialWidth * initialWidth + (hbar * t / (2 * mass * initialWidth)) ** 2);
+                x0 = 0;
+                y0 = 0;
+            }
+            
+            const r2 = (x - x0) ** 2 + (y - y0) ** 2;
+            const amplitude = 1 / (2 * Math.PI * sigma * sigma);
+            return amplitude * Math.exp(-r2 / (2 * sigma * sigma));
+        }
+        
+        function updateWavefunction() {
+            if (!waveGeometry) return;
+            
+            const positions = waveGeometry.attributes.position;
+            const vertices = positions.array;
+            
+            let maxHeight = 0;
+            
+            for (let i = 0; i < positions.count; i++) {
+                const x = vertices[i * 3];
+                const z = vertices[i * 3 + 2];
+                
+                const psi2 = gaussianWavepacket(x, z, time);
+                const height = Math.sqrt(psi2) * 5; // Scale for visibility
+                
+                vertices[i * 3 + 1] = height;
+                maxHeight = Math.max(maxHeight, height);
+            }
+            
+            positions.needsUpdate = true;
+            waveGeometry.computeVertexNormals();
+            
+            // Update info display
+            document.getElementById('timeDisplay').textContent = time.toFixed(2);
+            
+            let currentSigma;
+            if (isCollapsed && time - collapseTime < 0.1) {
+                currentSigma = 0.05;
+            } else if (isCollapsed) {
+                const dt = time - collapseTime;
+                currentSigma = 0.05 + Math.sqrt(0.0025 + (hbar * dt / (2 * mass)) ** 2);
+            } else {
+                currentSigma = Math.sqrt(initialWidth * initialWidth + (hbar * time / (2 * mass * initialWidth)) ** 2);
+            }
+            
+            document.getElementById('spreadDisplay').textContent = currentSigma.toFixed(2);
+            document.getElementById('peakDisplay').textContent = maxHeight.toFixed(2);
+        }
+        
+        function measureWavefunction() {
+            // Sample from probability distribution
+            const samples = 10000;
+            let totalProb = 0;
+            const probMap = [];
+            
+            for (let i = 0; i < samples; i++) {
+                const x = (Math.random() - 0.5) * gridSize * 2;
+                const y = (Math.random() - 0.5) * gridSize * 2;
+                const prob = gaussianWavepacket(x, y, time);
+                totalProb += prob;
+                probMap.push({ x, y, prob });
+            }
+            
+            // Normalize and sample
+            const rand = Math.random() * totalProb;
+            let cumProb = 0;
+            
+            for (const point of probMap) {
+                cumProb += point.prob;
+                if (cumProb >= rand) {
+                    collapsePosition.x = point.x;
+                    collapsePosition.y = point.y;
+                    break;
+                }
+            }
+            
+            isCollapsed = true;
+            collapseTime = time;
+            
+            // Visual feedback
+            waveMesh.material.color.setHex(0x10b981);
+            setTimeout(() => {
+                waveMesh.material.color.setHex(0x60a5fa);
+            }, 200);
+            
+            document.getElementById('stateDisplay').textContent = 'Collapsed';
+            setTimeout(() => {
+                document.getElementById('stateDisplay').textContent = 'Spreading';
+            }, 100);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (isRunning) {
+                time += 0.016 * simulationSpeed; // 60fps timestep
+                updateWavefunction();
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Event listeners
+        document.getElementById('startBtn').addEventListener('click', function() {
+            isRunning = !isRunning;
+            this.textContent = isRunning ? 'Pause' : 'Start Simulation';
+            document.getElementById('measureBtn').disabled = !isRunning;
+            document.getElementById('stateDisplay').textContent = isRunning ? 'Running' : 'Paused';
+        });
+        
+        document.getElementById('measureBtn').addEventListener('click', function() {
+            if (isRunning) {
+                measureWavefunction();
+            }
+        });
+        
+        document.getElementById('widthSlider').addEventListener('input', function() {
+            initialWidth = parseFloat(this.value);
+            document.getElementById('widthValue').textContent = initialWidth.toFixed(1);
+            if (!isRunning) {
+                time = 0;
+                isCollapsed = false;
+                updateWavefunction();
+            }
+        });
+        
+        document.getElementById('speedSlider').addEventListener('input', function() {
+            simulationSpeed = parseFloat(this.value);
+            document.getElementById('speedValue').textContent = simulationSpeed.toFixed(1);
+        });
+        
+        window.addEventListener('resize', function() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+        
+        // Initialize
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initThree);
+        } else {
+            initThree();
+        }
+    </script>
+</body>
+</html>
