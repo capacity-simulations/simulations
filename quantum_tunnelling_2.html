@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Tunneling Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: #0f172a; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+        
+        .control-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            padding: 15px 20px;
+            z-index: 1000;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+        }
+        
+        .value-display {
+            min-width: 60px;
+            text-align: right;
+            font-size: 13px;
+            color: #f1f5f9;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 100px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        canvas {
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 250px;
+            font-size: 12px;
+        }
+        
+        .info-title {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 15px;
+        }
+        
+        .info-label {
+            color: #64748b;
+        }
+        
+        .info-value {
+            color: #f1f5f9;
+            font-weight: 600;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .legend {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        
+        .legend-text {
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <div class="controls-grid">
+            <div class="control-group">
+                <label class="control-label">Particle Energy (E/V₀)</label>
+                <div class="control-row">
+                    <input type="range" class="slider" id="energy" min="0.1" max="0.95" step="0.01" value="0.5">
+                    <span class="value-display" id="energyValue">0.50</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <label class="control-label">Barrier Width (a)</label>
+                <div class="control-row">
+                    <input type="range" class="slider" id="width" min="0.5" max="5" step="0.1" value="2">
+                    <span class="value-display" id="widthValue">2.0 nm</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <label class="control-label">Barrier Height (V₀)</label>
+                <div class="control-row">
+                    <input type="range" class="slider" id="height" min="1" max="10" step="0.1" value="5">
+                    <span class="value-display" id="heightValue">5.0 eV</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <label class="control-label">Animation Speed</label>
+                <div class="control-row">
+                    <input type="range" class="slider" id="speed" min="0" max="5" step="0.1" value="2">
+                    <span class="value-display" id="speedValue">2.0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    
+    <div class="legend">
+        <div class="info-title">Wavefunction Components</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #60a5fa;"></div>
+            <span class="legend-text">Real Part (ψ_real)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #34d399;"></div>
+            <span class="legend-text">Imaginary Part (ψ_imag)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f472b6;"></div>
+            <span class="legend-text">Probability Density (|ψ|²)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(148, 163, 184, 0.3);"></div>
+            <span class="legend-text">Potential Barrier</span>
+        </div>
+    </div>
+    
+    <div class="info-panel">
+        <div class="info-title">Quantum Properties</div>
+        <div class="info-grid">
+            <span class="info-label">Transmission:</span>
+            <span class="info-value" id="transmission">0.000</span>
+            <span class="info-label">Reflection:</span>
+            <span class="info-value" id="reflection">1.000</span>
+            <span class="info-label">Wave Vector k₁:</span>
+            <span class="info-value" id="k1">0.00</span>
+            <span class="info-label">Decay Const κ:</span>
+            <span class="info-value" id="kappa">0.00</span>
+            <span class="info-label">Phase:</span>
+            <span class="info-value" id="phase">0.00°</span>
+        </div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.width = Math.min(container.clientWidth - 40, 1200);
+            canvas.height = Math.min(container.clientHeight - 40, 600);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Physics parameters
+        let E_ratio = 0.5; // E/V0
+        let barrierWidth = 2; // nm
+        let V0 = 5; // eV
+        let animSpeed = 2;
+        let time = 0;
+        
+        // Constants
+        const hbar = 1.054571817e-34; // J·s
+        const m = 9.10938356e-31; // electron mass in kg
+        const eV_to_J = 1.602176634e-19;
+        
+        // Control elements
+        const energySlider = document.getElementById('energy');
+        const widthSlider = document.getElementById('width');
+        const heightSlider = document.getElementById('height');
+        const speedSlider = document.getElementById('speed');
+        
+        energySlider.addEventListener('input', (e) => {
+            E_ratio = parseFloat(e.target.value);
+            document.getElementById('energyValue').textContent = E_ratio.toFixed(2);
+        });
+        
+        widthSlider.addEventListener('input', (e) => {
+            barrierWidth = parseFloat(e.target.value);
+            document.getElementById('widthValue').textContent = barrierWidth.toFixed(1) + ' nm';
+        });
+        
+        heightSlider.addEventListener('input', (e) => {
+            V0 = parseFloat(e.target.value);
+            document.getElementById('heightValue').textContent = V0.toFixed(1) + ' eV';
+        });
+        
+        speedSlider.addEventListener('input', (e) => {
+            animSpeed = parseFloat(e.target.value);
+            document.getElementById('speedValue').textContent = animSpeed.toFixed(1);
+        });
+        function calculateWavefunction(x, t) {
+            const E = E_ratio * V0;               // eV
+            const a = barrierWidth;               // nm
+            const k  = Math.sqrt(2 * m * E * eV_to_J) / hbar * 1e-9;         // nm^-1
+            const kap= Math.sqrt(2 * m * (V0 - E) * eV_to_J) / hbar * 1e-9;  // nm^-1
+
+            // --- complex helpers ---
+            function cadd([ar,ai],[br,bi]){ return [ar+br, ai+bi]; }
+            function cmul([ar,ai],[br,bi]){ return [ar*br - ai*bi, ar*bi + ai*br]; }
+            function cconj([ar,ai]){ return [ar, -ai]; }
+            function cabs2([ar,ai]){ return ar*ar + ai*ai; }
+
+            // hyperbolics
+            const s = Math.sinh(kap * a);
+            const c = Math.cosh(kap * a);
+
+            // t = 2 i k κ / [ (k^2 - κ^2) sinh(κa) + 2 i k κ cosh(κa) ]
+            const denom = [ (k*k - kap*kap) * s,  2*k*kap * c ];
+            const denom_abs2 = denom[0]*denom[0] + denom[1]*denom[1];
+            const denom_inv  = [ denom[0]/denom_abs2, -denom[1]/denom_abs2 ];
+            const t_amp = cmul([0, 2*k*kap], denom_inv);
+
+            // r = -1 + t[ cosh(κa) - i (k/κ) sinh(κa) ]
+            const r = cadd([-1,0], cmul(t_amp, [ c, -(k/kap)*s ]));
+
+            // A = (t/2) e^{-κa} (1 + i k/κ),   B = (t/2) e^{+κa} (1 - i k/κ)
+            const half = 0.5;
+            const A0 = cmul(t_amp, [ half*Math.exp(-kap*a), 0 ]);
+            const B0 = cmul(t_amp, [ half*Math.exp(+kap*a), 0 ]);
+            const A  = cadd(A0, [ -(k/kap)*A0[1],  (k/kap)*A0[0] ]); // + i(k/κ)
+            const B  = cadd(B0, [  (k/kap)*B0[1], -(k/kap)*B0[0] ]); // - i(k/κ)
+
+            // physics time-phase
+            const omega = (E * eV_to_J) / hbar;           // rad/s
+            const phase = omega * t * 1e-15;              // scaled for viz
+            function cexp(theta){ return [Math.cos(theta), Math.sin(theta)]; }
+
+            // piecewise ψ
+            let psi; 
+            if (x < 0) {
+                // ψ = e^{i(kx-ωt)} + r e^{i(-kx-ωt)}
+                const inc = cexp(k*x - phase);
+                const ref = cmul(r, cexp(-k*x - phase));
+                psi = cadd(inc, ref);
+            } else if (x <= a) {
+                // ψ = (A e^{κx} + B e^{-κx}) e^{-iωt}
+                const inside = cadd( cmul(A, [Math.exp(kap*x), 0]),
+                                    cmul(B, [Math.exp(-kap*x), 0]) );
+                psi = cmul(inside, cexp(-phase));
+            } else {
+                // ψ = t e^{i(k(x-a)-ωt)}
+                psi = cmul(t_amp, cexp(k*(x - a) - phase));
+            }
+
+            const psi_real = psi[0];
+            const psi_imag = psi[1];
+            const psi_mag  = Math.hypot(psi_real, psi_imag);
+
+            // update info panel from the same amplitudes we draw
+            const T = cabs2(t_amp);            // k3/k1 = 1 here
+            const R = cabs2(r);
+            document.getElementById('transmission').textContent = T.toFixed(4);
+            document.getElementById('reflection').textContent  = R.toFixed(4);
+            document.getElementById('k1').textContent          = k.toFixed(3);
+            document.getElementById('kappa').textContent       = kap.toFixed(3);
+            document.getElementById('phase').textContent       = (phase*180/Math.PI % 360).toFixed(1) + '°';
+
+            return { real: psi_real, imag: psi_imag, mag: psi_mag };
+            }
+
+        
+        function animate() {
+            // Clear canvas with solid background
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Set up coordinate system
+            const padding = 50;
+            const plotWidth = canvas.width - 2 * padding;
+            const plotHeight = canvas.height - 2 * padding;
+            const centerY = canvas.height / 2;
+            
+            // X-axis range: -5 to 10 nm
+            const xMin = -5;
+            const xMax = 10;
+            const xScale = plotWidth / (xMax - xMin);
+            const yScale = plotHeight / 4; // Scale for wavefunction amplitude
+            
+            // Draw axes
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, centerY);
+            ctx.lineTo(canvas.width - padding, centerY);
+            ctx.stroke();
+            
+            // Draw barrier
+            const barrierX = padding + (0 - xMin) * xScale;
+            const barrierEndX = padding + (barrierWidth - xMin) * xScale;
+            const barrierHeight = V0 * yScale / 5; // Scale barrier height for visualization
+            
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.15)';
+            ctx.fillRect(barrierX, centerY - barrierHeight, barrierEndX - barrierX, barrierHeight * 2);
+            
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(barrierX, centerY - barrierHeight);
+            ctx.lineTo(barrierX, centerY + barrierHeight);
+            ctx.moveTo(barrierEndX, centerY - barrierHeight);
+            ctx.lineTo(barrierEndX, centerY + barrierHeight);
+            ctx.stroke();
+            
+            // Draw wavefunctions
+            const numPoints = 500;
+            const dx = (xMax - xMin) / numPoints;
+            
+            // Arrays to store wavefunction values
+            const realWave = [];
+            const imagWave = [];
+            const probDensity = [];
+            
+            for (let i = 0; i <= numPoints; i++) {
+                const x = xMin + i * dx;
+                const psi = calculateWavefunction(x, time);
+                const screenX = padding + i * plotWidth / numPoints;
+                
+                realWave.push({ x: screenX, y: centerY - psi.real * yScale });
+                imagWave.push({ x: screenX, y: centerY - psi.imag * yScale });
+                probDensity.push({ x: screenX, y: centerY - psi.mag * psi.mag * yScale });
+            }
+            
+            // Draw probability density (filled)
+            ctx.fillStyle = 'rgba(244, 114, 182, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(probDensity[0].x, centerY);
+            probDensity.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.lineTo(probDensity[probDensity.length - 1].x, centerY);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw probability density (line)
+            ctx.strokeStyle = '#f472b6';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(probDensity[0].x, probDensity[0].y);
+            probDensity.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.stroke();
+            
+            // Draw real part
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(realWave[0].x, realWave[0].y);
+            realWave.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.stroke();
+            
+            // Draw imaginary part
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(imagWave[0].x, imagWave[0].y);
+            imagWave.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.stroke();
+            
+            // Draw labels
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px monospace';
+            ctx.fillText('x (nm)', canvas.width - padding - 30, centerY - 10);
+            ctx.fillText('-5', padding - 15, centerY + 15);
+            ctx.fillText('0', barrierX - 5, centerY + 15);
+            ctx.fillText(barrierWidth.toFixed(1), barrierEndX - 10, centerY + 15);
+            ctx.fillText('10', canvas.width - padding - 10, centerY + 15);
+            
+            // Draw region labels
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+            ctx.font = '10px monospace';
+            ctx.fillText('Region I', padding + 20, 30);
+            ctx.fillText('Barrier', barrierX + (barrierEndX - barrierX) / 2 - 20, 30);
+            ctx.fillText('Region III', barrierEndX + 20, 30);
+            
+            // Update time
+            time += animSpeed * 0.01;
+            
+            // Continue animation
+            requestAnimationFrame(animate);
+        }
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
