@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Spherical Harmonics Visualization (Fixed)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0f1b;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      color: #e2e8f0;
+    }
+    .control-panel {
+      position: fixed; top: 0; left: 0; right: 0; height: 80px;
+      background: rgba(10, 15, 27, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(148,163,184,0.1);
+      display: flex; align-items: center; padding: 0 30px; gap: 40px; z-index: 1000;
+    }
+    .control-group { display: flex; align-items: center; gap: 20px; }
+    .control { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .control label { color: #94a3b8; font-weight: 500; min-width: 20px; }
+    .slider {
+      width: 120px; height: 4px; -webkit-appearance: none; appearance: none;
+      background: rgba(148,163,184,0.2); border-radius: 2px; outline: none;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; background: #3b82f6;
+      border-radius: 50%; cursor: pointer; transition: background 0.2s;
+    }
+    .slider::-webkit-slider-thumb:hover { background: #60a5fa; }
+    .value-display {
+      color: #f1f5f9; font-weight: 600; font-variant-numeric: tabular-nums;
+      min-width: 30px; text-align: center;
+    }
+    .button-group { display: flex; gap: 10px; margin-left: auto; }
+    button {
+      padding: 8px 16px; background: rgba(59,130,246,0.2);
+      border: 1px solid rgba(59,130,246,0.3); border-radius: 6px;
+      color: #60a5fa; cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: all 0.2s;
+    }
+    button:hover { background: rgba(59,130,246,0.3); border-color: rgba(59,130,246,0.5); }
+    .info-panel, .legend-panel {
+      position: fixed; background: rgba(10,15,27,0.85);
+      backdrop-filter: blur(12px); border: 1px solid rgba(148,163,184,0.1);
+      border-radius: 8px; padding: 12px; font-size: 12px;
+      z-index: 100;
+    }
+    .info-panel { bottom: 20px; left: 20px; min-width: 220px; }
+    .legend-panel { bottom: 20px; right: 20px; min-width: 260px; max-width: 320px; }
+    .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .info-label { color: #94a3b8; }
+    .info-value { color: #f1f5f9; font-weight: 600; }
+    #canvas-container { position: fixed; top: 80px; left: 0; right: 0; bottom: 0; }
+    .view-buttons { display: flex; gap: 5px; background: rgba(30,41,59,0.5); padding: 3px; border-radius: 6px; }
+    .view-btn { padding: 6px 12px; font-size: 12px; background: transparent; border: none; color: #94a3b8; cursor: pointer; }
+    .view-btn.active { background: #3b82f6; color: white; border-radius: 4px; }
+
+    .legend-title { color: #e2e8f0; font-weight: 700; margin-bottom: 10px; font-size: 13px; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 6px; }
+    .legend-section { margin-bottom: 12px; }
+    .legend-section-title { color: #cbd5e1; font-weight: 600; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .legend-note { color: #94a3b8; font-size: 11px; line-height: 1.4; margin-top: 6px; }
+    .legend-formula { color: #e2e8f0; font-family: 'Courier New', monospace; font-size: 11px; background: rgba(30,41,59,0.5); padding: 4px 8px; border-radius: 4px; margin: 6px 0; }
+    .swatch-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+    .swatch { width: 20px; height: 20px; border-radius: 3px; border: 1px solid rgba(148,163,184,0.3); flex-shrink: 0; }
+    .swatch-label { color: #e2e8f0; font-size: 12px; }
+    .ticks { display: flex; justify-content: space-between; color: #94a3b8; font-size: 11px; margin-top: 4px; }
+    canvas.legend-canvas { width: 100%; height: 16px; display: block; border-radius: 3px; border: 1px solid rgba(148,163,184,0.2); margin: 6px 0; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div class="control-panel">
+    <div class="control-group">
+      <div class="control">
+        <label>ℓ:</label>
+        <input type="range" class="slider" id="l-slider" min="0" max="5" value="2" step="1">
+        <span class="value-display" id="l-value">2</span>
+      </div>
+      <div class="control">
+        <label>m:</label>
+        <input type="range" class="slider" id="m-slider" min="-2" max="2" value="0" step="1">
+        <span class="value-display" id="m-value">0</span>
+      </div>
+    </div>
+
+    <div class="view-buttons">
+      <button class="view-btn active" data-view="cloud">Point Cloud</button>
+      <button class="view-btn" data-view="isosurface">Isosurface</button>
+      <button class="view-btn" data-view="projection">Projection</button>
+    </div>
+
+    <div class="button-group">
+      <button id="convention-toggle">Complex Mode</button>
+      <button id="reset-btn">Reset View</button>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <div class="info-row"><span class="info-label">Mode:</span><span class="info-value" id="mode-display">Real</span></div>
+    <div class="info-row"><span class="info-label">Nodes (lat):</span><span class="info-value" id="lat-nodes">2</span></div>
+    <div class="info-row"><span class="info-label">Nodes (lon):</span><span class="info-value" id="lon-nodes">0</span></div>
+    <div class="info-row"><span class="info-label">Points:</span><span class="info-value" id="point-count">0</span></div>
+    <div class="info-row"><span class="info-label">FPS:</span><span class="info-value" id="fps">60</span></div>
+    <div class="info-row"><span class="info-label">Tips:</span><span class="info-value">Drag = rotate, Scroll = zoom</span></div>
+  </div>
+
+  <div class="legend-panel" id="legend-panel">
+    <div id="legend-body"></div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    function initVisualization() {
+      if (typeof THREE === 'undefined') {
+        setTimeout(initVisualization, 50);
+        return;
+      }
+
+      let scene, camera, renderer;
+      let pointCloud, isosurfaceMesh, projectionMesh;
+      let worldGroup;
+      let l = 2, m = 0;
+  // Max number of points allocated for the point cloud (tune for performance)
+      const POINT_CLOUD_MAX = 50000;
+      let isComplex = false;
+      let frameCount = 0;
+      let lastTime = performance.now();
+
+      let isDragging = false;
+      let lastX = 0, lastY = 0;
+      const rotSpeed = 0.005;
+      const zoomMin = 2.0, zoomMax = 20.0;
+      const defaultCam = new THREE.Vector3(4, 2, 4);
+
+      const POS_COLOR = [0.38, 0.65, 0.98];
+      const NEG_COLOR = [0.96, 0.45, 0.72];
+
+      function init() {
+        scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x0a0f1b, 5, 15);
+
+        const container = document.getElementById('canvas-container');
+        const width = window.innerWidth;
+        const height = window.innerHeight - 80;
+
+        camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
+        camera.position.copy(defaultCam);
+        camera.lookAt(0, 0, 0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x0a0f1b, 1);
+        container.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0x404040, 1.5));
+        const d1 = new THREE.DirectionalLight(0xffffff, 0.8); d1.position.set(5,5,5); scene.add(d1);
+        const d2 = new THREE.DirectionalLight(0x60a5fa, 0.4); d2.position.set(-5,3,-5); scene.add(d2);
+
+        worldGroup = new THREE.Group();
+        scene.add(worldGroup);
+
+        const axesHelper = new THREE.AxesHelper(2);
+        worldGroup.add(axesHelper);
+
+        const gridHelper = new THREE.GridHelper(6, 12, 0x1e293b, 0x1e293b);
+        gridHelper.position.y = -1.5; scene.add(gridHelper);
+
+        createPointCloud();
+        createIsosurface();
+        createProjection();
+        updateVisualization();
+
+        const el = renderer.domElement;
+        el.addEventListener('pointerdown', (e) => {
+          isDragging = true;
+          lastX = e.clientX; lastY = e.clientY;
+          el.setPointerCapture(e.pointerId);
+        });
+        el.addEventListener('pointermove', (e) => {
+          if (!isDragging) return;
+          const dx = e.clientX - lastX;
+          const dy = e.clientY - lastY;
+          worldGroup.rotation.y += dx * rotSpeed;
+          worldGroup.rotation.x = THREE.MathUtils.clamp(worldGroup.rotation.x + dy * rotSpeed, -Math.PI/2, Math.PI/2);
+          lastX = e.clientX; lastY = e.clientY;
+        });
+        el.addEventListener('pointerup', (e) => {
+          isDragging = false;
+          el.releasePointerCapture(e.pointerId);
+        });
+
+        el.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const dir = camera.position.clone();
+          const dist = dir.length();
+          const factor = Math.pow(1.001, e.deltaY);
+          const newDist = THREE.MathUtils.clamp(dist * factor, zoomMin, zoomMax);
+          dir.setLength(newDist);
+          camera.position.copy(dir);
+          camera.lookAt(0, 0, 0);
+        }, { passive: false });
+
+        function loop() {
+          requestAnimationFrame(loop);
+          frameCount++;
+          const now = performance.now();
+          if (now - lastTime > 1000) {
+            document.getElementById('fps').textContent =
+              Math.round(frameCount * 1000 / (now - lastTime));
+            frameCount = 0; lastTime = now;
+          }
+          renderer.render(scene, camera);
+        }
+        loop();
+      }
+
+      // CORRECTED: Associated Legendre polynomials
+      function associatedLegendre(L, M, x) {
+        if (Math.abs(M) > L) return 0;
+        const m = Math.abs(M);
+        
+        // P_m^m
+        let pmm = 1.0;
+        if (m > 0) {
+          const somx2 = Math.sqrt((1.0 - x) * (1.0 + x));
+          let fact = 1.0;
+          for (let i = 1; i <= m; i++) {
+            pmm *= -fact * somx2;
+            fact += 2.0;
+          }
+        }
+        if (L === m) return pmm;
+        
+        // P_{m+1}^m
+        let pmmp1 = x * (2 * m + 1) * pmm;
+        if (L === m + 1) return pmmp1;
+        
+        // P_l^m for l > m+1
+        let pll = 0;
+        for (let ll = m + 2; ll <= L; ll++) {
+          pll = ((2.0 * ll - 1.0) * x * pmmp1 - (ll + m - 1.0) * pmm) / (ll - m);
+          pmm = pmmp1;
+          pmmp1 = pll;
+        }
+        return pll;
+      }
+
+      // CORRECTED: Proper normalization
+      function normalization(L, M) {
+        const m = Math.abs(M);
+        let factRatioInv = 1;
+        for (let i = L - m + 1; i <= L + m; i++) {
+          factRatioInv *= i;
+        }
+        return Math.sqrt((2 * L + 1) / (4 * Math.PI) / factRatioInv);
+      }
+
+      // CORRECTED: Spherical harmonic with proper handling of negative m
+      function sphericalHarmonic(L, M, theta, phi) {
+        const cosTheta = Math.cos(theta);
+        
+        if (isComplex) {
+          // Complex spherical harmonics
+          if (M >= 0) {
+            const P = associatedLegendre(L, M, cosTheta);
+            const N = normalization(L, M);
+            const real = N * P * Math.cos(M * phi);
+            const imag = N * P * Math.sin(M * phi);
+            return {
+              real,
+              imag,
+              magnitude: Math.sqrt(real * real + imag * imag),
+              phase: Math.atan2(imag, real)
+            };
+          } else {
+            // For negative m: Y_l^(-m) = (-1)^m * conj(Y_l^|m|)
+            const absM = Math.abs(M);
+            const P = associatedLegendre(L, absM, cosTheta);
+            const N = normalization(L, absM);
+            const sign = (absM % 2 === 0) ? 1 : -1;
+            const real = sign * N * P * Math.cos(absM * phi);
+            const imag = -sign * N * P * Math.sin(absM * phi); // conjugate flips sign
+            return {
+              real,
+              imag,
+              magnitude: Math.sqrt(real * real + imag * imag),
+              phase: Math.atan2(imag, real)
+            };
+          }
+        } else {
+          // Real spherical harmonics
+          let value;
+          if (M === 0) {
+            const P = associatedLegendre(L, 0, cosTheta);
+            const N = normalization(L, 0);
+            value = N * P;
+          } else if (M > 0) {
+            const P = associatedLegendre(L, M, cosTheta);
+            const N = normalization(L, M);
+            value = Math.sqrt(2) * N * P * Math.cos(M * phi);
+          } else {
+            const absM = Math.abs(M);
+            const P = associatedLegendre(L, absM, cosTheta);
+            const N = normalization(L, absM);
+            value = Math.sqrt(2) * N * P * Math.sin(absM * phi);
+          }
+          return {
+            real: value,
+            imag: 0,
+            magnitude: Math.abs(value),
+            phase: value >= 0 ? 0 : Math.PI
+          };
+        }
+      }
+
+      function createPointCloud() {
+        const geometry = new THREE.BufferGeometry();
+        const maxPoints = POINT_CLOUD_MAX;
+        const positions = new Float32Array(maxPoints * 3);
+        const colors = new Float32Array(maxPoints * 3);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const material = new THREE.PointsMaterial({
+          size: 0.02, vertexColors: true, transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending
+        });
+        pointCloud = new THREE.Points(geometry, material);
+        pointCloud.visible = true;
+        worldGroup.add(pointCloud);
+      }
+
+      function createIsosurface() {
+        const geometry = new THREE.SphereGeometry(1, 64, 64);
+        const vertexCount = geometry.attributes.position.count;
+        const colors = new Float32Array(vertexCount * 3);
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const material = new THREE.MeshPhongMaterial({
+          vertexColors: true, transparent: true, opacity: 0.8, side: THREE.DoubleSide
+        });
+        isosurfaceMesh = new THREE.Mesh(geometry, material);
+        isosurfaceMesh.visible = false;
+        worldGroup.add(isosurfaceMesh);
+      }
+
+      function createProjection() {
+        const geometry = new THREE.SphereGeometry(1.5, 64, 64);
+        const vertexCount = geometry.attributes.position.count;
+        const colors = new Float32Array(vertexCount * 3);
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const material = new THREE.MeshPhongMaterial({
+          vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.9
+        });
+        projectionMesh = new THREE.Mesh(geometry, material);
+        projectionMesh.visible = false;
+        worldGroup.add(projectionMesh);
+      }
+
+      function updateVisualization() {
+        updatePointCloud();
+        updateIsosurface();
+        updateProjection();
+        updateInfo();
+        renderLegend();
+      }
+
+      function updatePointCloud() {
+        const positions = pointCloud.geometry.attributes.position.array;
+        const colors = pointCloud.geometry.attributes.color.array;
+        let idx = 0, valid = 0;
+        const numSamples = positions.length / 3;
+        
+        // Find max probability for acceptance-rejection
+        // Use proper uniform sphere sampling here too
+        let maxProb = 0;
+        for (let i = 0; i < 1000; i++) {
+          const cosTheta = 2 * Math.random() - 1;  // uniform in [-1, 1]
+          const theta = Math.acos(cosTheta);
+          const phi = Math.random() * 2 * Math.PI;
+          const sh = sphericalHarmonic(l, m, theta, phi);
+          const prob = sh.magnitude * sh.magnitude;
+          if (prob > maxProb) maxProb = prob;
+        }
+        
+        const target = Math.floor(numSamples * 0.33);
+        for (let i = 0; i < numSamples && valid < target; i++) {
+          // Uniform sampling on sphere: sample cos(theta) uniformly
+          const cosTheta = 2 * Math.random() - 1;  // uniform in [-1, 1]
+          const theta = Math.acos(cosTheta);
+          const phi = Math.random() * 2 * Math.PI;
+          const r = 0.5 + Math.random() * 2;
+          const sh = sphericalHarmonic(l, m, theta, phi);
+          const prob = sh.magnitude * sh.magnitude;
+          
+          if (Math.random() < prob / maxProb) {
+            // Standard spherical to Cartesian (y-up for Three.js)
+            const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);  // more stable
+            const x = r * sinTheta * Math.cos(phi);
+            const y = r * cosTheta;
+            const z = r * sinTheta * Math.sin(phi);
+            
+            positions[idx*3+0] = x;
+            positions[idx*3+1] = y;
+            positions[idx*3+2] = z;
+            
+            if (isComplex) {
+              const hue = (sh.phase + Math.PI) / (2 * Math.PI);
+              const rgb = hslToRgb(hue, 0.8, 0.5 + Math.min(0.3, sh.magnitude * 0.3));
+              colors[idx*3] = rgb[0];
+              colors[idx*3+1] = rgb[1];
+              colors[idx*3+2] = rgb[2];
+            } else {
+              if (sh.real >= 0) {
+                colors[idx*3] = POS_COLOR[0];
+                colors[idx*3+1] = POS_COLOR[1];
+                colors[idx*3+2] = POS_COLOR[2];
+              } else {
+                colors[idx*3] = NEG_COLOR[0];
+                colors[idx*3+1] = NEG_COLOR[1];
+                colors[idx*3+2] = NEG_COLOR[2];
+              }
+            }
+            idx++;
+            valid++;
+          }
+        }
+        
+        document.getElementById('point-count').textContent = valid;
+        pointCloud.geometry.attributes.position.needsUpdate = true;
+        pointCloud.geometry.attributes.color.needsUpdate = true;
+        pointCloud.geometry.setDrawRange(0, valid);
+      }
+
+      function updateIsosurface() {
+        const geometry = isosurfaceMesh.geometry;
+        const pos = geometry.attributes.position.array;
+        const colors = geometry.attributes.color.array;
+        
+        for (let i = 0, j = 0; i < pos.length; i += 3, j += 3) {
+          const x = pos[i], y = pos[i+1], z = pos[i+2];
+          const r = Math.sqrt(x*x + y*y + z*z) || 1;
+          const theta = Math.acos(y / r);
+          const phi = Math.atan2(z, x);
+          const sh = sphericalHarmonic(l, m, theta, phi);
+          const newR = 0.8 + 1.5 * sh.magnitude;
+          
+          pos[i]   = newR * Math.sin(theta) * Math.cos(phi);
+          pos[i+1] = newR * Math.cos(theta);
+          pos[i+2] = newR * Math.sin(theta) * Math.sin(phi);
+          
+          // Color based on mode
+          if (isComplex) {
+            const hue = (sh.phase + Math.PI) / (2 * Math.PI);
+            const rgb = hslToRgb(hue, 0.85, 0.5);
+            colors[j] = rgb[0];
+            colors[j+1] = rgb[1];
+            colors[j+2] = rgb[2];
+          } else {
+            const base = (sh.real >= 0) ? POS_COLOR : NEG_COLOR;
+            colors[j] = base[0];
+            colors[j+1] = base[1];
+            colors[j+2] = base[2];
+          }
+        }
+        
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+        geometry.computeVertexNormals();
+      }
+
+      function updateProjection() {
+        const geometry = projectionMesh.geometry;
+        const pos = geometry.attributes.position.array;
+        const colors = geometry.attributes.color.array;
+        
+        for (let i = 0, j = 0; i < pos.length; i += 3, j += 3) {
+          const x = pos[i], y = pos[i+1], z = pos[i+2];
+          const r = Math.sqrt(x*x + y*y + z*z) || 1.5;
+          const theta = Math.acos(y / r);
+          const phi = Math.atan2(z, x);
+          const sh = sphericalHarmonic(l, m, theta, phi);
+          
+          const projR = 1.5;
+          pos[i]   = projR * Math.sin(theta) * Math.cos(phi);
+          pos[i+1] = projR * Math.cos(theta);
+          pos[i+2] = projR * Math.sin(theta) * Math.sin(phi);
+          
+          if (isComplex) {
+            const hue = (sh.phase + Math.PI) / (2 * Math.PI);
+            const rgb = hslToRgb(hue, 0.9, 0.45 + Math.min(0.4, sh.magnitude * 0.4));
+            colors[j] = rgb[0];
+            colors[j+1] = rgb[1];
+            colors[j+2] = rgb[2];
+          } else {
+            const amp = Math.min(1, 0.5 + sh.magnitude);
+            const base = (sh.real >= 0) ? POS_COLOR : NEG_COLOR;
+            colors[j]   = Math.min(1, base[0]*amp);
+            colors[j+1] = Math.min(1, base[1]*amp);
+            colors[j+2] = Math.min(1, base[2]*amp);
+          }
+        }
+        
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+      }
+
+      function updateInfo() {
+        document.getElementById('mode-display').textContent = isComplex ? 'Complex' : 'Real';
+        document.getElementById('lat-nodes').textContent = l - Math.abs(m);
+        document.getElementById('lon-nodes').textContent = isComplex ? 'N/A' : Math.abs(m);
+      }
+
+      function renderLegend() {
+        const body = document.getElementById('legend-body');
+        body.innerHTML = '';
+
+        // Main title
+        const mainTitle = document.createElement('div');
+        mainTitle.className = 'legend-title';
+        mainTitle.textContent = isComplex ? 'Complex Spherical Harmonics' : 'Real Spherical Harmonics';
+        body.appendChild(mainTitle);
+
+        if (isComplex) {
+          // Complex mode legend
+          const section = document.createElement('div');
+          section.className = 'legend-section';
+          
+          const sectionTitle = document.createElement('div');
+          sectionTitle.className = 'legend-section-title';
+          sectionTitle.textContent = 'Phase Encoding';
+          section.appendChild(sectionTitle);
+          
+          const c = document.createElement('canvas');
+          c.className = 'legend-canvas';
+          c.width = 280; c.height = 16;
+          section.appendChild(c);
+
+          const ctx = c.getContext('2d');
+          const w = c.width, h = c.height;
+          const img = ctx.createImageData(w, h);
+          for (let x = 0; x < w; x++) {
+            const phase = -Math.PI + (2*Math.PI) * (x / (w - 1));
+            const hue = (phase + Math.PI) / (2*Math.PI);
+            const rgb = hslToRgb(hue, 0.9, 0.55);
+            for (let y = 0; y < h; y++) {
+              const idx = (y*w + x) * 4;
+              img.data[idx] = Math.round(rgb[0]*255);
+              img.data[idx+1] = Math.round(rgb[1]*255);
+              img.data[idx+2] = Math.round(rgb[2]*255);
+              img.data[idx+3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+
+          const ticks = document.createElement('div');
+          ticks.className = 'ticks';
+          ticks.innerHTML = '<span>−π</span><span>−π/2</span><span>0</span><span>π/2</span><span>π</span>';
+          section.appendChild(ticks);
+
+          const formula = document.createElement('div');
+          formula.className = 'legend-formula';
+          formula.innerHTML = 'Y<sub>ℓ</sub><sup>m</sup>(θ,φ) = N P<sub>ℓ</sub><sup>|m|</sup>(cos θ) e<sup>imφ</sup>';
+          section.appendChild(formula);
+
+          const note = document.createElement('div');
+          note.className = 'legend-note';
+          note.innerHTML = '<strong>Hue:</strong> Phase angle arg(Y) from −π to π<br><strong>Brightness:</strong> Magnitude |Y|<br><strong>Surface:</strong> Radial distance encodes |Y|';
+          section.appendChild(note);
+          
+          body.appendChild(section);
+          
+        } else {
+          // Real mode legend
+          const section = document.createElement('div');
+          section.className = 'legend-section';
+          
+          const sectionTitle = document.createElement('div');
+          sectionTitle.className = 'legend-section-title';
+          sectionTitle.textContent = 'Sign Encoding';
+          section.appendChild(sectionTitle);
+          
+          const row1 = document.createElement('div');
+          row1.className = 'swatch-row';
+          const s1 = document.createElement('div'); s1.className = 'swatch';
+          s1.style.background = `rgb(${POS_COLOR[0]*255}, ${POS_COLOR[1]*255}, ${POS_COLOR[2]*255})`;
+          const l1 = document.createElement('div'); l1.className = 'swatch-label';
+          l1.textContent = 'Positive (Y ≥ 0)';
+          row1.appendChild(s1); row1.appendChild(l1);
+
+          const row2 = document.createElement('div');
+          row2.className = 'swatch-row';
+          const s2 = document.createElement('div'); s2.className = 'swatch';
+          s2.style.background = `rgb(${NEG_COLOR[0]*255}, ${NEG_COLOR[1]*255}, ${NEG_COLOR[2]*255})`;
+          const l2 = document.createElement('div'); l2.className = 'swatch-label';
+          l2.textContent = 'Negative (Y < 0)';
+          row2.appendChild(s2); row2.appendChild(l2);
+
+          section.appendChild(row1);
+          section.appendChild(row2);
+
+          const formula = document.createElement('div');
+          formula.className = 'legend-formula';
+          if (m === 0) {
+            formula.innerHTML = 'Y<sub>ℓ</sub><sup>0</sup> = N P<sub>ℓ</sub>(cos θ)';
+          } else if (m > 0) {
+            formula.innerHTML = 'Y<sub>ℓ</sub><sup>m</sup> = √2 N P<sub>ℓ</sub><sup>m</sup>(cos θ) cos(mφ)';
+          } else {
+            formula.innerHTML = 'Y<sub>ℓ</sub><sup>m</sup> = √2 N P<sub>ℓ</sub><sup>|m|</sup>(cos θ) sin(|m|φ)';
+          }
+          section.appendChild(formula);
+
+          const note = document.createElement('div');
+          note.className = 'legend-note';
+          note.innerHTML = '<strong>Color:</strong> Sign of Y<br><strong>Brightness:</strong> Magnitude |Y|<br><strong>Surface:</strong> Radial distance encodes |Y|';
+          section.appendChild(note);
+          
+          body.appendChild(section);
+        }
+
+        // View mode explanation
+        const viewSection = document.createElement('div');
+        viewSection.className = 'legend-section';
+        viewSection.style.borderTop = '1px solid rgba(148,163,184,0.2)';
+        viewSection.style.paddingTop = '10px';
+        
+        const viewTitle = document.createElement('div');
+        viewTitle.className = 'legend-section-title';
+        viewTitle.textContent = 'Visualization Modes';
+        viewSection.appendChild(viewTitle);
+        
+        const viewNote = document.createElement('div');
+        viewNote.className = 'legend-note';
+        viewNote.innerHTML = '<strong>Point Cloud:</strong> Probability density |Y|²<br><strong>Isosurface:</strong> 3D shape + color<br><strong>Projection:</strong> Spherical surface colored by Y';
+        viewSection.appendChild(viewNote);
+        
+        body.appendChild(viewSection);
+      }
+
+      function hslToRgb(h, s, l) {
+        let r, g, b;
+        if (s === 0) {
+          r = g = b = l;
+        } else {
+          const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+          };
+          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+          const p = 2 * l - q;
+          r = hue2rgb(p, q, h + 1/3);
+          g = hue2rgb(p, q, h);
+          b = hue2rgb(p, q, h - 1/3);
+        }
+        return [r, g, b];
+      }
+
+      function setView(view) {
+        document.querySelectorAll('.view-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.view === view);
+        });
+        if (pointCloud) pointCloud.visible = (view === 'cloud');
+        if (isosurfaceMesh) isosurfaceMesh.visible = (view === 'isosurface');
+        if (projectionMesh) projectionMesh.visible = (view === 'projection');
+      }
+
+      document.getElementById('l-slider').addEventListener('input', (e) => {
+        l = parseInt(e.target.value, 10);
+        document.getElementById('l-value').textContent = l;
+        const mSlider = document.getElementById('m-slider');
+        mSlider.min = -l; mSlider.max = l;
+        if (Math.abs(m) > l) {
+          m = 0;
+          mSlider.value = 0;
+          document.getElementById('m-value').textContent = 0;
+        }
+        updateVisualization();
+      });
+
+      document.getElementById('m-slider').addEventListener('input', (e) => {
+        m = parseInt(e.target.value, 10);
+        document.getElementById('m-value').textContent = m;
+        updateVisualization();
+      });
+
+      document.getElementById('convention-toggle').addEventListener('click', (e) => {
+        isComplex = !isComplex;
+        e.currentTarget.textContent = isComplex ? 'Real Mode' : 'Complex Mode';
+        updateVisualization();
+      });
+
+      document.getElementById('reset-btn').addEventListener('click', () => {
+        worldGroup.rotation.set(0, 0, 0);
+        camera.position.copy(defaultCam);
+        camera.lookAt(0, 0, 0);
+      });
+
+      document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const view = e.currentTarget.dataset.view;
+          if (!view) return;
+          setView(view);
+        });
+      });
+
+      window.addEventListener('resize', () => {
+        const width = window.innerWidth;
+        const height = window.innerHeight - 80;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      });
+
+      init();
+      setView('cloud');
+      renderLegend();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initVisualization);
+    } else {
+      initVisualization();
+    }
+  </script>
+</body>
+</html>
