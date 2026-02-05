@@ -296,7 +296,7 @@
                     <br><br>
                     Plane wavefronts approach the slits from a source, split into two secondary circular waves (S1 and S2), and interfere constructively and destructively to create the characteristic pattern.
                     <br><br>
-                    Toggle the <span class="highlight">Classical Expectation</span> button to overlay what classical physics would predict (two peaks behind each slit) versus the actual quantum interference pattern.
+                    Toggle the <span class="highlight">Classical Pattern</span> button to see what classical particles (bullets) would do: orange dots accumulate as P₁₂ = P₁ + P₂ with <span class="highlight">no interference</span>, compared to the quantum result (Feynman Lectures Vol III, Ch 1).
                 </p>
             </div>
         </div>
@@ -333,7 +333,7 @@
                 </div>
             </div>
 
-            <button class="btn-toggle" id="classical-btn">Show Classical Pattern on Screen</button>
+            <button class="btn-toggle" id="classical-btn">Show Classical Pattern</button>
             <button class="btn-primary" id="reset-btn">Reset Simulation</button>
 
             <div>
@@ -349,6 +349,10 @@
                     <div class="legend-item">
                         <div class="legend-color theoretical"></div>
                         <span>Quantum Theory</span>
+                    </div>
+                    <div class="legend-item" id="classical-legend" style="display: none;">
+                        <div class="legend-color classical"></div>
+                        <span>Classical (P₁+P₂)</span>
                     </div>
                 </div>
                 <p class="chart-description">
@@ -377,6 +381,7 @@
             lambda: 1.5,
             animationSpeed: 15,
             hits: new Uint32Array(80),
+            classicalHits: new Uint32Array(80),
             detectedCount: 0,
             showClassical: false
         };
@@ -478,59 +483,15 @@
             classicalOverlayMesh.visible = false;
             scene.add(classicalOverlayMesh);
             
-            // Draw initial classical pattern
-            updateClassicalOverlay();
+            // Start with clear overlay (dots accumulate when classical mode is on)
+            clearClassicalOverlay();
         }
 
-        function updateClassicalOverlay() {
+        function clearClassicalOverlay() {
             const ctx = classicalOverlayContext;
             const w = CONFIG.screenRes.w;
             const h = CONFIG.screenRes.h;
-            
-            // Clear with transparent background
             ctx.clearRect(0, 0, w, h);
-            
-            // Calculate classical pattern (two Gaussian peaks)
-            const slitPos1 = -state.sep / 2;
-            const slitPos2 = state.sep / 2;
-            const sigma = 1.5;
-            
-            // Draw the classical pattern as vertical bands
-            for (let i = 0; i < w; i++) {
-                const x = ((i / w) - 0.5) * CONFIG.sceneWidth;
-                
-                const peak1 = Math.exp(-Math.pow(x - slitPos1, 2) / (2 * sigma * sigma));
-                const peak2 = Math.exp(-Math.pow(x - slitPos2, 2) / (2 * sigma * sigma));
-                const intensity = (peak1 + peak2) / 2; // Normalize
-                
-                // Draw vertical line with orange color based on intensity
-                ctx.fillStyle = `rgba(245, 158, 11, ${intensity * 0.6})`;
-                ctx.fillRect(i, 0, 1, h);
-            }
-            
-            // Add dashed outline markers at the peak positions
-            ctx.strokeStyle = '#f59e0b';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([8, 8]);
-            
-            // Mark slit 1 position
-            const slit1ScreenX = ((slitPos1 / CONFIG.sceneWidth) + 0.5) * w;
-            ctx.beginPath();
-            ctx.moveTo(slit1ScreenX, 10);
-            ctx.lineTo(slit1ScreenX, h - 10);
-            ctx.stroke();
-            
-            // Mark slit 2 position
-            const slit2ScreenX = ((slitPos2 / CONFIG.sceneWidth) + 0.5) * w;
-            ctx.beginPath();
-            ctx.moveTo(slit2ScreenX, 10);
-            ctx.lineTo(slit2ScreenX, h - 10);
-            ctx.stroke();
-            
-            ctx.setLineDash([]);
-            
-            // Labels removed as per user request - just show the pattern
-            
             classicalOverlayTexture.needsUpdate = true;
         }
 
@@ -905,6 +866,39 @@
                     if (bin >= 0 && bin < 80) state.hits[bin]++;
                 }
             }
+
+            // Record classical hits when classical mode is on
+            // Classical probability: P₁ + P₂ (Feynman Vol III, Fig 1-1)
+            // Bullets have no wavelength → no interference, just two overlapping distributions
+            if (state.showClassical) {
+                const classicalSigma = 3.5;
+                const d_half = state.sep / 2;
+
+                for (let i = 0; i < numSamples; i++) {
+                    const cx = (Math.random() - 0.5) * CONFIG.sceneWidth;
+
+                    // P₁: Gaussian centered behind slit 1, P₂: behind slit 2
+                    const p1 = Math.exp(-Math.pow(cx + d_half, 2) / (2 * classicalSigma * classicalSigma));
+                    const p2 = Math.exp(-Math.pow(cx - d_half, 2) / (2 * classicalSigma * classicalSigma));
+                    const classicalProb = (p1 + p2) / 2;
+
+                    if (Math.random() < classicalProb) {
+                        // Draw orange dot on the classical overlay canvas
+                        const tx = ((cx / CONFIG.sceneWidth) + 0.5) * CONFIG.screenRes.w;
+                        const ty = (0.5 + (Math.random() - 0.5) * 0.3) * CONFIG.screenRes.h;
+
+                        classicalOverlayContext.globalCompositeOperation = 'lighter';
+                        classicalOverlayContext.beginPath();
+                        classicalOverlayContext.arc(tx, ty, 2, 0, Math.PI * 2);
+                        classicalOverlayContext.fillStyle = 'rgba(245, 158, 11, 0.3)';
+                        classicalOverlayContext.fill();
+                        classicalOverlayTexture.needsUpdate = true;
+
+                        const cbin = Math.floor(((cx / CONFIG.sceneWidth) + 0.5) * 80);
+                        if (cbin >= 0 && cbin < 80) state.classicalHits[cbin]++;
+                    }
+                }
+            }
         }
 
         // --- COMBINED CHART ---
@@ -941,6 +935,21 @@
                             pointRadius: 0,
                             yAxisID: 'y1',
                             order: 1
+                        },
+                        {
+                            type: 'line',
+                            label: 'Classical (P₁+P₂)',
+                            data: generateClassicalData(),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                            borderWidth: 2.5,
+                            borderDash: [6, 4],
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            yAxisID: 'y1',
+                            order: 2,
+                            hidden: true
                         }
                     ]
                 },
@@ -1031,11 +1040,34 @@
             return values;
         }
 
+        // Classical pattern: P₁₂ = P₁ + P₂ (Feynman Vol III, Fig 1-1)
+        // No wavelength dependence — bullets are classical particles
+        function generateClassicalData() {
+            const numBins = 80;
+            const values = [];
+            const d_half = state.sep / 2;
+            const sigma = 3.5;
+
+            for (let i = 0; i < numBins; i++) {
+                const x = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
+                const p1 = Math.exp(-Math.pow(x + d_half, 2) / (2 * sigma * sigma));
+                const p2 = Math.exp(-Math.pow(x - d_half, 2) / (2 * sigma * sigma));
+                values.push((p1 + p2) / 2);
+            }
+
+            return values;
+        }
+
         function updateCombinedChart() {
             const theoreticalData = generateTheoreticalData();
             
             combinedChart.data.datasets[1].data = theoreticalData;
             combinedChart.data.datasets[0].data = Array.from(state.hits);
+
+            // Update classical envelope when visible
+            if (state.showClassical) {
+                combinedChart.data.datasets[2].data = generateClassicalData();
+            }
             
             combinedChart.update('none');
         }
@@ -1049,12 +1081,26 @@
                 
                 if (state.showClassical) {
                     classicalBtn.classList.add('active');
-                    classicalBtn.textContent = 'Hide Classical Pattern on Screen';
+                    classicalBtn.textContent = 'Hide Classical Pattern';
                     classicalOverlayMesh.visible = true;
+                    // Clear overlay for fresh accumulation
+                    clearClassicalOverlay();
+                    state.classicalHits.fill(0);
+                    // Show classical envelope on chart
+                    combinedChart.data.datasets[2].hidden = false;
+                    combinedChart.data.datasets[2].data = generateClassicalData();
+                    document.getElementById('classical-legend').style.display = 'flex';
+                    combinedChart.update('none');
                 } else {
                     classicalBtn.classList.remove('active');
-                    classicalBtn.textContent = 'Show Classical Pattern on Screen';
+                    classicalBtn.textContent = 'Show Classical Pattern';
                     classicalOverlayMesh.visible = false;
+                    clearClassicalOverlay();
+                    state.classicalHits.fill(0);
+                    // Hide classical envelope on chart
+                    combinedChart.data.datasets[2].hidden = true;
+                    document.getElementById('classical-legend').style.display = 'none';
+                    combinedChart.update('none');
                 }
             };
 
@@ -1062,7 +1108,8 @@
                 state.sep = parseFloat(e.target.value);
                 createBarrier();
                 createSlitLabels();
-                updateClassicalOverlay();
+                clearClassicalOverlay();
+                state.classicalHits.fill(0);
                 resetSim();
                 updateCombinedChart();
             };
@@ -1086,11 +1133,15 @@
         function resetSim() {
             state.detectedCount = 0;
             state.hits.fill(0);
+            state.classicalHits.fill(0);
             
             screenContext.globalCompositeOperation = 'source-over';
             screenContext.fillStyle = '#1e293b';
             screenContext.fillRect(0, 0, CONFIG.screenRes.w, CONFIG.screenRes.h);
             screenTexture.needsUpdate = true;
+
+            // Clear classical overlay (dots restart fresh if classical mode is on)
+            clearClassicalOverlay();
             
             createWavefronts();
             
