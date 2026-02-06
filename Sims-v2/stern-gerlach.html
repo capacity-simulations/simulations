@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stern-Gerlach Experiment — Quantum Spin Measurement</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -317,13 +321,14 @@
             background: #0a0a0a;
             border: 1px solid #2a2a2a;
             border-radius: 4px;
-            padding: 10px 12px;
+            padding: 12px 12px 8px;
             margin-top: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
             color: #4fd1ff;
             text-align: center;
+            font-size: 14px;
         }
+        
+        .equation-box .katex { color: #4fd1ff; }
         
         .beam-legend {
             background: #0a0a0a;
@@ -455,8 +460,11 @@
                 <p class="info-text" style="margin-top: 8px;">
                     <strong>Classical Prediction:</strong> Random magnetic moment orientations would produce a continuous spread of deflections.
                 </p>
+                <p class="info-text" style="margin-top: 8px;">
+                    <strong>Note:</strong> This simulation assumes g<sub>j</sub> = 1 for simplicity. For silver atoms (original experiment), g<sub>j</sub> ≈ 2.
+                </p>
                 <div class="equation-box">
-                    F = μ · (∂B/∂z) = gⱼ·mⱼ·μ<sub>B</sub> · (∂B/∂z)
+                    $$F_z = -g_J \, m_J \, \mu_B \, \frac{\partial B}{\partial z}$$
                 </div>
                 <div class="legend">
                     <div class="legend-item">
@@ -481,6 +489,7 @@
         let totalCount = 0;
         let lastEmitTime = 0;
         let animationTime = 0;
+        let lastFrameTime = 0;
         
         // Controls
         let fieldStrength = 5;
@@ -498,7 +507,7 @@
         let spinCounts = {}; // Track counts per mj value
         
         // Colors for different mj states - ordered from highest mj to lowest
-        // Index 0 = highest mj (top of screen), last index = lowest mj (bottom of screen)
+        // Index 0 = highest mj (bottom of screen, deflects down), last index = lowest mj (top of screen)
         const SPIN_COLORS = [
             '#ff6b9d', // pink - highest mj
             '#4da6ff', // blue
@@ -522,6 +531,21 @@
             metalLight: '#5a6b80',
             metalDark: '#2a3444'
         };
+        
+        // Analytically compute expected deflection per unit mj at the detector,
+        // derived from the same discrete physics as Atom.update():
+        //   total_deflection = a * N_mag * (N_mag + 1) / 2  +  a * N_mag * N_drift
+        // where a = fieldStrength * FORCE_CONST * mj, N = frames in each region.
+        const FORCE_CONST = 0.0014;
+        const MEAN_VX = 2.4;
+        
+        function getDeflectionPerMj() {
+            const magnetLength = magnetEndX - magnetStartX;
+            const driftLength = detectorX - magnetEndX;
+            const nMag = magnetLength / MEAN_VX;
+            const nDrift = driftLength / MEAN_VX;
+            return fieldStrength * FORCE_CONST * nMag * (nMag / 2 + nDrift);
+        }
         
         function getMjValues() {
             const values = [];
@@ -593,11 +617,32 @@
             detectorHeight = detectorWindowHeight;
         }
         
+        // Effusive beam speed distribution: chi(4), i.e. f(v) ∝ v³ exp(-v²/2)
+        // Models thermal atoms effusing from an oven aperture
+        function sampleEffusiveSpeed(meanSpeed) {
+            const chi4Mean = 1.8800; // theoretical mean of chi(4)
+            let v;
+            // Rejection sampling to enforce ~10% effective spread (velocity selection)
+            const lo = 0.9 * meanSpeed;
+            const hi = 1.1 * meanSpeed;
+            do {
+                let sumSq = 0;
+                for (let i = 0; i < 4; i++) {
+                    const u1 = Math.random();
+                    const u2 = Math.random();
+                    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+                    sumSq += z * z;
+                }
+                v = Math.sqrt(sumSq) * (meanSpeed / chi4Mean);
+            } while (v < lo || v > hi);
+            return v;
+        }
+        
         class Atom {
             constructor() {
                 this.x = sourceX + 30;
                 this.y = centerY + (Math.random() - 0.5) * 12;
-                this.vx = 2.2 + Math.random() * 0.4;
+                this.vx = sampleEffusiveSpeed(MEAN_VX);
                 this.vy = 0;
                 this.phase = Math.random() * Math.PI * 2;
                 
@@ -636,6 +681,8 @@
             update(dt) {
                 if (this.detected) return false;
                 
+                const dtScale = dt / 16.67; // normalize to 60fps for frame-rate independence
+                
                 this.wobble = Math.sin(animationTime * 0.01 + this.phase) * 0.5;
                 
                 if (this.trail.length > 40) this.trail.shift();
@@ -650,17 +697,16 @@
                 if (this.x >= magnetStartX && this.x <= magnetEndX) {
                     this.inField = true;
                     this.hasEnteredField = true;
-                    const progress = (this.x - magnetStartX) / (magnetEndX - magnetStartX);
-                    // Deflection proportional to mj value
-                    const normalizedMj = totalSpin > 0 ? this.mj / totalSpin : 0;
-                    const fieldEffect = fieldStrength * 0.0018 * normalizedMj * (0.5 + progress * 0.5);
-                    this.vy += fieldEffect;
+                    // Force proportional to mj directly (not normalized by j)
+                    // F_z = -g_j * m_j * mu_B * (dB/dz), with g_j = 1 assumed
+                    const fieldEffect = fieldStrength * FORCE_CONST * this.mj;
+                    this.vy += fieldEffect * dtScale;
                 } else if (this.x > magnetEndX) {
                     this.pastField = true;
                 }
                 
-                this.x += this.vx;
-                this.y += this.vy;
+                this.x += this.vx * dtScale;
+                this.y += this.vy * dtScale;
                 
                 if (this.x >= detectorX) {
                     this.detected = true;
@@ -1149,16 +1195,15 @@
             ctx.roundRect(windowLeft, windowTop, detectorWindowWidth, detectorWindowHeight, 12);
             ctx.stroke();
             
-            // Labels for mj values on the side - NOW IN SINGLE LIGHT GREEN COLOR
+            // Labels for mj values on the side
             const mjValues = getMjValues();
-            const maxDeflection = fieldStrength * 7;
+            const maxDeflection = getDeflectionPerMj(); // pixels per unit mj, matches particle physics
             ctx.font = '9px monospace';
             ctx.textAlign = 'left';
             
             if (!classicalMode && totalSpin > 0) {
                 mjValues.forEach(mj => {
-                    const normalizedMj = mj / totalSpin;
-                    const yOffset = -normalizedMj * maxDeflection;
+                    const yOffset = mj * maxDeflection;
                     const labelY = centerY + yOffset;
                     if (labelY > windowTop + 40 && labelY < windowTop + detectorWindowHeight - 40) {
                         // Use single light green color for all mj labels
@@ -1197,14 +1242,14 @@
             ctx.lineTo(magnetStartX, centerY);
             ctx.stroke();
             
-            const maxDeflection = fieldStrength * 7;
+            const maxDeflection = getDeflectionPerMj(); // pixels per unit mj, matches particle physics
             const magnetCenterX = (magnetStartX + magnetEndX) / 2;
             
             if (classicalMode) {
-                // Classical spread
+                // Classical spread — mj ranges from -totalSpin to +totalSpin
                 for (let i = -6; i <= 6; i++) {
                     const fraction = i / 6;
-                    const deflection = maxDeflection * fraction;
+                    const deflection = totalSpin * maxDeflection * fraction;
                     const alpha = 0.08 + 0.08 * (1 - Math.abs(fraction));
                     ctx.strokeStyle = `rgba(255, 179, 71, ${alpha})`;
                     ctx.beginPath();
@@ -1220,8 +1265,7 @@
                 // Quantum discrete paths for each mj - using matching colors
                 const mjValues = getMjValues();
                 mjValues.forEach(mj => {
-                    const normalizedMj = totalSpin > 0 ? mj / totalSpin : 0;
-                    const deflection = -normalizedMj * maxDeflection;
+                    const deflection = mj * maxDeflection;
                     ctx.strokeStyle = getColorRgbaForMj(mj, 0.25);
                     ctx.beginPath();
                     ctx.moveTo(magnetCenterX, centerY);
@@ -1334,6 +1378,8 @@
         }
         
         function animate(currentTime) {
+            const dt = lastFrameTime > 0 ? Math.min(currentTime - lastFrameTime, 50) : 16.67;
+            lastFrameTime = currentTime;
             animationTime = currentTime;
             const emitInterval = 1000 / emissionRate;
             if (currentTime - lastEmitTime > emitInterval) {
@@ -1350,7 +1396,7 @@
             drawDetectorWindow();
             
             atoms = atoms.filter(atom => {
-                const alive = atom.update(16);
+                const alive = atom.update(dt);
                 if (alive || !atom.detected) {
                     atom.draw();
                 }
