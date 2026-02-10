@@ -636,6 +636,13 @@
             cursor: grabbing;
         }
 
+        .draggable-component.selected {
+            outline: 2px solid rgba(255, 255, 255, 0.8);
+            outline-offset: 2px;
+            transform: scale(1.08);
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        }
+
         .draggable-component.magnet-z {
             background: linear-gradient(135deg, #f472b6, #ec4899);
             color: white;
@@ -782,7 +789,7 @@
                             <strong>Sequential Measurement:</strong> When you measure Z then X then Z, the second Z measurement re-randomizes the spin because X and Z are incompatible observables (ΔS_x · ΔS_z ≥ ℏ/2).
                         </p>
                         <p>
-                            <strong>Drag & Drop:</strong> Build multi-stage experiments. Blockers select specific spin states for further analysis.
+                            <strong>Build Experiments:</strong> Click a component to select it, then click a drop zone to place it. Blockers select specific spin states for further analysis.
                         </p>
                     </div>
                 </div>
@@ -855,7 +862,7 @@
             <div class="panel-section">
                 <h3>🔧 Experiment Builder</h3>
 
-                <p class="info-text" style="margin-bottom: 10px;">Drag components to Stage 2 or 3 drop zones:</p>
+                <p class="info-text" style="margin-bottom: 10px;">Click a component below, then click a Stage drop zone to place it:</p>
 
                 <div class="component-palette">
                     <div class="draggable-component magnet-z" draggable="true" data-type="magnet" data-axis="z">
@@ -1101,9 +1108,11 @@
 
         function addDetectionSpot(y, axis, value) {
             const color = getSpinColor(axis, value);
+            // Small random depth offset for 3D appearance on detector screen
+            const depthVar = (Math.random() - 0.5) * 8;
             const spot = {
-                x: detectorX,
-                y: y,
+                x: detectorX + depthVar * 0.35,
+                y: y + (Math.random() - 0.5) * 2 - depthVar * 0.25,
                 color: color,
                 alpha: 1.0,
                 size: 3 + Math.random() * 2,
@@ -1299,7 +1308,7 @@
                     stats.detected++;
                     if (this.spinValue > 0) {
                         stats.totalPlus++;
-                    } else if (this.spinValue < 0) {
+                    } else {
                         stats.totalMinus++;
                     }
 
@@ -1574,6 +1583,82 @@
                 return;
             }
 
+            // ============================================================
+            // X-AXIS MAGNET (Stage 1): Poles oriented into/out of screen
+            // Same structure as Z-magnet but with:
+            //   - Compressed vertical gap (foreshortened, poles going into screen)
+            //   - Much larger 3D depth (extended into screen)
+            //   - Purple/green color scheme
+            //   - ⊙ field-direction indicators instead of vertical field lines
+            // ============================================================
+            if (!isZAxis) {
+                const xGap = 25 * scaleFactor;       // Smaller gap (foreshortened)
+                const xPoleH = 50 * scaleFactor;
+                const xDepth = 80 * scaleFactor;     // Much larger depth than Z-magnet
+
+                // North pole (upper - represents back/into-screen pole)
+                const xNorthTopY = centerY - xGap - xPoleH;
+                draw3DBox(
+                    pos.startX, xNorthTopY,
+                    magnetWidth, xPoleH, xDepth,
+                    '#7c3aed', '#8b5cf6', '#6d28d9', true
+                );
+
+                // South pole (lower - represents front/toward-viewer pole)
+                const xSouthTopY = centerY + xGap;
+                draw3DBox(
+                    pos.startX, xSouthTopY,
+                    magnetWidth, xPoleH, xDepth,
+                    '#059669', '#10b981', '#047857', true
+                );
+
+                // Field direction indicators (⊙) in the gap between poles
+                if (magneticFieldEnabled) {
+                    const numIndicators = Math.floor(3 + fieldStrength);
+                    const indicatorAlpha = 0.3 + 0.15 * fieldStrength;
+
+                    for (let fi = 0; fi < numIndicators; fi++) {
+                        const t = (fi + 1) / (numIndicators + 1);
+                        const dotX = pos.startX + magnetWidth * t;
+                        const r = 4.5 * scaleFactor;
+
+                        // Circle (⊙ = field coming toward viewer, N-back to S-front)
+                        ctx.strokeStyle = `rgba(196, 181, 253, ${indicatorAlpha})`;
+                        ctx.lineWidth = 1.5 * scaleFactor;
+                        ctx.beginPath();
+                        ctx.arc(dotX, centerY, r, 0, Math.PI * 2);
+                        ctx.stroke();
+
+                        // Dot in center
+                        ctx.fillStyle = `rgba(196, 181, 253, ${indicatorAlpha})`;
+                        ctx.beginPath();
+                        ctx.arc(dotX, centerY, 1.5 * scaleFactor, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                ctx.globalAlpha = 1.0;
+
+                // Labels
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${18 * scaleFactor}px -apple-system, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText('N', pos.centerX, xNorthTopY + xPoleH / 2 + 5 * scaleFactor);
+                ctx.fillText('S', pos.centerX, xSouthTopY + xPoleH / 2 + 5 * scaleFactor);
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = `${10 * scaleFactor}px -apple-system, sans-serif`;
+                const xStatusLabel = magneticFieldEnabled ? ` (${fieldStrength.toFixed(2)} T)` : ' (OFF)';
+                ctx.fillText(`Stage 1: SG-X${xStatusLabel}`, pos.centerX, xSouthTopY + xPoleH + 25 * scaleFactor);
+
+                ctx.restore();
+                return;
+            }
+
+            // ============================================================
+            // Z-AXIS MAGNET (Stage 1): Poles oriented vertically (up/down)
+            // ============================================================
+
             // North pole (top)
             const northTopY = centerY - gapFromCenter - poleHeight;
             const northBottomY = centerY - gapFromCenter;
@@ -1658,7 +1743,7 @@
 
             ctx.fillStyle = '#94a3b8';
             ctx.font = `${10 * scaleFactor}px -apple-system, sans-serif`;
-            const axisLabel = isZAxis ? 'SG-Z' : 'SG-X';
+            const axisLabel = 'SG-Z';
             const statusLabel = magneticFieldEnabled ? ` (${fieldStrength.toFixed(2)} T)` : ' (OFF)';
             ctx.fillText(`Stage ${index + 1}: ${axisLabel}${statusLabel}`, pos.centerX, southBottomY + 25 * scaleFactor);
 
@@ -1688,6 +1773,60 @@
             
             const halfWidth = magnetWidth / 2;
             const tipHeight = 12 * scaleFactor * miniScale;
+
+            // ============================================================
+            // X-AXIS MINI MAGNET: Same structure as Z but with
+            //   compressed gap, extended depth, purple/green colors
+            // ============================================================
+            if (!isZAxis) {
+                const xMiniGap = gapFromBeam * 0.5;  // Compressed gap
+                const xMiniDepth = depth3D * 2.5;    // Extended depth
+
+                // North pole - above the upper beam (closer gap, no knife edge)
+                const xNorthTopY = upperBeamY - xMiniGap - (poleHeight - tipHeight);
+                draw3DBox(
+                    pos.centerX - halfWidth, xNorthTopY,
+                    magnetWidth, poleHeight - tipHeight, xMiniDepth,
+                    '#7c3aed', '#8b5cf6', '#6d28d9', false
+                );
+
+                // South pole - below the lower beam (closer gap, no knife edge)
+                const xSouthTopY = lowerBeamY + xMiniGap;
+                draw3DBox(
+                    pos.centerX - halfWidth, xSouthTopY,
+                    magnetWidth, poleHeight, xMiniDepth,
+                    '#059669', '#10b981', '#047857', false
+                );
+
+                // Field direction indicators (⊙) at each beam position
+                if (magneticFieldEnabled) {
+                    const beamMidY = (upperBeamY + lowerBeamY) / 2;
+                    const r = Math.max(2, 3 * scaleFactor * miniScale);
+                    ctx.strokeStyle = 'rgba(196, 181, 253, 0.4)';
+                    ctx.lineWidth = Math.max(0.5, 1 * scaleFactor * miniScale);
+                    ctx.beginPath();
+                    ctx.arc(pos.centerX, beamMidY, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(196, 181, 253, 0.4)';
+                    ctx.beginPath();
+                    ctx.arc(pos.centerX, beamMidY, Math.max(0.5, 1 * scaleFactor * miniScale), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Mini N/S labels
+                const miniFontSize = Math.max(9, 12 * miniScale * scaleFactor);
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${miniFontSize}px -apple-system, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText('N', pos.centerX, xNorthTopY + (poleHeight - tipHeight) / 2 + 2);
+                ctx.fillText('S', pos.centerX, xSouthTopY + poleHeight / 2 + 3);
+
+                return;
+            }
+
+            // ============================================================
+            // Z-AXIS MINI MAGNET: Standard vertical poles (N above, S below)
+            // ============================================================
             
             // North pole - positioned above the upper beam
             const northBottomTipY = upperBeamY - gapFromBeam; // Tip of knife edge
@@ -2104,7 +2243,66 @@
             }
         }
 
-        // Drag and Drop functionality
+        // =============================================
+        // Click-based interaction (primary method)
+        // Click a component to select it, then click a drop zone to place it
+        // =============================================
+        let selectedComponent = null;
+
+        function initClickInteraction() {
+            // Click palette components to select them
+            document.querySelectorAll('.draggable-component').forEach(comp => {
+                comp.addEventListener('click', (e) => {
+                    const el = e.currentTarget;
+                    const data = {
+                        type: el.dataset.type,
+                        axis: el.dataset.axis || null,
+                        value: el.dataset.value || null
+                    };
+
+                    // Toggle: click again to deselect
+                    if (selectedComponent &&
+                        selectedComponent.type === data.type &&
+                        selectedComponent.axis === data.axis &&
+                        selectedComponent.value === data.value) {
+                        selectedComponent = null;
+                        document.querySelectorAll('.draggable-component').forEach(d => d.classList.remove('selected'));
+                    } else {
+                        selectedComponent = data;
+                        document.querySelectorAll('.draggable-component').forEach(d => d.classList.remove('selected'));
+                        el.classList.add('selected');
+                    }
+                });
+            });
+
+            // Click drop zones to place the selected component
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.addEventListener('click', (e) => {
+                    if (!selectedComponent) return;
+
+                    const stageIndex = parseInt(e.currentTarget.dataset.stage) - 1;
+                    if (!canDropInZone(stageIndex, selectedComponent)) return;
+
+                    if (selectedComponent.type === 'magnet') {
+                        stages[stageIndex].axis = selectedComponent.axis;
+                    } else if (selectedComponent.type === 'blocker') {
+                        stages[stageIndex].blocker = selectedComponent.value;
+                    }
+
+                    calculateStagePositions();
+                    updateDropZones();
+                    reset();
+
+                    // Deselect after placing
+                    document.querySelectorAll('.draggable-component').forEach(d => d.classList.remove('selected'));
+                    selectedComponent = null;
+                });
+            });
+        }
+
+        // =============================================
+        // Drag and Drop (fallback method, kept for browsers that support it)
+        // =============================================
         function initDragAndDrop() {
             const draggables = document.querySelectorAll('.draggable-component');
             const dropZones = document.querySelectorAll('.drop-zone');
@@ -2124,21 +2322,25 @@
         let draggedData = null;
 
         function handleDragStart(e) {
+            const el = e.currentTarget;
             draggedData = {
-                type: e.target.dataset.type,
-                axis: e.target.dataset.axis || null,
-                value: e.target.dataset.value || null
+                type: el.dataset.type,
+                axis: el.dataset.axis || null,
+                value: el.dataset.value || null
             };
-            e.target.style.opacity = '0.5';
+            e.dataTransfer.setData('text/plain', JSON.stringify(draggedData));
+            e.dataTransfer.effectAllowed = 'move';
+            el.style.opacity = '0.5';
         }
 
         function handleDragEnd(e) {
-            e.target.style.opacity = '1';
+            e.currentTarget.style.opacity = '1';
             draggedData = null;
         }
 
         function handleDragOver(e) {
             e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
             const zone = e.currentTarget;
             const stageIndex = parseInt(zone.dataset.stage) - 1;
 
@@ -2303,6 +2505,7 @@
 
         // Initialize
         resize();
+        initClickInteraction();
         initDragAndDrop();
         updateDropZones();
         updateStage1Controls();
