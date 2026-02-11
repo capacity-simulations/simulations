@@ -181,6 +181,8 @@
         /* CONTROLS */
         .control-group { margin-bottom: 15px; }
         .control-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 8px; }
+        .control-value { color: var(--accent-blue); font-weight: 600; }
+        .control-range { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; }
 
         /* SLIDERS */
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer; }
@@ -292,11 +294,13 @@
             <div class="info-tooltip">
                 <div class="info-tooltip-title">About the Simulation</div>
                 <p>
-                    The <span class="highlight">double-slit experiment</span> demonstrates the wave-particle duality of quantum mechanics. When waves pass through two narrow slits, they create an <span class="highlight">interference pattern</span> on the detection screen.
+                    The <span class="highlight">double-slit experiment</span> demonstrates wave-particle duality. When particles pass through two slits, they create an <span class="highlight">interference pattern</span> on the detection screen.
                     <br><br>
-                    Plane wavefronts approach the slits from a source, split into two secondary circular waves (S1 and S2), and interfere constructively and destructively to create the characteristic pattern.
+                    <span class="highlight">Quantum (green):</span> |ψ₁ + ψ₂|² — amplitudes add, then square. The interference fringes arise from constructive/destructive interference.
                     <br><br>
-                    Toggle the <span class="highlight">Classical Pattern</span> button to see what classical particles (bullets) would do: orange dots accumulate as P₁₂ = P₁ + P₂ with <span class="highlight">no interference</span>, compared to the quantum result (Feynman Lectures Vol III, Ch 1).
+                    <span class="highlight">Classical (orange):</span> P₁ + P₂ — probabilities add directly. Each slit produces a single-slit diffraction pattern; with no interference between slits, we get a smooth envelope.
+                    <br><br>
+                    Both patterns use the <span class="highlight">same single-slit diffraction</span> physics — the difference is whether amplitudes or probabilities combine (Feynman Lectures Vol III, Ch 1).
                 </p>
             </div>
         </div>
@@ -320,20 +324,24 @@
             <div>
                 <div class="section-title">Parameters</div>
                 <div class="control-group">
-                    <div class="control-label"><span>Slit Separation (d)</span></div>
+                    <div class="control-label"><span>Slit Separation (d)</span><span class="control-value" id="slit-sep-value">4.0</span></div>
                     <input type="range" id="slit-sep" min="2" max="8" step="0.1" value="4">
+                    <div class="control-range"><span>Min: 2</span><span>Max: 8</span></div>
                 </div>
                 <div class="control-group">
-                    <div class="control-label"><span>Slit Width (a)</span></div>
+                    <div class="control-label"><span>Slit Width (a)</span><span class="control-value" id="slit-width-value">0.80</span></div>
                     <input type="range" id="slit-width" min="0.1" max="2.0" step="0.05" value="0.8">
+                    <div class="control-range"><span>Min: 0.1</span><span>Max: 2.0</span></div>
                 </div>
                 <div class="control-group" id="wavelength-group">
-                    <div class="control-label"><span>Wavelength (λ)</span></div>
+                    <div class="control-label"><span>Wavelength (λ)</span><span class="control-value" id="wavelength-value">1.5</span></div>
                     <input type="range" id="wavelength" min="0.5" max="3.0" step="0.1" value="1.5">
+                    <div class="control-range"><span>Min: 0.5</span><span>Max: 3.0</span></div>
                 </div>
                 <div class="control-group">
-                    <div class="control-label"><span>Animation Speed</span></div>
+                    <div class="control-label"><span>Animation Speed</span><span class="control-value" id="rate-value">15</span></div>
                     <input type="range" id="rate" min="5" max="30" step="1" value="15">
+                    <div class="control-range"><span>Min: 5</span><span>Max: 30</span></div>
                 </div>
             </div>
 
@@ -352,16 +360,16 @@
                     </div>
                     <div class="legend-item">
                         <div class="legend-color theoretical"></div>
-                        <span>Quantum Theory</span>
+                        <span>Quantum |ψ₁+ψ₂|²</span>
                     </div>
                     <div class="legend-item" id="classical-legend" style="display: none;">
                         <div class="legend-color classical"></div>
-                        <span>Classical (P₁+P₂)</span>
+                        <span>Classical P₁+P₂</span>
                     </div>
                 </div>
                 <p class="chart-description">
-                    <span class="highlight">I = I₀ cos²(πd sinθ/λ)</span> × sinc²(πa sinθ/λ)<br>
-                    Compare the <span class="highlight">detected intensity distribution</span> (blue bars) with the <span class="highlight">theoretical intensity envelope</span> (green line).
+                    <span class="highlight">Quantum:</span> I ∝ |ψ₁ + ψ₂|² = cos²(πd sinθ/λ) × sinc²(πa sinθ/λ)<br>
+                    <span class="highlight">Classical:</span> I ∝ P₁ + P₂ (no interference between slits)
                 </p>
             </div>
         </div>
@@ -376,7 +384,8 @@
             numIncidentWaves: 8,
             waveSegments: 150,
             sourceZ: 18,
-            barrierZ: 0
+            barrierZ: 0,
+            screenDistance: 30  // L: distance from slits to screen
         };
 
         // --- STATE ---
@@ -829,18 +838,23 @@
         }
 
         function recordInterferenceHits(time) {
-            const L = 30;
+            const L = CONFIG.screenDistance;
             const numSamples = 150;
+            const d_half = state.sep / 2;
             
             for (let i = 0; i < numSamples; i++) {
                 const x = (Math.random() - 0.5) * CONFIG.sceneWidth;
                 
+                // Quantum: Full double-slit interference pattern
+                // I = |ψ₁ + ψ₂|² = cos²(φ) × sinc²(β)
                 const theta = Math.atan(x / L);
                 const sinTheta = Math.sin(theta);
                 
+                // Interference term from path difference between slits
                 const phi = (Math.PI * state.sep * sinTheta) / state.lambda;
                 const interference = Math.pow(Math.cos(phi), 2);
                 
+                // Single-slit diffraction envelope
                 const beta = (Math.PI * state.slitWidth * sinTheta) / state.lambda;
                 let diffraction = 1.0;
                 if (Math.abs(beta) > 0.001) {
@@ -868,19 +882,25 @@
             }
 
             // Record classical hits when classical mode is on
-            // Classical probability: P₁ + P₂ (Feynman Vol III, Fig 1-1)
-            // Bullets have no wavelength → no interference, just two overlapping distributions
+            // Classical: P₁₂ = P₁ + P₂ (Feynman Vol III, Fig 1-1)
+            // Each slit produces its own single-slit diffraction pattern
+            // No interference between slits - probabilities add directly
             if (state.showClassical) {
-                const classicalSigma = 4.4 * state.slitWidth;
-                const d_half = state.sep / 2;
-
                 for (let i = 0; i < numSamples; i++) {
                     const cx = (Math.random() - 0.5) * CONFIG.sceneWidth;
 
-                    // P₁: Gaussian centered behind slit 1, P₂: behind slit 2
-                    const p1 = Math.exp(-Math.pow(cx + d_half, 2) / (2 * classicalSigma * classicalSigma));
-                    const p2 = Math.exp(-Math.pow(cx - d_half, 2) / (2 * classicalSigma * classicalSigma));
-                    // Normalize by 2.0 (max possible when both peaks coincide) for consistent sampling rate
+                    // P₁: Single-slit diffraction from slit 1 at x = -d/2
+                    const theta1 = Math.atan((cx + d_half) / L);
+                    const beta1 = (Math.PI * state.slitWidth * Math.sin(theta1)) / state.lambda;
+                    const p1 = Math.abs(beta1) > 0.001 ? Math.pow(Math.sin(beta1) / beta1, 2) : 1.0;
+                    
+                    // P₂: Single-slit diffraction from slit 2 at x = +d/2
+                    const theta2 = Math.atan((cx - d_half) / L);
+                    const beta2 = (Math.PI * state.slitWidth * Math.sin(theta2)) / state.lambda;
+                    const p2 = Math.abs(beta2) > 0.001 ? Math.pow(Math.sin(beta2) / beta2, 2) : 1.0;
+                    
+                    // Classical probability: just add (no interference)
+                    // Normalize by 2.0 for consistent sampling rate
                     const classicalProb = (p1 + p2) / 2.0;
 
                     if (Math.random() < classicalProb) {
@@ -932,7 +952,7 @@
                         },
                         {
                             type: 'line',
-                            label: 'Theoretical Envelope',
+                            label: 'Quantum |ψ₁+ψ₂|²',
                             data: theoreticalData,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -945,7 +965,7 @@
                         },
                         {
                             type: 'line',
-                            label: 'Classical (P₁+P₂)',
+                            label: 'Classical P₁+P₂',
                             data: generateClassicalData(),
                             borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.12)',
@@ -1004,10 +1024,14 @@
             });
         }
 
+        // Generate both quantum and classical patterns with proper normalization
+        // Both represent probability distributions with EQUAL total probability (same particle flux)
+        // We normalize so quantum peak = 1, then scale classical to have same area
+        
         function generateTheoreticalData() {
             const numBins = 80;
             const values = [];
-            const L = 30;
+            const L = CONFIG.screenDistance;
             
             for (let i = 0; i < numBins; i++) {
                 const x = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
@@ -1015,9 +1039,11 @@
                 const theta = Math.atan(x / L);
                 const sinTheta = Math.sin(theta);
                 
+                // Interference from double-slit path difference
                 const phi = (Math.PI * state.sep * sinTheta) / state.lambda;
                 const interference = Math.pow(Math.cos(phi), 2);
                 
+                // Single-slit diffraction envelope
                 const beta = (Math.PI * state.slitWidth * sinTheta) / state.lambda;
                 let diffraction = 1.0;
                 if (Math.abs(beta) > 0.001) {
@@ -1027,28 +1053,57 @@
                 values.push(interference * diffraction);
             }
             
-            return values;
+            // Normalize to max = 1
+            const maxVal = Math.max(...values);
+            return values.map(v => v / maxVal);
         }
 
-        // Classical pattern: P₁₂ = P₁ + P₂ (Feynman Vol III, Fig 1-1)
-        // No wavelength dependence — bullets are classical particles
+        // Classical pattern: P₁ + P₂ (Feynman Vol III, Fig 1-1)
+        // Each slit produces single-slit diffraction, no interference between slits
         function generateClassicalData() {
             const numBins = 80;
-            const values = [];
+            const L = CONFIG.screenDistance;
             const d_half = state.sep / 2;
-            const sigma = 4.4 * state.slitWidth;
-
-            // Calculate unnormalized intensities
+            
+            // First, generate raw quantum pattern for area comparison
+            const quantumRaw = [];
             for (let i = 0; i < numBins; i++) {
                 const x = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
-                const p1 = Math.exp(-Math.pow(x + d_half, 2) / (2 * sigma * sigma));
-                const p2 = Math.exp(-Math.pow(x - d_half, 2) / (2 * sigma * sigma));
-                values.push(p1 + p2);
+                const theta = Math.atan(x / L);
+                const sinTheta = Math.sin(theta);
+                const phi = (Math.PI * state.sep * sinTheta) / state.lambda;
+                const interference = Math.pow(Math.cos(phi), 2);
+                const beta = (Math.PI * state.slitWidth * sinTheta) / state.lambda;
+                const diffraction = Math.abs(beta) > 0.001 ? Math.pow(Math.sin(beta) / beta, 2) : 1.0;
+                quantumRaw.push(interference * diffraction);
             }
-
-            // Normalize to max = 1 for intensity comparison with quantum pattern
-            const maxValue = Math.max(...values);
-            return values.map(v => v / maxValue);
+            const quantumMax = Math.max(...quantumRaw);
+            const quantumNormalized = quantumRaw.map(v => v / quantumMax);
+            const quantumArea = quantumNormalized.reduce((a, b) => a + b, 0);
+            
+            // Generate classical pattern: P₁ + P₂
+            const classicalRaw = [];
+            for (let i = 0; i < numBins; i++) {
+                const x = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
+                
+                // P₁: diffraction from slit 1 at -d/2
+                const theta1 = Math.atan((x + d_half) / L);
+                const beta1 = (Math.PI * state.slitWidth * Math.sin(theta1)) / state.lambda;
+                const p1 = Math.abs(beta1) > 0.001 ? Math.pow(Math.sin(beta1) / beta1, 2) : 1.0;
+                
+                // P₂: diffraction from slit 2 at +d/2
+                const theta2 = Math.atan((x - d_half) / L);
+                const beta2 = (Math.PI * state.slitWidth * Math.sin(theta2)) / state.lambda;
+                const p2 = Math.abs(beta2) > 0.001 ? Math.pow(Math.sin(beta2) / beta2, 2) : 1.0;
+                
+                classicalRaw.push(p1 + p2);
+            }
+            
+            const classicalArea = classicalRaw.reduce((a, b) => a + b, 0);
+            
+            // Scale classical to have same area as normalized quantum
+            const scale = quantumArea / classicalArea;
+            return classicalRaw.map(v => v * scale);
         }
 
         function updateCombinedChart() {
@@ -1099,6 +1154,7 @@
 
             document.getElementById('slit-sep').oninput = (e) => {
                 state.sep = parseFloat(e.target.value);
+                document.getElementById('slit-sep-value').textContent = state.sep.toFixed(1);
                 createBarrier();
                 createSlitLabels();
                 clearClassicalOverlay();
@@ -1108,6 +1164,7 @@
             };
             document.getElementById('slit-width').oninput = (e) => {
                 state.slitWidth = parseFloat(e.target.value);
+                document.getElementById('slit-width-value').textContent = state.slitWidth.toFixed(2);
                 createBarrier();
                 clearClassicalOverlay();
                 state.classicalHits.fill(0);
@@ -1116,11 +1173,13 @@
             };
             document.getElementById('wavelength').oninput = (e) => {
                 state.lambda = parseFloat(e.target.value);
+                document.getElementById('wavelength-value').textContent = state.lambda.toFixed(1);
                 resetSim();
                 updateCombinedChart();
             };
             document.getElementById('rate').oninput = (e) => {
                 state.animationSpeed = parseInt(e.target.value);
+                document.getElementById('rate-value').textContent = state.animationSpeed;
             };
             document.getElementById('reset-btn').onclick = resetSim;
 
