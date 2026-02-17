@@ -479,6 +479,7 @@
             background: rgba(148, 163, 184, 0.4);
         }
     </style>
+</head>
 <body>
     <button class="sidebar-toggle" id="sidebarToggle">☰</button>
     
@@ -680,7 +681,16 @@
         let isPlaying = true;
         let lastFrameTime = performance.now();
         const baseTimeStep = 0.02;  // Base time step for physics
-        const xMin = -5, xMax = 5;
+
+        // Display range — dynamically adapts so turning points always fit on screen
+        let xMin = -5, xMax = 5;
+        function updateDisplayRange() {
+            const A = getAmplitude();
+            // Ensure turning points ±A fit with 30% margin, minimum range [-5, 5]
+            const halfRange = Math.max(5, A * 1.3);
+            xMin = -halfRange;
+            xMax = halfRange;
+        }
 
         // Fixed y-axis scale for potential plots - this stays constant
         const potentialYMax = 6.0;  // Fixed maximum for y-axis
@@ -867,9 +877,9 @@
             ctx.fillText('-A', xToCanvas(-A, canvas), h - 15);
             ctx.fillText('+A', xToCanvas(A, canvas), h - 15);
             ctx.fillStyle = '#fbbf24';
-            ctx.textAlign = 'left';
-            // Energy displayed in natural units (ℏω)
-            ctx.fillText('E=' + energy.toFixed(1) + ' (ℏω)', w - rightMargin + 5, ey + 4);
+            ctx.textAlign = 'right';
+            // Energy displayed in natural units (ℏω), positioned inside the right margin
+            ctx.fillText('E=' + energy.toFixed(1) + ' ℏω', w - rightMargin - 5, ey - 8);
         }
 
         // Draw classical mass-spring system
@@ -890,21 +900,25 @@
             const massX = xToCanvas(x, canvas);
             const eqX = xToCanvas(0, canvas);
 
-            // Draw forbidden region shading
+            // Draw forbidden region shading (clamp to plot area so negative widths are avoided)
             ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-            ctx.fillRect(40, 0, xToCanvas(-A, canvas) - 40, h);
-            ctx.fillRect(xToCanvas(A, canvas), 0, w - 40 - xToCanvas(A, canvas), h);
+            const leftTP = Math.max(40, xToCanvas(-A, canvas));
+            const rightTP = Math.min(w - 40, xToCanvas(A, canvas));
+            if (leftTP > 40) ctx.fillRect(40, 0, leftTP - 40, h);
+            if (rightTP < w - 40) ctx.fillRect(rightTP, 0, w - 40 - rightTP, h);
 
-            // Draw turning point markers
+            // Draw turning point markers (only if on-screen)
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             [-A, A].forEach(xTurn => {
                 const px = xToCanvas(xTurn, canvas);
-                ctx.beginPath();
-                ctx.moveTo(px, 10);
-                ctx.lineTo(px, h - 10);
-                ctx.stroke();
+                if (px >= 40 && px <= w - 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, 10);
+                    ctx.lineTo(px, h - 10);
+                    ctx.stroke();
+                }
             });
             ctx.setLineDash([]);
 
@@ -923,7 +937,8 @@
             ctx.lineWidth = 2;
             ctx.beginPath();
             const springStart = wallX + 10;
-            const springEnd = massX - massRadius;
+            // Clamp so spring never inverts when mass is pushed past the wall
+            const springEnd = Math.max(springStart + 5, massX - massRadius);
             const coils = 12;
             const coilWidth = 15;
             ctx.moveTo(springStart, centerY);
@@ -1010,21 +1025,25 @@
             // In natural units with ℏ=1: |ψ|² = sqrt(mω/π) * exp(-mω * (x-x0)²)
             const normFactor = Math.sqrt(m * omega / Math.PI);
 
-            // Draw forbidden region shading
+            // Draw forbidden region shading (clamp to plot area so negative widths are avoided)
             ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-            ctx.fillRect(40, 0, xToCanvas(-A, canvas) - 40, h);
-            ctx.fillRect(xToCanvas(A, canvas), 0, w - 40 - xToCanvas(A, canvas), h);
+            const leftTPq = Math.max(40, xToCanvas(-A, canvas));
+            const rightTPq = Math.min(w - 40, xToCanvas(A, canvas));
+            if (leftTPq > 40) ctx.fillRect(40, 0, leftTPq - 40, h);
+            if (rightTPq < w - 40) ctx.fillRect(rightTPq, 0, w - 40 - rightTPq, h);
 
-            // Draw turning point markers
+            // Draw turning point markers (only if on-screen)
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             [-A, A].forEach(xTurn => {
                 const px = xToCanvas(xTurn, canvas);
-                ctx.beginPath();
-                ctx.moveTo(px, 10);
-                ctx.lineTo(px, h - 10);
-                ctx.stroke();
+                if (px >= 40 && px <= w - 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, 10);
+                    ctx.lineTo(px, h - 10);
+                    ctx.stroke();
+                }
             });
             ctx.setLineDash([]);
 
@@ -1045,7 +1064,14 @@
                 points.push({ x, psi2 });
             }
 
-            const maxPsi2 = normFactor;
+            // Fixed reference scale so |ψ|² height changes visibly with m and ω.
+            // Reference: default parameters (m=1, ω=1) peak fills 70% of display.
+            // At extreme parameters the peak is clamped to 95% to prevent overflow.
+            const refNormFactor = Math.sqrt(1.0 / Math.PI);  // peak at m=1, ω=1
+            const psi2Scale = yScale * 0.7 / refNormFactor;
+            function psi2ToY(psi2) {
+                return centerY - Math.min(psi2 * psi2Scale, yScale * 0.95);
+            }
 
             // Draw filled wavepacket with different colors for allowed/forbidden regions
             // First, draw the allowed region (cyan/blue)
@@ -1054,7 +1080,7 @@
             points.forEach((p, i) => {
                 if (Math.abs(p.x) <= A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     if (i === 0 || Math.abs(points[i-1].x) > A) {
                         ctx.lineTo(px, centerY);
                     }
@@ -1065,7 +1091,7 @@
             });
             ctx.lineTo(xToCanvas(A, canvas), centerY);
             ctx.closePath();
-            const gradientAllowed = ctx.createLinearGradient(0, centerY - yScale * 0.8, 0, centerY);
+            const gradientAllowed = ctx.createLinearGradient(0, centerY - yScale * 0.95, 0, centerY);
             gradientAllowed.addColorStop(0, 'rgba(6, 182, 212, 0.8)');
             gradientAllowed.addColorStop(1, 'rgba(59, 130, 246, 0.3)');
             ctx.fillStyle = gradientAllowed;
@@ -1078,13 +1104,13 @@
             points.forEach((p, i) => {
                 if (p.x < -A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     ctx.lineTo(px, py);
                 }
             });
             ctx.lineTo(xToCanvas(-A, canvas), centerY);
             ctx.closePath();
-            const gradientForbidden = ctx.createLinearGradient(0, centerY - yScale * 0.8, 0, centerY);
+            const gradientForbidden = ctx.createLinearGradient(0, centerY - yScale * 0.95, 0, centerY);
             gradientForbidden.addColorStop(0, 'rgba(249, 115, 22, 0.8)');
             gradientForbidden.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
             ctx.fillStyle = gradientForbidden;
@@ -1096,7 +1122,7 @@
             points.forEach((p, i) => {
                 if (p.x > A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     ctx.lineTo(px, py);
                 }
             });
@@ -1111,7 +1137,7 @@
             ctx.beginPath();
             points.forEach((p, i) => {
                 const px = xToCanvas(p.x, canvas);
-                const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                const py = psi2ToY(p.psi2);
                 if (i === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             });
@@ -1192,6 +1218,9 @@
                 // Scale by a factor to get reasonable animation speed
                 time += cappedDelta * 1.0;  // 1.0 = real-time in natural units
             }
+
+            // Recompute display range so turning points always fit on screen
+            updateDisplayRange();
 
             drawPotential(ctxCP, canvasCP, false);
             drawClassicalMass(ctxCM, canvasCM);
