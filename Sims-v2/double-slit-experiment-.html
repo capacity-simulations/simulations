@@ -560,8 +560,7 @@
             numIncidentWaves: 8,
             waveSegments: 150,
             sourceZ: 18,
-            barrierZ: 0,
-            screenDistance: 30  // L: distance from slits to screen
+            barrierZ: 0
         };
 
         // --- STATE ---
@@ -589,6 +588,7 @@
             sep: 800 * NM_TO_SIM.sep,
             slitWidth: 200 * NM_TO_SIM.width,
             lambda: 550 * NM_TO_SIM.lambda,
+            screenDistance: 6000 * NM_TO_SIM.screenDist,   // L: slits → screen
             animationSpeed: 15,
             hits: new Uint32Array(80),
             classicalHits: new Uint32Array(80),
@@ -734,7 +734,7 @@
                 side: THREE.DoubleSide
             });
             screenMesh = new THREE.Mesh(screenGeo, screenMat);
-            screenMesh.position.z = -CONFIG.screenDistance;
+            screenMesh.position.z = -state.screenDistance;
             scene.add(screenMesh);
 
             // Create classical overlay (separate plane in front of screen)
@@ -764,7 +764,7 @@
                 depthWrite: false
             });
             classicalOverlayMesh = new THREE.Mesh(overlayGeo, overlayMat);
-            classicalOverlayMesh.position.z = -CONFIG.screenDistance + 0.3; // Slightly in front of the detection screen
+            classicalOverlayMesh.position.z = -state.screenDistance + 0.3; // Slightly in front of the detection screen
             classicalOverlayMesh.visible = false;
             scene.add(classicalOverlayMesh);
             
@@ -892,12 +892,18 @@
             }
         }
 
+        function disposeWave(w) {
+            scene.remove(w.mesh);
+            w.mesh.geometry.dispose();
+            w.mesh.material.dispose();
+        }
+
         function createWavefronts() {
-            incidentWaves.forEach(w => scene.remove(w.mesh));
+            incidentWaves.forEach(disposeWave);
             incidentWaves = [];
-            secondaryWavesS1.forEach(w => scene.remove(w.mesh));
+            secondaryWavesS1.forEach(disposeWave);
             secondaryWavesS1 = [];
-            secondaryWavesS2.forEach(w => scene.remove(w.mesh));
+            secondaryWavesS2.forEach(disposeWave);
             secondaryWavesS2 = [];
 
             for (let i = 0; i < CONFIG.numIncidentWaves; i++) {
@@ -1003,7 +1009,7 @@
 
         function updateWaveMode(dt, time) {
             const speed = state.animationSpeed;
-            const screenZ = -CONFIG.screenDistance;
+            const screenZ = -state.screenDistance;
 
             const incidentToRemove = [];
             incidentWaves.forEach((wave, index) => {
@@ -1032,7 +1038,7 @@
             });
 
             incidentToRemove.reverse().forEach(index => {
-                scene.remove(incidentWaves[index].mesh);
+                disposeWave(incidentWaves[index]);
                 incidentWaves.splice(index, 1);
             });
             
@@ -1078,7 +1084,7 @@
             });
 
             s1ToRemove.reverse().forEach(index => {
-                scene.remove(secondaryWavesS1[index].mesh);
+                disposeWave(secondaryWavesS1[index]);
                 secondaryWavesS1.splice(index, 1);
             });
 
@@ -1108,13 +1114,13 @@
             });
 
             s2ToRemove.reverse().forEach(index => {
-                scene.remove(secondaryWavesS2[index].mesh);
+                disposeWave(secondaryWavesS2[index]);
                 secondaryWavesS2.splice(index, 1);
             });
         }
 
         function recordInterferenceHits() {
-            const L = CONFIG.screenDistance;
+            const L = state.screenDistance;
             const numSamples = 150;
             const d_half = state.sep / 2;
             
@@ -1310,7 +1316,7 @@
         function generateTheoreticalData() {
             const numBins = 80;
             const values = [];
-            const L = CONFIG.screenDistance;
+            const L = state.screenDistance;
             
             for (let i = 0; i < numBins; i++) {
                 const x = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
@@ -1341,7 +1347,7 @@
         // Each slit produces single-slit diffraction, no interference between slits
         function generateClassicalData() {
             const numBins = 80;
-            const L = CONFIG.screenDistance;
+            const L = state.screenDistance;
             const d_half = state.sep / 2;
             
             // Generate classical pattern: P₁ + P₂
@@ -1426,10 +1432,7 @@
             function updateSimParams() {
                 createBarrier();
                 createSlitLabels();
-                clearClassicalOverlay();
-                state.classicalHits.fill(0);
-                resetSim();
-                updateCombinedChart();
+                resetSim();   // handles clear, hit reset, and chart update
             }
 
             document.getElementById('slit-sep').oninput = (e) => {
@@ -1450,21 +1453,16 @@
                 const valEl = document.getElementById('wavelength-value');
                 valEl.textContent = Math.round(val) + ' nm';
                 valEl.style.color = wavelengthToColor(val);
-                updateAllWaveColors();
                 createSourceMarker();
-                updateSimParams();
+                updateSimParams();  // recreates all waves with current color
             };
             document.getElementById('screen-dist').oninput = (e) => {
                 const val = parseFloat(e.target.value);
-                CONFIG.screenDistance = val * NM_TO_SIM.screenDist;
+                state.screenDistance = val * NM_TO_SIM.screenDist;
                 document.getElementById('screen-dist-value').textContent = Math.round(val) + ' nm';
-                // Update screen mesh positions
-                if (screenMesh) screenMesh.position.z = -CONFIG.screenDistance;
-                if (classicalOverlayMesh) classicalOverlayMesh.position.z = -CONFIG.screenDistance + 0.3;
-                clearClassicalOverlay();
-                state.classicalHits.fill(0);
+                if (screenMesh) screenMesh.position.z = -state.screenDistance;
+                if (classicalOverlayMesh) classicalOverlayMesh.position.z = -state.screenDistance + 0.3;
                 resetSim();
-                updateCombinedChart();
             };
             document.getElementById('rate').oninput = (e) => {
                 state.animationSpeed = parseInt(e.target.value);
@@ -1566,6 +1564,7 @@
             isPlaying: false,
             timer: null,
             utterance: null,
+            keepAliveInterval: null,   // Chrome TTS workaround
             speechSupported: 'speechSynthesis' in window
         };
 
@@ -1616,6 +1615,10 @@
                 clearTimeout(narration.timer);
                 narration.timer = null;
             }
+            if (narration.keepAliveInterval) {
+                clearInterval(narration.keepAliveInterval);
+                narration.keepAliveInterval = null;
+            }
 
             // Reset to first slide after a brief pause
             narration.timer = setTimeout(() => {
@@ -1664,6 +1667,16 @@
 
             narration.utterance = utterance;
             window.speechSynthesis.speak(utterance);
+
+            // Chrome workaround: speechSynthesis silently stops after ~15 s.
+            // A periodic pause/resume keeps the audio pipeline alive.
+            if (narration.keepAliveInterval) clearInterval(narration.keepAliveInterval);
+            narration.keepAliveInterval = setInterval(() => {
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.pause();
+                    window.speechSynthesis.resume();
+                }
+            }, 10000);
         }
 
         function playNarration() {
@@ -1720,6 +1733,10 @@
             if (narration.timer) {
                 clearTimeout(narration.timer);
                 narration.timer = null;
+            }
+            if (narration.keepAliveInterval) {
+                clearInterval(narration.keepAliveInterval);
+                narration.keepAliveInterval = null;
             }
         }
 
