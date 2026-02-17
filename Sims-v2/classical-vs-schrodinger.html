@@ -1225,12 +1225,30 @@
             });
 
             document.getElementById('kSlider').addEventListener('input', function() {
-                // Preserve oscillation phase across ω change to prevent position discontinuity
+                // Changing k affects both ω = √(k/m) AND A = √(2E/k).
+                // Phase-only preservation (as used for the mass slider) still causes a
+                // position jump because A changes. Instead, preserve the actual position
+                // x_old and the velocity direction by solving A_new·cos(θ_new) = x_old.
                 const oldOmega = getOmega();
-                const phase = oldOmega * time;
+                const oldA = getAmplitude();
+                const oldTheta = oldOmega * time;
+                const xOld = oldA * Math.cos(oldTheta);
+                const movingLeft = Math.sin(oldTheta) > 0; // v = -Aω sin(θ), sin>0 → v<0
+
                 k = parseFloat(this.value);
+
                 const newOmega = getOmega();
-                time = newOmega > 0 ? phase / newOmega : time;
+                const newA = getAmplitude();
+                if (newOmega > 0 && newA > 0) {
+                    // Clamp ratio to [-1, 1] in case x_old is beyond new turning points
+                    const cosNew = Math.max(-1, Math.min(1, xOld / newA));
+                    let newTheta = Math.acos(cosNew); // returns [0, π] where sin ≥ 0
+                    // acos gives sin(θ) ≥ 0 (moving left). Flip to [π, 2π] if was moving right.
+                    if (!movingLeft) {
+                        newTheta = 2 * Math.PI - newTheta;
+                    }
+                    time = newTheta / newOmega;
+                }
                 document.getElementById('kSliderValue').textContent = k.toFixed(2) + ' N/m';
             });
 
