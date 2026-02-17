@@ -1064,13 +1064,19 @@
                 points.push({ x, psi2 });
             }
 
-            // Fixed reference scale so |ψ|² height changes visibly with m and ω.
-            // Reference: default parameters (m=1, ω=1) peak fills 70% of display.
-            // At extreme parameters the peak is clamped to 95% to prevent overflow.
+            // Fixed reference scale: default (m=1, ω=1) peak fills 70% of display.
+            // Peak grows taller when wavepacket narrows (conserving visual area ≈ ∫|ψ|²).
+            // Smooth compression above 70% prevents hard clipping / flat tops at extremes.
             const refNormFactor = Math.sqrt(1.0 / Math.PI);  // peak at m=1, ω=1
             const psi2Scale = yScale * 0.7 / refNormFactor;
+            const compThresh = yScale * 0.7;
+            const compRange  = yScale * 0.25;              // headroom above threshold
             function psi2ToY(psi2) {
-                return centerY - Math.min(psi2 * psi2Scale, yScale * 0.95);
+                const h = psi2 * psi2Scale;                 // linear height in pixels
+                if (h <= compThresh) return centerY - h;    // linear up to 70%
+                // Exponential soft-knee: smoothly approaches 95% — never a flat top
+                return centerY - (compThresh +
+                    compRange * (1 - Math.exp(-(h - compThresh) / compRange)));
             }
 
             // Draw filled wavepacket with different colors for allowed/forbidden regions
