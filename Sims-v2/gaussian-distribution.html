@@ -656,7 +656,6 @@
         let totalSamples = 0;
         let sampleAccumulator = 0;
         let totalElapsedTime = 0;
-        let isFirstFrame = true;
         
         // Measurement window state
         let measurementWindowHeight = 70; // Height of the measurement window below x-axis
@@ -738,6 +737,7 @@
             totalElapsedTime = 0;
             currentMeasurement = null;
             measurementFlashes = [];
+            previousTime = null;
         }
         
         function drawGrid() {
@@ -753,9 +753,10 @@
                 ctx.stroke();
             }
             
-            // Horizontal grid lines
+            // Horizontal grid lines — step matches y-axis labels
             const maxY = getDynamicMaxY();
-            for (let y = 0; y <= maxY; y += 0.1) {
+            const gridYStep = maxY <= 0.5 ? 0.1 : (maxY <= 1.0 ? 0.2 : 0.5);
+            for (let y = 0; y <= maxY; y += gridYStep) {
                 const canvasY = yToCanvas(y, maxY);
                 ctx.beginPath();
                 ctx.moveTo(graphLeft, canvasY);
@@ -769,16 +770,16 @@
             const maxY = getDynamicMaxY();
             
             // 3σ region (outermost) - red
-            drawSigmaRegion(3, 'rgba(239, 68, 68, 0.15)');
+            drawSigmaRegion(3, 'rgba(239, 68, 68, 0.15)', 'rgba(239, 68, 68, 0.5)');
             
             // 2σ region - yellow/amber
-            drawSigmaRegion(2, 'rgba(251, 191, 36, 0.15)');
+            drawSigmaRegion(2, 'rgba(251, 191, 36, 0.15)', 'rgba(251, 191, 36, 0.5)');
             
             // 1σ region (innermost) - green
-            drawSigmaRegion(1, 'rgba(34, 197, 94, 0.2)');
+            drawSigmaRegion(1, 'rgba(34, 197, 94, 0.2)', 'rgba(34, 197, 94, 0.6)');
         }
         
-        function drawSigmaRegion(numSigma, fillColor) {
+        function drawSigmaRegion(numSigma, fillColor, strokeColor) {
             const maxY = getDynamicMaxY();
             const leftBound = mu - numSigma * sigma;
             const rightBound = mu + numSigma * sigma;
@@ -807,7 +808,7 @@
             ctx.fill();
             
             // Draw vertical boundary lines for the region
-            ctx.strokeStyle = fillColor.replace('0.15', '0.5').replace('0.2', '0.6');
+            ctx.strokeStyle = strokeColor;
             ctx.lineWidth = 1;
             ctx.setLineDash([4, 4]);
             
@@ -843,9 +844,13 @@
                 { sigma: 3, label: '+3σ', color: 'rgba(239, 68, 68, 0.9)' }
             ];
             
+            const oneSigmaPixels = (sigma / xRange) * graphWidth;
             for (const item of sigmaLabels) {
                 const x = mu + item.sigma * sigma;
                 if (x >= xMin && x <= xMax) {
+                    if (oneSigmaPixels < 12 && Math.abs(item.sigma) === 3) continue;
+                    if (oneSigmaPixels < 8 && Math.abs(item.sigma) === 2) continue;
+                    if (oneSigmaPixels < 6) continue;
                     const canvasX = xToCanvas(x);
                     ctx.fillStyle = item.color;
                     ctx.fillText(item.label, canvasX, graphTop - 12);
@@ -1129,27 +1134,27 @@
             
             for (let i = 0; i < samplesToAdd; i++) {
                 const value = generateGaussianSample();
+                totalSamples++;
+                
                 if (value >= xMin && value <= xMax) {
-                    // Add to histogram immediately
                     const bin = getBin(value);
                     histogram[bin]++;
-                    totalSamples++;
                     
-                    // Create measurement marker
                     currentMeasurement = {
                         value: value,
                         alpha: 1,
-                        life: 30 // Frames to display
+                        life: 30
                     };
                     
-                    // Add flash effect
-                    measurementFlashes.push({
-                        value: value,
-                        alpha: 1,
-                        radius: 5,
-                        life: 20,
-                        maxLife: 20
-                    });
+                    if (measurementFlashes.length < 15) {
+                        measurementFlashes.push({
+                            value: value,
+                            alpha: 1,
+                            radius: 5,
+                            life: 20,
+                            maxLife: 20
+                        });
+                    }
                 }
             }
         }
@@ -1180,18 +1185,18 @@
             drawMeasurementWindow();
         }
         
-        let previousTime = performance.now();
+        let previousTime = null;
         
         function animate(currentTime) {
+            if (previousTime === null) {
+                previousTime = currentTime;
+                requestAnimationFrame(animate);
+                return;
+            }
+            
             // Calculate delta time in seconds
             let deltaTime = (currentTime - previousTime) / 1000;
             previousTime = currentTime;
-            
-            // On first frame, cap deltaTime to prevent large initial burst
-            if (isFirstFrame) {
-                deltaTime = Math.min(deltaTime, 0.016);
-                isFirstFrame = false;
-            }
             
             // Cap deltaTime to prevent huge bursts after tab switching or lag
             deltaTime = Math.min(deltaTime, 0.1);
@@ -1235,6 +1240,9 @@
         
         document.getElementById('pauseBtn').addEventListener('click', (e) => {
             isPaused = !isPaused;
+            if (!isPaused) {
+                previousTime = null;
+            }
             e.target.textContent = isPaused ? 'Resume' : 'Pause';
             e.target.classList.toggle('active', isPaused);
         });
