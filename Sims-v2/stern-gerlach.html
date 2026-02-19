@@ -437,9 +437,9 @@
                 <div class="control">
                     <div class="control-header">
                         <label for="fieldStrength">Magnetic Field Gradient</label>
-                        <span class="control-value-display"><span id="fieldValue">5</span> T/m</span>
+                        <span class="control-value-display"><span id="fieldValue">3</span> T/m</span>
                     </div>
-                    <input type="range" class="slider" id="fieldStrength" min="1" max="10" value="5">
+                    <input type="range" class="slider" id="fieldStrength" min="1" max="6" value="3">
                 </div>
                 <div class="control">
                     <div class="control-header">
@@ -492,7 +492,7 @@
         let lastFrameTime = 0;
         
         // Controls
-        let fieldStrength = 5;
+        let fieldStrength = 3;  // Default value, max is 6 T/m to keep all beams in view
         let emissionRate = 8;
         let classicalMode = false;
         let totalSpin = 0.5; // j value
@@ -604,16 +604,16 @@
             ctx.scale(dpr, dpr);
             
             sourceX = width * 0.08;
-            magnetStartX = width * 0.25;
-            magnetEndX = width * 0.48;
-            detectorX = width * 0.64;
-            detectorWindowX = width * 0.73;
+            magnetStartX = width * 0.24;
+            magnetEndX = width * 0.44;
+            detectorX = width * 0.58;
+            detectorWindowX = width * 0.67;
             centerY = height * 0.5;
             magnetTopY = centerY - height * 0.18;
             magnetBottomY = centerY + height * 0.18;
             
-            detectorWindowHeight = height * 0.8;
-            detectorWindowWidth = width * 0.2;
+            detectorWindowHeight = height * 0.85;
+            detectorWindowWidth = width * 0.26;
             detectorHeight = detectorWindowHeight;
         }
         
@@ -735,15 +735,19 @@
                     spinCounts[closestMj] = (spinCounts[closestMj] || 0) + 1;
                 }
                 
-                const windowTop = centerY - detectorWindowHeight / 2;
-                const relativeY = this.y - windowTop;
-                const normalizedY = Math.max(10, Math.min(detectorWindowHeight - 10, relativeY));
+                // Store y-offset from centerY (positive = below center, negative = above)
+                // This is independent of display window position and can be mapped correctly
+                const yOffsetFromCenter = this.y - centerY;
+                
+                // Clamp to display window bounds (with 10px margin)
+                const maxOffset = detectorWindowHeight / 2 - 10;
+                const clampedOffset = Math.max(-maxOffset, Math.min(maxOffset, yOffsetFromCenter));
                 
                 detectionPoints.push({
-                    y: normalizedY,
+                    yOffset: clampedOffset,
                     mj: this.mj,
                     isClassical: this.isClassical,
-                    x: (Math.random() - 0.5) * (detectorWindowWidth * 0.5),
+                    x: (Math.random() - 0.5) * (detectorWindowWidth * 0.7),
                     time: animationTime
                 });
                 
@@ -762,10 +766,12 @@
                         ctx.moveTo(prev.x, prev.y);
                         ctx.lineTo(curr.x, curr.y);
                         
+                        // Use prev point's state for segment color to ensure color
+                        // transition happens at the correct spatial position
                         let color;
-                        if (!curr.hasEnteredField) color = COLORS.initialRgba + alpha + ')';
-                        else if (curr.isClassical) color = COLORS.classicalRgba + alpha + ')';
-                        else color = getColorRgbaForMj(curr.mj, alpha);
+                        if (!prev.hasEnteredField) color = COLORS.initialRgba + alpha + ')';
+                        else if (prev.isClassical) color = COLORS.classicalRgba + alpha + ')';
+                        else color = getColorRgbaForMj(prev.mj, alpha);
                         
                         ctx.strokeStyle = color;
                         ctx.lineWidth = 2.5;
@@ -1168,22 +1174,25 @@
                     color = getColorRgbaForMj(point.mj, 0.75);
                 }
                 
+                // Convert center-relative yOffset to absolute screen position
+                const pointY = centerY + point.yOffset;
+                
                 // Point glow
                 const glowSize = 6;
                 const glow = ctx.createRadialGradient(
-                    windowCenterX + point.x, windowTop + point.y, 0,
-                    windowCenterX + point.x, windowTop + point.y, glowSize
+                    windowCenterX + point.x, pointY, 0,
+                    windowCenterX + point.x, pointY, glowSize
                 );
                 glow.addColorStop(0, color);
                 glow.addColorStop(1, 'transparent');
                 ctx.fillStyle = glow;
                 ctx.beginPath();
-                ctx.arc(windowCenterX + point.x, windowTop + point.y, glowSize, 0, Math.PI * 2);
+                ctx.arc(windowCenterX + point.x, pointY, glowSize, 0, Math.PI * 2);
                 ctx.fill();
                 
                 // Point core
                 ctx.beginPath();
-                ctx.arc(windowCenterX + point.x, windowTop + point.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(windowCenterX + point.x, pointY, 2.5, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
             }
@@ -1397,9 +1406,9 @@
             
             atoms = atoms.filter(atom => {
                 const alive = atom.update(dt);
-                if (alive || !atom.detected) {
-                    atom.draw();
-                }
+                // Always draw the particle (including its final frame before removal)
+                // Detected particles are also visualized as detection points in the window
+                atom.draw();
                 return alive;
             });
             
@@ -1453,3 +1462,4 @@
     </script>
 </body>
 </html>
+// added the fixes

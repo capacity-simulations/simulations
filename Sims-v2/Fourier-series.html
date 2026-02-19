@@ -18,9 +18,9 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 
 .main-area{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden;}
 
-.equation-bar{background:rgba(15,23,42,0.85);border-bottom:1px solid rgba(148,163,184,0.12);padding:16px 24px;min-height:80px;display:flex;align-items:center;justify-content:center;overflow-x:auto;overflow-y:hidden;}
+.equation-bar{background:rgba(15,23,42,0.85);border-bottom:1px solid rgba(148,163,184,0.12);padding:16px 24px;min-height:80px;display:flex;align-items:center;justify-content:safe center;overflow-x:auto;overflow-y:hidden;}
 .equation-bar .katex{font-size:1.3em;}
-.equation-bar .katex-display{margin:0;}
+.equation-bar .katex-display{margin:0 auto;flex-shrink:0;}
 
 .panels-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
 
@@ -174,9 +174,7 @@ function initDragHandle() {
     const rect = container.getBoundingClientRect();
     const y = e.touches[0].clientY - rect.top;
     panelTopHeight = Math.max(0.08, Math.min(0.7, y / container.clientHeight));
-    const totalH = container.clientHeight - document.getElementById('dragHandleH').offsetHeight;
-    const topH = Math.max(60, Math.min(totalH - 100, totalH * panelTopHeight));
-    document.getElementById('panelTop').style.height = topH + 'px';
+    applyLayout();
   }, {passive:false});
   window.addEventListener('touchend', () => {
     if (isDragging) {
@@ -254,12 +252,14 @@ function getTermLabel(termIndex) {
   if (waveType === 'square') {
     const n = 2 * termIndex + 1;
     const coeff = (4 / (Math.PI * n)).toFixed(3);
-    return `${coeff}·sin(${n}x)`;
+    const harmStr = n === 1 ? 'x' : `${n}x`;
+    return `${coeff}·sin(${harmStr})`;
   } else {
     const n = termIndex + 1;
     const sign = Math.pow(-1, n + 1) > 0 ? '+' : '-';
     const coeff = (2 / (Math.PI * n)).toFixed(3);
-    return `${sign === '+' ? '' : '-'}${coeff}·sin(${n}x)`;
+    const harmStr = n === 1 ? 'x' : `${n}x`;
+    return `${sign === '+' ? '' : '-'}${coeff}·sin(${harmStr})`;
   }
 }
 
@@ -269,8 +269,8 @@ function getTermAmplitudeDisplay(termIndex) {
     return `A = ${(4 / (Math.PI * n)).toFixed(4)}`;
   } else {
     const n = termIndex + 1;
-    const sign = Math.pow(-1, n + 1) > 0 ? '+' : '-';
-    return `A = ${sign}${(2 / (Math.PI * n)).toFixed(4)}`;
+    const signChar = Math.pow(-1, n + 1) > 0 ? '' : '-';
+    return `A = ${signChar}${(2 / (Math.PI * n)).toFixed(4)}`;
   }
 }
 
@@ -281,7 +281,9 @@ function updateEquation() {
     for (let k = 0; k < N; k++) {
       const n = 2 * k + 1;
       if (k > 0) latex += ' + ';
-      latex += `\\frac{4}{${n}\\pi}\\sin(${n}x)`;
+      const denomStr = n === 1 ? '\\pi' : `${n}\\pi`;
+      const argStr = n === 1 ? 'x' : `${n}x`;
+      latex += `\\frac{4}{${denomStr}}\\sin(${argStr})`;
       if (k >= 5 && N > 6) { latex += ' + \\cdots'; break; }
     }
   } else {
@@ -289,7 +291,9 @@ function updateEquation() {
       const sign = Math.pow(-1, n + 1);
       if (n > 1) latex += sign > 0 ? ' + ' : ' - ';
       else if (sign < 0) latex += '-';
-      latex += `\\frac{2}{${n}\\pi}\\sin(${n}x)`;
+      const denomStr = n === 1 ? '\\pi' : `${n}\\pi`;
+      const argStr = n === 1 ? 'x' : `${n}x`;
+      latex += `\\frac{2}{${denomStr}}\\sin(${argStr})`;
       if (n >= 6 && N > 6) { latex += ' + \\cdots'; break; }
     }
   }
@@ -334,11 +338,16 @@ function drawTermCanvases() {
   const colors = ['#60a5fa','#34d399','#f472b6','#fbbf24','#a78bfa','#fb923c','#22d3ee','#e879f9','#4ade80','#f87171','#38bdf8','#facc15','#c084fc','#fb7185','#2dd4bf','#a3e635','#818cf8','#f97316','#67e8f9','#d946ef'];
   
   const maxAmpFirst = getTermAmplitude(0);
+  const dpr = window.devicePixelRatio || 1;
   
   for (let i = 0; i < termCanvases.length; i++) {
     const cvs = termCanvases[i];
+    const rect = cvs.getBoundingClientRect();
+    const w = rect.width || 220, h = rect.height || 100;
+    cvs.width = w * dpr;
+    cvs.height = h * dpr;
     const ctx = cvs.getContext('2d');
-    const w = cvs.width, h = cvs.height;
+    ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
@@ -563,8 +572,9 @@ function drawMainCanvas() {
   }
   ctx.stroke();
   
-  // Animated sweep line
-  const sweepFrac = ((animPhase * 2) % plotW) / plotW;
+  // Animated sweep line (time-based, resolution-independent)
+  const sweepPeriod = 8;
+  const sweepFrac = ((animPhase / 30) / sweepPeriod) % 1;
   const sweepX = padL + sweepFrac * plotW;
   ctx.strokeStyle = 'rgba(96,165,250,0.2)';
   ctx.lineWidth = 1;
@@ -601,7 +611,11 @@ function drawMainCanvas() {
   ctx.textAlign = 'left';
   ctx.fillText(`Target ${waveType} wave`, legendX + 30, legendY + 4);
   
-  ctx.strokeStyle = '#60a5fa';
+  const legendGrad = ctx.createLinearGradient(legendX, 0, legendX + 24, 0);
+  legendGrad.addColorStop(0, '#60a5fa');
+  legendGrad.addColorStop(0.5, '#34d399');
+  legendGrad.addColorStop(1, '#f472b6');
+  ctx.strokeStyle = legendGrad;
   ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.moveTo(legendX, legendY + 18); ctx.lineTo(legendX + 24, legendY + 18); ctx.stroke();
   ctx.fillStyle = '#e2e8f0';
@@ -618,7 +632,7 @@ let lastTime = 0;
 function animate(time) {
   const dt = Math.min(time - lastTime, 50) / 1000;
   lastTime = time;
-  animPhase += dt * 30;
+  animPhase = (animPhase + dt * 30) % 240000;
   
   drawMainCanvas();
   // Term canvases are now static — they are only redrawn when buildTermCards() is called

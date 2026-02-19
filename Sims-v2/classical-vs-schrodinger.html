@@ -479,6 +479,7 @@
             background: rgba(148, 163, 184, 0.4);
         }
     </style>
+</head>
 <body>
     <button class="sidebar-toggle" id="sidebarToggle">☰</button>
     
@@ -554,27 +555,31 @@
                     </div>
                 </div>
 
+                <div style="padding: 6px 12px; font-size: 10px; color: #94a3b8; line-height: 1.4; font-style: italic;">
+                    Slider values are chosen to compare classical and quantum behavior side by side. They do not correspond to real physical units.
+                </div>
+
                 <!-- Parameters -->
                 <div class="control-section">
                     <div class="section-title">Parameters</div>
                     <div class="slider-group">
                         <div class="slider-label">
                             <span class="slider-label-text">Mass (m)</span>
-                            <span class="slider-value" id="mSliderValue">1.00 kg</span>
+                            <span class="slider-value" id="mSliderValue">1.00</span>
                         </div>
                         <input type="range" class="slider" id="mSlider" min="0.25" max="4" step="0.05" value="1">
                     </div>
                     <div class="slider-group">
                         <div class="slider-label">
                             <span class="slider-label-text">Stiffness (k)</span>
-                            <span class="slider-value" id="kSliderValue">1.00 N/m</span>
+                            <span class="slider-value" id="kSliderValue">1.00</span>
                         </div>
                         <input type="range" class="slider" id="kSlider" min="0.25" max="4" step="0.05" value="1">
                     </div>
                     <div class="slider-group">
                         <div class="slider-label">
                             <span class="slider-label-text">Energy (E)</span>
-                            <span class="slider-value" id="energyValue">2.00 J</span>
+                            <span class="slider-value" id="energyValue">2.00</span>
                         </div>
                         <input type="range" class="slider" id="energySlider" min="0.5" max="5" step="0.1" value="2">
                     </div>
@@ -593,7 +598,7 @@
                             <div class="readout-value" id="quantumX">0.00</div>
                         </div>
                         <div class="readout-item">
-                            <div class="readout-label">ω (rad/s)</div>
+                            <div class="readout-label">ω</div>
                             <div class="readout-value" id="omegaValue">1.00</div>
                         </div>
                         <div class="readout-item">
@@ -667,8 +672,7 @@
          * The quantum wavepacket maintains its shape while oscillating,
          * demonstrating Ehrenfest's theorem: ⟨x⟩ follows classical motion.
          *
-         * Note: UI displays "kg", "N/m", "J" for familiarity, but these are
-         * actually dimensionless parameters in natural units.
+         * Note: m, k, and E are dimensionless parameters in natural units (ℏ = 1).
          */
 
         // Physics parameters (in natural units, ℏ = 1)
@@ -680,7 +684,16 @@
         let isPlaying = true;
         let lastFrameTime = performance.now();
         const baseTimeStep = 0.02;  // Base time step for physics
-        const xMin = -5, xMax = 5;
+
+        // Display range — dynamically adapts so turning points always fit on screen
+        let xMin = -5, xMax = 5;
+        function updateDisplayRange() {
+            const A = getAmplitude();
+            // Ensure turning points ±A fit with 30% margin, minimum range [-5, 5]
+            const halfRange = Math.max(5, A * 1.3);
+            xMin = -halfRange;
+            xMax = halfRange;
+        }
 
         // Fixed y-axis scale for potential plots - this stays constant
         const potentialYMax = 6.0;  // Fixed maximum for y-axis
@@ -867,9 +880,9 @@
             ctx.fillText('-A', xToCanvas(-A, canvas), h - 15);
             ctx.fillText('+A', xToCanvas(A, canvas), h - 15);
             ctx.fillStyle = '#fbbf24';
-            ctx.textAlign = 'left';
-            // Energy displayed in natural units (ℏω)
-            ctx.fillText('E=' + energy.toFixed(1) + ' (ℏω)', w - rightMargin + 5, ey + 4);
+            ctx.textAlign = 'right';
+            // Energy displayed in natural units (ℏω), positioned inside the right margin
+            ctx.fillText('E=' + energy.toFixed(1), w - rightMargin - 5, ey - 8);
         }
 
         // Draw classical mass-spring system
@@ -890,21 +903,25 @@
             const massX = xToCanvas(x, canvas);
             const eqX = xToCanvas(0, canvas);
 
-            // Draw forbidden region shading
+            // Draw forbidden region shading (clamp to plot area so negative widths are avoided)
             ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-            ctx.fillRect(40, 0, xToCanvas(-A, canvas) - 40, h);
-            ctx.fillRect(xToCanvas(A, canvas), 0, w - 40 - xToCanvas(A, canvas), h);
+            const leftTP = Math.max(40, xToCanvas(-A, canvas));
+            const rightTP = Math.min(w - 40, xToCanvas(A, canvas));
+            if (leftTP > 40) ctx.fillRect(40, 0, leftTP - 40, h);
+            if (rightTP < w - 40) ctx.fillRect(rightTP, 0, w - 40 - rightTP, h);
 
-            // Draw turning point markers
+            // Draw turning point markers (only if on-screen)
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             [-A, A].forEach(xTurn => {
                 const px = xToCanvas(xTurn, canvas);
-                ctx.beginPath();
-                ctx.moveTo(px, 10);
-                ctx.lineTo(px, h - 10);
-                ctx.stroke();
+                if (px >= 40 && px <= w - 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, 10);
+                    ctx.lineTo(px, h - 10);
+                    ctx.stroke();
+                }
             });
             ctx.setLineDash([]);
 
@@ -923,7 +940,8 @@
             ctx.lineWidth = 2;
             ctx.beginPath();
             const springStart = wallX + 10;
-            const springEnd = massX - massRadius;
+            // Clamp so spring never inverts when mass is pushed past the wall
+            const springEnd = Math.max(springStart + 5, massX - massRadius);
             const coils = 12;
             const coilWidth = 15;
             ctx.moveTo(springStart, centerY);
@@ -1010,21 +1028,25 @@
             // In natural units with ℏ=1: |ψ|² = sqrt(mω/π) * exp(-mω * (x-x0)²)
             const normFactor = Math.sqrt(m * omega / Math.PI);
 
-            // Draw forbidden region shading
+            // Draw forbidden region shading (clamp to plot area so negative widths are avoided)
             ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-            ctx.fillRect(40, 0, xToCanvas(-A, canvas) - 40, h);
-            ctx.fillRect(xToCanvas(A, canvas), 0, w - 40 - xToCanvas(A, canvas), h);
+            const leftTPq = Math.max(40, xToCanvas(-A, canvas));
+            const rightTPq = Math.min(w - 40, xToCanvas(A, canvas));
+            if (leftTPq > 40) ctx.fillRect(40, 0, leftTPq - 40, h);
+            if (rightTPq < w - 40) ctx.fillRect(rightTPq, 0, w - 40 - rightTPq, h);
 
-            // Draw turning point markers
+            // Draw turning point markers (only if on-screen)
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             [-A, A].forEach(xTurn => {
                 const px = xToCanvas(xTurn, canvas);
-                ctx.beginPath();
-                ctx.moveTo(px, 10);
-                ctx.lineTo(px, h - 10);
-                ctx.stroke();
+                if (px >= 40 && px <= w - 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, 10);
+                    ctx.lineTo(px, h - 10);
+                    ctx.stroke();
+                }
             });
             ctx.setLineDash([]);
 
@@ -1045,7 +1067,20 @@
                 points.push({ x, psi2 });
             }
 
-            const maxPsi2 = normFactor;
+            // Fixed reference scale: default (m=1, ω=1) peak fills 70% of display.
+            // Peak grows taller when wavepacket narrows (conserving visual area ≈ ∫|ψ|²).
+            // Smooth compression above 70% prevents hard clipping / flat tops at extremes.
+            const refNormFactor = Math.sqrt(1.0 / Math.PI);  // peak at m=1, ω=1
+            const psi2Scale = yScale * 0.7 / refNormFactor;
+            const compThresh = yScale * 0.7;
+            const compRange  = yScale * 0.25;              // headroom above threshold
+            function psi2ToY(psi2) {
+                const h = psi2 * psi2Scale;                 // linear height in pixels
+                if (h <= compThresh) return centerY - h;    // linear up to 70%
+                // Exponential soft-knee: smoothly approaches 95% — never a flat top
+                return centerY - (compThresh +
+                    compRange * (1 - Math.exp(-(h - compThresh) / compRange)));
+            }
 
             // Draw filled wavepacket with different colors for allowed/forbidden regions
             // First, draw the allowed region (cyan/blue)
@@ -1054,7 +1089,7 @@
             points.forEach((p, i) => {
                 if (Math.abs(p.x) <= A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     if (i === 0 || Math.abs(points[i-1].x) > A) {
                         ctx.lineTo(px, centerY);
                     }
@@ -1065,7 +1100,7 @@
             });
             ctx.lineTo(xToCanvas(A, canvas), centerY);
             ctx.closePath();
-            const gradientAllowed = ctx.createLinearGradient(0, centerY - yScale * 0.8, 0, centerY);
+            const gradientAllowed = ctx.createLinearGradient(0, centerY - yScale * 0.95, 0, centerY);
             gradientAllowed.addColorStop(0, 'rgba(6, 182, 212, 0.8)');
             gradientAllowed.addColorStop(1, 'rgba(59, 130, 246, 0.3)');
             ctx.fillStyle = gradientAllowed;
@@ -1078,13 +1113,13 @@
             points.forEach((p, i) => {
                 if (p.x < -A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     ctx.lineTo(px, py);
                 }
             });
             ctx.lineTo(xToCanvas(-A, canvas), centerY);
             ctx.closePath();
-            const gradientForbidden = ctx.createLinearGradient(0, centerY - yScale * 0.8, 0, centerY);
+            const gradientForbidden = ctx.createLinearGradient(0, centerY - yScale * 0.95, 0, centerY);
             gradientForbidden.addColorStop(0, 'rgba(249, 115, 22, 0.8)');
             gradientForbidden.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
             ctx.fillStyle = gradientForbidden;
@@ -1096,7 +1131,7 @@
             points.forEach((p, i) => {
                 if (p.x > A) {
                     const px = xToCanvas(p.x, canvas);
-                    const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                    const py = psi2ToY(p.psi2);
                     ctx.lineTo(px, py);
                 }
             });
@@ -1111,7 +1146,7 @@
             ctx.beginPath();
             points.forEach((p, i) => {
                 const px = xToCanvas(p.x, canvas);
-                const py = centerY - (p.psi2 / maxPsi2) * yScale * 0.8;
+                const py = psi2ToY(p.psi2);
                 if (i === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             });
@@ -1193,6 +1228,9 @@
                 time += cappedDelta * 1.0;  // 1.0 = real-time in natural units
             }
 
+            // Recompute display range so turning points always fit on screen
+            updateDisplayRange();
+
             drawPotential(ctxCP, canvasCP, false);
             drawClassicalMass(ctxCM, canvasCM);
             drawPotential(ctxQP, canvasQP, true);
@@ -1214,18 +1252,47 @@
             });
 
             document.getElementById('mSlider').addEventListener('input', function() {
+                // Preserve oscillation phase across ω change to prevent position discontinuity
+                // Phase θ = ω·t is the current point in the oscillation cycle
+                const oldOmega = getOmega();
+                const phase = oldOmega * time;
                 m = parseFloat(this.value);
-                document.getElementById('mSliderValue').textContent = m.toFixed(2) + ' kg';
+                const newOmega = getOmega();
+                time = newOmega > 0 ? phase / newOmega : time;
+                document.getElementById('mSliderValue').textContent = m.toFixed(2);
             });
 
             document.getElementById('kSlider').addEventListener('input', function() {
+                // Changing k affects both ω = √(k/m) AND A = √(2E/k).
+                // Phase-only preservation (as used for the mass slider) still causes a
+                // position jump because A changes. Instead, preserve the actual position
+                // x_old and the velocity direction by solving A_new·cos(θ_new) = x_old.
+                const oldOmega = getOmega();
+                const oldA = getAmplitude();
+                const oldTheta = oldOmega * time;
+                const xOld = oldA * Math.cos(oldTheta);
+                const movingLeft = Math.sin(oldTheta) > 0; // v = -Aω sin(θ), sin>0 → v<0
+
                 k = parseFloat(this.value);
-                document.getElementById('kSliderValue').textContent = k.toFixed(2) + ' N/m';
+
+                const newOmega = getOmega();
+                const newA = getAmplitude();
+                if (newOmega > 0 && newA > 0) {
+                    // Clamp ratio to [-1, 1] in case x_old is beyond new turning points
+                    const cosNew = Math.max(-1, Math.min(1, xOld / newA));
+                    let newTheta = Math.acos(cosNew); // returns [0, π] where sin ≥ 0
+                    // acos gives sin(θ) ≥ 0 (moving left). Flip to [π, 2π] if was moving right.
+                    if (!movingLeft) {
+                        newTheta = 2 * Math.PI - newTheta;
+                    }
+                    time = newTheta / newOmega;
+                }
+                document.getElementById('kSliderValue').textContent = k.toFixed(2);
             });
 
             document.getElementById('energySlider').addEventListener('input', function() {
                 energy = parseFloat(this.value);
-                document.getElementById('energyValue').textContent = energy.toFixed(2) + ' J';
+                document.getElementById('energyValue').textContent = energy.toFixed(2);
             });
 
             document.getElementById('sidebarToggle').addEventListener('click', function() {
