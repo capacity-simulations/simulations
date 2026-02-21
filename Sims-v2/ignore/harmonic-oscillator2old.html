@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Harmonic Oscillator Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        
+        .main-container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .visualization-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+        }
+        
+        .plot-container {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            position: relative;
+            min-height: 180px;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+        }
+        
+        .plot-label {
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .plot-legend {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            pointer-events: none; /* purely informative */
+        }
+        .legend-item {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 12px;
+            color: #cbd5e1;
+            font-weight: 600;
+            pointer-events: auto;
+        }
+        .legend-swatch {
+            display: inline-block;
+            width: 20px;
+            height: 8px;
+            border-radius: 3px;
+        }
+        .legend-swatch-real { background: #60a5fa; }
+    /* imaginary swatch (dashed) - purple */
+    .legend-swatch-imag { width: 20px; height: 0; border-top: 3px dashed #8b5cf6; border-radius: 0; background: transparent; }
+    /* potential / energy legend swatches */
+    .legend-swatch-potential { background: #fbbf24; }
+    .legend-swatch-energy { width: 20px; height: 0; border-top: 3px dashed #f472b6; border-radius: 0; background: transparent; }
+        .legend-label { color: #cbd5e1; font-size: 11px; }
+        
+        .sidebar {
+            width: 320px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border-left: 1px solid rgba(148, 163, 184, 0.1);
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+        }
+        
+        .control-group {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .control-group h3 {
+            font-size: 14px;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .control {
+            margin-bottom: 15px;
+        }
+        
+        .control label {
+            display: block;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .slider {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+        }
+        
+        .slider-value {
+            min-width: 30px;
+            text-align: right;
+            font-size: 13px;
+            color: #f1f5f9;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #3b82f6;
+            cursor: pointer;
+        }
+        
+        .checkbox-label {
+            font-size: 13px;
+            color: #cbd5e1;
+            cursor: pointer;
+        }
+        
+        .equations-box {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        
+        .equation {
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+            color: #60a5fa;
+        }
+        
+        .equation-label {
+            color: #94a3b8;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .stat {
+            background: rgba(30, 41, 59, 0.3);
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        
+        .stat-value {
+            font-size: 14px;
+            color: #f1f5f9;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        /* Keep statistics DOM present for JS but hide visually */
+        #statisticsPanel {
+            display: none;
+        }
+    </style>
+    <!-- MathJax config and loader to render LaTeX equations -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['\\(', '\\)'], ['$', '$']],
+                displayMath: [['$$','$$']]
+            },
+            options: {
+                skipHtmlTags: ['script','noscript','style','textarea','pre']
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+    <div class="main-container">
+        <div class="visualization-area">
+            <div class="plot-container">
+                <span class="plot-label">Wavefunction Re[ψ(x)]</span>
+                <div class="plot-legend" aria-hidden="true">
+                    <div class="legend-item"><span class="legend-swatch legend-swatch-real"></span><span class="legend-label">Real</span></div>
+                    <div class="legend-item"><span class="legend-swatch legend-swatch-imag"></span><span class="legend-label">Imag</span></div>
+                </div>
+                <canvas id="wavefunctionCanvas"></canvas>
+            </div>
+            <div class="plot-container">
+                <span class="plot-label">Probability Density |ψ(x)|²</span>
+                <canvas id="probabilityCanvas"></canvas>
+            </div>
+            <div class="plot-container">
+                <span class="plot-label">Potential & Energy Level</span>
+                <div class="plot-legend" aria-hidden="true">
+                    <div class="legend-item"><span class="legend-swatch legend-swatch-potential"></span><span class="legend-label">Potential</span></div>
+                    <div class="legend-item"><span class="legend-swatch legend-swatch-energy"></span><span class="legend-label" id="energyLegendLabel">E0</span></div>
+                </div>
+                <canvas id="potentialCanvas"></canvas>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="control-group">
+                <h3>Quantum State Controls</h3>
+                <div class="control">
+                    <label for="nSlider">Quantum Number n</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="nSlider" min="0" max="10" value="0">
+                        <span class="slider-value" id="nValue">0</span>
+                    </div>
+                </div>
+                <div class="control">
+                    <label for="scaleSlider">Scale Factor</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="scaleSlider" min="1" max="5" value="2" step="0.1">
+                        <span class="slider-value" id="scaleValue">2.0</span>
+                    </div>
+                </div>
+                <div class="control">
+                    <div class="checkbox-container">
+                        <input type="checkbox" class="checkbox" id="animateCheckbox" checked>
+                        <label for="animateCheckbox" class="checkbox-label">Animate Time Evolution</label>
+                    </div>
+                </div>
+                <div class="control">
+                    <div class="checkbox-container">
+                        <input type="checkbox" class="checkbox" id="showRealCheckbox" checked>
+                        <label for="showRealCheckbox" class="checkbox-label">Show real part</label>
+                    </div>
+                </div>
+                <div class="control">
+                    <div class="checkbox-container">
+                        <input type="checkbox" class="checkbox" id="showImagCheckbox" checked>
+                        <label for="showImagCheckbox" class="checkbox-label">Show imaginary part</label>
+                    </div>
+                </div>
+                <!-- Show Nodes control removed -->
+            </div>
+            
+            <div class="equations-box">
+                    <div class="equation-label">Wavefunction:</div>
+                    <div class="equation">\(\psi_n(x) = \left(\frac{m\omega}{\pi\hbar}\right)^{1/4} \frac{1}{\sqrt{2^n n!}} e^{-\frac{m\omega x^2}{2\hbar}}\, H_n\!\left(\sqrt{\frac{m\omega}{\hbar}}\,x\right)\)</div>
+                
+                <div class="equation-label" style="margin-top: 10px;">Energy Levels:</div>
+                <div class="equation">\(E_n = \hbar\omega\left(n + \tfrac{1}{2}\right)\)</div>
+                
+                <div class="equation-label" style="margin-top: 10px;">Current Energy:</div>
+                <div class="equation" id="currentEnergy">\(E_0 = 0.5\,\hbar\omega\)</div>
+            </div>
+            
+            <div class="control-group" id="statisticsPanel">
+                <h3>Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat">
+                        <div class="stat-label">FPS</div>
+                        <div class="stat-value" id="fps">60</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Phase</div>
+                        <div class="stat-value" id="phase">0.00</div>
+                    </div>
+                    <!-- Nodes stat removed -->
+                    <div class="stat">
+                        <div class="stat-label">Parity</div>
+                        <div class="stat-value" id="parity">Even</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Get canvas contexts
+        const wavefunctionCanvas = document.getElementById('wavefunctionCanvas');
+        const probabilityCanvas = document.getElementById('probabilityCanvas');
+        const potentialCanvas = document.getElementById('potentialCanvas');
+        
+        const ctxWave = wavefunctionCanvas.getContext('2d');
+        const ctxProb = probabilityCanvas.getContext('2d');
+        const ctxPot = potentialCanvas.getContext('2d');
+        
+        // State variables
+        let n = 0;
+        let scale = 2.0;
+        let animate = true;
+        let time = 0;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
+        // Show/hide components
+        let showReal = true;
+        let showImag = true;
+        
+        // Physics constants (normalized units)
+        const omega = 1;
+        const hbar = 1;
+        const m = 1;
+        
+        // Resize canvases
+        function resizeCanvases() {
+            const containers = document.querySelectorAll('.plot-container');
+            containers.forEach((container) => {
+                const canvas = container.querySelector('canvas');
+                const rect = container.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            });
+        }
+        
+        // Hermite polynomial calculation
+        function hermite(n, x) {
+            if (n === 0) return 1;
+            if (n === 1) return 2 * x;
+            
+            let h0 = 1;
+            let h1 = 2 * x;
+            let hn = 0;
+            
+            for (let i = 2; i <= n; i++) {
+                hn = 2 * x * h1 - 2 * (i - 1) * h0;
+                h0 = h1;
+                h1 = hn;
+            }
+            
+            return hn;
+        }
+        
+        // Calculate wavefunction
+        function wavefunction(n, x, t = 0) {
+            const alpha = Math.sqrt(m * omega / hbar);
+            const normalization = Math.pow(alpha / Math.PI, 0.25) / Math.sqrt(Math.pow(2, n) * factorial(n));
+            const exponential = Math.exp(-alpha * alpha * x * x / 2);
+            const hermitePoly = hermite(n, alpha * x);
+
+            // Time evolution phase
+            const energy = hbar * omega * (n + 0.5);
+            const phase = animate ? -energy * t / hbar : 0;
+            const reFactor = Math.cos(phase);
+            const imFactor = Math.sin(phase);
+
+            const base = normalization * exponential * hermitePoly;
+            return { re: base * reFactor, im: base * imFactor };
+        }
+        
+        // Factorial function
+        function factorial(n) {
+            if (n <= 1) return 1;
+            let result = 1;
+            for (let i = 2; i <= n; i++) {
+                result *= i;
+            }
+            return result;
+        }
+        
+        // Draw wavefunction
+        function drawWavefunction() {
+            const width = wavefunctionCanvas.width;
+            const height = wavefunctionCanvas.height;
+            
+            ctxWave.fillStyle = '#0f172a';
+            ctxWave.fillRect(0, 0, width, height);
+            
+            // Draw axes
+            ctxWave.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctxWave.lineWidth = 1;
+            ctxWave.beginPath();
+            ctxWave.moveTo(0, height / 2);
+            ctxWave.lineTo(width, height / 2);
+            ctxWave.moveTo(width / 2, 0);
+            ctxWave.lineTo(width / 2, height);
+            ctxWave.stroke();
+            
+            // Draw real and imaginary parts (overlayed)
+            const xRange = scale * 4;
+
+            // Collect sample points first
+            const rePoints = new Array(width);
+            const imPoints = new Array(width);
+            for (let px = 0; px < width; px++) {
+                const x = (px / width - 0.5) * 2 * xRange;
+                const psi = wavefunction(n, x, time);
+                rePoints[px] = height / 2 - psi.re * height / 4;
+                imPoints[px] = height / 2 - psi.im * height / 4;
+            }
+
+            // Real part
+            if (showReal) {
+                ctxWave.strokeStyle = '#60a5fa';
+                ctxWave.lineWidth = 2;
+                ctxWave.setLineDash([]);
+                ctxWave.beginPath();
+                for (let px = 0; px < width; px++) {
+                    const py = rePoints[px];
+                    if (px === 0) ctxWave.moveTo(px, py);
+                    else ctxWave.lineTo(px, py);
+                }
+                ctxWave.stroke();
+            }
+
+            // Imaginary part (dashed)
+            if (showImag) {
+                // use purple for imaginary
+                ctxWave.strokeStyle = '#8b5cf6';
+                ctxWave.lineWidth = 2;
+                ctxWave.setLineDash([6, 4]);
+                ctxWave.beginPath();
+                for (let px = 0; px < width; px++) {
+                    const py = imPoints[px];
+                    if (px === 0) ctxWave.moveTo(px, py);
+                    else ctxWave.lineTo(px, py);
+                }
+                ctxWave.stroke();
+                ctxWave.setLineDash([]);
+            }
+        }
+        
+        // Draw probability density
+        function drawProbability() {
+            const width = probabilityCanvas.width;
+            const height = probabilityCanvas.height;
+            
+            ctxProb.fillStyle = '#0f172a';
+            ctxProb.fillRect(0, 0, width, height);
+            
+            // Draw axes
+            ctxProb.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctxProb.lineWidth = 1;
+            ctxProb.beginPath();
+            ctxProb.moveTo(0, height - 20);
+            ctxProb.lineTo(width, height - 20);
+            ctxProb.moveTo(width / 2, 0);
+            ctxProb.lineTo(width / 2, height);
+            ctxProb.stroke();
+            
+            // Draw probability density
+            ctxProb.fillStyle = 'rgba(52, 211, 153, 0.3)';
+            ctxProb.strokeStyle = '#34d399';
+            ctxProb.lineWidth = 2;
+            ctxProb.beginPath();
+            
+            const xRange = scale * 4;
+            ctxProb.moveTo(0, height - 20);
+            
+            for (let px = 0; px < width; px++) {
+                const x = (px / width - 0.5) * 2 * xRange;
+                const psi = wavefunction(n, x, 0); // Use t=0 for probability
+                const prob = psi.re * psi.re + psi.im * psi.im;
+                const py = height - 20 - prob * height * 0.7;
+                ctxProb.lineTo(px, py);
+            }
+            
+            ctxProb.lineTo(width, height - 20);
+            ctxProb.closePath();
+            ctxProb.fill();
+            ctxProb.stroke();
+        }
+        
+        // Draw potential and energy level
+        function drawPotential() {
+            const width = potentialCanvas.width;
+            const height = potentialCanvas.height;
+            
+            ctxPot.fillStyle = '#0f172a';
+            ctxPot.fillRect(0, 0, width, height);
+            
+            // Draw axes
+            ctxPot.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctxPot.lineWidth = 1;
+            ctxPot.beginPath();
+            ctxPot.moveTo(0, height - 20);
+            ctxPot.lineTo(width, height - 20);
+            ctxPot.moveTo(width / 2, 0);
+            ctxPot.lineTo(width / 2, height);
+            ctxPot.stroke();
+            
+            // Draw potential V(x) = 0.5 * m * omega^2 * x^2
+            ctxPot.strokeStyle = '#fbbf24';
+            ctxPot.lineWidth = 2;
+            ctxPot.beginPath();
+            
+            const xRange = scale * 4;
+            const maxEnergy = (10 + 0.5) * hbar * omega; // Max n=10
+            
+            for (let px = 0; px < width; px++) {
+                const x = (px / width - 0.5) * 2 * xRange;
+                const V = 0.5 * m * omega * omega * x * x;
+                const py = height - 20 - (V / maxEnergy) * (height - 40);
+                
+                if (px === 0) {
+                    ctxPot.moveTo(px, py);
+                } else {
+                    ctxPot.lineTo(px, py);
+                }
+            }
+            ctxPot.stroke();
+            
+            // Draw energy level
+            const energy = hbar * omega * (n + 0.5);
+            const energyY = height - 20 - (energy / maxEnergy) * (height - 40);
+            
+            ctxPot.strokeStyle = '#f472b6';
+            ctxPot.lineWidth = 2;
+            ctxPot.setLineDash([5, 5]);
+            ctxPot.beginPath();
+            ctxPot.moveTo(0, energyY);
+            ctxPot.lineTo(width, energyY);
+            ctxPot.stroke();
+            ctxPot.setLineDash([]);
+            
+            // Draw classical turning points
+            const turningPoint = Math.sqrt(2 * energy / (m * omega * omega));
+            const tpX1 = (width / 2) - (turningPoint / xRange) * (width / 2);
+            const tpX2 = (width / 2) + (turningPoint / xRange) * (width / 2);
+            
+            ctxPot.fillStyle = '#f472b6';
+            ctxPot.beginPath();
+            ctxPot.arc(tpX1, energyY, 4, 0, Math.PI * 2);
+            ctxPot.fill();
+            ctxPot.beginPath();
+            ctxPot.arc(tpX2, energyY, 4, 0, Math.PI * 2);
+            ctxPot.fill();
+        }
+        
+        // Animation loop
+        function animationLoop() {
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - lastTime) / 1000;
+            
+            if (animate) {
+                time += deltaTime * 0.5; // Slow down time evolution
+            }
+            
+            // Update FPS
+            frameCount++;
+            if (frameCount % 30 === 0) {
+                fps = Math.round(1 / deltaTime);
+                document.getElementById('fps').textContent = fps;
+            }
+            
+            // Draw all plots
+            drawWavefunction();
+            drawProbability();
+            drawPotential();
+            
+            // Update stats
+            document.getElementById('phase').textContent = (time % (2 * Math.PI)).toFixed(2);
+            document.getElementById('parity').textContent = n % 2 === 0 ? 'Even' : 'Odd';
+            
+            lastTime = currentTime;
+            requestAnimationFrame(animationLoop);
+        }
+        
+        // Event listeners
+        document.getElementById('nSlider').addEventListener('input', (e) => {
+            n = parseInt(e.target.value);
+            document.getElementById('nValue').textContent = n;
+            document.getElementById('currentEnergy').textContent = `E${n} = ${(n + 0.5).toFixed(1)} ℏω`;
+            // Update potential plot legend to show current energy level label
+            const energyLabelEl = document.getElementById('energyLegendLabel');
+            if (energyLabelEl) energyLabelEl.textContent = `E${n}`;
+        });
+        
+        document.getElementById('scaleSlider').addEventListener('input', (e) => {
+            scale = parseFloat(e.target.value);
+            document.getElementById('scaleValue').textContent = scale.toFixed(1);
+        });
+        
+        document.getElementById('animateCheckbox').addEventListener('change', (e) => {
+            animate = e.target.checked;
+            if (!animate) time = 0;
+        });
+
+        document.getElementById('showRealCheckbox').addEventListener('change', (e) => {
+            showReal = e.target.checked;
+        });
+
+        document.getElementById('showImagCheckbox').addEventListener('change', (e) => {
+            showImag = e.target.checked;
+        });
+        
+        // Initialize
+        window.addEventListener('resize', resizeCanvases);
+        resizeCanvases();
+        animationLoop();
+    </script>
+</body>
+</html>

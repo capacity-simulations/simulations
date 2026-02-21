@@ -654,6 +654,7 @@
         // Animation state — fewer bins (40) so each bin gets more counts → faster convergence to PDF shape
         let histogram = new Array(40).fill(0);
         let totalSamples = 0;
+        let samplesInRange = 0;
         let sampleAccumulator = 0;
         let totalElapsedTime = 0;
         
@@ -733,6 +734,7 @@
         function resetHistogram() {
             histogram = new Array(40).fill(0);
             totalSamples = 0;
+            samplesInRange = 0;
             sampleAccumulator = 0;
             totalElapsedTime = 0;
             currentMeasurement = null;
@@ -920,56 +922,28 @@
             ctx.restore();
         }
         
-        // Dynamic Y-axis: follows the data so nothing is cut; scale to show both curve and histogram
+        // Fixed Y-axis based on theoretical peak for current σ
         function getDynamicMaxY() {
             const theoreticalPeak = 1 / (sigma * Math.sqrt(2 * Math.PI));
-            let empiricalMax = 0;
-            if (totalSamples > 0) {
-                const binXWidth = xRange / histogram.length;
-                for (let i = 0; i < histogram.length; i++) {
-                    const density = (histogram[i] / totalSamples) / binXWidth;
-                    empiricalMax = Math.max(empiricalMax, density);
-                }
-            }
-            const candidate = Math.max(theoreticalPeak * 1.1, empiricalMax * 1.1);
-            return Math.max(0.5, candidate);
+            return Math.max(0.5, theoreticalPeak * 1.15);
         }
 
         function drawHistogram() {
-            if (totalSamples === 0) return;
+            if (samplesInRange === 0) return;
 
             const maxY = getDynamicMaxY();
             const binWidth = graphWidth / histogram.length;
             const binXWidth = xRange / histogram.length;
             const n = histogram.length;
 
-            // Raw empirical density per bin (physics-correct: count / total / binWidth)
-            const rawDensity = [];
-            for (let i = 0; i < n; i++) {
-                rawDensity[i] = (histogram[i] / totalSamples) / binXWidth;
-            }
-            // Light 3-point smoothing so histogram shape matches curve faster (reduces bin noise)
-            const density = [];
-            for (let i = 0; i < n; i++) {
-                const prev = rawDensity[Math.max(0, i - 1)];
-                const curr = rawDensity[i];
-                const next = rawDensity[Math.min(n - 1, i + 1)];
-                density[i] = (prev + curr + next) / 3;
-            }
-            // Renormalize so smoothed histogram still integrates to 1
-            let integral = 0;
-            for (let i = 0; i < n; i++) integral += density[i] * binXWidth;
-            if (integral > 0) {
-                for (let i = 0; i < n; i++) density[i] /= integral;
-            }
-
             ctx.fillStyle = 'rgba(139, 210, 130, 0.3)';
             ctx.strokeStyle = 'rgba(139, 210, 130, 0.6)';
             ctx.lineWidth = 1;
 
             for (let i = 0; i < n; i++) {
-                if (density[i] <= 0) continue;
-                const barHeight = (density[i] / maxY) * graphHeight;
+                if (histogram[i] === 0) continue;
+                const density = (histogram[i] / samplesInRange) / binXWidth;
+                const barHeight = (density / maxY) * graphHeight;
                 const x = graphLeft + i * binWidth;
                 const y = graphBottom - barHeight;
                 ctx.fillRect(x, y, binWidth - 1, barHeight);
@@ -1162,6 +1136,7 @@
                 if (value >= xMin && value <= xMax) {
                     const bin = getBin(value);
                     histogram[bin]++;
+                    samplesInRange++;
                     
                     currentMeasurement = {
                         value: value,
