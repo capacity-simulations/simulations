@@ -1,0 +1,1 @@
+EC 20/02/2026: Removed pedagogically incorrect elements - "convergence bar", "Wavefunction" title for the theoretical function (misleading when the function is the probability density), and revised the "about" section to be more accurate (previous version mentioned wavefunction collapse from measurement, which this simulation does *not* do).
