@@ -2,6 +2,9 @@
 _Exported on 02/03/2026 at 13:13:33 GMT+5:30 from Cursor (2.5.25)_
 
 ---
+# Fixed and updated the classical pattern (2 Gaussian humps with extent of overlap decided by d,lambda, a and L).
+# Fixed barrier geometry breaking issue (for d<=a).
+# Fixed blank screen issue for larger L values.
 
 **User**
 

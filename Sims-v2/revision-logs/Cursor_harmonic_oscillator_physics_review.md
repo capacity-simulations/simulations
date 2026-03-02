@@ -2,7 +2,10 @@
 
 # Physics bugs fixed:
 
-
+Added energy and parity window. Fixed initial bugs present.
+Fixed issue with legends.
+Added the global layout.
+Added maximize option for separate plot windows.
 
 ## 1. Physics equations and concepts
 

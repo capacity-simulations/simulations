@@ -2,6 +2,7 @@
 _Exported on 02/03/2026 at 9:04:44 GMT+5:30 from Cursor (2.5.25)_
 
 ---
+# Fixed wrong sporeading parameter, Incorrect normalization, About section equation, minor change in drawplot function during architecture and flow check.
 
 **User**
 

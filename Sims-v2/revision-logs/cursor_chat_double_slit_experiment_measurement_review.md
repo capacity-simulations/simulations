@@ -2,6 +2,8 @@
 _Exported on 27/02/2026 at 16:02:24 GMT+5:30 from Cursor (2.5.25)_
 
 ---
+Fixed probability normalization issue
+Fixed measurement pattern (from just single Gaussian to 2 single Gaussian humps with the extent of overlap decsided by d, lambda, a and L)
 
 **User**
 
