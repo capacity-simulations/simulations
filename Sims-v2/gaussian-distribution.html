@@ -651,8 +651,8 @@
         const xMax = 10;
         const xRange = xMax - xMin; // 20
         
-        // Animation state — fewer bins (40) so each bin gets more counts → faster convergence to PDF shape
-        let histogram = new Array(40).fill(0);
+        // Animation state — many bins across PDF range so histogram resolves the curve as N increases
+        let histogram = new Array(100).fill(0);
         let totalSamples = 0;
         let samplesInRange = 0;
         let sampleAccumulator = 0;
@@ -694,8 +694,9 @@
             measurementRight = graphRight + 20;
         }
         
-        // Gaussian PDF
+        // Gaussian PDF: f(x) = (1/(σ√(2π))) exp(-½((x-μ)/σ)²)
         function gaussian(x, mu, sigma) {
+            if (sigma <= 0) return 0;
             const coeff = 1 / (sigma * Math.sqrt(2 * Math.PI));
             const exponent = -0.5 * Math.pow((x - mu) / sigma, 2);
             return coeff * Math.exp(exponent);
@@ -732,7 +733,7 @@
         
         // Reset histogram and measurements
         function resetHistogram() {
-            histogram = new Array(40).fill(0);
+            histogram = new Array(100).fill(0);
             totalSamples = 0;
             samplesInRange = 0;
             sampleAccumulator = 0;
@@ -922,9 +923,11 @@
             ctx.restore();
         }
         
-        // Fixed Y-axis based on theoretical peak for current σ
+        // Fixed Y-axis scale from theoretical PDF peak (no dynamic scaling); histogram scales to match as N increases
         function getDynamicMaxY() {
+            if (sigma <= 0) return 0.5;
             const theoreticalPeak = 1 / (sigma * Math.sqrt(2 * Math.PI));
+            return Math.max(0.5, theoreticalPeak * 1.15);
             return Math.max(0.5, theoreticalPeak * 1.15);
         }
 
@@ -941,8 +944,8 @@
             ctx.lineWidth = 1;
 
             for (let i = 0; i < n; i++) {
-                if (histogram[i] === 0) continue;
-                const density = (histogram[i] / samplesInRange) / binXWidth;
+                const density = (histogram[i] / totalSamples) / binXWidth;
+                if (density <= 0) continue;
                 const barHeight = (density / maxY) * graphHeight;
                 const x = graphLeft + i * binWidth;
                 const y = graphBottom - barHeight;
