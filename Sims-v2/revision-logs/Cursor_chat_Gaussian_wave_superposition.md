@@ -2,6 +2,12 @@
 _Exported on 06/03/2026 at 11:17:58 GMT+5:30 from Cursor (2.5.25)_
 
 ---
+# Fixed the normalization issue.
+# Replaced theta and phi sliders with alpha and beta. Now the code uses default relative phase as zero (only constructive interference)
+# Improved the rendering of the axes and the labels.
+# Added maximize window for each plots.
+# Tied alphs and beta sliders using the normalzation condition.
+# Removed the destructive interference label from the legend. 
 
 **User**
 
