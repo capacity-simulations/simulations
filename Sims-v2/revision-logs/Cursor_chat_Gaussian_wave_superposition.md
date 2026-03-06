@@ -1,8 +1,7 @@
 # Gaussian wave packet layout
-_Exported on 05/03/2026 at 18:54:21 GMT+5:30 from Cursor (2.5.25)_
+_Exported on 06/03/2026 at 11:17:58 GMT+5:30 from Cursor (2.5.25)_
 
 ---
-# Fixed normalization issue, classical probability legend label, replaced theta and phi with alpha and beta in the the controls, changed the fonts and style to standard sims, added maximize window option, changed the current layout into the global layout, improved the rendering of the axes and labels.
 
 **User**
 
@@ -254,6 +253,8 @@ Creating the physics review plan:
 
 **User**
 
+Physics review: Gaussian wave superposition simulation
+
 Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
 
 To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
@@ -296,6 +297,20 @@ All related to-dos are marked completed, and the linter reports no issues.
 
 **User**
 
+For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
+
+Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
+
+The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
+
+shift the legend to the right. it is overlapping ewith the axes
+
+For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+
 Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
 
 ---
@@ -317,6 +332,8 @@ Creating the review plan:
 ---
 
 **User**
+
+Numerical methods, architecture, and rendering review
 
 Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
 
@@ -349,6 +366,26 @@ All related to-dos are completed and the linter reports no issues.
 ---
 
 **User**
+
+For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
+
+Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
+
+The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
+
+shift the legend to the right. it is overlapping ewith the axes
+
+For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+
+Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
 
 Remove the text, other controls info from the panel.
 
@@ -436,6 +473,8 @@ Creating the final physics sanity-check plan:
 
 **User**
 
+Final physics sanity check — Gaussian wave superposition
+
 Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
 
 To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
@@ -465,6 +504,36 @@ The plan’s optional integration change (4.3, midpoint/trapezoidal rule) was no
 ---
 
 **User**
+
+For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
+
+Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
+
+The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
+
+shift the legend to the right. it is overlapping ewith the axes
+
+For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+
+Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+
+Remove the text, other controls info from the panel.
+
+Use the test and fonts similar to this sim and remove the 3 dots from the top border.
+
+Run a final physics sanity check. Check all the equations, concepts, overall architetcure and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
 
 Remove the group velocity from wave packet properties section in the panel
 
@@ -703,4 +772,228 @@ Summary of changes:
    When a plot is maximized, that plot’s button keeps the same icon but its `title` is set to **"Restore (minimize)"** and its `aria-label` to **"Restore"**, so it’s clear that the next click will restore the layout.
 
 You’ll see one consistent icon in all states, with tooltip/aria-label indicating whether the next click will maximize or restore.
+
+---
+
+**User**
+
+Remove the dynamic scaling of x and y axis. Select an appropriate scale for x and y axes and fix it in a way the wavepacket can be seen changing its shape across the plot window.
+
+---
+
+**Cursor**
+
+
+Implementing fixed x and y axis scales.
+
+
+
+Fixing Real Part mode to use a fixed y-scale:
+
+
+
+Summary of changes:
+
+**1. Fixed x-axis**
+- **Before:** `xMin` and `xMax` depended on X₁, X₂ and a margin (`margin = 5/√a`), so the window panned and zoomed as you moved the centers or changed width.
+- **After:** Fixed range **x ∈ [-6, 6]** for all plots. The wave packet moves and changes shape within this fixed window (sliders still -5 to 5, so there’s a bit of margin).
+
+**2. Fixed y-axis — probability mode (|ψ|²)**
+- **Before:** Each plot had its own dynamic scale (e.g. `yMax1`, `yMax2`, `yMax3` from data × 1.15).
+- **After:** Shared fixed scale **y ∈ [0, 1.5]** for all three probability plots. Normalized densities stay in a comparable range, so you see height and shape change without the axis rescaling.
+
+**3. Fixed y-axis — real-part mode (Re(ψ))**
+- **Before:** `yAbsMax` was computed from the data and scaled by 1.15.
+- **After:** Fixed scale **y ∈ [-1.2, 1.2]** for all three Re(ψ) plots. Normalized amplitudes fit in this range, so the waveform shape is stable as you change parameters.
+
+The grid and physics are unchanged: the same 1001 points now span **x ∈ [-6, 6]**, and all wave computations are still done on that grid. Only the axis limits are fixed so the wave packet evolution is easier to see.
+
+---
+
+**User**
+
+Set the maximum value of a (localization) slider to 3.5
+
+---
+
+**Cursor**
+
+
+Checking the getA formula and the marks under the slider:
+
+
+
+Mapping the slider so a runs from 0.1 to 3.5 and updating the right-hand mark.
+
+
+
+Summary of changes:
+
+1. **Mapping**  
+   `getA` now uses **35** instead of **50**, so the slider range 0–1000 maps to **a ∈ [0.1, 3.5]** (still logarithmic: `a = 0.1 × 35^(v/1000)`).
+
+2. **Label**  
+   The mark under the slider was updated from **5.0** to **3.5** so it matches the new maximum.
+
+The a (localization) slider still runs from 0 to 1000; at full scale it now corresponds to **a = 3.5** instead of 5.
+
+---
+
+**User**
+
+Tie the alpha and beta sliders using normalization condition (alpha^2 +beta^2 =1), changing one should change the other following the normalization condition.
+
+---
+
+**Cursor**
+
+
+Adding coupling so α and β satisfy α² + β² = 1. Checking how the sliders and update flow are wired:
+
+
+
+Adding coupled listeners for α and β so α² + β² = 1, and keeping the other sliders' behavior unchanged.
+
+
+
+Summary of changes:
+
+**Normalization α² + β² = 1**
+
+- **When you move the α slider:**  
+  α is taken from the slider (0–1).  
+  β is set to **√(1 − α²)** and the β slider is updated to match (only if the value actually changes, to avoid feedback).
+
+- **When you move the β slider:**  
+  β is taken from the slider.  
+  α is set to **√(1 − β²)** and the α slider is updated to match (again only when the value changes).
+
+So at all times **α² + β² = 1**. Whichever slider you move is the one you set; the other is updated to keep normalization. The existing Reset (α = β = 0.707) already satisfies 0.707² + 0.707² = 1, so it stays as is.
+
+---
+
+**User**
+
+after the alpha and beta sliders, display the normalization equation relating them.
+
+---
+
+**Cursor**
+
+
+Adding the normalization equation after the β slider and a small CSS rule to style it.
+
+
+
+Updating the display to show the computed α² + β² so it always shows 1 (or 1.00).
+
+
+
+Here’s what was added:
+
+1. **Equation display**  
+   Right after the β slider there’s a line showing the normalization relation: **α² + β² = 1**.
+
+2. **Styling**  
+   The equation sits in a small, centered block (`.norm-eq`) with muted text, a light background, and a thin border so it’s visible but not dominant.
+
+3. **Live value**  
+   The “1” is in a span with id `normEqVal`, and in the update loop it’s set to the current numerical value of α² + β² (e.g. `1.000`), so the display always shows that the constraint is satisfied.
+
+---
+
+**User**
+
+Remove the start button from the top
+
+---
+
+**Cursor**
+
+
+The Start button has been removed from the top bar. The header now only has the title, info icon, and Reset button.
+
+---
+
+**User**
+
+Check all the physics concepts, equations, numerical methods, overall architetcure and dlow, front end animations and visuals (for any physics or rendering isues). Mention if any bugs found with suggested fixes.
+
+---
+
+**Cursor**
+
+
+Checking a few more areas: overlap formula, sigma relation, and gradient/fill logic.
+
+
+
+Checking for a zero-range edge case in drawAxes and creating the review document.
+
+
+
+Writing the review and adding a defensive fix for zero axis range.
+
+
+
+Adding a defensive guard in `drawAxes` against zero axis range:
+
+
+
+Removing duplicate `xRange` declaration so the function uses the outer `xRange`.
+
+
+
+Summary of the review and changes:
+
+---
+
+## Review summary
+
+A full pass was done on **physics, numerics, architecture, and visuals**. Details are in **`simulations/Sims-v2/revision-logs/gaussian_wave_superposition_review.md`**. Here is the condensed version.
+
+### Physics and equations — **OK**
+- Wave function Ψ = (1/√N′)(α ψ₁ + β ψ₂) with φ = 0 is correct; Gaussians and normalization are consistent.
+- |Ψ|², classical mixture, overlap S₁₂ = exp(−a d²/2), ⟨x⟩, Δx, σ_x = 1/(2√a), and Re(Ψ) with √nS normalization are all correct.
+- α² + β² = 1 is correctly enforced by the slider coupling.
+
+### Numerical methods — **OK**
+- Fixed grid x ∈ [−6, 6], N = 1001; rectangle-rule integration is adequate; no time evolution, so no ODE/PDE issues.
+
+### Architecture and flow — **OK**
+- Single `update()` path, rAF throttling, canvas setup and maximize/restore behavior are consistent and clear.
+
+### Front-end and rendering — **OK**
+- Axes, fills, gradients, interference shading, and X₁/X₂ markers (including label offset when close) are correct. No animation-related physics or rendering bugs.
+
+### Bugs found
+
+**No functional bugs.** Two small improvements were made:
+
+1. **Defensive fix (applied)**  
+   In **drawAxes()**, `mx`/`my` divided by `(xMax−xMin)` and `(yMax−yMin)`. If those ranges were ever zero (e.g. with dynamic axes), you’d get NaN. A guard was added so the effective axis range is at least `1e-10`:
+   - `const xRange = Math.max(xMax - xMin, 1e-10), yRange = Math.max(yMax - yMin, 1e-10);`
+   - `mx`/`my` now use `xRange` and `yRange` instead of the raw differences. The duplicate inner `const xRange = xMax - xMin` was removed so tick formatting uses this same safe `xRange`.
+
+2. **Optional (documented in the review only)**  
+   - **Normalization display**: α² + β² can occasionally show 0.999 or 1.001 due to rounding; you could show 2 decimals or a “✓” when close to 1.
+   - **drawFill**: For nearly flat curves (yPeak ≈ yBase), the gradient has zero length; you could fall back to a solid fill when `|yPeak − yBase| < 1e-10`.
+
+**Conclusion:** Physics, numerics, and architecture are in good shape. The only change applied in code is the axis-range guard in **drawAxes**; the rest are optional refinements described in **`revision-logs/gaussian_wave_superposition_review.md`**.
+
+---
+
+**User**
+
+Remove the destructive interference info from the legend. Just keep the constructive interference label in the legend.
+
+---
+
+**Cursor**
+
+
+Update complete. The “Destructive interference” line is removed from the legend. It now lists only:
+- |Ψ(x)|² (quantum)
+- Classical (normalized)
+- Constructive interference
 
