@@ -3,7 +3,7 @@ _Exported on 20/02/2026 at 19:38:50 GMT+5:30 from Cursor (2.4.37)_
 
 ---
 # FIXES MADE:
-# Implemented standard Latex rebndering of the equations.
+# Implemented standard Latex rendering of the equations.
 # Removed the dynamic scaling.
 # Changed the spread sliders lower limit.
 # Fixed limits of the probe line.
