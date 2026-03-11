@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Tunneling — Plane Wave Simulator</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-0: #04060b;
+  --bg-1: #0a0f1a;
+  --bg-2: #101828;
+  --bg-3: #182035;
+  --border: #1c2840;
+  --text-1: #e4eaf4;
+  --text-2: #8fa0be;
+  --text-3: #4e6280;
+  --cyan:   #22d3ee;
+  --teal:   #2dd4a8;
+  --blue:   #3b82f6;
+  --amber:  #f59e0b;
+  --red:    #ef4444;
+  --violet: #a78bfa;
+  --rose:   #fb7185;
+  --green:  #4ade80;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; background:var(--bg-0); color:var(--text-1); font-family:'Outfit',system-ui,sans-serif; }
+
+.app { display:flex; flex-direction:column; height:100vh; }
+
+/* ─── TOPBAR ─── */
+.topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 16px; background:var(--bg-1); border-bottom:1px solid var(--border);
+  flex-shrink:0; z-index:10; flex-wrap:wrap; gap:6px;
+}
+.topbar-left { display:flex; align-items:center; gap:10px; }
+.logo {
+  width:28px; height:28px; border-radius:6px;
+  background:linear-gradient(135deg,var(--blue),var(--cyan));
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; font-weight:700; color:#fff;
+  box-shadow:0 0 12px rgba(34,211,238,0.25);
+}
+.topbar h1 { font-size:14px; font-weight:600; }
+.topbar h1 em { font-style:normal; color:var(--cyan); }
+.topbar-right { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+.ctrl-btn {
+  background:var(--bg-2); border:1px solid var(--border); color:var(--text-1);
+  width:30px; height:30px; border-radius:6px; font-size:14px;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all .12s;
+}
+.ctrl-btn:hover { border-color:var(--blue); background:var(--bg-3); }
+.ctrl-btn.active { background:var(--blue); border-color:var(--blue); }
+
+.badge {
+  font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500;
+  padding:4px 9px; border-radius:5px; border:1px solid var(--border);
+  background:var(--bg-2);
+}
+.badge.time { color:var(--text-2); min-width:100px; text-align:center; }
+.badge.regime { min-width:120px; text-align:center; }
+.badge.tunnel { color:var(--amber); border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.06); }
+.badge.above  { color:var(--teal);  border-color:rgba(45,212,168,.3); background:rgba(45,212,168,.06); }
+.badge.total  { color:var(--red);   border-color:rgba(239,68,68,.3);  background:rgba(239,68,68,.06); }
+
+/* ─── MAIN GRID ─── */
+.main {
+  display:grid; grid-template-columns:1fr 310px;
+  flex:1; min-height:0;
+}
+
+/* ─── CANVAS AREA ─── */
+.canvas-col { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.canvas-wrap { flex:1; position:relative; min-height:0; }
+.canvas-wrap canvas { width:100%; height:100%; display:block; }
+.canvas-tag {
+  position:absolute; top:8px; left:14px; font-size:10px; font-weight:500;
+  color:var(--text-2); background:var(--bg-0); padding:2px 7px; border-radius:4px;
+  border:1px solid var(--border); letter-spacing:.04em; z-index:2;
+}
+
+/* ─── PROB BAR ─── */
+.prob-bar {
+  display:flex; align-items:center; gap:10px; padding:6px 16px;
+  background:var(--bg-1); border-top:1px solid var(--border); flex-shrink:0;
+  font-family:'IBM Plex Mono',monospace; font-size:12px;
+}
+.prob-label { color:var(--text-3); font-family:'Outfit',sans-serif; font-size:12px; }
+.prob-t { color:var(--teal); font-weight:500; }
+.prob-r { color:var(--amber); font-weight:500; }
+.prob-sum { color:var(--text-3); font-size:11px; }
+.sep { width:1px; height:14px; background:var(--border); }
+
+.gauge-row { display:flex; gap:2px; height:5px; border-radius:3px; overflow:hidden; }
+.gauge-t { background:linear-gradient(90deg,rgba(45,212,168,.5),var(--teal)); border-radius:3px 0 0 3px; transition:width .2s; }
+.gauge-r { background:linear-gradient(90deg,var(--amber),rgba(245,158,11,.5)); border-radius:0 3px 3px 0; transition:width .2s; }
+
+/* ─── SIDEBAR ─── */
+.sidebar {
+  background:var(--bg-1); border-left:1px solid var(--border);
+  overflow-y:scroll; overflow-x:hidden;
+  padding:10px; padding-bottom:24px;
+  display:flex; flex-direction:column; gap:8px;
+}
+.sidebar::-webkit-scrollbar { width:5px; }
+.sidebar::-webkit-scrollbar-track { background:transparent; }
+.sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+.card {
+  background:var(--bg-2); border:1px solid var(--border); border-radius:9px;
+  flex-shrink:0;
+}
+.card-head {
+  padding:7px 12px; font-size:10px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.08em; color:var(--text-2);
+  border-bottom:1px solid var(--border); display:flex; align-items:center; gap:7px;
+}
+.card-head .dot { width:5px; height:5px; border-radius:50%; }
+.card-body { padding:8px 12px; }
+
+/* ─── TOGGLE ─── */
+.toggle-bar {
+  display:flex; background:var(--bg-0); border-radius:7px; padding:2px; gap:2px;
+}
+.toggle-opt {
+  flex:1; padding:5px 0; border-radius:5px; border:none; background:transparent;
+  font-family:'Outfit',sans-serif; font-size:11px; font-weight:500;
+  color:var(--text-3); cursor:pointer; text-align:center; transition:all .15s;
+}
+.toggle-opt.on { background:var(--blue); color:#fff; box-shadow:0 0 10px rgba(59,130,246,.3); }
+.toggle-opt:hover:not(.on) { color:var(--text-2); background:var(--bg-3); }
+
+/* ─── SLIDER ─── */
+.srow { margin-top:6px; }
+.srow-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
+.srow-label { font-size:11px; color:var(--text-2); }
+.srow-val { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan); font-weight:500; }
+
+input[type=range] {
+  appearance:none; -webkit-appearance:none; width:100%; height:4px;
+  background:var(--bg-0); border-radius:2px; outline:none;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance:none; -webkit-appearance:none; width:16px; height:16px;
+  background:var(--blue); border-radius:50%; cursor:pointer;
+  box-shadow:0 0 8px rgba(59,130,246,.3); border:2px solid var(--bg-1);
+}
+
+/* ─── CHECKBOXES ─── */
+.chk-row { display:flex; align-items:center; gap:6px; margin-top:3px; }
+.chk-row input { accent-color:var(--blue); width:14px; height:14px; }
+.chk-row label { font-size:11px; color:var(--text-2); cursor:pointer; }
+
+.legend-item { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--text-3); margin-top:2px; }
+.lsw { width:16px; height:3px; border-radius:2px; }
+
+/* ─── FORMULA ─── */
+.formula-box {
+  background:var(--bg-0); border:1px solid var(--border); border-radius:6px;
+  padding:8px 10px; margin:4px 0; text-align:center;
+}
+.formula-box .katex { font-size:.95em; color:var(--text-1); }
+.flabel { font-size:9px; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+.presult {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:4px 8px; margin-top:4px; background:var(--bg-0); border-radius:4px;
+  font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500;
+}
+.presult .pt { color:var(--teal); }
+.presult .pr { color:var(--amber); }
+.prow { display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:1px 0; }
+.prow .pn { color:var(--text-3); }
+.prow .pv { color:var(--cyan); }
+
+/* ─── SPECTRUM ─── */
+.spec-canvas { width:100%; height:110px; display:block; border-radius:4px; margin-top:3px; }
+.spec-note { font-size:9px; color:var(--text-3); margin-top:2px; line-height:1.3; }
+
+/* ─── DISPLAY GRID ─── */
+.disp-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; }
+
+@media(max-width:900px) {
+  .main { grid-template-columns:1fr; grid-template-rows:1fr auto; }
+  .sidebar { max-height:45vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">ψ</div>
+    <h1>Quantum <em>Tunneling</em> — Plane Wave</h1>
+  </div>
+  <div class="topbar-right">
+    <button class="ctrl-btn" id="btnReset" title="Reset time">⟲</button>
+    <button class="ctrl-btn active" id="btnPlay" title="Play / Pause">⏸</button>
+    <button class="ctrl-btn" id="btnStep" title="Step forward">⏭</button>
+    <div class="badge time" id="timeDisp">t = 0.000 fs</div>
+    <div class="badge regime" id="regimeDisp"></div>
+  </div>
+</div>
+
+<div class="main">
+<div class="canvas-col">
+  <div class="canvas-wrap" style="flex:.32">
+    <div class="canvas-tag">Energy Diagram — V(x) &amp; E</div>
+    <canvas id="cEnergy"></canvas>
+  </div>
+  <div class="canvas-wrap" style="flex:.68">
+    <div class="canvas-tag">Wave Function — ψ(x, t)</div>
+    <canvas id="cWave"></canvas>
+  </div>
+  <div class="prob-bar">
+    <span class="prob-label">T</span>
+    <span class="prob-t" id="dispT">—</span>
+    <div class="sep"></div>
+    <span class="prob-label">R</span>
+    <span class="prob-r" id="dispR">—</span>
+    <div class="sep"></div>
+    <span class="prob-sum" id="dispSum">T+R = —</span>
+    <div style="flex:1"></div>
+    <div style="width:140px">
+      <div class="gauge-row"><div class="gauge-t" id="gaugeT"></div><div class="gauge-r" id="gaugeR"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="sidebar">
+  <!-- Potential -->
+  <div class="card">
+    <div class="card-head"><div class="dot" style="background:var(--red)"></div>Potential</div>
+    <div class="card-body">
+      <div class="toggle-bar" id="potToggle">
+        <button class="toggle-opt on" data-v="barrier">Square Barrier</button>
+        <button class="toggle-opt" data-v="step">Step Potential</button>
+      </div>
+      <div class="srow">
+        <div class="srow-head"><span class="srow-label">Height V₀</span><span class="srow-val" id="dV0">0.50 eV</span></div>
+        <input type="range" id="slV0" min="0.01" max="5.0" step="0.01" value="0.50">
+      </div>
+      <div class="srow" id="wRow">
+        <div class="srow-head"><span class="srow-label">Width a</span><span class="srow-val" id="dW">0.50 nm</span></div>
+        <input type="range" id="slW" min="0.05" max="3.0" step="0.01" value="0.50">
+      </div>
+    </div>
+  </div>
+
+  <!-- Energy + Speed -->
+  <div class="card">
+    <div class="card-head"><div class="dot" style="background:var(--cyan)"></div>Particle</div>
+    <div class="card-body">
+      <div class="srow" style="margin-top:0">
+        <div class="srow-head"><span class="srow-label">Energy E</span><span class="srow-val" id="dE">0.30 eV</span></div>
+        <input type="range" id="slE" min="0.01" max="5.0" step="0.01" value="0.30">
+      </div>
+      <div class="srow">
+        <div class="srow-head"><span class="srow-label">Speed</span><span class="srow-val" id="dSpd">1.0×</span></div>
+        <input type="range" id="slSpd" min="0.1" max="5" step="0.1" value="1.0">
+      </div>
+    </div>
+  </div>
+
+  <!-- Display -->
+  <div class="card">
+    <div class="card-head"><div class="dot" style="background:var(--violet)"></div>Display</div>
+    <div class="card-body">
+      <div class="disp-grid">
+        <div class="chk-row"><input type="checkbox" id="chkRe" checked><label for="chkRe">Re(ψ)</label></div>
+        <div class="legend-item"><div class="lsw" style="background:var(--blue)"></div>Re(ψ) — real part</div>
+        <div class="chk-row"><input type="checkbox" id="chkIm" checked><label for="chkIm">Im(ψ)</label></div>
+        <div class="legend-item"><div class="lsw" style="background:var(--amber)"></div>Im(ψ) — imaginary part</div>
+        <div class="chk-row"><input type="checkbox" id="chkP" checked><label for="chkP">|ψ|²</label></div>
+        <div class="legend-item"><div class="lsw" style="background:var(--violet)"></div>|ψ|² — probability density</div>
+      </div>
+      <div style="margin-top:4px">
+        <div class="legend-item"><div class="lsw" style="background:var(--red)"></div>V(x) potential</div>
+        <div class="legend-item"><div class="lsw" style="background:var(--cyan);height:1px;border-top:2px dashed var(--cyan)"></div>Energy E</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytical -->
+  <div class="card">
+    <div class="card-head"><div class="dot" style="background:var(--teal)"></div>Analytical</div>
+    <div class="card-body" id="formulaPanel"></div>
+  </div>
+
+  <!-- T(E) Spectrum -->
+  <div class="card">
+    <div class="card-head"><div class="dot" style="background:var(--green)"></div>T(E) Spectrum</div>
+    <div class="card-body">
+      <canvas id="cSpec" class="spec-canvas"></canvas>
+      <div class="spec-note" id="specNote">● current E · dashed = V₀</div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script>
+const HBAR=1.0545718e-34,ME=9.10938e-31,EV=1.60218e-19,NM=1e-9,FS=1e-15;
+const E_V0_THR=1e-6,E_V0_THR_J=E_V0_THR*EV,DISP_THR=0.01;
+const NORM_THR=1e-40,KAPPA_MAX=20,AMP_SCALE=0.42,TIME_STEP=0.1;
+const NX=1200,xMin=-10,xMax=14,dx=(xMax-xMin)/NX;
+
+let S={type:'barrier',V0:.5,E:.3,W:.5,speed:1,showRe:true,showIm:true,showP:true,playing:true,t:0};
+
+const cE=document.getElementById('cEnergy'),cW=document.getElementById('cWave'),cS=document.getElementById('cSpec');
+const ctxE=cE.getContext('2d'),ctxW=cW.getContext('2d'),ctxS=cS.getContext('2d');
+
+function resize(){
+  const dpr=devicePixelRatio||1;
+  [cE,cW].forEach(c=>{const r=c.parentElement.getBoundingClientRect();c.width=r.width*dpr;c.height=r.height*dpr;c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);c.style.width=r.width+'px';c.style.height=r.height+'px';});
+  cS.width=cS.clientWidth*(devicePixelRatio||1);cS.height=cS.clientHeight*(devicePixelRatio||1);
+}
+
+function isApprox(a,b){return Math.abs(a-b)<E_V0_THR;}
+function computeTR(Ee,V0,Wn,type){
+  if(Ee<=0)return{T:0,R:1};
+  if(type==='step'){if(Ee<V0-E_V0_THR)return{T:0,R:1};if(isApprox(Ee,V0))return{T:0,R:1};const k1=Math.sqrt(2*ME*Ee*EV)/HBAR,k2=Math.sqrt(2*ME*(Ee-V0)*EV)/HBAR;const R=((k1-k2)/(k1+k2))**2;return{T:1-R,R};}
+  const k1=Math.sqrt(2*ME*Ee*EV)/HBAR,a=Wn*NM;
+  if(isApprox(Ee,V0)){const m=ME*V0*EV*a*a/(2*HBAR*HBAR),T=1/(1+m);return{T,R:1-T};}
+  if(Ee>V0){const k2=Math.sqrt(2*ME*(Ee-V0)*EV)/HBAR,s2=Math.sin(k2*a)**2;const T=1/(1+s2*(k1*k1-k2*k2)**2/(4*k1*k1*k2*k2));return{T,R:1-T};}
+  else{const kp=Math.sqrt(2*ME*(V0-Ee)*EV)/HBAR,ka=kp*a;if(ka>KAPPA_MAX){const p=16*k1*k1*kp*kp/(k1*k1+kp*kp)**2,T=Math.max(p*Math.exp(-2*ka),1e-300);return{T,R:1-T};}const sh2=Math.sinh(ka)**2,T=1/(1+sh2*(k1*k1+kp*kp)**2/(4*k1*k1*kp*kp));return{T,R:1-T};}
+}
+
+function getV(x){if(S.type==='step')return x>=0?S.V0:0;return(x>=0&&x<=S.W)?S.V0:0;}
+function getRegions(){if(S.type==='step')return[{x0:xMin,x1:0,V:0},{x0:0,x1:xMax,V:S.V0}];return[{x0:xMin,x1:0,V:0},{x0:0,x1:S.W,V:S.V0},{x0:S.W,x1:xMax,V:0}];}
+function rIdx(x,rg){for(let i=rg.length-1;i>=0;i--)if(x>=rg[i].x0)return i;return 0;}
+
+function tMatrix(rg,Ee){
+  const E=Ee*EV,n=rg.length,kV=[],rT=[];
+  for(let i=0;i<n;i++){const V=rg[i].V*EV,d=E-V;if(Math.abs(d)<E_V0_THR_J){kV.push(0);rT.push('L');}else if(d>0){kV.push(Math.sqrt(2*ME*d)/HBAR);rT.push('P');}else{kV.push(Math.sqrt(-2*ME*d)/HBAR);rT.push('E');}}
+  const A=new Float64Array(n*2),B=new Float64Array(n*2);A[(n-1)*2]=1;
+  for(let j=n-2;j>=0;j--){const bd=rg[j+1].x0,ar=A[(j+1)*2],ai=A[(j+1)*2+1],br=B[(j+1)*2],bi=B[(j+1)*2+1];let pR,pI,dR,dI;
+    if(rT[j+1]==='L'){pR=ar;pI=ai;dR=br;dI=bi;}else if(rT[j+1]==='P'){pR=ar+br;pI=ai+bi;const k=kV[j+1];dR=-k*ai+k*bi;dI=k*ar-k*br;}else{const kp=kV[j+1];pR=ar+br;pI=ai+bi;dR=kp*ar-kp*br;dI=kp*ai-kp*bi;}
+    const xL=(bd-rg[j].x0)*NM;
+    if(rT[j]==='L'){B[j*2]=dR;B[j*2+1]=dI;A[j*2]=pR-dR*xL;A[j*2+1]=pI-dI*xL;}
+    else if(rT[j]==='P'){const k=kV[j],phi=k*xL,cp=Math.cos(phi),sp=Math.sin(phi);const hpR=.5*pR,hpI=.5*pI,hdR=.5*dI/k,hdI=-.5*dR/k;const AeR=hpR+hdR,AeI=hpI+hdI,BeR=hpR-hdR,BeI=hpI-hdI;A[j*2]=AeR*cp+AeI*sp;A[j*2+1]=AeI*cp-AeR*sp;B[j*2]=BeR*cp-BeI*sp;B[j*2+1]=BeI*cp+BeR*sp;}
+    else{const kp=kV[j],kpL=kp*xL;let ex,emx;if(kpL>KAPPA_MAX){ex=Math.exp(Math.min(kpL,700));emx=0;}else if(kpL<-KAPPA_MAX){ex=0;emx=Math.exp(Math.min(-kpL,700));}else{ex=Math.exp(kpL);emx=Math.exp(-kpL);}const AeR=.5*(pR+dR/kp),AeI=.5*(pI+dI/kp),BeR=.5*(pR-dR/kp),BeI=.5*(pI-dI/kp);A[j*2]=AeR*ex;A[j*2+1]=AeI*ex;B[j*2]=BeR*emx;B[j*2+1]=BeI*emx;}}
+  const a0r=A[0],a0i=A[1],m2=a0r*a0r+a0i*a0i;
+  if(m2>NORM_THR){const ir=a0r/m2,ii=-a0i/m2;for(let j=0;j<n;j++){const ar=A[j*2],ai=A[j*2+1],br=B[j*2],bi=B[j*2+1];A[j*2]=ar*ir-ai*ii;A[j*2+1]=ar*ii+ai*ir;B[j*2]=br*ir-bi*ii;B[j*2+1]=br*ii+bi*ir;}}
+  return{A,B,kV,rT};
+}
+
+function solvePW(Ee,tfs){
+  const E=Ee*EV,om=E/HBAR,t=tfs*FS,rg=getRegions(),m=tMatrix(rg,Ee);const{A:Ac,B:Bc,kV,rT}=m,out=new Float64Array(NX*2);
+  for(let i=0;i<NX;i++){const x=xMin+i*dx,xm=x*NM,ri=rIdx(x,rg),reg=rg[ri];const aR=Ac[ri*2],aI=Ac[ri*2+1],bR=Bc[ri*2],bI=Bc[ri*2+1];let pR,pI;const V=reg.V*EV,dE=E-V;
+    if(Math.abs(dE)<E_V0_THR_J){const xr=xm-reg.x0*NM,vR=aR+bR*xr,vI=aI+bI*xr,ph=-om*t,ct=Math.cos(ph),st=Math.sin(ph);pR=vR*ct-vI*st;pI=vR*st+vI*ct;}
+    else if(dE>0){const k=kV[ri],xr=xm-reg.x0*NM,pf=k*xr-om*t,pb=-k*xr-om*t;const cf=Math.cos(pf),sf=Math.sin(pf),cb=Math.cos(pb),sb=Math.sin(pb);pR=(aR*cf-aI*sf)+(bR*cb-bI*sb);pI=(aR*sf+aI*cf)+(bR*sb+bI*cb);}
+    else{const kp=kV[ri],xr=xm-reg.x0*NM,kpX=kp*xr;let dc,gr;if(kpX>KAPPA_MAX){dc=0;gr=Math.exp(Math.min(kpX,700));}else if(kpX<-KAPPA_MAX){dc=Math.exp(Math.min(-kpX,700));gr=0;}else{dc=Math.exp(-kpX);gr=Math.exp(kpX);}const ph=-om*t,ct=Math.cos(ph),st=Math.sin(ph);pR=(aR*ct-aI*st)*dc+(bR*ct-bI*st)*gr;pI=(aR*st+aI*ct)*dc+(bR*st+bI*ct)*gr;}
+    out[i*2]=pR;out[i*2+1]=pI;}return out;
+}
+
+function drawEnergy(){
+  const ctx=ctxE,dpr=devicePixelRatio||1,w=cE.width/dpr,h=cE.height/dpr;ctx.clearRect(0,0,w,h);ctx.fillStyle='#060a12';ctx.fillRect(0,0,w,h);
+  const mg={l:48,r:18,t:26,b:26},pw=w-mg.l-mg.r,ph=h-mg.t-mg.b;const Vm=Math.max(S.V0+.5,S.E+.5,1.5),Vn=-.3;
+  const toX=x=>mg.l+((x-xMin)/(xMax-xMin))*pw,toY=v=>mg.t+(1-(v-Vn)/(Vm-Vn))*ph;
+  ctx.strokeStyle='#141e2e';ctx.lineWidth=.5;for(let v=Math.ceil(Vn*2)/2;v<=Vm;v+=.5){ctx.beginPath();ctx.moveTo(mg.l,toY(v));ctx.lineTo(w-mg.r,toY(v));ctx.stroke();}
+  ctx.strokeStyle='#1e2e42';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mg.l,toY(0));ctx.lineTo(w-mg.r,toY(0));ctx.stroke();
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<NX;i++){const x=xMin+i*dx,px=toX(x),py=toY(getV(x));i?ctx.lineTo(px,py):ctx.moveTo(px,py);}ctx.stroke();
+  ctx.fillStyle='rgba(239,68,68,0.07)';ctx.beginPath();ctx.moveTo(toX(xMin),toY(0));for(let i=0;i<NX;i++)ctx.lineTo(toX(xMin+i*dx),toY(getV(xMin+i*dx)));ctx.lineTo(toX(xMax),toY(0));ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#22d3ee';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(mg.l,toY(S.E));ctx.lineTo(w-mg.r,toY(S.E));ctx.stroke();ctx.setLineDash([]);
+  ctx.font='11px "IBM Plex Mono"';ctx.textAlign='right';ctx.fillStyle='#22d3ee';ctx.fillText('E = '+S.E.toFixed(2)+' eV',w-mg.r-4,toY(S.E)-5);
+  ctx.fillStyle='#ef4444';ctx.fillText('V\u2080 = '+S.V0.toFixed(2)+' eV',w-mg.r-4,toY(S.V0)-5);
+  ctx.fillStyle='#3e5068';ctx.font='10px "IBM Plex Mono"';for(let v=Math.ceil(Vn*2)/2;v<=Vm;v+=.5)ctx.fillText(v.toFixed(1),mg.l-4,toY(v)+3);
+  ctx.fillStyle='#4e6680';ctx.font='10px Outfit';ctx.textAlign='center';ctx.fillText('Position (nm)',w/2,h-2);
+  ctx.save();ctx.translate(10,h/2);ctx.rotate(-Math.PI/2);ctx.fillText('Energy (eV)',0,0);ctx.restore();
+}
+
+function drawWave(){
+  const ctx=ctxW,dpr=devicePixelRatio||1,w=cW.width/dpr,h=cW.height/dpr;ctx.clearRect(0,0,w,h);ctx.fillStyle='#060a12';ctx.fillRect(0,0,w,h);
+  const mg={l:48,r:18,t:26,b:26},pw=w-mg.l-mg.r,ph=h-mg.t-mg.b;const toX=x=>mg.l+((x-xMin)/(xMax-xMin))*pw;
+  const data=solvePW(S.E,S.t);let maxA=.01;for(let i=0;i<NX;i++){const r=data[i*2],im=data[i*2+1],m=Math.sqrt(r*r+im*im);if(m>maxA&&isFinite(m))maxA=m;}
+  const ampS=ph*AMP_SCALE/maxA,midY=mg.t+ph*.5;const toY=v=>midY-v*ampS;
+  ctx.fillStyle='rgba(239,68,68,0.05)';const rg=getRegions();for(const r of rg)if(Math.abs(r.V)>.01)ctx.fillRect(toX(r.x0),mg.t,toX(r.x1)-toX(r.x0),ph);
+  ctx.strokeStyle='rgba(239,68,68,0.25)';ctx.lineWidth=1;ctx.setLineDash([3,3]);for(const r of rg)if(Math.abs(r.V)>.01){ctx.beginPath();ctx.moveTo(toX(r.x0),mg.t);ctx.lineTo(toX(r.x0),mg.t+ph);ctx.stroke();if(S.type==='barrier'){ctx.beginPath();ctx.moveTo(toX(r.x1),mg.t);ctx.lineTo(toX(r.x1),mg.t+ph);ctx.stroke();}}ctx.setLineDash([]);
+  ctx.strokeStyle='#152030';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mg.l,midY);ctx.lineTo(w-mg.r,midY);ctx.stroke();
+  const step=Math.max(1,Math.floor(NX/pw*.8));
+  function gRI(i){const r=data[i*2],im=data[i*2+1];return{r:isFinite(r)?r:0,i:isFinite(im)?im:0};}
+  function curve(col,fn,al){ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.globalAlpha=al||.85;ctx.beginPath();let f=true;for(let i=0;i<NX;i+=step){const x=xMin+i*dx,v=fn(i);if(!isFinite(v))continue;const px=toX(x),py=toY(v);f?(ctx.moveTo(px,py),f=false):ctx.lineTo(px,py);}const lv=fn(NX-1);if(isFinite(lv))ctx.lineTo(toX(xMax),toY(lv));ctx.stroke();ctx.globalAlpha=1;}
+  if(S.showRe)curve('#3b82f6',i=>gRI(i).r);if(S.showIm)curve('#f59e0b',i=>gRI(i).i);
+  if(S.showP){const pS=ph*AMP_SCALE/(maxA*maxA);ctx.fillStyle='rgba(167,139,250,0.13)';ctx.beginPath();ctx.moveTo(toX(xMin),midY);for(let i=0;i<NX;i+=step){const x=xMin+i*dx,{r,i:im}=gRI(i),p=r*r+im*im;if(isFinite(p))ctx.lineTo(toX(x),midY-p*pS);}ctx.lineTo(toX(xMax),midY);ctx.closePath();ctx.fill();ctx.strokeStyle='#a78bfa';ctx.lineWidth=1.8;ctx.beginPath();let f2=true;for(let i=0;i<NX;i+=step){const x=xMin+i*dx,{r,i:im}=gRI(i),p=r*r+im*im;if(!isFinite(p))continue;const px=toX(x),py=midY-p*pS;f2?(ctx.moveTo(px,py),f2=false):ctx.lineTo(px,py);}ctx.stroke();}
+  const tr=computeTR(S.E,S.V0,S.W,S.type),lyB=mg.t+ph-8,lyT=mg.t+ph-24;
+  function tag(txt,px,py,col){ctx.font='bold 10px "IBM Plex Mono"';const tw=ctx.measureText(txt).width,bw=tw+12,bh=18;const bx=px-bw/2,by=py-bh+4;ctx.fillStyle='rgba(4,6,11,0.8)';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx,by,bw,bh,3);else ctx.rect(bx,by,bw,bh);ctx.fill();ctx.strokeStyle=col.replace(')',',0.35)').replace('rgb','rgba');ctx.lineWidth=1;ctx.stroke();ctx.fillStyle=col;ctx.textAlign='center';ctx.fillText(txt,px,py);}
+  tag('\u2192 incident',toX(-5),lyB,'#c8d6e5');
+  if(S.type==='barrier'){if(tr.T>.001)tag('\u2192 transmitted',toX(S.W+5),lyB,'#34d399');if(tr.R>.001)tag('\u2190 reflected',toX(-5),lyT,'#fb7185');}
+  else{if(S.E>S.V0){tag('\u2192 transmitted',toX(7),lyB,'#34d399');if(tr.R>.001)tag('\u2190 reflected',toX(-5),lyT,'#fb7185');}else{tag('\u2190 reflected (total)',toX(-5),lyT,'#fb7185');tag('evanescent \u2192',toX(5),lyB,'#ef6b6b');}}
+  ctx.fillStyle='#3e5068';ctx.font='10px "IBM Plex Mono"';ctx.textAlign='right';ctx.fillText('0',mg.l-4,midY+3);
+  ctx.fillStyle='#3a4a5a';ctx.textAlign='center';for(let x=Math.ceil(xMin);x<=Math.floor(xMax);x++){ctx.fillText(x+'',toX(x),mg.t+ph+14);ctx.strokeStyle='#0e1822';ctx.lineWidth=.5;ctx.beginPath();ctx.moveTo(toX(x),mg.t);ctx.lineTo(toX(x),mg.t+ph);ctx.stroke();}
+  ctx.fillStyle='#4e6680';ctx.font='10px Outfit';ctx.fillText('Position (nm)',w/2,h-2);ctx.save();ctx.translate(10,h/2);ctx.rotate(-Math.PI/2);ctx.fillText('Amplitude',0,0);ctx.restore();
+}
+
+function drawSpec(){
+  const c=cS,dpr=devicePixelRatio||1;const cw=Math.max(1,c.clientWidth),ch=Math.max(1,c.clientHeight);c.width=cw*dpr;c.height=ch*dpr;const ctx=ctxS;ctx.scale(dpr,dpr);const w=cw,h=ch;ctx.fillStyle='#080d16';ctx.fillRect(0,0,w,h);
+  const mg={l:32,r:8,t:14,b:22},pw=w-mg.l-mg.r,ph=h-mg.t-mg.b;const Em=Math.max(S.V0*2.5,3,S.E*1.5);
+  ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=mg.t+ph*(1-i/4);ctx.beginPath();ctx.moveTo(mg.l,y);ctx.lineTo(mg.l+pw,y);ctx.stroke();}
+  if(S.V0<=Em){const xv=mg.l+(S.V0/Em)*pw;ctx.strokeStyle='rgba(239,68,68,0.3)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xv,mg.t);ctx.lineTo(xv,mg.t+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(239,68,68,0.6)';ctx.font="8px 'IBM Plex Mono'";ctx.textAlign='left';ctx.fillText('V\u2080',xv+2,mg.t+9);}
+  const N=300;ctx.beginPath();ctx.strokeStyle='#2dd4a8';ctx.lineWidth=2;for(let i=0;i<=N;i++){const Ev=(i/N)*Em;if(Ev<=0)continue;const T=computeTR(Ev,S.V0,S.W,S.type).T;const x=mg.l+(Ev/Em)*pw,y=mg.t+ph*(1-T);i<=1?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();
+  if(S.E<=Em){const Tc=computeTR(S.E,S.V0,S.W,S.type).T,mx=mg.l+(S.E/Em)*pw,my=mg.t+ph*(1-Tc);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(mx,my,3.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2dd4a8';ctx.beginPath();ctx.arc(mx,my,2,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font="8px 'IBM Plex Mono'";ctx.textAlign='center';ctx.fillText('E (eV)',mg.l+pw/2,h-2);ctx.textAlign='right';ctx.fillText('0',mg.l-2,mg.t+ph+3);ctx.fillText('1',mg.l-2,mg.t+4);ctx.textAlign='center';ctx.fillText(Em.toFixed(1),mg.l+pw,mg.t+ph+11);ctx.save();ctx.translate(7,mg.t+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('T',0,0);ctx.restore();
+}
+
+function updateProb(){
+  const tr=computeTR(S.E,S.V0,S.W,S.type);let T=tr.T,R=tr.R;if(isNaN(T))T=0;if(isNaN(R))R=0;
+  document.getElementById('dispT').textContent='T = '+(T*100).toFixed(2)+'%';document.getElementById('dispR').textContent='R = '+(R*100).toFixed(2)+'%';
+  document.getElementById('dispSum').textContent='T+R = '+((T+R)*100).toFixed(2)+'%';
+  document.getElementById('gaugeT').style.width=(T*100)+'%';document.getElementById('gaugeR').style.width=(R*100)+'%';
+  const b=document.getElementById('regimeDisp');
+  if(S.type==='step'){if(S.E>S.V0+DISP_THR){b.textContent='E > V\u2080';b.className='badge regime above';}else if(Math.abs(S.E-S.V0)<=DISP_THR){b.textContent='E \u2248 V\u2080';b.className='badge regime above';}else{b.textContent='E < V\u2080 (total)';b.className='badge regime total';}}
+  else{if(S.E>S.V0+DISP_THR){b.textContent='Above barrier';b.className='badge regime above';}else if(Math.abs(S.E-S.V0)<=DISP_THR){b.textContent='E \u2248 V\u2080';b.className='badge regime above';}else{b.textContent='Tunneling';b.className='badge regime tunnel';}}
+  document.getElementById('specNote').textContent='\u25cf current E \u00b7 dashed = V\u2080'+(S.E>S.V0?' \u00b7 resonances where T \u2192 1':'');
+}
+
+function renderLatex(tex,el){try{katex.render(tex,el,{throwOnError:false,displayMode:true});}catch(e){el.textContent=tex;}}
+
+function updateFormula(){
+  const tr=computeTR(S.E,S.V0,S.W,S.type),el=document.getElementById('formulaPanel'),E=S.E,V0=S.V0;
+  if(S.type==='step'){
+    if(E>V0+DISP_THR){const k1=Math.sqrt(2*ME*E*EV)/HBAR,k2=Math.sqrt(2*ME*(E-V0)*EV)/HBAR;el.innerHTML='<div class="flabel">Step (E > V\u2080)</div><div class="formula-box"><span id="ltx1"></span></div><div class="formula-box"><span id="ltx2"></span></div><div class="prow"><span class="pn">k\u2081</span><span class="pv">'+(k1*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="prow"><span class="pn">k\u2082</span><span class="pv">'+(k2*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="presult"><span class="pt">T='+(tr.T*100).toFixed(4)+'%</span><span class="pr">R='+(tr.R*100).toFixed(4)+'%</span></div>';renderLatex('T=\\frac{4k_1 k_2}{(k_1+k_2)^2}',document.getElementById('ltx1'));renderLatex('R=\\left(\\frac{k_1-k_2}{k_1+k_2}\\right)^2',document.getElementById('ltx2'));}
+    else if(Math.abs(E-V0)<=DISP_THR){el.innerHTML='<div class="flabel">Step (E \u2248 V\u2080)</div><div style="color:var(--text-2);margin:6px 0;font-size:12px">k\u2082 \u2192 0 \u00b7 Total reflection</div><div class="presult"><span class="pt">T='+(tr.T*100).toFixed(4)+'%</span><span class="pr">R='+(tr.R*100).toFixed(4)+'%</span></div>';}
+    else{const kp=Math.sqrt(2*ME*(V0-E)*EV)/HBAR;el.innerHTML='<div class="flabel">Step (E < V\u2080)</div><div style="color:var(--text-2);margin:6px 0;font-size:12px">Evanescent \u00b7 No current</div><div class="prow"><span class="pn">\u03ba</span><span class="pv">'+(kp*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="presult"><span class="pt">T=0.0000%</span><span class="pr">R=100.0000%</span></div>';}
+  }else{
+    const k1=Math.sqrt(2*ME*E*EV)/HBAR,a=S.W*NM;
+    if(E>V0+DISP_THR){const k2=Math.sqrt(2*ME*(E-V0)*EV)/HBAR;el.innerHTML='<div class="flabel">Barrier (E > V\u2080)</div><div class="formula-box"><span id="ltx1"></span></div><div class="prow"><span class="pn">k\u2081</span><span class="pv">'+(k1*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="prow"><span class="pn">k\u2082</span><span class="pv">'+(k2*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="prow"><span class="pn">k\u2082a</span><span class="pv">'+(k2*a).toFixed(4)+'</span></div><div class="presult"><span class="pt">T='+(tr.T*100).toFixed(4)+'%</span><span class="pr">R='+(tr.R*100).toFixed(4)+'%</span></div>';renderLatex('T=\\left[1+\\frac{(k_1^2-k_2^2)^2}{4k_1^2 k_2^2}\\sin^2(k_2 a)\\right]^{-1}',document.getElementById('ltx1'));}
+    else if(Math.abs(E-V0)<=DISP_THR){el.innerHTML='<div class="flabel">Barrier (E \u2248 V\u2080)</div><div class="formula-box"><span id="ltx1"></span></div><div style="color:var(--text-2);margin:6px 0;font-size:12px">Linear solution inside barrier</div><div class="presult"><span class="pt">T='+(tr.T*100).toFixed(4)+'%</span><span class="pr">R='+(tr.R*100).toFixed(4)+'%</span></div>';renderLatex('T=\\left[1+\\frac{mV_0 a^2}{2\\hbar^2}\\right]^{-1}',document.getElementById('ltx1'));}
+    else{const kp=Math.sqrt(2*ME*(V0-E)*EV)/HBAR,ka=kp*a;el.innerHTML='<div class="flabel">Barrier (E < V\u2080) \u2014 Tunneling</div><div class="formula-box"><span id="ltx1"></span></div><div class="prow"><span class="pn">k\u2081</span><span class="pv">'+(k1*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="prow"><span class="pn">\u03ba</span><span class="pv">'+(kp*NM).toFixed(4)+' nm\u207b\u00b9</span></div><div class="prow"><span class="pn">\u03baa</span><span class="pv">'+ka.toFixed(4)+(ka>KAPPA_MAX?' (large)':'')+'</span></div><div class="presult"><span class="pt">T='+(tr.T*100).toFixed(4)+'%</span><span class="pr">R='+(tr.R*100).toFixed(4)+'%</span></div>';renderLatex('T=\\left[1+\\frac{(k_1^2+\\kappa^2)^2}{4k_1^2\\kappa^2}\\sinh^2(\\kappa a)\\right]^{-1}',document.getElementById('ltx1'));}
+  }
+}
+
+let lastT=0;
+function frame(ts){if(!lastT)lastT=ts;const dt=Math.min((ts-lastT)/1000,0.1);lastT=ts;if(S.playing)S.t+=dt*2*S.speed;drawEnergy();drawWave();updateProb();updateFormula();drawSpec();document.getElementById('timeDisp').textContent='t = '+S.t.toFixed(3)+' fs';requestAnimationFrame(frame);}
+
+document.getElementById('potToggle').querySelectorAll('.toggle-opt').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('#potToggle .toggle-opt').forEach(x=>x.classList.remove('on'));b.classList.add('on');S.type=b.dataset.v;document.getElementById('wRow').style.display=S.type==='step'?'none':'';S.t=0;});});
+function wire(id,dId,prop,fmt){const sl=document.getElementById(id),d=document.getElementById(dId);sl.addEventListener('input',()=>{S[prop]=+sl.value;d.textContent=fmt(S[prop]);});}
+wire('slV0','dV0','V0',v=>v.toFixed(2)+' eV');wire('slW','dW','W',v=>v.toFixed(2)+' nm');wire('slE','dE','E',v=>v.toFixed(2)+' eV');wire('slSpd','dSpd','speed',v=>v.toFixed(1)+'\u00d7');
+document.getElementById('chkRe').addEventListener('change',e=>S.showRe=e.target.checked);
+document.getElementById('chkIm').addEventListener('change',e=>S.showIm=e.target.checked);
+document.getElementById('chkP').addEventListener('change',e=>S.showP=e.target.checked);
+document.getElementById('btnPlay').addEventListener('click',()=>{S.playing=!S.playing;const b=document.getElementById('btnPlay');b.textContent=S.playing?'\u23f8':'\u25b6';b.classList.toggle('active',S.playing);});
+document.getElementById('btnReset').addEventListener('click',()=>S.t=0);
+document.getElementById('btnStep').addEventListener('click',()=>S.t+=TIME_STEP*S.speed);
+window.addEventListener('resize',resize);
+function init(){requestAnimationFrame(()=>{resize();document.getElementById('btnPlay').textContent='\u23f8';document.getElementById('btnPlay').classList.add('active');requestAnimationFrame(frame);});}
+document.readyState==='complete'?init():window.addEventListener('load',init);
+</script>
+</body>
+</html>
