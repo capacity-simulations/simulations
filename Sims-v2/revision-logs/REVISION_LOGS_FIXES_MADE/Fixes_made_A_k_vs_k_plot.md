@@ -1,0 +1,1 @@
+BS 20/02/2026: Implemented standard LaTeX rendering of the displayed equations. Removed dynamic axis scaling. Adjusted the spread slider's lower limit. Fixed the probe line limits. Updated the momentum slider range. Corrected annotation panel values.

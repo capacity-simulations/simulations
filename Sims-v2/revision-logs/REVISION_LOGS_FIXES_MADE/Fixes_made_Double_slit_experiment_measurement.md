@@ -1,0 +1,1 @@
+BS 27/02/2026: Fixed probability normalization issue. Corrected the pattern observed after measurement — changed from a single Gaussian hump to two single-slit Gaussian diffraction envelopes with the extent of overlap determined by slit separation (d), wavelength (λ), slit width (a), and screen distance (L).

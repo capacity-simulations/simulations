@@ -1,0 +1,1 @@
+BS 20/02/2026: Added energy and parity information window and fixed initial bugs. Fixed issue with legend display. Converted the layout to the global layout standard. Added maximize-window option for individual plot windows.

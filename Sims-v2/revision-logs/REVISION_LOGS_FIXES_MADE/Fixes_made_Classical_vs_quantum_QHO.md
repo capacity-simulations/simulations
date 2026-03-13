@@ -1,0 +1,1 @@
+BS 18/02/2026: Fixed flickering animation that occurred during live slider changes. Removed slider units that were misleading in the context of a classical vs quantum comparison. Fixed the angular frequency (ω) parameter — previously, changing ω produced no significant change in the oscillation. Fixed the truncated wavefunction peak at higher amplitudes.

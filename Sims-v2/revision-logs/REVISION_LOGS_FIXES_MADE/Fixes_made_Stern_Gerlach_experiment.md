@@ -1,0 +1,1 @@
+BS 18/02/2026: Reduced the maximum magnetic field gradient from 10 T/m to 6 T/m to prevent particles from overshooting beyond the output window for up to 5 beams. Increased the output window size to clearly display a maximum of 5 accumulated beams. Removed the overlap between split beams at minimum magnetic field strength.

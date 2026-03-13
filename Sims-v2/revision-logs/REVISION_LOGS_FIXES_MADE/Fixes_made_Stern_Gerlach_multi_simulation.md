@@ -1,0 +1,1 @@
+BS 20/02/2026: Multiple physics bugs were detected. No fixes were applied — attempts to correct the issues altered the entire animation (e.g., a 360° rotatable setup was needed to visualize splitting along the x-direction, which could not be successfully implemented after multiple attempts).
