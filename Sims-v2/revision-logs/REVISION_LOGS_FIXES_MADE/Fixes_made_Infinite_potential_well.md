@@ -1,0 +1,1 @@
+BS 02/03/2026: Added measurement rate slider. Note — the histogram bars still do not fully match the area under the theoretical probability density curve for a large number of measurements (persisting issue).

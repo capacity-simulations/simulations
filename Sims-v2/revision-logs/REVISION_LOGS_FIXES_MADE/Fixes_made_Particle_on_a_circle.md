@@ -1,0 +1,1 @@
+BS 20/02/2026: Fixed incorrect wavelength information. Added equal extra spacing between all energy levels to eliminate overlap between the lower energy levels. Improved the quantum number and energy level labels.

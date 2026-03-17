@@ -36,6 +36,8 @@ canvas{display:block}
 /* Setup hover tooltip (3D and panel) */
 .setup-tooltip{position:fixed;max-width:260px;padding:8px 12px;background:rgba(8,12,28,0.95);border:1px solid rgba(99,102,241,0.3);border-radius:8px;font-size:11px;color:#c8d6e5;line-height:1.4;pointer-events:none;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,0.4);opacity:0;visibility:hidden;transition:opacity 0.15s,visibility 0.15s}
 .setup-tooltip.visible{opacity:1;visibility:visible}
+.drag-hint{position:fixed;left:0;top:0;padding:10px 14px;background:rgba(8,12,28,0.96);border:1px solid rgba(99,102,241,0.4);border-radius:8px;font-size:12px;font-weight:500;color:#e2e8f0;line-height:1.4;pointer-events:none;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,0.5);opacity:0;visibility:hidden;transition:opacity 0.12s,visibility 0.12s;white-space:nowrap}
+.drag-hint.visible{opacity:1;visibility:visible}
 
 /* Header right actions */
 .header-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
@@ -70,7 +72,8 @@ canvas{display:block}
 .stat-val.blocked{color:#ef4444}
 
 /* Stage builder */
-.palette{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;padding:8px;background:rgba(10,14,30,0.5);border-radius:8px;border:1px dashed rgba(100,120,200,0.2)}
+.palette{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;padding:8px;background:rgba(10,14,30,0.5);border-radius:8px;border:1px dashed rgba(100,120,200,0.2)}
+.builder-note{font-size:10px;color:#94a3b8;margin-bottom:10px;line-height:1.4}
 .chip{padding:6px 10px;border-radius:5px;cursor:grab;font-size:10px;font-weight:700;user-select:none;transition:transform 0.15s}
 .chip:hover{transform:scale(1.06)}
 .chip:active{cursor:grabbing}
@@ -88,9 +91,9 @@ canvas{display:block}
 select{padding:6px 8px;background:rgba(20,28,50,0.8);border:1px solid rgba(100,120,200,0.15);border-radius:5px;color:#e2e8f0;font-size:11px;cursor:pointer;width:100%}
 select:focus{outline:none;border-color:#6366f1}
 
-.drop-zone{min-height:44px;border:1.5px dashed rgba(100,120,200,0.25);border-radius:7px;padding:8px;margin-bottom:8px;transition:all 0.2s;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.drop-zone{min-height:44px;border:1.5px dashed rgba(148,163,184,0.55);border-radius:7px;padding:8px;margin-bottom:8px;transition:all 0.2s;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:rgba(30,41,59,0.4)}
 .drop-zone.over{border-color:#6366f1;background:rgba(99,102,241,0.08)}
-.drop-zone-lbl{width:100%;text-align:center;color:#4a5568;font-size:10px}
+.drop-zone-lbl{width:100%;text-align:center;color:#cbd5e1;font-size:11px;font-weight:500;letter-spacing:0.02em}
 .dz-item{padding:4px 8px;border-radius:4px;font-size:9px;font-weight:700;display:flex;align-items:center;gap:5px}
 .dz-item.mz{background:linear-gradient(135deg,#db2777,#be185d);color:#fff}
 .dz-item.mx{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff}
@@ -177,6 +180,7 @@ button:hover{transform:translateY(-1px)}
         </div>
         <div class="camera-hint" id="camHint">🖱️ Drag to rotate • Scroll to zoom</div>
         <div class="setup-tooltip" id="setupTooltip" role="tooltip"></div>
+        <div class="drag-hint" id="dragHint" aria-hidden="true"></div>
       </div>
     </div>
 
@@ -191,6 +195,7 @@ button:hover{transform:translateY(-1px)}
           <div class="chip bp" draggable="true" data-type="blocker" data-value="plus" title="Drag to block the positive (e.g. spin up) beam at this stage.">🚫 Block +</div>
           <div class="chip bm" draggable="true" data-type="blocker" data-value="minus" title="Drag to block the negative (e.g. spin down) beam at this stage.">🚫 Block −</div>
         </div>
+        <p class="builder-note">Drag a magnet or blocker from above into Stage 2 or Stage 3 below to add more stages.</p>
         <div class="stage-box" title="First magnet stage: choose Z or X orientation and optional blocker.">
           <div class="stage-hdr">
             <span class="stage-lbl z" id="s1lbl">Stage 1: Z-Axis</span>
@@ -1268,15 +1273,46 @@ function rebuild() {
 
 // ========== DRAG AND DROP ==========
 let dragData = null;
+const DRAG_HINT_OFFSET_X = 16;
+const DRAG_HINT_OFFSET_Y = 12;
+
+function getDragHintMessage() {
+  if (!dragData) return '';
+  const s2 = canDrop(1, dragData);
+  const s3 = canDrop(2, dragData);
+  if (s2 && s3) return 'Drop in Stage 2 or Stage 3 below';
+  if (s2) return 'Drop in Stage 2 below';
+  if (s3) return 'Drop in Stage 3 below';
+  return 'Add Stage 2 first, then drop here';
+}
+
+function updateDragHintPosition(clientX, clientY) {
+  const hint = document.getElementById('dragHint');
+  if (!hint || !hint.classList.contains('visible')) return;
+  hint.style.left = (clientX + DRAG_HINT_OFFSET_X) + 'px';
+  hint.style.top = (clientY + DRAG_HINT_OFFSET_Y) + 'px';
+}
 
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('dragstart', e => {
     dragData = {type: chip.dataset.type, axis: chip.dataset.axis, value: chip.dataset.value};
     chip.style.opacity = '0.5';
+    const hint = document.getElementById('dragHint');
+    hint.textContent = getDragHintMessage();
+    hint.classList.add('visible');
+    hint.setAttribute('aria-hidden', 'false');
+    hint.style.left = (e.clientX + DRAG_HINT_OFFSET_X) + 'px';
+    hint.style.top = (e.clientY + DRAG_HINT_OFFSET_Y) + 'px';
+  });
+  chip.addEventListener('drag', e => {
+    if (e.clientX !== 0 || e.clientY !== 0) updateDragHintPosition(e.clientX, e.clientY);
   });
   chip.addEventListener('dragend', e => {
     chip.style.opacity = '1';
     dragData = null;
+    const hint = document.getElementById('dragHint');
+    hint.classList.remove('visible');
+    hint.setAttribute('aria-hidden', 'true');
   });
 });
 

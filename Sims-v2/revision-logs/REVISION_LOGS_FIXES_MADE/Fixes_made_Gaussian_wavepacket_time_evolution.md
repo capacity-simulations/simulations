@@ -1,0 +1,1 @@
+BS 02/03/2026: Fixed incorrect spreading parameter in the complex width α(t). Corrected the wavefunction normalization prefactor. Updated the "About" section equation to match the corrected α(t) = 2σ² + iℏt/m formula. Applied a minor guard in the drawPlot function to handle zero-size plot containers during the architecture and flow review.

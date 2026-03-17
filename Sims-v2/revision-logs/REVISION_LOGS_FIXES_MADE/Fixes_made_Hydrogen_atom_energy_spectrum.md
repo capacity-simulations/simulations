@@ -1,0 +1,1 @@
+BS 12/03/2026: Fixed timing mismatch where the next transition in a series would start before the photon line appeared on the emission/absorption strip, by tying photon travel speed to the series delay so the photon always arrives before the next transition fires.

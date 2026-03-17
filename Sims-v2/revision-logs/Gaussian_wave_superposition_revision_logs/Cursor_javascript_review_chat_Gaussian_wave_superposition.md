@@ -1,5 +1,5 @@
-# Gaussian wave packet layout
-_Exported on 06/03/2026 at 11:17:58 GMT+5:30 from Cursor (2.5.25)_
+# Simulation measurement line and legend changes
+_Exported on 13/03/2026 at 18:11:56 GMT+5:30 from Cursor (2.6.18)_
 
 ---
 # FIXES MADE:
@@ -8,259 +8,501 @@ _Exported on 06/03/2026 at 11:17:58 GMT+5:30 from Cursor (2.5.25)_
 # Improved the rendering of the axes and the labels.
 # Added maximize window for each plots.
 # Tied alphs and beta sliders using the normalzation condition.
-# Removed the destructive interference label from the legend. 
+# Removed the destructive interference label from the legend.
+# Added dark/light theme toggle.
+# Improved contrast of the control panel text.
 
 **User**
 
-For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
+In the @simulations/Sims-early-stage-revisions/General_wavefunction_collapse.html simulation, remove the '+' icon from the dotted line showing measurement and just make itv a smooth dotted line. Also remove Measured position legend from the legend window.
 
 ---
 
 **Cursor**
 
+I can see the two things to change:
 
-Reading the current file to understand its structure, then refactoring it to match the global layout.
+1. The `drawMeasurementMarker` function draws a reticle circle with a crosshair (the '+' icon) on the dotted measurement line.
+2. The collapsed-state legend includes a "Measured position" entry.
 
+Let me make both changes.
 
+Done. Here's what I changed:
 
-Implementing the global layout: adding the upper menu with title and info icon, the info reveal area, and restructuring the main area and right control panel.
+1. **Removed the reticle/crosshair icon** from the `drawMeasurementMarker` function — the circle and '+' crosshair lines (the `arc` and inner cross strokes) are gone. The measurement marker is now just a smooth dashed vertical line with the "Measured X" label.
 
-
-
-Fixing structure: placing the legend inside the first plot-wrap so it overlays the canvas, and adding JS for info hover, Reset, and populating the new output fields.
-
-
-
-Adding info-hover and Reset logic and updating the script to populate the legend and wave packet properties (⟨x⟩, Δx, normalization).
-
-
-
-Using a timeout id so we can cancel hide when the pointer moves to the info area:
-
-
-
-Adding computation and display of wave packet properties (⟨x⟩, Δx, group velocity, normalization):
-
-
-
-Matching the layout image: using uppercase "PARAMETERS" and "WAVE PACKET PROPERTIES" for section titles.
-
-
-
-Summary of changes for the global layout:
-
-**1. Upper menu (top bar)**  
-- Title set to **“Gaussian Wave Packet”** with an **(i)** info icon on the left.  
-- **Reset**, **Start**, and **⋯** buttons on the right.  
-- **Reset** restores default parameters and view mode.
-
-**2. Info text area**  
-- Collapsible block directly under the menu.  
-- **“(i)” hover** (on the icon or the block) shows **“About this simulation”** with the formulas and quote.  
-- Mouse leave with a short delay hides it.
-
-**3. Main content (two columns)**  
-- **Left:** Single **main simulation** area containing the three stacked plots (unchanged behavior).  
-- **Right:** **Control panel** (fixed width) with all controls.
-
-**4. Legend**  
-- Moved into the **main simulation** as an overlay in the **top-left** of the first plot.  
-- Same content as before (probability vs real-part legend), updated when view mode changes.
-
-**5. Right control panel**  
-- **Parameters:** “Physics” (X₁, X₂, a, θ, φ) and “View” (|ψ|² / Re(ψ) toggles) grouped and labeled.  
-- **Wave Packet Properties:** Group velocity (—), Position ⟨x⟩, Uncertainty Δx, Normalization, plus α, |β|, cos φ, Overlap S₁₂.  
-  - ⟨x⟩ and Δx are computed from the normalized |Ψ|².  
-- **Text, other controls:** N′ numerical/analytical and N′ accuracy (normalization check).
-
-**6. Behavior**  
-- **Reset** restores X₁ = -2, X₂ = 2, a ≈ 1, θ = π/4, φ = 0 and Probability view.  
-- **Start** and **⋯** are present for layout only (no handlers).  
-- Dark theme and styling are unchanged; layout matches the described structure.
+2. **Removed the "Measured position" legend entry** from the collapsed-state legend, so only "|Ψ(x)|² (collapsed)" and "Pre-measurement (ghost)" remain.
 
 ---
 
 **User**
 
-Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
+In the code check the ranges of x1, x2 and a. Add appropriate units for all the sliders.
 
 ---
 
 **Cursor**
 
+Let me re-read the file to check the current slider configuration.
 
-Implementing a small popup that opens from the info (i) icon and renders equations with KaTeX. Checking the current info section and icon markup.
+Now let me check the `getA` function and how the ranges map.
 
+Let me check the `getA` mapping function and how the value ranges translate.
 
+Here's my analysis of the ranges and units:
 
-Implementing a popup that opens from the (i) icon, uses KaTeX for LaTeX rendering, and removing the old hover panel.
+**Ranges check:**
+- **X₁, X₂** [-5, +5]: Plot domain is [-6, +6], so the centers stay well within view with margin. Appropriate.
+- **a** maps via `0.1 * 35^(v/1000)`, giving [0.1, 3.5]: At a=0.1, σ≈1.58 (broad); at a=3.5, σ≈0.27 (narrow). Both extremes keep Gaussians visible. Appropriate.
 
+**Units needed (simulation uses arbitrary units):**
+- X₁, X₂, σₓ, ⟨x⟩, Δx → a.u. (length)
+- a → a.u.⁻² (inverse length squared, from e^{-a·x²})
+- α, β → dimensionless (no units needed)
 
+Now let me add the units throughout.
 
-Reverting the heading to plain text (no LaTeX) and rendering only the two main equations with KaTeX.
+Now update the JavaScript display values to append units.
 
+Now update the Wave Packet Properties section to include units on ⟨x⟩ and Δx.
 
+Now update the JS that writes the ⟨x⟩ and Δx values to include units.
 
-Updating the script to open/close the popup and render the equations with KaTeX.
+Also update the measurement banner display value to include units.
 
+Let me verify the final state of all the changes looks correct.
 
+Everything looks good. Here's a summary of the range analysis and changes:
 
-Fixing the render logic so we set `aboutRendered` only after a successful render and ensuring KaTeX is referenced correctly (it may be loaded with `defer`).
+**Range analysis** — all ranges are appropriate:
+- **X₁, X₂** [-5, +5 a.u.]: Plot domain is [-6, +6], so Gaussian centers always stay well within view with margin on each side.
+- **a** [0.1, 3.5 a.u.⁻²]: At a=0.1, σ≈1.58 a.u. (broad, delocalized); at a=3.5, σ≈0.27 a.u. (narrow, localized). Both extremes produce Gaussians that remain visible within the plot.
+- **α, β** [0, 1]: Dimensionless probability amplitude coefficients, correctly constrained.
 
-
-
-Loading KaTeX before our script so it's available on first click. Removing `defer` from the KaTeX script tags.
-
-
-
-Checking KaTeX string: escaping the prime in N' can cause issues.
-
-
-
-Using `N^{\prime}` so the prime is safe in the JS string.
-
-
-
-Verifying popup structure and running a quick lint check:
-
-
-
-Positioning the popup before showing it so it doesn't flash at (0,0):
-
-
-
-Summary of what’s in place:
-
-**1. Popup from the (i) icon**
-- **Click** the (i) icon opens a small “About this simulation” popup.
-- Popup is **positioned** under the icon (or above if there isn’t enough space below), and kept in view.
-- **Transparent backdrop** behind the popup; clicking it or the **×** button closes the popup.
-- **Escape** key also closes the popup.
-- **Header** with title “About this simulation” and a close (×) button.
-
-**2. Layout and styling**
-- Dark panel: background `#1e293b`, light border, rounded corners (10px), shadow.
-- **Header** bar with darker background and bottom border.
-- **Body**: section headings left-aligned, equations right-aligned (as in your reference).
-- **Quote** at the bottom with a left blue border and italic style.
-
-**3. LaTeX rendering**
-- **KaTeX** (from CDN) is used to render the two main equations in standard LaTeX.
-- **General superposition:**  
-  \(\Psi(x) = \frac{1}{\sqrt{N'}}\left(\alpha e^{-a(x-X_1)^2} + |\beta| e^{i\phi} e^{-a(x-X_2)^2}\right)\)
-- **Equal superposition:**  
-  \(\Psi(x) = \frac{1}{\sqrt{N'}}\cdot\frac{1}{\sqrt{2}}\cdot\left(e^{-a(x-X_1)^2} + e^{-a(x-X_2)^2}\right)\)
-- If KaTeX isn’t available, a Unicode/HTML fallback is shown.
-- Headings stay as normal text (e.g. “Equal superposition (θ = π/4, α = β = 1/√2, φ = 0):”).
-
-**4. Accessibility**
-- Dialog uses `role="dialog"`, `aria-labelledby`, `aria-modal="true"`, and the backdrop uses `aria-hidden` when closed.
-- Close control has `aria-label="Close"`.
-
-The old full-width hover panel has been removed; “About this simulation” now appears only in this popup when you click the (i) icon.
+**Units added:**
+- **X₁, X₂** slider values and tick marks: `a.u.` (arbitrary length units)
+- **a** slider value and tick marks: `a.u.⁻²` (inverse length squared, consistent with the exponent e^{-a·x²})
+- **σₓ** tick mark: `a.u.`
+- **⟨x⟩ and Δx** in Wave Packet Properties: `a.u.`
+- **Measurement banner** collapsed value: `a.u.`
+- **α, β**: Left unitless — they are dimensionless coefficients
 
 ---
 
 **User**
 
-The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
+Change the simulation title to general wavefunction collapse.
 
 ---
 
 **Cursor**
 
+Updated both the page `<title>` and the visible header to "General Wavefunction Collapse".
 
-Searching the file for uses of θ, φ, alpha, and beta so we can switch controls to α and β.
+---
 
+**User**
 
+Imrove the rendering and contrast of the slider ranges below each slider. Right now they look very dull.
 
-Checking the rest of the update logic and the reset/defaults:
+---
 
+**Cursor**
 
-
-Implementing the switch from θ/φ to α and β controls in the frontend and backend.
-
-
-
-Updating the script: wire sAlpha/sBeta, add getAlpha/getBeta, and use α and β in the backend.
-
-
-
-Updating the event listener and the About popup text.
-
-
-
-Checking for remaining references to the removed elements (phiIndicator, vCosPhi, vTheta, vPhi):
-
-
-
-Confirming no remaining references to removed DOM elements. Marking todos complete and verifying the file.
-
+Updating the slider range marks to a lighter color and slightly larger font for better contrast.
 
 
 Summary of changes:
 
-**Frontend (controls)**  
-- **Removed:** θ (mixing angle) and φ (relative phase) sliders, and the “constructive / destructive” φ indicator.  
-- **Added:** Two sliders:
-  - **α (coefficient)** — range 0 to 1, step 0.001, default 0.707 (1/√2).
-  - **β (coefficient)** — range 0 to 1, step 0.001, default 0.707 (1/√2).  
-- **Wave packet properties:** Replaced “α = cos θ”, “|β| = sin θ”, and “cos φ” with **α** and **β** (and kept Overlap S₁₂).
+- **Color:** `#475569` → `#94a3b8` so the range labels match the panel’s secondary text and read clearly on the dark background.
+- **Font size:** `8px` → `9px` for slightly better legibility.
+- **Spacing:** `margin-top: 1px` → `4px` and padding `0 1px` → `0 2px` so the marks sit a bit farther from the slider and don’t feel cramped.
+- **Numbers:** `font-variant-numeric: tabular-nums` so digits line up when values change.
 
-**Backend (logic)**  
-- **Removed:** `getTheta`, `getPhi`, and all θ/φ handling.  
-- **Added:** `getAlpha(v)` and `getBeta(v)` mapping slider values 0–1000 to 0–1.  
-- **Superposition:** Uses the slider values directly:  
-  `α` and `β` from the sliders, with **φ = 0** (real superposition):  
-  Ψ ∝ α·ψ₁(x) + β·ψ₂(x).  
-- **Reset:** Defaults are α = β = 0.707 (equal superposition).  
-- **Input wiring:** Update and resize listen to `sAlpha` and `sBeta` instead of `sTheta` and `sPhi`.
-
-**About popup**  
-- Equal-superposition line updated to: “Equal superposition (α = β = 1/√2):” (no θ or φ).
-
-The simulation is now driven only by **α** and **β** in both UI and math; relative phase is fixed at 0.
+The slider range labels should now look clearer and less dull while staying consistent with the rest of the UI.
 
 ---
 
 **User**
 
-shift the legend to the right. it is overlapping ewith the axes
+Improve the contrast of the x1, x2 dotted line labels.
+
+---
+
+**Cursor**
+
+Using full opacity for the label text and slightly increasing font size. Labels are currently drawn with `color+'90'` (~56% opacity), which makes them faint on the dark background.
+
+
+Summary of changes:
+
+- **Label opacity:** Label text was using `color+'90'` (~56% opacity). It now uses the full color (no alpha), so X₁ and X₂ appear solid and stand out more on the dark background.
+- **Font:** Set to `bold 10px monospace` (from `9px monospace`) so the labels are slightly larger and easier to read.
+
+The X₁ (blue) and X₂ (pink) labels should now have clearly better contrast while keeping their colors.
+
+---
+
+**User**
+
+Replace the a.u units with nm in the entire sim.
+
+---
+
+**Cursor**
+
+Replacing all a.u. and a.u.⁻² occurrences with nm and nm⁻².
+
+
+Checking for any remaining "a.u" or "nm.⁻²" after the first replace:
+
+
+Summary of what was changed:
+
+- **Sliders:** X₁ and X₂ initial values and tick marks: "a.u." → "nm". For **a (localization)**: "a.u.⁻²" → "nm⁻²" and σₓ tick mark: "a.u." → "nm".
+- **Wave packet properties:** "Position ⟨x⟩ (a.u.)" and "Uncertainty Δx (a.u.)" → "(nm)"; the displayed values now use "nm".
+- **Measurement banner:** "x = … a.u." → "x = … nm".
+- **Axis label:** "Position, x (a.u.)" → "Position, x (nm)".
+- **JavaScript:** All `' a.u.'` and `' a.u.\u207B\u00B2'` strings were updated to `' nm'` and `' nm\u207B\u00B2'` (superscript −2 for nm⁻²).
+
+Every instance of a.u. in the sim is now nm (or nm⁻² where applicable).
+
+---
+
+**User**
+
+Slightly increase the font size of these and improve their style.
+
+---
+
+**Cursor**
+
+Updating the plot title styling in `drawAxes`: slightly larger font, cleaner font choice, and integer positioning for crisper rendering.
+
+
+Summary of changes:
+
+1. **Font size:** Title font increased from **11px** to **13px** so the plot labels are easier to read.
+
+2. **Font and weight:** Switched from **bold 11px monospace** to **600 13px** with the system UI stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`) so the mixed text and symbols render more clearly and look less soft.
+
+3. **Position:** Title is drawn at **integer coordinates** (`Math.round(pad.l+6)`, `Math.round(pad.t+15)`) to avoid sub-pixel placement and reduce blur on the canvas.
+
+4. **Vertical offset:** Vertical position set to `pad.t+15` to suit the larger font.
+
+Plot titles like “|ψ₁(x)|² (component 1)”, “|ψ₂(x)|² (component 2)”, and “|Ψ(x)|² (superposition)” should now appear slightly larger and sharper.
+
+---
+
+**User**
+
+Thoroughly check all the physics concepts and equations, numerical methods being used in detail for accuracy. Mention if any bugs found with suggested fixes.
+
+---
+
+**Cursor**
+
+Reviewing the simulation's physics and numerical implementation in detail.
+
+
+Checking overlap formula, integration consistency, and real-part normalization:
+
+
+Checking how the trapezoidal rule would apply and whether the grid uses midpoint or endpoint sampling:
+
+
+Creating the physics and numerics review plan.
+
+
+---
+
+**User**
+
+Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
+
+To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+
+---
+
+**Cursor**
+
+Implementing the plan: checking existing todos and the codebase to apply the changes.
+
+
+Implementing domain truncation (4.1): relabeling normalization and adding an About note.
+
+
+Adding CSS for the new About notes so they display correctly:
+
+
+Implementing the trapezoidal rule for all integrals. Locating every integration loop:
+
+
+Implementing the trapezoidal rule: updating the measure-button handler first, then the main update() loop.
+
+
+Removing unused `pClassNorm` and `pClassRaw`.
+
+
+Summary of what was implemented from the plan:
+
+**4.1 Domain truncation**
+- Renamed the Wave Packet Properties label from "Normalization" to **"Norm (on [-6,6] nm)"** so it’s clear the integral is over the displayed range.
+- In **About**, added a **Notes** section with:
+  - A note that integrals are over [-6, 6] nm and that for broad packets (small a) the analytical N′ is for the full real line, so the norm can show a small error.
+
+**4.2 Trapezoidal rule**
+- **Measure-button handler**: Stopped accumulating `nS` inside the loop; after filling `pSRaw`, `nS` is computed with the trapezoidal rule. `n1` and `n2` use trapezoidal weights (0.5 at endpoints, 1 in the middle) in their loop.
+- **Main `update()` loop**: No longer accumulate `n1`, `n2`, `nS` inside the loop; after the loop they are computed with the trapezoidal rule from `p1Raw`, `p2Raw`, and `pSRaw`.
+- **Collapsed state**: `collapsedNorm` is computed with the trapezoidal rule after filling `collapsedArr`.
+- **⟨x⟩ and Δx**: `sumX` and `sumX2` use the trapezoidal rule (endpoint weights 0.5).
+- **Re(Ψ) norm**: `reNormSq` and `imNormSq` use the trapezoidal rule (endpoint weights 0.5).
+
+**4.4 Collapse animation disclaimer**
+- In **About → Notes**, added: “The collapse animation is a visual blend from pre-measurement to collapsed state, not a physical time evolution.”
+- Styled the new notes with `.about-note` (margin and color).
+
+**4.3 Optional cleanup**
+- Removed unused **pClassRaw** and **pClassNorm** (declarations, assignments in the loop, and the `pClassNorm[i]=0` branch). The dashed “Classical (normalized)” curve still uses **pMixture** only.
+
+All related todos are marked completed, and the linter reports no issues.
+
+---
+
+**User**
+
+For the domain trauncation issue, implement fix suggested in Option A.
+
+---
+
+**Cursor**
+
+Implementing Option A: scaling the domain with 1/√a. Searching the file for all uses of xMin and xMax:
+
+
+Checking the current state of the file (domain and norm label):
+
+
+Implementing Option A: scaling the domain as L/√a (L = 6), capping at ±20 nm.
+
+
+Adding an id to the norm label and updating it in `update()` to show the dynamic domain.
+
+
+Updating the About note to state the domain is dynamic:
+
+
+Summary of the Option A (domain scaling) changes:
+
+**1. Domain formula**  
+- Use **x ∈ [-L/√a, L/√a]** with **L = 6** so that at a = 1 you get [-6, 6] nm.  
+- **Cap** the half-width at **20 nm** so small a doesn’t make the range too large:  
+  `xHalf = Math.min(6 / Math.sqrt(a), 20)`, then `xMin = -xHalf`, `xMax = xHalf`.
+
+**2. Where it’s applied**  
+- **Measure-button handler**: Before building the grid and computing the PDF, `xMin` and `xMax` are set from the current `a` using the formula above.  
+- **update()**: The same `xHalf` / `xMin` / `xMax` logic is used so the main loop and all plots use the same scaled domain.
+
+**3. Norm label**  
+- The Wave Packet Properties label for norm is now **“Norm (domain)”** and is updated in code to the actual range, e.g. **“Norm (on [-6.0, 6.0] nm)”** or **“Norm (on [-19.0, 19.0] nm)”** when the domain is wider.
+
+**Resulting behavior**  
+- **Larger a** (narrower packets): smaller domain (e.g. a = 3.5 → about [-3.2, 3.2] nm).  
+- **Smaller a** (broader packets): larger domain (e.g. a = 0.1 → about [-19, 19] nm, capped at ±20).  
+So integrals are over a range that scales with the wave packet width, reducing truncation error and keeping the reported norm consistent with the analytical N′.
+
+---
+
+**User**
+
+remove the normalization info from the wavepacket properties .
+
+---
+
+**Cursor**
+
+Summary of changes:
+
+1. **Wave Packet Properties**
+   - Removed the row that showed “Normalization” and its value (e.g. “1 (OK)” or “% err”).
+
+2. **JavaScript**
+   - Removed the line that set `document.getElementById('vNorm').textContent` so nothing tries to update that element anymore.
+
+Wave Packet Properties now only show: Position ⟨x⟩ (nm), Uncertainty Δx (nm), α, β, and Overlap S₁₂. The α² + β² normalization in the Parameters section is unchanged.
+
+---
+
+**User**
+
+Implement fixes from 4.2 to 4.5 following the plan doc.
+
+---
+
+**Cursor**
+
+Checking the file to implement plan items 4.2–4.5.
+
+
+Implementing 4.2–4.5: applying changes in order.
+
+
+Adding the About disclaimer (4.4) and the rejection-sampling comment (4.5).
+
+
+Summary of what was implemented from the plan (4.2–4.5):
+
+**4.2 Trapezoidal rule**  
+- **Measure handler:** `nS` is no longer accumulated in the loop; it’s computed after the loop with the trapezoidal rule. `n1` and `n2` use trapezoidal weights (0.5 at endpoints, 1 in the middle) in their loop.  
+- **update():** Removed `n1+=`, `n2+=`, `nS+=` from the main loop. After the loop, `n1`, `n2`, and `nS` are computed with the trapezoidal rule from `p1Raw`, `p2Raw`, and `pSRaw`.  
+- **Collapsed state:** `collapsedNorm` is computed with the trapezoidal rule after filling `collapsedArr`.  
+- **⟨x⟩ and Δx:** `sumX` and `sumX2` use the trapezoidal rule (0.5 at first/last points).  
+- **Re(Ψ) norm:** `reNormSq` and `imNormSq` use the trapezoidal rule.
+
+**4.3 Remove pClassNorm / pClassRaw**  
+- Removed `pClassRaw` and `pClassNorm` (declarations and all uses).  
+- Removed `pClassRaw[i]=t1+t2` from the main loop and dropped `pClassNorm` from the normalization loop and its else branch. The dashed “Classical (normalized)” curve still uses **pMixture** only.
+
+**4.4 Collapse animation disclaimer**  
+- In the About popup, added a **Note** section with: “The collapse animation is a visual blend from pre-measurement to collapsed state, not a physical time evolution.”  
+- Added `.about-note` styling (color and font size) for that text.
+
+**4.5 Rejection sampling (documentation only)**  
+- Above `rejectionSample`, added a comment: “PDF is taken as piecewise linear between grid points.” No code change (plan said no change required).
+
+Lint passes with no errors.
+
+---
+
+**User**
+
+Remove the collapse animation disclaimer from the 'About' section.
+
+---
+
+**Cursor**
+
+The collapse animation disclaimer has been removed from the About section (the “Note” paragraph and its heading), and the `.about-note` CSS rule used only for that text has been deleted.
+
+---
+
+**User**
+
+For the @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html simulation, improve the contrast of the text  in the control panel, add a dark/light theme toggle beside the 'i' icon, following the General_wavefunction_collapse simulation
 
 ---
 
 **Cursor**
 
 
-Update applied: the legend is now anchored to the **right** of the first plot (`right: 10px` instead of `left: 8px`), so it no longer overlaps the axes or labels on the left.
+Inspecting both files to understand structure and implement the theme toggle and contrast improvements.
+
+
+
+Checking theme-toggle JavaScript in the reference file:
+
+
+
+Implementing control-panel contrast improvements and adding the theme toggle.
+
+
+
+Locating the script start and where to add the theme logic and theme-aware drawAxes:
+
+
+
+Summary of changes to `Gaussian_wave_superposition_new (1).html`:
+
+**1. Control panel text contrast**
+- **Parameter labels (`.sl`)**: `#b0b8c4` → `#f1f5f9`
+- **Slider values (`.sv`)**: `#60a5fa` → `#93c5fd`
+- **Param subtitle (e.g. “Physics”)**: `#64748b` → `#cbd5e1`
+- **Slider range marks (`.marks`)**: `#475569` → `#cbd5e1`, font size 8px → 9px, `margin-top: 4px`, `padding: 0 2px`, added `font-variant-numeric: tabular-nums`
+- **Norm equation (`.norm-eq`)**: `#94a3b8` → `#e2e8f0`; `.norm-eq .eq`: `#cbd5e1` → `#f1f5f9`
+- **View toggles (`.toggle-btn`)**: `#94a3b8` → `#e2e8f0`; active state `#60a5fa` → `#93c5fd`
+- **Wave packet labels (`.wave-prop .wl`)**: `#64748b` → `#cbd5e1`
+- **Wave packet values (`.wave-prop .wv`)**: `#e2e8f0` → `#f1f5f9`
+
+**2. Dark/light theme toggle (next to the (i) icon)**
+- **HTML**: Theme toggle block in the upper menu: label “Dark”/“Light”, pill switch, moon/sun icon in the thumb.
+- **CSS**: Styles for `.theme-toggle-wrap`, `.theme-switch`, track, thumb (with `.is-dark` for dark theme), and a full `body.theme-bright` set for menu, about popup, main area, plot wrap, legend, control panel, sliders, toggles, wave props, and range inputs so light theme is consistent.
+- **JS**: Theme init from `localStorage` key `gaussian-superposition-theme`, `applyTheme()` to set body class and switch label/icon/title, and a click handler that toggles theme, saves it, and calls `scheduleUpdate()` so the canvas redraws.
+- **Canvas**: `isBrightTheme()` and theme-dependent colors in `drawAxes()` for plot background, grid, axes, tick labels, and title so plots match the active theme.
+
+The toggle is placed immediately after the “(i)” icon in the menu bar and follows the same pattern as in the General Wavefunction Collapse simulation.
 
 ---
 
 **User**
 
-For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
+Imprve the style and contrast of these headings in each plot window.
 
 ---
 
 **Cursor**
 
 
-Reviewing the simulation's physics and equations in detail.
+Summary of changes:
 
+**Style**
+- **Font:** Switched from `bold 11px monospace` to `600 13px` with the system UI stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`) so the headings are slightly larger and render more clearly.
+- **Position:** Title is drawn at integer coordinates (`Math.round(pad.l+6)`, `Math.round(pad.t+15)`) to avoid sub-pixel blur, and the vertical offset is set to `pad.t+15` to suit the new size.
 
+**Contrast**
+- **Default title color (dark theme):** Updated from `#e2e8f0` to `#f1f5f9` so the default heading color is brighter against the dark plot background (`#111827`).
+- **Bright theme:** Default title color set to `#0f172a` for clear contrast on the light background.
 
-Checking normalization handling when α or β is zero and the classical-mixture definition:
-
-
-
-Creating the physics review plan:
-
+Plot titles like “|ψ₁(x)|² (component 1)”, “|ψ₂(x)|² (component 2)”, and “|Ψ(x)|² (superposition)” still use their existing blue/pink/green when passed in; the new default only applies when no color is given. Overall they should look sharper and read more easily in both themes.
 
 ---
 
 **User**
 
-Physics review: Gaussian wave superposition simulation
+Improve the contrast of these dotted lines across the 3 plot windows.
+
+---
+
+**Cursor**
+
+
+Summary of changes:
+
+**Dotted lines (X₁ and X₂)**
+- **Stroke:** `color+'50'` was replaced with `color` so the lines use full opacity and stand out clearly on the dark background.
+- **Line width:** Increased from `1` to `1.5` so the dashes are easier to see.
+- **Dash pattern:** Updated from `[3,3]` to `[4,3]` for slightly longer dashes and clearer separation.
+
+**Labels ("X₁", "X₂")**
+- **Fill:** `color+'90'` was replaced with `color` so the text is fully opaque and higher contrast.
+- **Font:** Set to `bold 10px` with the system UI font stack for clearer, more readable labels.
+
+These updates apply everywhere `drawMarkers` is used, so all three plot windows get the same improved X₁/X₂ lines and labels.
+
+---
+
+**User**
+
+For the @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html simulation check all the physics concepts and equations thoroughly for accuracy. Mention if any major physics bug found with suggested fixes.
+
+---
+
+**Cursor**
+
+
+Reviewing the simulation's physics and equations.
+
+
+
+Checking the About popup equations and the getA mapping:
+
+
+
+Creating the physics review plan.
+
+
+---
+
+**User**
 
 Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
 
@@ -271,736 +513,241 @@ To-do's from the plan have already been created. Do not create them again. Mark 
 **Cursor**
 
 
-Implementing the plan: fixing the α=β=0 edge case, then addressing the classical-curve display and the Real Part plot 2 label.
+Implementing the plan's optional improvements. Checking current todos and the file state:
 
 
 
-Implementing the α=β=0 fix first.
+Implementing the three improvements: applying the trapezoidal rule first, then domain scaling, then removing pClassNorm/pClassRaw.
 
 
 
-Showing "—" for vNnum and vNana when there's no state.
+Summary of what was implemented from the plan:
 
+**1. Trapezoidal rule for all integrals**
+- **Norms (n1, n2, nS):** No longer accumulated in the main loop. After the loop, they are computed with the trapezoidal rule from `p1Raw`, `p2Raw`, and `pSRaw` (endpoint weights 0.5).
+- **⟨x⟩ and Δx:** `sumX` and `sumX2` now use the trapezoidal rule (endpoint weights 0.5).
+- **Re(Ψ) norm (reNormSq, imNormSq):** Same trapezoidal rule for the real-part view.
 
+**2. Domain scaling with 1/√a**
+- Replaced fixed `xMin = -6, xMax = 6` with a domain that scales as 1/√a: `xHalf = Math.min(6 / Math.sqrt(a), 20)`, then `xMin = -xHalf`, `xMax = xHalf`, so broad packets get a wider range and narrow ones a smaller one, with a ±20 a.u. cap.
+- The Wave Packet Properties norm label is now dynamic: the element has `id="lNorm"` and its text is set to the current range, e.g. `"Norm (on [-6.0, 6.0] a.u.)"`.
 
-Summary of what was implemented:
+**3. Remove unused pClassNorm / pClassRaw**
+- Removed the `pClassRaw` array and its assignment in the loop (`pClassRaw[i]=t1+t2`).
+- Removed the `pClassNorm` array and all uses (normalization loop and the else branch). The dashed “Classical (normalized)” curve still uses **pMixture** only.
 
-**1. α = β = 0 edge case (Section 2)**  
-- Introduced a `noState` flag when `Nprime_ana < 1e-15` or `nS < 1e-15`.  
-- **N' accuracy** (`vInt`): shows "—" when `noState`, otherwise the percentage; color is neutral when `noState`.  
-- **Normalization** (`vNorm`): shows "—" when `noState`, instead of "1 (OK)".  
-- **N' numerical/analytical** (`vNnum`, `vNana`): show "—" when there’s no state instead of "0.000000".
-
-**2. Classical curve display (Section 3)**  
-- After building `pMixture = α² P₁ + β² P₂`, added `mixScale = α² + β²`.  
-- If `mixScale > 1e-15`, `pMixture` is scaled in place by `1/mixScale` so the classical curve integrates to 1 and is on the same scale as normalized |Ψ|².
-
-**3. Real Part plot 2 label (Section 4)**  
-- Plot 2 title changed from `Re: |β|·cos(φ)·ψ₂(x) / √N'` to `Re: β·ψ₂(x) / √N'` to match the α/β controls and φ = 0.
-
-All related to-dos are marked completed, and the linter reports no issues.
+All related todos are completed and the linter reports no issues.
 
 ---
 
 **User**
 
-For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
-
-Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
-
-The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
-
-shift the legend to the right. it is overlapping ewith the axes
-
-For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
+Check the numerical methods being used ,overall architecture and flow of the physics engine, front end animantions and visuals (for any physiocs or rendering issues). mention if any major physics bugs found with suggested fixes.
 
 ---
 
 **Cursor**
 
 
-Reviewing the simulation's numerical methods, physics flow, and rendering by reading the key sections.
+Reviewing the simulation's numerical methods, architecture, and visuals.
 
 
 
-Checking a few more details: integration sums, `genTicks` edge cases, and noState handling for position/uncertainty.
+Checking use of `reFraction` and the Real-part zero line in bright theme:
 
 
 
-Creating the review plan:
+Here’s a concise report on numerical methods, architecture, flow, and visuals.
 
+---
+
+## Numerical methods
+
+- **Integration:** All integrals use a **left-endpoint Riemann sum**:  
+  `n1 += g1sq*dx`, `n2 += g2sq*dx`, `nS += pSRaw[i]*dx`, and similarly for `sumX`, `sumX2`, `reNormSq`, `imNormSq`.  
+  So ∫ f dx ≈ Σᵢ f(xᵢ) dx with xᵢ = xMin + i·dx. This is first-order; for smooth integrands a **trapezoidal rule** would improve accuracy (same physics, better numerics).
+
+- **Domain:** Fixed x ∈ [-6, 6], N = 1001, dx = 12/1000. Analytical N′ assumes integration over ℝ, so for small a the displayed “Normalization” can show a few % error due to truncation, not a formula error.
+
+- **Mapping:** `getA(v) = 0.1·35^(v/1000)` gives a ∈ [0.1, 3.5]; α, β from sliders with α²+β²=1. All consistent.
+
+**Verdict:** No physics bug. Optional improvement: switch to trapezoidal integration for norms and expectation values.
+
+---
+
+## Architecture and flow
+
+- **Single update path:** One `update()` function (1) reads sliders (X1, X2, a, α, β), (2) builds all arrays (xArr, g1, g2, pSRaw, nS, pSNorm, pMixture, re1Arr, re2Arr, re3Arr), (3) updates DOM (values, legend), (4) calls `setupCanvas` + `drawAxes` + `drawFill` / `drawLine` / `drawMarkers` for each of the three plots. No separate “physics engine” module; physics and rendering are in one place.
+
+- **Throttling:** `scheduleUpdate()` uses a single `requestAnimationFrame` so only one full update runs per frame. Slider/resize/toggle/theme all call `scheduleUpdate()`. Good for avoiding jank.
+
+- **Data flow:** Parameters → grid and raw arrays → normalized arrays (p1Norm, p2Norm, pSNorm, pMixture) and Re(Ψ) arrays → canvas drawing. No caching; every `update()` recomputes from scratch. Clear and correct.
+
+- **α–β coupling:** Input listeners enforce α²+β²=1 by rewriting the other slider. State stays normalized.
+
+**Verdict:** Flow is coherent; no major physics or logic bug.
+
+---
+
+## Front-end and visuals
+
+- **Canvas:** `setupCanvas` sets `canvas.width/height` to layout size × devicePixelRatio and `ctx.setTransform(dpr,0,0,dpr,0,0)`, so drawing is in CSS pixels and stays sharp on HiDPI. Correct.
+
+- **Theme:** `drawAxes` uses `isBrightTheme()` for plot background, grid, axes, and label colors. Plot 3 interference shading and lines use fixed rgba colors that work in both themes. Real-part zero line is `rgba(148,163,184,0.35)` in both themes; in light theme it could be a bit faint (cosmetic only).
+
+- **Drawing order (prob mode):** Plot 3: axes → quantum fill → interference trapezoids (quantum vs classical) → classical dashed line → quantum line → markers. Order is correct; classical and quantum curves are both drawn and visible.
+
+- **Interference shading:** Uses (pSNorm − pMixture) and fills trapezoids between classical and quantum curves; color by sign of difference. Correct representation of interference.
+
+- **Markers:** X₁, X₂ vertical dashed lines and labels use `mapX`, `mapY` from the same `drawAxes` call; no coordinate mismatch.
+
+- **reFraction:** Computed (Re vs total norm squared) but not shown in the UI. With φ=0, Im(Ψ)=0 so it’s 1. No bug; could be used later for a “Real part fraction” indicator if φ is made adjustable.
+
+**Verdict:** No physics or rendering bug. Optional: theme-aware zero line in Real part mode for better contrast in light theme.
+
+---
+
+## Summary and suggested fixes
+
+- **Physics:** No major physics bug found. Equations for |Ψ|², N′, overlap, σₓ, mixture, ⟨x⟩, Δx, and Re(Ψ) are correct; normalization and display logic are consistent with the model.
+
+- **Numerical (optional):**  
+  - Use **trapezoidal rule** for all integrals (n1, n2, nS, sumX, sumX2, reNormSq, imNormSq) to improve accuracy at no change to the physics.
+
+- **Domain/UI (optional):**  
+  - Either document that “Normalization” is over the shown range [-6, 6], or (as in the General wavefunction collapse sim) use a domain that scales with 1/√a and cap at a maximum half-width.
+
+- **Code cleanup (optional):**  
+  - Remove or repurpose unused `pClassNorm` / `pClassRaw` if the dashed “Classical” curve is to remain pMixture only.
+
+- **Visual (optional):**  
+  - In Real part mode, make the zero line color theme-dependent (e.g. darker in light theme) so it stays visible.
+
+No critical physics or rendering fixes are required; the above are optional improvements.
 
 ---
 
 **User**
 
-Numerical methods, architecture, and rendering review
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
+Implement this: 'Use trapezoidal rule for all integrals (n1, n2, nS, sumX, sumX2, reNormSq, imNormSq) to improve accuracy at no change to the physics.'
 
 ---
 
 **Cursor**
 
 
-Implementing the plan: fixing Bug 1 (Position/Uncertainty when noState), then removing the dead code for Bug 2.
-
-
-
-Summary of what was implemented:
-
-**Bug 1 – Position and Uncertainty when there is no state**  
-- When `noState` is true (e.g. α = β = 0), **Position ⟨x⟩** and **Uncertainty Δx** now show **"—"** instead of `"0.000"`, so the UI no longer suggests a state at the origin when the state is effectively zero.  
-- Implementation: `vPosX` and `vUncertainty` are set with `noState ? '—' : posX.toFixed(3)` and `noState ? '—' : uncertainty.toFixed(3)`.
-
-**Bug 2 – Dead Real Part annotation code**  
-- **Removed** the block that drew `"cos φ < 0 → inverted"` on plot 2 (with φ fixed at 0 this condition never held).  
-- **Removed** the block that drew `"▼ cancellation"` and `"▲ reinforcement"` on plot 3 (conditions on `cosPhi` never held).  
-- Real Part mode now only draws the curves and markers, with no unused annotation logic.
-
-The optional integration-rule change (midpoint/trapezoidal) was not implemented, as the plan marked it as optional and the current behavior is already acceptable.
-
-All related to-dos are completed and the linter reports no issues.
-
----
-
-**User**
-
-For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
-
-Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
-
-The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
-
-shift the legend to the right. it is overlapping ewith the axes
-
-For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Remove the text, other controls info from the panel.
-
----
-
-**Cursor**
-
-
-Removing the "Text, other controls" section and the code that updates it.
+Implementing the trapezoidal rule for all integrals.
 
 
 
 Summary of changes:
 
-1. **Panel section**  
-   - Removed the whole “Text, other controls” block: its heading and the box that showed N' (numerical), N' (analytical), and N' accuracy.
+**1. Norms n1, n2, nS**  
+- Removed accumulation of `n1`, `n2`, and `nS` inside the loop that fills `p1Raw`, `p2Raw`, and `pSRaw`.  
+- After the loop, they are computed with the trapezoidal rule:  
+  `(first + last) * 0.5 * dx` plus `sum over i = 1..N-2` of `f[i]*dx`.
 
-2. **JavaScript**  
-   - Stopped updating the removed elements: no more assignments to `vNnum`, `vNana`, or `vInt`.  
-   - Left the `noState` and `relErr` calculations in place; they still drive the **Normalization**, **Position ⟨x⟩**, and **Uncertainty Δx** values in the Wave packet properties section.
+**2. ⟨x⟩ and ⟨x²⟩ (sumX, sumX2)**  
+- Replaced the simple loop with trapezoidal integration:  
+  `sumX` and `sumX2` use endpoint weights 0.5 for indices 0 and N−1, and weight 1 for indices 1..N−2.
 
-3. **CSS**  
-   - Deleted the `.other-controls` and `.other-controls .norm-line` rules so there’s no unused styling.
+**3. reNormSq and imNormSq**  
+- Same trapezoidal pattern: endpoint terms with factor 0.5, then a loop over `i = 1..N-2` for the rest.
 
-The right panel now has only **Parameters** and **Wave packet properties**. Lint passes with no errors.
+The physics is unchanged; only the quadrature rule is switched from left-endpoint to trapezoidal for better accuracy. Lint passes with no errors.
 
 ---
 
 **User**
 
-Use the test and fonts similar to this sim and remove the 3 dots from the top border.
+For the @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html simulation, label the slider and axes units following the General_wavefunction_collapse simulation.
 
 ---
 
 **Cursor**
 
 
-Checking the reference simulation for font usage:
+Checking how General_wavefunction_collapse labels sliders and axes (including units):
 
 
 
-Applying font updates and removing the three-dots button.
+Checking where the Gaussian file updates slider value displays and the measurement banner in General:
+
+
+
+Applying General_wavefunction_collapse labeling: nm for position, nm⁻² for a, and axis label "Position, x (nm)".
+
+
+
+Summary of updates to match the General_wavefunction_collapse labeling:
+
+**Sliders and marks**
+- **X₁, X₂:** Value displays and marks now include " nm" (e.g. "-2.00 nm", "-5 nm", "+5 nm"). JS appends `' nm'` when updating `vX1` and `vX2`.
+- **a (localization):** Value shows "1.000 nm⁻²"; marks "0.1 nm⁻²", "σ_x=0.50 nm", "3.5 nm⁻²". JS appends `' nm⁻²'` when updating `vA`. `vSigma` stays numeric with " nm" in the surrounding HTML.
+
+**Wave packet properties**
+- Labels: "Position ⟨x⟩ (nm)" and "Uncertainty Δx (nm)".
+- JS appends `' nm'` to the numeric values for position and uncertainty.
+
+**Plot axes**
+- Horizontal axis label: `'Position, x (a.u.)'` → `'Position, x (nm)'`.
+
+Coefficients α and β are unchanged (dimensionless). No new lint issues.
+
+---
+
+**User**
+
+ Run a final physics sanity check. check all the equations, concepts, numerical methods, overall architetcure and flow of the physics engine, front end animations and visuals in detail. Mention if any new bugs found with suggested fixes.
+
+---
+
+**Cursor**
+
+
+Reviewing the Gaussian wave superposition simulation's physics, numerics, architecture, and front-end by reading the key sections of the file.
+
+
+
+Verifying overlap and σ formulas and checking for a Reset bug (range inputs expect strings):
+
+
+
+Checking setupCanvas context handling and whether drawAxes receives the correct dimensions:
+
+
+
+Creating the physics sanity-check plan:
+
+
+---
+
+**User**
+
+Remove the normalizsation window label from the controls. Change the overlap window label following the General Wavefunction collapse simulation
+
+---
+
+**Cursor**
+
+
+Removing the Normalization display and renaming Overlap to match the General simulation; removing the JS that updates `vNorm`.
+
+
+
+Updating the comment that references the Normalization display:
 
 
 
 Summary of changes:
 
-**1. Three-dots removed from top bar**  
-- The “⋯” (More options) button has been removed from the upper menu.  
-- The `.menu-btn-icon` CSS rule used only by that button has been removed.  
-- The top bar now shows only the title, (i) icon, Reset, and Start.
-
-**2. Fonts and text aligned with the reference sim**  
-- **Body font:** Replaced `'SF Mono','Fira Code','Consolas',monospace` with  
-  `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` so it matches the classical/quantum oscillator sim.  
-- **Sim title (“Gaussian Wave Packet”):** Set to `color: #fff` and `letter-spacing: -0.02em`.  
-- **Panel section titles (e.g. “PARAMETERS”, “WAVE PACKET PROPERTIES”):** Set to `color: #fff`, `font-weight: 600`, and `letter-spacing: 0.08em` so they read like the reference’s uppercase headers.  
-- **Parameter labels:** Set to `color: #b0b8c4` for a light grey similar to the reference’s body/secondary text.
-
-Canvas axis labels still use the existing monospace for numbers; the rest of the UI (menu, panel, about popup, legend) now uses the same sans-serif stack as the reference. No new linter issues.
-
----
-
-**User**
-
-Run a final physics sanity check. Check all the equations, concepts, overall architetcure and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes
-
----
-
-**Cursor**
-
-
-Reviewing the simulation's physics, architecture, and rendering in its current state.
-
-
-
-Checking parameter mapping and edge cases:
-
-
-
-Creating the final physics sanity-check plan:
-
-
----
-
-**User**
-
-Final physics sanity check — Gaussian wave superposition
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
----
-
-**Cursor**
-
-
-Implementing the plan's optional cleanups: removing the dead Im(Ψ) warning block and updating the legend wording.
-
-
-
-Summary of what was implemented:
-
-**1. Remove dead Im(Ψ) warning block (Section 4.1)**  
-- Removed the `if(Math.abs(sinPhi)>0.15 && ...)` block in Real Part mode that drew the "Im(Ψ) ≠ 0 — Re shows …% of |Ψ|²" message.  
-- With `sinPhi` fixed at 0 this condition never held, so the block was dead code.  
-- The `reNormSq` / `imNormSq` / `reFraction` computation earlier in `update()` is unchanged (still used only by this removed block); it’s harmless and could support a future phase control.
-
-**2. Update legend wording (Section 4.2)**  
-- In probability mode, the legend entry for the dashed classical curve was changed from **"α²P₁ + β²P₂ (classical)"** to **"Classical (normalized)"**.  
-- The drawn curve is the normalized classical mixture (α²P₁+β²P₂)/(α²+β²), so the legend now matches what’s displayed.
-
-The plan’s optional integration change (4.3, midpoint/trapezoidal rule) was not in the to-dos and was left as-is. All listed to-dos are done and the linter reports no issues.
-
----
-
-**User**
-
-For @simulations/Sims-v2/Gaussian_wave_superposition_new (1).html , change the current layout into this global layout.
-
-Show the about the simulation as a small pop up window appearing from the info (i) icon and the the window should look intuitive. Render the questions the window in standard latex format.
-
-The parameters to control should be alpha and beta, not θ (mixing angle) / φ (relative phase). Fix this issue both in the backend and the front end.
-
-shift the legend to the right. it is overlapping ewith the axes
-
-For this simulation, check all the physics concepts and equations throughly in detail. Mention if any bugs found with suggested fixes.
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Check the numerical methods being used overall architecture and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes.
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Remove the text, other controls info from the panel.
-
-Use the test and fonts similar to this sim and remove the 3 dots from the top border.
-
-Run a final physics sanity check. Check all the equations, concepts, overall architetcure and flow of the physics engine, front end animations and visuals (for any physics or rendering issues). Mention if any bugs found with suggested fixes
-
-Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
-
-To-do's from the plan have already been created. Do not create them again. Mark them as in_progress as you work, starting with the first one. Don't stop until you have completed all the to-dos.
-
-Remove the group velocity from wave packet properties section in the panel
-
----
-
-**Cursor**
-
-
-Summary of changes:
-
-1. **HTML** – Removed the Group velocity row from the Wave packet properties grid (the `wave-prop` div with "Group velocity" and `id="vGroupVel"`).
-
-2. **JavaScript** – Removed the line that set `document.getElementById('vGroupVel').textContent='—'` in `update()`.
-
-The Wave packet properties section now shows only: Position ⟨x⟩, Uncertainty Δx, Normalization, α, β, Overlap S₁₂. Lint is clean.
-
----
-
-**User**
-
-Finally check again all the physics concepts, equations, numerical methods, pveralkl architecture and flow of the physics engine, front and animatiions and visuals (for any physics or rendering issues). Mention if any new bugs found with suggested fixes.
-
----
-
-**Cursor**
-
-
-Reviewing the simulation's current state:
-
-
-
-Here’s a final pass over the current file.
-
----
-
-## Final check — Gaussian wave superposition
-
-### 1. Physics and equations — correct
-
-- **Wavefunctions:** ψⱼ(x) = exp(-a(x−Xⱼ)²); implemented as `g1`/`g2` with `d1`/`d2`. Correct.
-- **Superposition:** Ψ = (1/√N')(α ψ₁ + β ψ₂), φ=0; α, β from sliders, cosPhi=1, sinPhi=0. Correct.
-- **|Ψ|²:** α²ψ₁² + β²ψ₂² + 2αβ ψ₁ψ₂; `t1`, `t2`, `cross`, `pSRaw`; `pSNorm = pSRaw/nS`. Correct.
-- **N' analytical:** √(π/(2a))[α²+β²+2αβ exp(-aΔX²/2)] at line 471. Correct.
-- **Overlap S₁₂:** exp(-a(X₁−X₂)²/2) via `overlapAna/normRef`. Correct.
-- **Classical (display):** (α²P₁+β²P₂)/(α²+β²); `pMixture`/`mixScale`. Correct.
-- **⟨x⟩, Δx:** From `pSNorm` with `noState` → "—". Correct.
-- **σ:** 1/(2√a). Correct.
-- **Re(Ψ):** re1Arr = α g₁/√N', re2Arr = β g₂/√N', re3Arr = re1+re2. Correct.
-
-No physics bugs found.
-
----
-
-### 2. Numerical methods — acceptable
-
-- **Grid:** xMin/xMax with margin = 5/√a, N = 1001, dx = (xMax−xMin)/(N−1). Fine.
-- **Integration:** Left-point rule for n1, n2, nS, sumX, sumX2, reNormSq, imNormSq. O(dx) error, acceptable for this N.
-- **Guards:** n1/n2/nS > 1e-15, sqrtN = sqrt(max(nS,1e-30)). No NaNs from division.
-
-No numerical bugs; optional improvement remains using midpoint/trapezoidal rule.
-
----
-
-### 3. Architecture and flow — correct
-
-- Sliders and resize → `scheduleUpdate()` → single `requestAnimationFrame` → `update()` (params → grid → physics → DOM → draw). No double updates, no animation loop. Structure is sound.
-
----
-
-### 4. Front-end and visuals — no physics/rendering bugs
-
-- **Canvas:** DPR and `setTransform` used; drawing in CSS pixels. Correct.
-- **Plot 3 order:** Quantum fill → interference shading → classical dashed → quantum line → markers. Correct.
-- **Axes:** `mx`/`my`; xMax−xMin and y ranges non-zero (margin, yMax clamping). No NaN.
-- **genTicks:** Degenerate range guarded. Safe.
-- **Legend:** Top-right (`right:10px`), “Classical (normalized)”. Matches drawn curve.
-- **Group velocity:** Removed from panel and from JS; no leftover references.
-
-No new physics or rendering issues.
-
----
-
-### 5. Optional cleanup (not a bug)
-
-- **Unused computation:** `reNormSq`, `imNormSq`, and `reFraction` (lines 524–533) are still computed but are no longer used after the Im(Ψ) warning was removed. Behavior is correct; this is dead code.
-- **Suggested fix (optional):** Remove the block that computes `reNormSq`, `imNormSq`, and `reFraction` to avoid unnecessary work, or leave it if you plan to reintroduce an Im(Ψ) warning (e.g. with a future phase control).
-
----
-
-### 6. Summary
-
-| Area              | Status   | Notes                                      |
-|-------------------|----------|--------------------------------------------|
-| Physics/equations  | Correct  | All formulas and noState handling verified |
-| Numerical methods | Acceptable | Rectangular rule; guards in place        |
-| Architecture/flow | Correct  | Single rAF, no animation loop             |
-| Rendering/visuals | Correct  | DPR, order, axes, legend, no overlap      |
-| New bugs          | None     | —                                          |
-| Optional cleanup  | 1 item   | Unused reNormSq/imNormSq/reFraction       |
-
-**Conclusion:** No new bugs. The simulation is physically and numerically sound; the only optional change is removing the unused `reNormSq` / `imNormSq` / `reFraction` computation if you want to trim dead code.
-
----
-
-**User**
-
-label all the x axis more intuitively and claerly. Right now it is not very clearly visible.
-
----
-
-**Cursor**
-
-
-Checking how the x-axis and tick labels are drawn:
-
-
-
-Making the x-axis labels clearer: increasing font size and contrast, improving tick formatting, and clarifying the axis title.
-
-
-
-Summary of changes for clearer, more visible x-axis labels:
-
-1. **X-axis tick labels**
-   - **Color:** `#475569` → `#cbd5e1` for better contrast on the dark background.
-   - **Font:** 9px monospace → 11px system font for readability.
-   - **Position:** Moved slightly lower (`pad.t+pH+16` instead of `+13`) so they’re not cramped.
-   - **Formatting:**  
-     - `0` for values near zero;  
-     - 2 decimals when the x-range is small (e.g. −1.50, 0, 1.50);  
-     - 1 decimal otherwise;  
-     - integers for |x| ≥ 10.
-
-2. **X-axis title**
-   - Text: **"Position, x (a.u.)"** so it’s clear it’s position in x.
-   - Same 11px font and `#cbd5e1` color.
-   - Vertical position set to `H-4` so it’s not right on the bottom edge.
-
-3. **Layout**
-   - Bottom padding increased from 20 to 28 so the x-axis label and tick labels have more space.
-
-Y-axis numbers also use the new color and font, so all axis text is more readable and consistent. Open the HTML in a browser to confirm it looks good on your display.
-
----
-
-**User**
-
-Change the simulation title as: 'Superposition~Gaussian Wave packet'
-
----
-
-**Cursor**
-
-
-Updates made:
-
-1. **Page heading** – The main title on the page is now **Superposition~Gaussian Wave packet**.
-2. **Browser tab** – The `<title>` tag is set to the same text so the tab shows **Superposition~Gaussian Wave packet**.
-
----
-
-**User**
-
-Add a maximize window icon at the top right corner of each plot window
-
----
-
-**Cursor**
-
-
-Checking how plots are drawn and how the render loop works:
-
-
-
-Reading the rest of the update function and the end of the file to understand the full flow.
-
-
-
-Adding maximize icons and maximize/restore behavior: CSS, HTML structure, and JS.
-
-
-
-Adding JavaScript to handle maximize/restore and the restore icon.
-
-
-
-Summary of changes:
-
-**1. Maximize button on each plot**
-- Each of the three plot windows has a **maximize** button in the **top-right** (above the canvas).
-- Button: 28×28px, dark semi-transparent background, light gray icon, subtle border; hover lightens background and icon.
-- Icon: expand/fullscreen (arrows outward). Clicking it **maximizes** that plot and hides the other two.
-
-**2. Maximized state**
-- When a plot is maximized, it uses the full plots area and the other two are hidden.
-- The button for the active plot switches to a **restore** icon (arrows inward).
-- Clicking restore removes the maximized state and shows all three plots again.
-
-**3. Layout**
-- `plots-area` has an id and each `.plot-wrap` has classes `plot-wrap-1`, `plot-wrap-2`, `plot-wrap-3` for targeting.
-- The legend on the first plot is shifted slightly left (`right: 42px`) so it doesn’t overlap the new button.
-
-**4. Accessibility**
-- Buttons use `title` and `aria-label` (“Maximize” / “Restore”) and are keyboard-usable.
-
-After a maximize/restore, `scheduleUpdate()` runs so the visible canvas(es) resize and redraw correctly.
-
----
-
-**User**
-
-The icon is looking distorted once a particular window is maximized. Fix this issue. Either turn that into a minimize icon once a given window is maximized or just keep it same as maximize with functionality changed (when clicked again the maximized window will minimize)
-
----
-
-**Cursor**
-
-
-Keeping the same maximize icon when a plot is maximized and using it as a toggle (click again to restore), so we avoid the restore icon and any distortion.
-
-
-
-Keeping the same maximize icon for all states and using it as a toggle; only the tooltip and aria-label will switch to "Restore" when maximized.
-
-
-
-Summary of changes:
-
-1. **Single icon**  
-   The restore/minimize SVG is no longer used. All three plot buttons always show the same **maximize** icon (expand arrows), so the icon never changes or looks distorted.
-
-2. **Toggle behavior**  
-   Behavior is unchanged: first click maximizes that plot, second click restores it. Only the icon display was simplified.
-
-3. **Tooltip and accessibility**  
-   When a plot is maximized, that plot’s button keeps the same icon but its `title` is set to **"Restore (minimize)"** and its `aria-label` to **"Restore"**, so it’s clear that the next click will restore the layout.
-
-You’ll see one consistent icon in all states, with tooltip/aria-label indicating whether the next click will maximize or restore.
-
----
-
-**User**
-
-Remove the dynamic scaling of x and y axis. Select an appropriate scale for x and y axes and fix it in a way the wavepacket can be seen changing its shape across the plot window.
-
----
-
-**Cursor**
-
-
-Implementing fixed x and y axis scales.
-
-
-
-Fixing Real Part mode to use a fixed y-scale:
-
-
-
-Summary of changes:
-
-**1. Fixed x-axis**
-- **Before:** `xMin` and `xMax` depended on X₁, X₂ and a margin (`margin = 5/√a`), so the window panned and zoomed as you moved the centers or changed width.
-- **After:** Fixed range **x ∈ [-6, 6]** for all plots. The wave packet moves and changes shape within this fixed window (sliders still -5 to 5, so there’s a bit of margin).
-
-**2. Fixed y-axis — probability mode (|ψ|²)**
-- **Before:** Each plot had its own dynamic scale (e.g. `yMax1`, `yMax2`, `yMax3` from data × 1.15).
-- **After:** Shared fixed scale **y ∈ [0, 1.5]** for all three probability plots. Normalized densities stay in a comparable range, so you see height and shape change without the axis rescaling.
-
-**3. Fixed y-axis — real-part mode (Re(ψ))**
-- **Before:** `yAbsMax` was computed from the data and scaled by 1.15.
-- **After:** Fixed scale **y ∈ [-1.2, 1.2]** for all three Re(ψ) plots. Normalized amplitudes fit in this range, so the waveform shape is stable as you change parameters.
-
-The grid and physics are unchanged: the same 1001 points now span **x ∈ [-6, 6]**, and all wave computations are still done on that grid. Only the axis limits are fixed so the wave packet evolution is easier to see.
-
----
-
-**User**
-
-Set the maximum value of a (localization) slider to 3.5
-
----
-
-**Cursor**
-
-
-Checking the getA formula and the marks under the slider:
-
-
-
-Mapping the slider so a runs from 0.1 to 3.5 and updating the right-hand mark.
-
-
-
-Summary of changes:
-
-1. **Mapping**  
-   `getA` now uses **35** instead of **50**, so the slider range 0–1000 maps to **a ∈ [0.1, 3.5]** (still logarithmic: `a = 0.1 × 35^(v/1000)`).
-
-2. **Label**  
-   The mark under the slider was updated from **5.0** to **3.5** so it matches the new maximum.
-
-The a (localization) slider still runs from 0 to 1000; at full scale it now corresponds to **a = 3.5** instead of 5.
-
----
-
-**User**
-
-Tie the alpha and beta sliders using normalization condition (alpha^2 +beta^2 =1), changing one should change the other following the normalization condition.
-
----
-
-**Cursor**
-
-
-Adding coupling so α and β satisfy α² + β² = 1. Checking how the sliders and update flow are wired:
-
-
-
-Adding coupled listeners for α and β so α² + β² = 1, and keeping the other sliders' behavior unchanged.
-
-
-
-Summary of changes:
-
-**Normalization α² + β² = 1**
-
-- **When you move the α slider:**  
-  α is taken from the slider (0–1).  
-  β is set to **√(1 − α²)** and the β slider is updated to match (only if the value actually changes, to avoid feedback).
-
-- **When you move the β slider:**  
-  β is taken from the slider.  
-  α is set to **√(1 − β²)** and the α slider is updated to match (again only when the value changes).
-
-So at all times **α² + β² = 1**. Whichever slider you move is the one you set; the other is updated to keep normalization. The existing Reset (α = β = 0.707) already satisfies 0.707² + 0.707² = 1, so it stays as is.
-
----
-
-**User**
-
-after the alpha and beta sliders, display the normalization equation relating them.
-
----
-
-**Cursor**
-
-
-Adding the normalization equation after the β slider and a small CSS rule to style it.
-
-
-
-Updating the display to show the computed α² + β² so it always shows 1 (or 1.00).
-
-
-
-Here’s what was added:
-
-1. **Equation display**  
-   Right after the β slider there’s a line showing the normalization relation: **α² + β² = 1**.
-
-2. **Styling**  
-   The equation sits in a small, centered block (`.norm-eq`) with muted text, a light background, and a thin border so it’s visible but not dominant.
-
-3. **Live value**  
-   The “1” is in a span with id `normEqVal`, and in the update loop it’s set to the current numerical value of α² + β² (e.g. `1.000`), so the display always shows that the constraint is satisfied.
-
----
-
-**User**
-
-Remove the start button from the top
-
----
-
-**Cursor**
-
-
-The Start button has been removed from the top bar. The header now only has the title, info icon, and Reset button.
-
----
-
-**User**
-
-Check all the physics concepts, equations, numerical methods, overall architetcure and dlow, front end animations and visuals (for any physics or rendering isues). Mention if any bugs found with suggested fixes.
-
----
-
-**Cursor**
-
-
-Checking a few more areas: overlap formula, sigma relation, and gradient/fill logic.
-
-
-
-Checking for a zero-range edge case in drawAxes and creating the review document.
-
-
-
-Writing the review and adding a defensive fix for zero axis range.
-
-
-
-Adding a defensive guard in `drawAxes` against zero axis range:
-
-
-
-Removing duplicate `xRange` declaration so the function uses the outer `xRange`.
-
-
-
-Summary of the review and changes:
-
----
-
-## Review summary
-
-A full pass was done on **physics, numerics, architecture, and visuals**. Details are in **`simulations/Sims-v2/revision-logs/gaussian_wave_superposition_review.md`**. Here is the condensed version.
-
-### Physics and equations — **OK**
-- Wave function Ψ = (1/√N′)(α ψ₁ + β ψ₂) with φ = 0 is correct; Gaussians and normalization are consistent.
-- |Ψ|², classical mixture, overlap S₁₂ = exp(−a d²/2), ⟨x⟩, Δx, σ_x = 1/(2√a), and Re(Ψ) with √nS normalization are all correct.
-- α² + β² = 1 is correctly enforced by the slider coupling.
-
-### Numerical methods — **OK**
-- Fixed grid x ∈ [−6, 6], N = 1001; rectangle-rule integration is adequate; no time evolution, so no ODE/PDE issues.
-
-### Architecture and flow — **OK**
-- Single `update()` path, rAF throttling, canvas setup and maximize/restore behavior are consistent and clear.
-
-### Front-end and rendering — **OK**
-- Axes, fills, gradients, interference shading, and X₁/X₂ markers (including label offset when close) are correct. No animation-related physics or rendering bugs.
-
-### Bugs found
-
-**No functional bugs.** Two small improvements were made:
-
-1. **Defensive fix (applied)**  
-   In **drawAxes()**, `mx`/`my` divided by `(xMax−xMin)` and `(yMax−yMin)`. If those ranges were ever zero (e.g. with dynamic axes), you’d get NaN. A guard was added so the effective axis range is at least `1e-10`:
-   - `const xRange = Math.max(xMax - xMin, 1e-10), yRange = Math.max(yMax - yMin, 1e-10);`
-   - `mx`/`my` now use `xRange` and `yRange` instead of the raw differences. The duplicate inner `const xRange = xMax - xMin` was removed so tick formatting uses this same safe `xRange`.
-
-2. **Optional (documented in the review only)**  
-   - **Normalization display**: α² + β² can occasionally show 0.999 or 1.001 due to rounding; you could show 2 decimals or a “✓” when close to 1.
-   - **drawFill**: For nearly flat curves (yPeak ≈ yBase), the gradient has zero length; you could fall back to a solid fill when `|yPeak − yBase| < 1e-10`.
-
-**Conclusion:** Physics, numerics, and architecture are in good shape. The only change applied in code is the axis-range guard in **drawAxes**; the rest are optional refinements described in **`revision-logs/gaussian_wave_superposition_review.md`**.
-
----
-
-**User**
-
-Remove the destructive interference info from the legend. Just keep the constructive interference label in the legend.
-
----
-
-**Cursor**
-
-
-Update complete. The “Destructive interference” line is removed from the legend. It now lists only:
-- |Ψ(x)|² (quantum)
-- Classical (normalized)
-- Constructive interference
+1. **Normalization removed from controls**  
+   - The “Normalization” row (label + value `vNorm`) was removed from the Wave Packet Properties grid.  
+   - The line that set `document.getElementById('vNorm').textContent` was removed so it doesn’t reference a missing element.  
+   - The FIX #3 comment was updated to say the display is only for Position and Uncertainty.
+
+2. **Overlap label aligned with General**  
+   - The overlap label was changed from **“Overlap S₁₂”** to **“Overlap (norm.)”** so it matches the General Wavefunction Collapse simulation.
+
+The Wave Packet Properties section now shows: Position ⟨x⟩ (nm), Uncertainty Δx (nm), α, β, and Overlap (norm.), with no Normalization row. Lint is clean.
 

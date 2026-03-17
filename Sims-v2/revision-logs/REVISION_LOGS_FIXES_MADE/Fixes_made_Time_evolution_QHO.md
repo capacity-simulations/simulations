@@ -1,0 +1,1 @@
+BS 20/02/2026: Fixed issues with the coherent state width and the uncertainty ellipse. Updated the initial position slider range. Changed the split-window layout from horizontal to vertical. Added maximize-window option for individual plot windows. Adjusted the layout to conform to the global layout standard.

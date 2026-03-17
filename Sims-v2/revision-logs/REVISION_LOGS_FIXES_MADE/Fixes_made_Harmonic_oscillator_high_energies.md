@@ -1,0 +1,1 @@
+BS 25/02/2026: No major physics bugs found. Fixed grid resolution issue at higher quantum numbers (n). Attempted removing dynamic axis scaling but reverted since wavefunction plots appeared stretched at smaller n values. Implemented improved rendering of the plots.
