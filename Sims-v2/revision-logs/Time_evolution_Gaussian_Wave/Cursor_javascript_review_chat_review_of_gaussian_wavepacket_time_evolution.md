@@ -1,3 +1,10 @@
+EC: 31/03/2026 Normalization (norm_mag) was incorrect. This could be seen from the "norm" not equaling 1 in the stats section:
+Old: const norm_mag = 1.0 / (Math.pow(2 * Math.PI * sigma2, 0.25) * Math.pow(denom, 0.25));
+New: const norm_mag = Math.pow(2 * sigma2 / (Math.PI * denom), 0.25);
+The alpha equation display was also incorrect. Old version had 2\sigma^2 + it/m, while the new version has 1/\sigma^2 + it/m.
+
+There may be a typo in David's notes, we can come back to this. 
+
 # Physics review of Gaussian wavepacket simulation
 _Exported on 02/03/2026 at 9:04:44 GMT+5:30 from Cursor (2.5.25)_
 
