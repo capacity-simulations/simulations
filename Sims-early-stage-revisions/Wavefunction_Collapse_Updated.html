@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quantum Wavefunction Collapse Simulator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e2e8f0;}
+
+.layout{display:grid;grid-template-rows:54px 1fr;grid-template-columns:1fr 280px;height:100vh;width:100vw;}
+
+.top-bar{display:flex;align-items:center;padding:0 16px;gap:14px;background:rgba(11,17,32,0.95);border-bottom:1px solid rgba(100,120,180,0.12);z-index:10;grid-column:1 / -1;}
+.logo{font-size:14px;font-weight:700;color:#7c3aed;white-space:nowrap;letter-spacing:0.5px;}
+.logo span{color:#06b6d4;}
+.btn-group{display:flex;gap:8px;margin-left:auto;align-items:center;}
+.measure-btn{padding:8px 22px;background:linear-gradient(135deg,#7c3aed,#06b6d4);border:none;border-radius:6px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s;text-transform:uppercase;}
+.measure-btn:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(124,58,237,0.4);}
+.measure-btn:active{transform:scale(0.97);}
+.reset-btn{padding:8px 18px;background:rgba(100,120,180,0.15);border:1px solid rgba(100,120,180,0.2);border-radius:6px;color:#94a3b8;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;}
+.reset-btn:hover{background:rgba(100,120,180,0.25);color:#e2e8f0;}
+
+.main-area{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(100,120,180,0.08);overflow:hidden;}
+.main-area.maximized-left{grid-template-columns:1fr 0fr;}
+.main-area.maximized-right{grid-template-columns:0fr 1fr;}
+.view-panel{position:relative;background:#0b1120;overflow:hidden;}
+.main-area.maximized-left .view-panel:nth-child(2){display:none;}
+.main-area.maximized-right .view-panel:nth-child(1){display:none;}
+.view-label{position:absolute;top:8px;left:12px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;z-index:2;pointer-events:none;}
+.view-panel canvas{display:block;width:100%;height:100%;}
+
+.maximize-btn{position:absolute;top:8px;right:12px;z-index:3;width:30px;height:30px;background:rgba(15,20,40,0.7);border:1px solid rgba(100,120,180,0.25);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.25s ease;padding:0;backdrop-filter:blur(4px);}
+.maximize-btn:hover{background:rgba(124,58,237,0.25);border-color:rgba(124,58,237,0.5);transform:scale(1.1);box-shadow:0 0 12px rgba(124,58,237,0.2);}
+.maximize-btn:active{transform:scale(0.95);}
+.maximize-btn svg{width:16px;height:16px;stroke:#94a3b8;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:stroke 0.2s;}
+.maximize-btn:hover svg{stroke:#c4b5fd;}
+
+.right-panel{background:rgba(11,17,32,0.95);border-left:1px solid rgba(100,120,180,0.12);overflow-y:auto;padding:0;display:flex;flex-direction:column;}
+.right-panel::-webkit-scrollbar{width:5px;}
+.right-panel::-webkit-scrollbar-thumb{background:rgba(100,120,180,0.25);border-radius:3px;}
+.right-panel::-webkit-scrollbar-track{background:transparent;}
+
+.panel-section{padding:12px 14px;border-bottom:1px solid rgba(100,120,180,0.1);flex-shrink:0;}
+.panel-section-title{font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.stat-block{background:rgba(100,120,180,0.06);border:1px solid rgba(100,120,180,0.1);border-radius:6px;padding:8px 10px;}
+.stat-block .sl{color:#64748b;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:2px;}
+.stat-block .sv{color:#e2e8f0;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums;display:block;}
+.stat-block.wide{grid-column:1 / -1;}
+
+.ctrl-item{margin-bottom:12px;}
+.ctrl-item:last-child{margin-bottom:0;}
+.ctrl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.ctrl-header label{color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:0.5px;}
+.ctrl-header .cv{color:#06b6d4;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;}
+.ctrl-item input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:rgba(100,120,180,0.2);border-radius:2px;outline:none;margin:4px 0;}
+.ctrl-item input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:#7c3aed;border-radius:50%;cursor:pointer;transition:transform 0.15s;}
+.ctrl-item input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3);}
+
+.info-icon-wrap{position:relative;display:inline-flex;align-items:center;margin-left:5px;}
+.info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(100,120,180,0.2);border:1px solid rgba(100,120,180,0.3);color:#64748b;font-size:9px;font-weight:700;font-style:italic;font-family:Georgia,serif;cursor:help;transition:all 0.2s;line-height:1;user-select:none;}
+.info-icon:hover{background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#c4b5fd;}
+.info-tooltip{display:none;position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);width:200px;padding:8px 10px;background:rgba(15,23,42,0.97);border:1px solid rgba(100,120,180,0.25);border-radius:6px;color:#94a3b8;font-size:10px;line-height:1.5;font-style:italic;font-weight:400;z-index:100;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.4);}
+.info-tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:rgba(100,120,180,0.25);}
+.info-icon-wrap:hover .info-tooltip{display:block;}
+
+.log-section{flex-shrink:0;}
+.log-section .panel-section-title{margin-bottom:6px;}
+.log-entries{overflow-y:auto;max-height:200px;font-size:10px;font-family:'Courier New',monospace;line-height:1.6;min-height:60px;}
+.log-entries::-webkit-scrollbar{width:4px;}
+.log-entries::-webkit-scrollbar-thumb{background:rgba(100,120,180,0.2);border-radius:2px;}
+.log-entry{color:#94a3b8;border-bottom:1px solid rgba(100,120,180,0.05);padding:3px 0;}
+.log-entry .collapse-num{color:#7c3aed;font-weight:700;}
+.log-entry .collapse-pos{color:#06b6d4;}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="top-bar">
+    <div class="logo">&Psi; <span>COLLAPSE</span></div>
+    <div class="btn-group">
+      <button class="reset-btn" id="resetBtn">&circlearrowleft; Reset</button>
+      <button class="measure-btn" id="measureBtn">&zap; Measure</button>
+    </div>
+  </div>
+  <div class="main-area" id="mainArea">
+    <div class="view-panel" id="viewPanel2D">
+      <div class="view-label">Probability Density |&Psi;|&sup2;</div>
+      <button class="maximize-btn" id="maxBtn2D" title="Maximize / Restore">
+        <svg viewBox="0 0 16 16"><polyline points="5.5 1.5 1.5 1.5 1.5 5.5"/><line x1="1.5" y1="1.5" x2="6" y2="6"/><polyline points="10.5 14.5 14.5 14.5 14.5 10.5"/><line x1="14.5" y1="14.5" x2="10" y2="10"/></svg>
+      </button>
+      <canvas id="c2d"></canvas>
+    </div>
+    <div class="view-panel" id="viewPanel3D">
+      <div class="view-label">3D Surface Plot</div>
+      <button class="maximize-btn" id="maxBtn3D" title="Maximize / Restore">
+        <svg viewBox="0 0 16 16"><polyline points="5.5 1.5 1.5 1.5 1.5 5.5"/><line x1="1.5" y1="1.5" x2="6" y2="6"/><polyline points="10.5 14.5 14.5 14.5 14.5 10.5"/><line x1="14.5" y1="14.5" x2="10" y2="10"/></svg>
+      </button>
+      <canvas id="c3d"></canvas>
+    </div>
+  </div>
+  <div class="right-panel">
+    <div class="panel-section">
+      <div class="panel-section-title">Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-block"><span class="sl">Time</span><span class="sv" id="sTime">0.00</span></div>
+        <div class="stat-block"><span class="sl">Width W(t)</span><span class="sv" id="sWidth">1.50</span></div>
+        <div class="stat-block"><span class="sl">Center X&#8320;</span><span class="sv" id="sCX">0.00</span></div>
+        <div class="stat-block"><span class="sl">Center Y&#8320;</span><span class="sv" id="sCY">0.00</span></div>
+        <div class="stat-block wide"><span class="sl">Collapses</span><span class="sv" id="sCol">0</span></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Parameters</div>
+      <div class="ctrl-item">
+        <div class="ctrl-header">
+          <label>&sigma;&#8320; (Initial Spread)
+            <span class="info-icon-wrap"><span class="info-icon">i</span><span class="info-tooltip">Controls the initial spatial uncertainty of the wavepacket. Larger values create a more spread-out probability distribution.</span></span>
+          </label>
+          <span class="cv" id="vSigma0">1.5</span>
+        </div>
+        <input type="range" id="rSigma0" min="0.3" max="4.0" step="0.1" value="1.5">
+      </div>
+      <div class="ctrl-item">
+        <div class="ctrl-header">
+          <label>m (Mass)
+            <span class="info-icon-wrap"><span class="info-icon">i</span><span class="info-tooltip">Particle mass in natural units. Heavier particles spread more slowly over time due to reduced quantum dispersion.</span></span>
+          </label>
+          <span class="cv" id="vMass">1.0</span>
+        </div>
+        <input type="range" id="rMass" min="0.1" max="10.0" step="0.1" value="1.0">
+      </div>
+      <div class="ctrl-item">
+        <div class="ctrl-header">
+          <label>&sigma;_c (Collapse Width)
+            <span class="info-icon-wrap"><span class="info-icon">i</span><span class="info-tooltip">Width of the wavepacket immediately after a measurement collapse. Smaller values mean more precise position measurement.</span></span>
+          </label>
+          <span class="cv" id="vSigmaC">0.5</span>
+        </div>
+        <input type="range" id="rSigmaC" min="0.1" max="3.0" step="0.1" value="0.5">
+      </div>
+      <div class="ctrl-item">
+        <div class="ctrl-header">
+          <label>p&#8339; (Momentum X)
+            <span class="info-icon-wrap"><span class="info-icon">i</span><span class="info-tooltip">Initial momentum along the x-axis. Determines the horizontal drift velocity of the wavepacket center.</span></span>
+          </label>
+          <span class="cv" id="vPx">0.0</span>
+        </div>
+        <input type="range" id="rPx" min="-5.0" max="5.0" step="0.1" value="0.0">
+      </div>
+      <div class="ctrl-item">
+        <div class="ctrl-header">
+          <label>p&#7527; (Momentum Y)
+            <span class="info-icon-wrap"><span class="info-icon">i</span><span class="info-tooltip">Initial momentum along the y-axis. Determines the vertical drift velocity of the wavepacket center.</span></span>
+          </label>
+          <span class="cv" id="vPy">0.0</span>
+        </div>
+        <input type="range" id="rPy" min="-5.0" max="5.0" step="0.1" value="0.0">
+      </div>
+    </div>
+    <div class="panel-section log-section">
+      <div class="panel-section-title">Collapse Log</div>
+      <div class="log-entries" id="logEntries"><div style="color:#475569;font-style:italic;">No collapses yet. Press MEASURE.</div></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+
+const BASE_RANGE=10, DT=0.05, N3D=60;
+let time=0,sigma0=1.5,mass=1.0,sigmaC=0.5,momX=0,momY=0;
+let cX=0,cY=0,collapseT=0,curSigBase=1.5,collapses=0;
+let collapseLog=[],collapseEffects=[];
+let paused=false;
+let maximizedView=null; // null, 'left', or 'right'
+
+function randn(){let u=Math.random(),v=Math.random();return Math.sqrt(-2*Math.log(u||1e-10))*Math.cos(2*Math.PI*v);}
+function getSigma(){const dt=time-collapseT,s=curSigBase;return s*Math.sqrt(1+Math.pow(dt/(2*mass*s*s),2));}
+function getCenter(){const dt=time-collapseT;return{x:cX+(momX/mass)*dt,y:cY+(momY/mass)*dt};}
+
+function getDynamicRange(){
+  const sigma=getSigma();
+  const center=getCenter();
+  const needed = Math.max(Math.abs(center.x), Math.abs(center.y)) + 4 * sigma;
+  const raw = Math.max(BASE_RANGE, needed);
+  if(raw <= 10) return 10;
+  if(raw <= 15) return 15;
+  if(raw <= 20) return 20;
+  if(raw <= 25) return 25;
+  if(raw <= 30) return 30;
+  if(raw <= 40) return 40;
+  if(raw <= 50) return 50;
+  return Math.ceil(raw / 10) * 10;
+}
+
+let currentDisplayRange = BASE_RANGE;
+function getSmoothedRange(){
+  const target = getDynamicRange();
+  currentDisplayRange += (target - currentDisplayRange) * 0.08;
+  if(Math.abs(currentDisplayRange - target) < 0.05) currentDisplayRange = target;
+  return currentDisplayRange;
+}
+
+// Color LUT
+const colorLUT=new Array(256);
+(function buildLUT(){
+  const stops=[
+    {p:0,r:8,g:4,b:28},{p:0.15,r:40,g:15,b:80},{p:0.3,r:90,g:30,b:160},
+    {p:0.5,r:124,g:58,b:237},{p:0.65,r:60,g:120,b:220},
+    {p:0.8,r:6,g:182,b:212},{p:0.95,r:94,g:234,b:212},{p:1,r:180,g:255,b:240}
+  ];
+  for(let i=0;i<256;i++){
+    const t=i/255;let s0=stops[0],s1=stops[stops.length-1];
+    for(let j=0;j<stops.length-1;j++){if(t>=stops[j].p&&t<=stops[j+1].p){s0=stops[j];s1=stops[j+1];break;}}
+    const f=(t-s0.p)/(s1.p-s0.p||1);
+    colorLUT[i]=[Math.round(s0.r+(s1.r-s0.r)*f),Math.round(s0.g+(s1.g-s0.g)*f),Math.round(s0.b+(s1.b-s0.b)*f)];
+  }
+})();
+
+const c2d=document.getElementById('c2d'),ctx2=c2d.getContext('2d');
+const c3d=document.getElementById('c3d'),ctx3=c3d.getContext('2d');
+
+function resizeCanvas(canvas){
+  const panel=canvas.parentElement;
+  if(!panel) return;
+  const r=panel.getBoundingClientRect();
+  if(r.width>0 && r.height>0){
+    canvas.width=Math.round(r.width*devicePixelRatio);
+    canvas.height=Math.round(r.height*devicePixelRatio);
+  }
+}
+
+function resizeCanvases(){
+  // Only resize canvases whose panels are currently visible
+  if(maximizedView==='right'){
+    // Only 3D panel is visible
+    resizeCanvas(c3d);
+  } else if(maximizedView==='left'){
+    // Only 2D panel is visible
+    resizeCanvas(c2d);
+  } else {
+    // Both visible
+    resizeCanvas(c2d);
+    resizeCanvas(c3d);
+  }
+}
+
+// Maximize/restore logic
+const mainArea=document.getElementById('mainArea');
+const maxBtn2D=document.getElementById('maxBtn2D');
+const maxBtn3D=document.getElementById('maxBtn3D');
+
+// SVG icons: expand (maximize) and collapse (restore)
+const svgMaximize='<svg viewBox="0 0 16 16"><polyline points="5.5 1.5 1.5 1.5 1.5 5.5"/><line x1="1.5" y1="1.5" x2="6" y2="6"/><polyline points="10.5 14.5 14.5 14.5 14.5 10.5"/><line x1="14.5" y1="14.5" x2="10" y2="10"/></svg>';
+const svgRestore='<svg viewBox="0 0 16 16"><polyline points="1.5 5.5 5.5 5.5 5.5 1.5"/><line x1="5.5" y1="5.5" x2="1" y2="1"/><polyline points="14.5 10.5 10.5 10.5 10.5 14.5"/><line x1="10.5" y1="10.5" x2="15" y2="15"/></svg>';
+
+function updateMaximizeState(){
+  mainArea.classList.remove('maximized-left','maximized-right');
+  if(maximizedView==='left'){
+    mainArea.classList.add('maximized-left');
+    maxBtn2D.innerHTML=svgRestore;
+    maxBtn3D.innerHTML=svgMaximize;
+  } else if(maximizedView==='right'){
+    mainArea.classList.add('maximized-right');
+    maxBtn3D.innerHTML=svgRestore;
+    maxBtn2D.innerHTML=svgMaximize;
+  } else {
+    maxBtn2D.innerHTML=svgMaximize;
+    maxBtn3D.innerHTML=svgMaximize;
+  }
+  // Use multiple delayed resize calls to ensure layout has settled
+  setTimeout(resizeCanvases, 20);
+  setTimeout(resizeCanvases, 100);
+  setTimeout(resizeCanvases, 250);
+}
+
+maxBtn2D.addEventListener('click',()=>{
+  maximizedView = maximizedView==='left' ? null : 'left';
+  updateMaximizeState();
+});
+maxBtn3D.addEventListener('click',()=>{
+  maximizedView = maximizedView==='right' ? null : 'right';
+  updateMaximizeState();
+});
+
+function getGridStep(range){
+  if(range<=10) return 2;
+  if(range<=20) return 5;
+  if(range<=30) return 5;
+  if(range<=50) return 10;
+  return 10;
+}
+
+function getLabelStep(range){
+  if(range<=10) return 5;
+  if(range<=20) return 5;
+  if(range<=30) return 10;
+  if(range<=50) return 10;
+  return 20;
+}
+
+// 2D Heatmap
+function render2D(){
+  const w=c2d.width,h=c2d.height;
+  if(w<2||h<2)return;
+  ctx2.fillStyle='#0b1120';ctx2.fillRect(0,0,w,h);
+  const pad=Math.round(Math.min(w,h)*0.08);
+  const pw=w-2*pad,ph=h-2*pad;
+  if(pw<10||ph<10)return;
+  
+  const RANGE=getSmoothedRange();
+  const sigma=getSigma(),center=getCenter();
+  const maxP=1/(2*Math.PI*sigma*sigma);
+  const imgD=ctx2.createImageData(pw,ph);
+  const d=imgD.data;
+  
+  const exX=new Float64Array(pw),exY=new Float64Array(ph);
+  for(let i=0;i<pw;i++){const x=-RANGE+(i/pw)*2*RANGE;const dx=(x-center.x)/sigma;exX[i]=Math.exp(-0.5*dx*dx);}
+  for(let j=0;j<ph;j++){const y=RANGE-(j/ph)*2*RANGE;const dy=(y-center.y)/sigma;exY[j]=Math.exp(-0.5*dy*dy);}
+  
+  for(let j=0;j<ph;j++){
+    const ey=exY[j];
+    for(let i=0;i<pw;i++){
+      const prob=maxP*exX[i]*ey;
+      const t=Math.min(prob/maxP,1);
+      const ci=Math.round(t*255);
+      const c=colorLUT[ci];
+      const idx=(j*pw+i)*4;
+      d[idx]=c[0];d[idx+1]=c[1];d[idx+2]=c[2];d[idx+3]=255;
+    }
+  }
+  ctx2.putImageData(imgD,pad,pad);
+  
+  // Grid
+  const gridStep=getGridStep(RANGE);
+  ctx2.strokeStyle='rgba(100,120,180,0.12)';ctx2.lineWidth=1;
+  for(let v=-RANGE;v<=RANGE;v+=gridStep){
+    const px_=pad+(v+RANGE)/(2*RANGE)*pw;
+    const py_=pad+(RANGE-v)/(2*RANGE)*ph;
+    ctx2.beginPath();ctx2.moveTo(px_,pad);ctx2.lineTo(px_,pad+ph);ctx2.stroke();
+    ctx2.beginPath();ctx2.moveTo(pad,py_);ctx2.lineTo(pad+pw,py_);ctx2.stroke();
+  }
+  // Axes
+  ctx2.strokeStyle='rgba(100,120,180,0.3)';ctx2.lineWidth=1.5;
+  const ax=pad+(RANGE)/(2*RANGE)*pw,ay=pad+(RANGE)/(2*RANGE)*ph;
+  ctx2.beginPath();ctx2.moveTo(ax,pad);ctx2.lineTo(ax,pad+ph);ctx2.stroke();
+  ctx2.beginPath();ctx2.moveTo(pad,ay);ctx2.lineTo(pad+pw,ay);ctx2.stroke();
+  
+  // Labels
+  const labelStep=getLabelStep(RANGE);
+  ctx2.fillStyle='#475569';ctx2.font=`${Math.round(10*devicePixelRatio)}px sans-serif`;ctx2.textAlign='center';
+  for(let v=Math.ceil(-RANGE/labelStep)*labelStep;v<=RANGE;v+=labelStep){
+    if(v===0)continue;
+    const px_=pad+(v+RANGE)/(2*RANGE)*pw;
+    ctx2.fillText(v,px_,pad+ph+14*devicePixelRatio);
+    const py_=pad+(RANGE-v)/(2*RANGE)*ph;
+    ctx2.textAlign='right';ctx2.fillText(v,pad-4*devicePixelRatio,py_+3*devicePixelRatio);ctx2.textAlign='center';
+  }
+  
+  // Range indicator
+  ctx2.fillStyle='rgba(100,120,180,0.3)';ctx2.font=`${Math.round(9*devicePixelRatio)}px sans-serif`;
+  ctx2.textAlign='left';
+  ctx2.fillText('Range: \u00B1'+RANGE.toFixed(1), pad, pad-4*devicePixelRatio);
+  ctx2.textAlign='center';
+  
+  // Crosshair at center
+  const ccx=pad+((center.x+RANGE)/(2*RANGE))*pw;
+  const ccy=pad+((RANGE-center.y)/(2*RANGE))*ph;
+  ctx2.strokeStyle='rgba(255,255,255,0.3)';ctx2.lineWidth=1;ctx2.setLineDash([4,4]);
+  ctx2.beginPath();ctx2.moveTo(ccx,pad);ctx2.lineTo(ccx,pad+ph);ctx2.stroke();
+  ctx2.beginPath();ctx2.moveTo(pad,ccy);ctx2.lineTo(pad+pw,ccy);ctx2.stroke();
+  ctx2.setLineDash([]);
+  
+  // Center dot
+  ctx2.fillStyle='rgba(255,255,255,0.7)';ctx2.beginPath();ctx2.arc(ccx,ccy,3*devicePixelRatio,0,Math.PI*2);ctx2.fill();
+  
+  // Collapse effects
+  for(let k=collapseEffects.length-1;k>=0;k--){
+    const ef=collapseEffects[k];
+    const age=time-ef.t;
+    if(age>1.5){collapseEffects.splice(k,1);continue;}
+    const progress=age/1.5;
+    const alpha=1-progress;
+    const radius=(10+progress*60)*devicePixelRatio;
+    const epx=pad+((ef.x+RANGE)/(2*RANGE))*pw;
+    const epy=pad+((RANGE-ef.y)/(2*RANGE))*ph;
+    ctx2.strokeStyle=`rgba(94,234,212,${alpha*0.8})`;ctx2.lineWidth=2*devicePixelRatio*(1-progress*0.5);
+    ctx2.beginPath();ctx2.arc(epx,epy,radius,0,Math.PI*2);ctx2.stroke();
+    ctx2.strokeStyle=`rgba(124,58,237,${alpha*0.6})`;ctx2.lineWidth=1.5*devicePixelRatio*(1-progress);
+    ctx2.beginPath();ctx2.arc(epx,epy,radius*0.5,0,Math.PI*2);ctx2.stroke();
+    ctx2.fillStyle=`rgba(255,255,255,${alpha})`;ctx2.beginPath();ctx2.arc(epx,epy,3*devicePixelRatio,0,Math.PI*2);ctx2.fill();
+  }
+}
+
+// 3D Surface
+function render3D(){
+  const w=c3d.width,h=c3d.height;
+  if(w<2||h<2){
+    // Attempt a resize if dimensions are bad but panel should be visible
+    resizeCanvas(c3d);
+    return;
+  }
+  ctx3.fillStyle='#0b1120';ctx3.fillRect(0,0,w,h);
+  
+  const RANGE=getSmoothedRange();
+  const sigma=getSigma(),center=getCenter();
+  const maxP=1/(2*Math.PI*sigma*sigma);
+  const N=N3D,step=2*RANGE/(N-1);
+  
+  const heights=new Float64Array(N*N);
+  for(let j=0;j<N;j++){
+    const y=-RANGE+j*step;
+    const dy=(y-center.y)/sigma;
+    const ey=Math.exp(-0.5*dy*dy);
+    for(let i=0;i<N;i++){
+      const x=-RANGE+i*step;
+      const dx=(x-center.x)/sigma;
+      heights[j*N+i]=maxP*Math.exp(-0.5*dx*dx)*ey;
+    }
+  }
+  
+  const az=-Math.PI*0.25,el=Math.PI*0.22;
+  const ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);
+  const sc=Math.min(w,h)/(2.3*RANGE);
+  const hsc=RANGE*0.8*sc;
+  const ox=w*0.5,oy=h*0.62;
+  
+  function proj(x,y,z){
+    const x1=x*ca-y*sa;
+    const y1=x*sa+y*ca;
+    return[x1*sc+ox,(-(y1*se+z*ce))*sc+oy];
+  }
+  
+  // Range indicator
+  ctx3.fillStyle='rgba(100,120,180,0.3)';ctx3.font=`${Math.round(9*devicePixelRatio)}px sans-serif`;
+  ctx3.textAlign='left';
+  ctx3.fillText('Range: \u00B1'+RANGE.toFixed(1), 10*devicePixelRatio, h-10*devicePixelRatio);
+  ctx3.textAlign='center';
+  
+  // Base grid
+  const gridStep3d=getGridStep(RANGE);
+  ctx3.strokeStyle='rgba(100,120,180,0.08)';ctx3.lineWidth=0.5*devicePixelRatio;
+  for(let v=-RANGE;v<=RANGE;v+=gridStep3d){
+    let[x1,y1]=proj(v,-RANGE,0),[x2,y2]=proj(v,RANGE,0);
+    ctx3.beginPath();ctx3.moveTo(x1,y1);ctx3.lineTo(x2,y2);ctx3.stroke();
+    [x1,y1]=proj(-RANGE,v,0);[x2,y2]=proj(RANGE,v,0);
+    ctx3.beginPath();ctx3.moveTo(x1,y1);ctx3.lineTo(x2,y2);ctx3.stroke();
+  }
+  
+  // Surface quads back-to-front
+  for(let j=N-2;j>=0;j--){
+    for(let i=0;i<N-1;i++){
+      const x0=-RANGE+i*step,y0=-RANGE+j*step;
+      const x1=x0+step,y1=y0+step;
+      const h00=heights[j*N+i],h10=heights[j*N+i+1];
+      const h11=heights[(j+1)*N+i+1],h01=heights[(j+1)*N+i];
+      const avgH=(h00+h10+h11+h01)/4;
+      const t=Math.min(avgH/maxP,1);
+      const ci=Math.round(t*255);
+      const c=colorLUT[ci];
+      
+      const[sx00,sy00]=proj(x0,y0,h00*hsc);
+      const[sx10,sy10]=proj(x1,y0,h10*hsc);
+      const[sx11,sy11]=proj(x1,y1,h11*hsc);
+      const[sx01,sy01]=proj(x0,y1,h01*hsc);
+      
+      ctx3.beginPath();
+      ctx3.moveTo(sx00,sy00);ctx3.lineTo(sx10,sy10);
+      ctx3.lineTo(sx11,sy11);ctx3.lineTo(sx01,sy01);
+      ctx3.closePath();
+      
+      ctx3.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.85+t*0.15})`;
+      ctx3.fill();
+      
+      if(t>0.02){
+        ctx3.strokeStyle=`rgba(${Math.min(255,c[0]+40)},${Math.min(255,c[1]+40)},${Math.min(255,c[2]+40)},${0.15+t*0.25})`;
+        ctx3.lineWidth=0.5*devicePixelRatio;
+        ctx3.stroke();
+      }
+    }
+  }
+  
+  // Axes
+  ctx3.strokeStyle='rgba(100,120,180,0.3)';ctx3.lineWidth=1.5*devicePixelRatio;
+  let[ax1,ay1]=proj(-RANGE,0,0),[ax2,ay2]=proj(RANGE,0,0);
+  ctx3.beginPath();ctx3.moveTo(ax1,ay1);ctx3.lineTo(ax2,ay2);ctx3.stroke();
+  [ax1,ay1]=proj(0,-RANGE,0);[ax2,ay2]=proj(0,RANGE,0);
+  ctx3.beginPath();ctx3.moveTo(ax1,ay1);ctx3.lineTo(ax2,ay2);ctx3.stroke();
+  [ax1,ay1]=proj(0,0,0);[ax2,ay2]=proj(0,0,maxP*hsc*1.2);
+  ctx3.beginPath();ctx3.moveTo(ax1,ay1);ctx3.lineTo(ax2,ay2);ctx3.stroke();
+  
+  // Axis labels
+  ctx3.fillStyle='#64748b';ctx3.font=`${Math.round(10*devicePixelRatio)}px sans-serif`;
+  const[lx,ly]=proj(RANGE+1,0,0);ctx3.textAlign='center';ctx3.fillText('x',lx,ly);
+  const[lx2,ly2]=proj(0,RANGE+1,0);ctx3.fillText('y',lx2,ly2);
+  const[lx3,ly3]=proj(0,0,maxP*hsc*1.3);ctx3.fillText('|\u03A8|\u00B2',lx3,ly3);
+}
+
+// Controls
+function bindSlider(id,vid,cb){
+  const el=document.getElementById(id),vl=document.getElementById(vid);
+  el.addEventListener('input',()=>{const v=parseFloat(el.value);vl.textContent=v.toFixed(1);cb(v);});
+}
+bindSlider('rSigma0','vSigma0',v=>{sigma0=v;});
+bindSlider('rMass','vMass',v=>{mass=v;});
+bindSlider('rSigmaC','vSigmaC',v=>{sigmaC=v;});
+bindSlider('rPx','vPx',v=>{momX=v;});
+bindSlider('rPy','vPy',v=>{momY=v;});
+
+function doCollapse(){
+  const sigma=getSigma(),center=getCenter();
+  const xm=center.x+sigma*randn();
+  const ym=center.y+sigma*randn();
+  collapseLog.push({num:collapses+1,time:+time.toFixed(2),x:+xm.toFixed(3),y:+ym.toFixed(3),preW:+sigma.toFixed(3)});
+  collapseEffects.push({x:xm,y:ym,t:time});
+  cX=xm;cY=ym;collapseT=time;curSigBase=sigmaC;collapses++;
+  updateLog();
+}
+
+function updateLog(){
+  const el=document.getElementById('logEntries');
+  if(collapseLog.length===0){el.innerHTML='<div style="color:#475569;font-style:italic;">No collapses yet.</div>';return;}
+  let html='';
+  for(let i=collapseLog.length-1;i>=Math.max(0,collapseLog.length-50);i--){
+    const c=collapseLog[i];
+    html+=`<div class="log-entry"><span class="collapse-num">#${c.num}</span> t=${c.time} \u2192 <span class="collapse-pos">(${c.x}, ${c.y})</span> W_pre=${c.preW}</div>`;
+  }
+  el.innerHTML=html;
+}
+
+document.getElementById('measureBtn').addEventListener('click',doCollapse);
+document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();doCollapse();}});
+
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  time=0;cX=0;cY=0;collapseT=0;curSigBase=sigma0;collapses=0;
+  collapseLog=[];collapseEffects=[];currentDisplayRange=BASE_RANGE;
+  maximizedView=null;updateMaximizeState();
+  updateLog();
+});
+
+// Track last known good sizes for each canvas to detect when resize is needed
+let lastKnown3DWidth=0, lastKnown3DHeight=0;
+let lastKnown2DWidth=0, lastKnown2DHeight=0;
+
+// Animation loop
+let frameCount=0;
+function animate(){
+  time+=DT;
+  frameCount++;
+  
+  const sigma=getSigma(),center=getCenter();
+  
+  // Stats
+  document.getElementById('sTime').textContent=time.toFixed(2);
+  document.getElementById('sWidth').textContent=sigma.toFixed(3);
+  document.getElementById('sCX').textContent=center.x.toFixed(2);
+  document.getElementById('sCY').textContent=center.y.toFixed(2);
+  document.getElementById('sCol').textContent=collapses;
+  
+  // Auto-resize check: if a canvas that should be visible has bad dimensions, resize it
+  if(maximizedView!=='right'){
+    if(c2d.width<2||c2d.height<2) resizeCanvas(c2d);
+    render2D();
+  }
+  if(maximizedView!=='left'){
+    if(c3d.width<2||c3d.height<2) resizeCanvas(c3d);
+    render3D();
+  }
+  
+  requestAnimationFrame(animate);
+}
+
+function init(){
+  resizeCanvases();
+  window.addEventListener('resize',()=>{resizeCanvases();});
+  animate();
+}
+
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}else{init();}
+
+})();
+</script>
+</body>
+</html>
