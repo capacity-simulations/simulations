@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Superposition — Interactive Visualization</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:'SF Mono','Fira Code','Consolas',monospace;overflow:hidden;height:100vh}
+.layout{display:flex;height:100vh}
+.plots-area{flex:1;display:flex;flex-direction:column;padding:10px;gap:6px;min-width:0}
+.plot-wrap{flex:1;position:relative;min-height:0;border-radius:8px;overflow:hidden;background:#111827;border:1px solid rgba(148,163,184,0.07)}
+.plot-wrap canvas{width:100%;height:100%;display:block}
+.sidebar{width:330px;background:rgba(15,23,42,0.97);border-left:1px solid rgba(148,163,184,0.1);padding:18px 16px;overflow-y:auto;flex-shrink:0;scrollbar-width:thin;scrollbar-color:#1e293b transparent}
+.sidebar::-webkit-scrollbar{width:5px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}
+.sidebar h1{font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:2px;letter-spacing:-0.3px}
+.subtitle{font-size:10px;color:#64748b;margin-bottom:16px}
+.section{margin-bottom:16px}
+.section-title{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid rgba(148,163,184,0.1)}
+.sg{margin-bottom:12px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+.sl{font-size:12px;color:#cbd5e1}
+.sv{font-size:12px;color:#60a5fa;font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;height:5px;-webkit-appearance:none;appearance:none;background:rgba(148,163,184,0.12);border-radius:3px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:#3b82f6;border-radius:50%;cursor:pointer;box-shadow:0 0 6px rgba(59,130,246,0.35)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;background:#3b82f6;border-radius:50%;cursor:pointer;border:none}
+.marks{display:flex;justify-content:space-between;font-size:8px;color:#475569;margin-top:1px;padding:0 1px}
+.vg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.vc{background:rgba(30,41,59,0.7);border:1px solid rgba(148,163,184,0.06);border-radius:5px;padding:7px 9px}
+.vc .vl{font-size:9px;color:#64748b;margin-bottom:1px}
+.vc .vv{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.legend{margin-top:10px}
+.li{display:flex;align-items:center;gap:7px;font-size:10px;color:#94a3b8;margin-bottom:3px}
+.lc{width:18px;height:3px;border-radius:2px;flex-shrink:0}
+.ld{width:18px;height:0;flex-shrink:0}
+.info-box{background:rgba(30,41,59,0.5);border:1px solid rgba(96,165,250,0.15);border-radius:7px;padding:12px;font-size:11px;line-height:1.55}
+.info-box .formula{font-family:Georgia,serif;font-style:italic;color:#93c5fd;font-size:12px;margin:8px 0;text-align:center;word-break:break-all}
+.info-box .quote{color:#94a3b8;font-style:italic;border-left:2px solid #3b82f6;padding-left:9px;margin-top:8px;font-size:11px}
+.norm-box{font-size:10px;color:#475569;margin-top:8px;padding:6px 8px;background:rgba(30,41,59,0.4);border-radius:4px;line-height:1.5}
+.norm-box span{color:#64748b}
+.phi-indicator{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:4px;font-size:10px;padding:4px 8px;border-radius:4px;font-weight:600}
+.phi-constructive{background:rgba(52,211,153,0.12);color:#34d399}
+.phi-destructive{background:rgba(244,114,182,0.12);color:#f472b6}
+.phi-neutral{background:rgba(148,163,184,0.08);color:#94a3b8}
+.toggle-group{display:flex;gap:4px;margin-bottom:4px}
+.toggle-btn{flex:1;padding:7px 8px;font-size:10px;font-family:inherit;border:1px solid rgba(148,163,184,0.15);background:rgba(30,41,59,0.5);color:#94a3b8;border-radius:5px;cursor:pointer;transition:all 0.2s}
+.toggle-btn:hover{background:rgba(30,41,59,0.8);color:#cbd5e1}
+.toggle-btn.active{background:rgba(59,130,246,0.2);border-color:rgba(59,130,246,0.4);color:#60a5fa;font-weight:600}
+</style>
+</head>
+<body>
+<div class="layout">
+<div class="plots-area">
+<div class="plot-wrap"><canvas id="c1"></canvas></div>
+<div class="plot-wrap"><canvas id="c2"></canvas></div>
+<div class="plot-wrap"><canvas id="c3"></canvas></div>
+</div>
+<div class="sidebar">
+<h1>⚛ Quantum Superposition</h1>
+<div class="subtitle">Spatial interference of Gaussian wavepackets</div>
+
+<div class="section">
+<div class="section-title">View Mode</div>
+<div class="toggle-group">
+<button class="toggle-btn active" id="btnProb">|ψ|² Probability</button>
+<button class="toggle-btn" id="btnReal">Re(ψ) Real Part</button>
+</div>
+</div>
+
+<div class="section">
+<div class="section-title">Wavepacket Parameters</div>
+<div class="sg"><div class="sh"><span class="sl">X₁ (center)</span><span class="sv" id="vX1">-2.00</span></div><input type="range" id="sX1" min="-5" max="5" step="0.05" value="-2"><div class="marks"><span>-5</span><span>0</span><span>+5</span></div></div>
+<div class="sg"><div class="sh"><span class="sl">X₂ (center)</span><span class="sv" id="vX2">+2.00</span></div><input type="range" id="sX2" min="-5" max="5" step="0.05" value="2"><div class="marks"><span>-5</span><span>0</span><span>+5</span></div></div>
+<!-- FIX #12: default value=589 gives a≈1.002 instead of 588→0.998 -->
+<div class="sg"><div class="sh"><span class="sl">a (localization)</span><span class="sv" id="vA">1.000</span></div><input type="range" id="sA" min="0" max="1000" step="1" value="589"><div class="marks"><span>0.1</span><span>σ<sub>x</sub>=<span id="vSigma">0.50</span></span><span>5.0</span></div></div>
+</div>
+
+<div class="section">
+<div class="section-title">Superposition Parameters</div>
+<div class="sg"><div class="sh"><span class="sl">θ (mixing angle)</span><span class="sv" id="vTheta">π/4</span></div><input type="range" id="sTheta" min="0" max="1570.796" step="1" value="785"><div class="marks"><span>0</span><span>π/4</span><span>π/2</span></div></div>
+<div class="sg"><div class="sh"><span class="sl">φ (relative phase)</span><span class="sv" id="vPhi">0.000</span></div><input type="range" id="sPhi" min="0" max="6283.185" step="1" value="0"><div class="marks"><span>0</span><span>π/2</span><span>π</span><span>3π/2</span><span>2π</span></div></div>
+<div class="phi-indicator" id="phiIndicator">constructive</div>
+</div>
+
+<div class="section">
+<div class="section-title">Current Values</div>
+<div class="vg">
+<div class="vc"><div class="vl">α = cos θ</div><div class="vv" id="vAlpha" style="color:#60a5fa">0.7071</div></div>
+<div class="vc"><div class="vl">|β| = sin θ</div><div class="vv" id="vBeta" style="color:#f472b6">0.7071</div></div>
+<div class="vc"><div class="vl">cos φ</div><div class="vv" id="vCosPhi" style="color:#fbbf24">1.0000</div></div>
+<!-- FIX #8: label now says S₁₂ (normalized) instead of ∫ψ₁ψ₂ -->
+<div class="vc"><div class="vl">Overlap S₁₂</div><div class="vv" id="vOverlap" style="color:#a78bfa">0.0183</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-title">Plot 3 Legend</div>
+<div class="legend" id="legendContent">
+<div class="li"><div class="lc" style="background:#34d399"></div>|Ψ(x)|² (quantum)</div>
+<div class="li"><div class="ld" style="border-top:2px dashed #94a3b8"></div>α²P₁ + β²P₂ (classical)</div>
+<div class="li"><div class="lc" style="background:rgba(52,211,153,0.35)"></div>Constructive interference</div>
+<div class="li"><div class="lc" style="background:rgba(244,114,182,0.35)"></div>Destructive interference</div>
+</div>
+</div>
+
+<!-- FIX #3: normalization section now shows meaningful N' accuracy check -->
+<div class="section">
+<div class="section-title">Normalization Check</div>
+<div class="norm-box" title="N′ = ∫(raw) so ∫|Ψ|² = 1">
+<span>N' (numerical):</span> <span id="vNnum">—</span><br>
+<span>N' (analytical):</span> <span id="vNana">—</span><br>
+<span>N' accuracy:</span> <span id="vInt" style="color:#34d399">—</span>
+</div>
+</div>
+
+<div class="section">
+<div class="section-title">ℹ About</div>
+<div class="info-box">
+<div style="color:#cbd5e1;margin-bottom:4px">General superposition:</div>
+<div class="formula">Ψ(x) = (1/√N′)(α·e<sup>−a(x−X₁)²</sup> + |β|e<sup>iφ</sup>·e<sup>−a(x−X₂)²</sup>)</div>
+<!-- FIX #2: consistent convention with sidebar α=cos θ, β=sin θ -->
+<div style="color:#cbd5e1;margin-bottom:4px;font-size:10px">Equal superposition (θ = π/4, so α = β = 1/√2, φ = 0):</div>
+<div class="formula">Ψ(x) = (1/√N′)·(1/√2)·(e<sup>−a(x−X₁)²</sup> + e<sup>−a(x−X₂)²</sup>)</div>
+<div class="quote">"This describes a particle that sits partly at X₁ and partly at X₂. The particle is in two places at the same time!"</div>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+(function(){
+const c1=document.getElementById('c1'), c2=document.getElementById('c2'), c3=document.getElementById('c3');
+const ctx1=c1.getContext('2d'), ctx2=c2.getContext('2d'), ctx3=c3.getContext('2d');
+const sX1=document.getElementById('sX1'), sX2=document.getElementById('sX2');
+const sA=document.getElementById('sA'), sTheta=document.getElementById('sTheta'), sPhi=document.getElementById('sPhi');
+
+let viewMode='prob';
+// FIX #7: track legend mode to avoid redundant innerHTML writes
+let lastLegendMode='';
+
+const btnProb=document.getElementById('btnProb');
+const btnReal=document.getElementById('btnReal');
+btnProb.addEventListener('click',function(){
+viewMode='prob';
+this.classList.add('active');
+btnReal.classList.remove('active');
+scheduleUpdate();
+});
+btnReal.addEventListener('click',function(){
+viewMode='real';
+this.classList.add('active');
+btnProb.classList.remove('active');
+scheduleUpdate();
+});
+
+function getA(v){return 0.1*Math.pow(50,v/1000)}
+function getTheta(v){return v/1000}
+function getPhi(v){return v/1000}
+
+function setupCanvas(canvas){
+const dpr=window.devicePixelRatio||1;
+const r=canvas.parentElement.getBoundingClientRect();
+canvas.width=r.width*dpr;
+canvas.height=r.height*dpr;
+const ctx=canvas.getContext('2d');
+ctx.setTransform(dpr,0,0,dpr,0,0);
+return{w:r.width,h:r.height};
+}
+
+function genTicks(mn,mx,approxN){
+if(mx-mn<1e-12)return[mn];
+const range=mx-mn;
+const raw=range/approxN;
+const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+const r2=raw/mag;
+let step;
+if(r2<=1.5)step=mag;else if(r2<=3.5)step=2*mag;else if(r2<=7.5)step=5*mag;else step=10*mag;
+const ticks=[];
+let s=Math.ceil(mn/step)*step;
+for(;s<=mx+step*0.01;s+=step){
+if(s>=mn-step*0.01&&s<=mx+step*0.01)ticks.push(Math.round(s/step)*step);
+}
+const seen=new Set();
+return ticks.filter(function(t){const k=t;if(seen.has(k))return false;seen.add(k);return true;});
+}
+
+function drawAxes(ctx,W,H,pad,xMin,xMax,yMin,yMax,title,titleColor){
+const pW=W-pad.l-pad.r, pH=H-pad.t-pad.b;
+function mx(x){return pad.l+(x-xMin)/(xMax-xMin)*pW}
+function my(y){return pad.t+pH-(y-yMin)/(yMax-yMin)*pH}
+
+ctx.fillStyle='#111827';
+ctx.fillRect(0,0,W,H);
+
+ctx.strokeStyle='rgba(148,163,184,0.06)';
+ctx.lineWidth=1;
+const xt=genTicks(xMin,xMax,8);
+xt.forEach(x=>{ctx.beginPath();ctx.moveTo(mx(x),pad.t);ctx.lineTo(mx(x),pad.t+pH);ctx.stroke()});
+const yt=genTicks(yMin,yMax,4);
+yt.forEach(y=>{ctx.beginPath();ctx.moveTo(pad.l,my(y));ctx.lineTo(pad.l+pW,my(y));ctx.stroke()});
+
+ctx.strokeStyle='rgba(148,163,184,0.2)';
+const y0line=(yMin<=0&&yMax>=0)?my(0):pad.t+pH;
+ctx.beginPath();ctx.moveTo(pad.l,y0line);ctx.lineTo(pad.l+pW,y0line);ctx.stroke();
+ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+pH);ctx.stroke();
+
+ctx.fillStyle='#475569';
+ctx.font='9px monospace';
+ctx.textAlign='center';
+xt.forEach(x=>{let s=Math.abs(x)<0.001?'0':x.toFixed(1);ctx.fillText(s,mx(x),pad.t+pH+13)});
+ctx.textAlign='right';
+yt.forEach(y=>{let s;if(Math.abs(y)<1e-10)s='0';else if(Math.abs(yMax-yMin)>4)s=y.toFixed(1);else s=y.toFixed(2);ctx.fillText(s,pad.l-4,my(y)+3)});
+
+ctx.fillStyle=titleColor||'#e2e8f0';
+ctx.font='bold 11px monospace';
+ctx.textAlign='left';
+ctx.fillText(title,pad.l+6,pad.t+14);
+
+ctx.fillStyle='#475569';
+ctx.font='9px monospace';
+ctx.textAlign='center';
+ctx.fillText('x (a.u.)',pad.l+pW/2,H-2);
+
+return{mx,my,pW,pH};
+}
+
+function drawFill(ctx,xs,ys,mapX,mapY,color,yBase){
+if(xs.length<2)return;
+ctx.beginPath();
+ctx.moveTo(mapX(xs[0]),mapY(yBase));
+for(let i=0;i<xs.length;i++)ctx.lineTo(mapX(xs[i]),mapY(ys[i]));
+ctx.lineTo(mapX(xs[xs.length-1]),mapY(yBase));
+ctx.closePath();
+// FIX #11: use reduce instead of Math.max(...ys) to avoid stack overflow for large N
+let yPeak=ys[0];for(let i=1;i<ys.length;i++)if(ys[i]>yPeak)yPeak=ys[i];
+const g=ctx.createLinearGradient(0,mapY(yPeak),0,mapY(yBase));
+g.addColorStop(0,color+'55');
+g.addColorStop(1,color+'08');
+ctx.fillStyle=g;
+ctx.fill();
+}
+
+function drawFillSigned(ctx,xs,ys,mapX,mapY,posColor,negColor){
+if(xs.length<2)return;
+const yBase=mapY(0);
+for(let i=0;i<xs.length-1;i++){
+const x0=mapX(xs[i]),x1=mapX(xs[i+1]);
+const y0=mapY(ys[i]),y1=mapY(ys[i+1]);
+const avg=(ys[i]+ys[i+1])/2;
+ctx.fillStyle=avg>=0?posColor:negColor;
+ctx.beginPath();
+ctx.moveTo(x0,yBase);
+ctx.lineTo(x0,y0);
+ctx.lineTo(x1,y1);
+ctx.lineTo(x1,yBase);
+ctx.closePath();
+ctx.fill();
+}
+}
+
+function drawLine(ctx,xs,ys,mapX,mapY,color,lw,dash){
+ctx.strokeStyle=color;
+ctx.lineWidth=lw||2;
+ctx.setLineDash(dash||[]);
+ctx.beginPath();
+for(let i=0;i<xs.length;i++){
+const px=mapX(xs[i]),py=mapY(ys[i]);
+i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+}
+ctx.stroke();
+ctx.setLineDash([]);
+}
+
+// FIX #10: drawMarker now accepts optional vertical offset for label
+function drawMarker(ctx,x,mapX,mapY,yMin,yMax,color,label,labelOffsetY){
+ctx.strokeStyle=color+'50';
+ctx.lineWidth=1;
+ctx.setLineDash([3,3]);
+ctx.beginPath();
+ctx.moveTo(mapX(x),mapY(yMax));
+ctx.lineTo(mapX(x),mapY(yMin));
+ctx.stroke();
+ctx.setLineDash([]);
+ctx.fillStyle=color+'90';
+ctx.font='9px monospace';
+ctx.textAlign='center';
+ctx.fillText(label,mapX(x),mapY(yMax)-3+(labelOffsetY||0));
+}
+
+// FIX #10: Smart marker drawing that offsets labels when X₁ ≈ X₂
+function drawMarkers(ctx,X1,X2,mapX,mapY,yMin,yMax){
+const px1=mapX(X1), px2=mapX(X2);
+const sep=Math.abs(px1-px2);
+if(sep<20){
+// Labels would overlap — offset X₂ label downward
+drawMarker(ctx,X1,mapX,mapY,yMin,yMax,'#60a5fa','X₁',0);
+drawMarker(ctx,X2,mapX,mapY,yMin,yMax,'#f472b6','X₂',12);
+}else{
+drawMarker(ctx,X1,mapX,mapY,yMin,yMax,'#60a5fa','X₁',0);
+drawMarker(ctx,X2,mapX,mapY,yMin,yMax,'#f472b6','X₂',0);
+}
+}
+
+function update(){
+const X1=parseFloat(sX1.value);
+const X2=parseFloat(sX2.value);
+const a=getA(parseFloat(sA.value));
+const theta=getTheta(parseFloat(sTheta.value));
+const phi=getPhi(parseFloat(sPhi.value));
+const alpha=Math.cos(theta);
+const betaMag=Math.sin(theta);
+const cosPhi=Math.cos(phi);
+const sinPhi=Math.sin(phi);
+const sigma=1/(2*Math.sqrt(a));
+
+document.getElementById('vX1').textContent=(X1>=0?'+':'')+X1.toFixed(2);
+document.getElementById('vX2').textContent=(X2>=0?'+':'')+X2.toFixed(2);
+document.getElementById('vA').textContent=a.toFixed(3);
+document.getElementById('vSigma').textContent=sigma.toFixed(3);
+const thetaFrac=theta/Math.PI;
+let thetaStr;
+if(Math.abs(thetaFrac)<0.005)thetaStr='0';
+else if(Math.abs(thetaFrac-0.25)<0.005)thetaStr='π/4';
+else if(Math.abs(thetaFrac-0.5)<0.005)thetaStr='π/2';
+else thetaStr=(theta).toFixed(3);
+document.getElementById('vTheta').textContent=thetaStr;
+document.getElementById('vPhi').textContent=phi.toFixed(3);
+document.getElementById('vAlpha').textContent=alpha.toFixed(4);
+document.getElementById('vBeta').textContent=betaMag.toFixed(4);
+document.getElementById('vCosPhi').textContent=cosPhi.toFixed(4);
+
+const phiInd=document.getElementById('phiIndicator');
+if(Math.abs(cosPhi-1)<0.05){phiInd.textContent='⬆ Constructive (cos φ ≈ 1)';phiInd.className='phi-indicator phi-constructive';}
+else if(Math.abs(cosPhi+1)<0.05){phiInd.textContent='⬇ Destructive (cos φ ≈ -1)';phiInd.className='phi-indicator phi-destructive';}
+else if(Math.abs(cosPhi)<0.05){phiInd.textContent='— No interference contribution (cos φ ≈ 0)';phiInd.className='phi-indicator phi-neutral';}
+else if(cosPhi>0){phiInd.textContent='↗ Partially constructive';phiInd.className='phi-indicator phi-constructive';}
+else{phiInd.textContent='↘ Partially destructive';phiInd.className='phi-indicator phi-destructive';}
+
+const margin=5/Math.sqrt(a);
+const xMin=Math.min(X1,X2)-margin;
+const xMax=Math.max(X1,X2)+margin;
+// FIX #9: N=1001 (odd) ensures a grid point at the exact midpoint of symmetric domains
+const N=1001;
+const dx=(xMax-xMin)/(N-1);
+
+const xArr=new Float64Array(N);
+const g1Arr=new Float64Array(N);
+const g2Arr=new Float64Array(N);
+const p1Raw=new Float64Array(N);
+const p2Raw=new Float64Array(N);
+const pSRaw=new Float64Array(N);
+const pClassRaw=new Float64Array(N);
+const pCrossRaw=new Float64Array(N);
+
+let n1=0,n2=0,nS=0;
+
+for(let i=0;i<N;i++){
+const x=xMin+i*dx;
+xArr[i]=x;
+const d1=x-X1, d2=x-X2;
+const g1=Math.exp(-a*d1*d1);
+const g2=Math.exp(-a*d2*d2);
+g1Arr[i]=g1;
+g2Arr[i]=g2;
+const g1sq=g1*g1;
+const g2sq=g2*g2;
+
+p1Raw[i]=g1sq;
+p2Raw[i]=g2sq;
+
+const t1=alpha*alpha*g1sq;
+const t2=betaMag*betaMag*g2sq;
+const cross=2*alpha*betaMag*cosPhi*g1*g2;
+
+pSRaw[i]=Math.max(0,t1+t2+cross);
+pClassRaw[i]=t1+t2;
+pCrossRaw[i]=cross;
+
+n1+=g1sq*dx;
+n2+=g2sq*dx;
+nS+=pSRaw[i]*dx;
+}
+
+const overlapAna=Math.sqrt(Math.PI/(2*a))*Math.exp(-a*(X1-X2)*(X1-X2)/2);
+const normRef=Math.sqrt(Math.PI/(2*a));
+// FIX #8: display value is already S₁₂ = exp(-a*d²/2), label updated in HTML
+document.getElementById('vOverlap').textContent=(overlapAna/normRef).toFixed(4);
+
+const Nprime_ana=Math.sqrt(Math.PI/(2*a))*(alpha*alpha+betaMag*betaMag+2*alpha*betaMag*cosPhi*Math.exp(-a*(X1-X2)*(X1-X2)/2));
+document.getElementById('vNnum').textContent=nS.toFixed(6);
+document.getElementById('vNana').textContent=Nprime_ana.toFixed(6);
+
+const p1Norm=new Float64Array(N);
+const p2Norm=new Float64Array(N);
+const pSNorm=new Float64Array(N);
+const pClassNorm=new Float64Array(N);
+const pCrossNorm=new Float64Array(N);
+
+for(let i=0;i<N;i++){
+p1Norm[i]=n1>1e-15?p1Raw[i]/n1:0;
+p2Norm[i]=n2>1e-15?p2Raw[i]/n2:0;
+if(nS>1e-15){
+pSNorm[i]=pSRaw[i]/nS;
+pClassNorm[i]=pClassRaw[i]/nS;
+pCrossNorm[i]=pCrossRaw[i]/nS;
+}else{
+pSNorm[i]=0;pClassNorm[i]=0;pCrossNorm[i]=0;
+}
+}
+
+const pMixture=new Float64Array(N);
+for(let i=0;i<N;i++) pMixture[i]=alpha*alpha*p1Norm[i]+betaMag*betaMag*p2Norm[i];
+
+// FIX #3: replace tautological intCheck (was always nS/nS=1) with meaningful N' accuracy
+const relErr=Math.abs(Nprime_ana)>1e-15?Math.abs(nS-Nprime_ana)/Math.abs(Nprime_ana)*100:0;
+const vIntEl=document.getElementById('vInt');
+vIntEl.textContent=relErr.toFixed(4)+'%';
+vIntEl.style.color=relErr<0.1?'#34d399':relErr<1?'#fbbf24':'#f87171';
+
+// Compute Re(ψ) values normalized by sqrt(N')
+const sqrtN=Math.sqrt(Math.max(nS,1e-30));
+const re1Arr=new Float64Array(N);
+const re2Arr=new Float64Array(N);
+const re3Arr=new Float64Array(N);
+for(let i=0;i<N;i++){
+re1Arr[i]=nS>1e-15?alpha*g1Arr[i]/sqrtN:0;
+re2Arr[i]=nS>1e-15?betaMag*cosPhi*g2Arr[i]/sqrtN:0;
+re3Arr[i]=re1Arr[i]+re2Arr[i];
+}
+
+// FIX #5: compute Im(Ψ) fraction for Real Part mode warning
+let reNormSq=0, imNormSq=0;
+if(nS>1e-15){
+for(let i=0;i<N;i++){
+reNormSq+=re3Arr[i]*re3Arr[i]*dx;
+const imVal=betaMag*sinPhi*g2Arr[i]/sqrtN;
+imNormSq+=imVal*imVal*dx;
+}
+}
+const totalNormSq=reNormSq+imNormSq;
+const reFraction=totalNormSq>1e-15?reNormSq/totalNormSq:1;
+
+// FIX #7: only update legend innerHTML when view mode changes
+const legendDiv=document.getElementById('legendContent');
+if(viewMode!==lastLegendMode){
+lastLegendMode=viewMode;
+if(viewMode==='prob'){
+legendDiv.innerHTML='<div class="li"><div class="lc" style="background:#34d399"></div>|Ψ(x)|² (quantum)</div>'+
+'<div class="li"><div class="ld" style="border-top:2px dashed #94a3b8"></div>α²P₁ + β²P₂ (classical)</div>'+
+'<div class="li"><div class="lc" style="background:rgba(52,211,153,0.35)"></div>Constructive interference</div>'+
+'<div class="li"><div class="lc" style="background:rgba(244,114,182,0.35)"></div>Destructive interference</div>';
+}else{
+legendDiv.innerHTML='<div class="li"><div class="lc" style="background:#34d399"></div>Re(Ψ) = sum (normalized)</div>'+
+'<div class="li"><div class="lc" style="background:rgba(52,211,153,0.25)"></div>Positive amplitude region</div>'+
+'<div class="li"><div class="lc" style="background:rgba(251,146,60,0.25)"></div>Negative amplitude region</div>';
+}
+}
+
+const pad={t:24,r:12,b:20,l:48};
+
+if(viewMode==='prob'){
+// ==================== PROBABILITY DENSITY MODE ====================
+
+// FIX #1: Plot 1 title now says "|ψ₁(x)|² (component 1)" — matches unweighted data
+let sz=setupCanvas(c1);
+let yMax1=0;for(let i=0;i<N;i++)if(p1Norm[i]>yMax1)yMax1=p1Norm[i];
+yMax1=Math.max(yMax1*1.15,0.01);
+let m=drawAxes(ctx1,sz.w,sz.h,pad,xMin,xMax,0,yMax1,'|ψ₁(x)|²  (component 1)','#60a5fa');
+drawFill(ctx1,xArr,p1Norm,m.mx,m.my,'#60a5fa',0);
+drawLine(ctx1,xArr,p1Norm,m.mx,m.my,'#60a5fa',2.5);
+// FIX #10: use smart marker drawing
+drawMarkers(ctx1,X1,X2,m.mx,m.my,0,yMax1);
+
+// FIX #1: Plot 2 title now says "|ψ₂(x)|² (component 2)" — matches unweighted data
+sz=setupCanvas(c2);
+let yMax2=0;for(let i=0;i<N;i++)if(p2Norm[i]>yMax2)yMax2=p2Norm[i];
+yMax2=Math.max(yMax2*1.15,0.01);
+m=drawAxes(ctx2,sz.w,sz.h,pad,xMin,xMax,0,yMax2,'|ψ₂(x)|²  (component 2)','#f472b6');
+drawFill(ctx2,xArr,p2Norm,m.mx,m.my,'#f472b6',0);
+drawLine(ctx2,xArr,p2Norm,m.mx,m.my,'#f472b6',2.5);
+drawMarkers(ctx2,X1,X2,m.mx,m.my,0,yMax2);
+
+// Plot 3 - Superposition
+sz=setupCanvas(c3);
+let yMax3=0;
+for(let i=0;i<N;i++){
+if(pSNorm[i]>yMax3)yMax3=pSNorm[i];
+if(pMixture[i]>yMax3)yMax3=pMixture[i];
+}
+yMax3=Math.max(yMax3*1.15,0.01);
+m=drawAxes(ctx3,sz.w,sz.h,pad,xMin,xMax,0,yMax3,'|Ψ(x)|²  (superposition)','#34d399');
+
+// FIX #4: draw quantum fill gradient FIRST (background layer)
+drawFill(ctx3,xArr,pSNorm,m.mx,m.my,'#34d399',0);
+
+// FIX #4: THEN draw interference shading ON TOP so it's fully visible
+for(let i=0;i<N-1;i++){
+const x0=m.mx(xArr[i]),x1=m.mx(xArr[i+1]);
+const yq0=m.my(pSNorm[i]),yq1=m.my(pSNorm[i+1]);
+const yc0=m.my(pMixture[i]),yc1=m.my(pMixture[i+1]);
+const diff=(pSNorm[i]-pMixture[i]+pSNorm[i+1]-pMixture[i+1])/2;
+if(Math.abs(diff)>yMax3*0.002){
+ctx3.fillStyle=diff>0?'rgba(52,211,153,0.25)':'rgba(244,114,182,0.25)';
+ctx3.beginPath();
+ctx3.moveTo(x0,yc0);ctx3.lineTo(x1,yc1);ctx3.lineTo(x1,yq1);ctx3.lineTo(x0,yq0);
+ctx3.closePath();ctx3.fill();
+}
+}
+
+// Lines on top of everything
+drawLine(ctx3,xArr,pMixture,m.mx,m.my,'#94a3b8',1.5,[5,4]);
+drawLine(ctx3,xArr,pSNorm,m.mx,m.my,'#34d399',2.5);
+drawMarkers(ctx3,X1,X2,m.mx,m.my,0,yMax3);
+
+if(Math.abs(alpha*betaMag)>0.01){
+const midX=(X1+X2)/2;
+const midIdx=Math.round((midX-xMin)/dx);
+if(midIdx>=0&&midIdx<N){
+const qVal=pSNorm[midIdx];
+const cVal=pMixture[midIdx];
+const diff=qVal-cVal;
+if(Math.abs(diff)>yMax3*0.03){
+const px=m.mx(midX);
+const py=m.my(Math.max(qVal,cVal));
+ctx3.fillStyle=diff>0?'#34d399':'#f472b6';
+ctx3.font='bold 9px monospace';
+ctx3.textAlign='center';
+const label=diff>0?'▲ interference':'▼ interference';
+ctx3.fillText(label,px,py-6);
+}
+}
+}
+
+}else{
+// ==================== REAL PART MODE ====================
+
+// Use a common y-axis scale across all 3 Re plots for visual consistency
+let yAbsMax=0;
+for(let i=0;i<N;i++){
+const a1=Math.abs(re1Arr[i]);
+const a2=Math.abs(re2Arr[i]);
+const a3=Math.abs(re3Arr[i]);
+if(a1>yAbsMax)yAbsMax=a1;
+if(a2>yAbsMax)yAbsMax=a2;
+if(a3>yAbsMax)yAbsMax=a3;
+}
+yAbsMax=Math.max(yAbsMax*1.15,0.01);
+
+// Plot 1 - Re: α·ψ₁(x)/√N'
+let sz=setupCanvas(c1);
+let m=drawAxes(ctx1,sz.w,sz.h,pad,xMin,xMax,-yAbsMax,yAbsMax,'Re: α·ψ₁(x) / √N\'','#60a5fa');
+// Draw zero line more prominently
+ctx1.strokeStyle='rgba(148,163,184,0.35)';
+ctx1.lineWidth=1;
+ctx1.setLineDash([4,4]);
+ctx1.beginPath();ctx1.moveTo(m.mx(xMin),m.my(0));ctx1.lineTo(m.mx(xMax),m.my(0));ctx1.stroke();
+ctx1.setLineDash([]);
+drawFillSigned(ctx1,xArr,re1Arr,m.mx,m.my,'rgba(96,165,250,0.25)','rgba(251,146,60,0.25)');
+drawLine(ctx1,xArr,re1Arr,m.mx,m.my,'#60a5fa',2.5);
+drawMarkers(ctx1,X1,X2,m.mx,m.my,-yAbsMax,yAbsMax);
+
+// Plot 2 - Re: |β|cos(φ)·ψ₂(x)/√N'
+sz=setupCanvas(c2);
+m=drawAxes(ctx2,sz.w,sz.h,pad,xMin,xMax,-yAbsMax,yAbsMax,'Re: |β|·cos(φ)·ψ₂(x) / √N\'','#f472b6');
+ctx2.strokeStyle='rgba(148,163,184,0.35)';
+ctx2.lineWidth=1;
+ctx2.setLineDash([4,4]);
+ctx2.beginPath();ctx2.moveTo(m.mx(xMin),m.my(0));ctx2.lineTo(m.mx(xMax),m.my(0));ctx2.stroke();
+ctx2.setLineDash([]);
+drawFillSigned(ctx2,xArr,re2Arr,m.mx,m.my,'rgba(244,114,182,0.25)','rgba(251,146,60,0.25)');
+drawLine(ctx2,xArr,re2Arr,m.mx,m.my,'#f472b6',2.5);
+drawMarkers(ctx2,X1,X2,m.mx,m.my,-yAbsMax,yAbsMax);
+// Annotation when cos(phi) < 0
+if(cosPhi<-0.1){
+ctx2.fillStyle='rgba(251,146,60,0.8)';
+ctx2.font='bold 9px monospace';
+ctx2.textAlign='right';
+ctx2.fillText('cos φ < 0 → inverted',m.mx(xMax)-4,m.my(yAbsMax)+14);
+}
+
+// Plot 3 - Re(Ψ(x)) = sum
+sz=setupCanvas(c3);
+m=drawAxes(ctx3,sz.w,sz.h,pad,xMin,xMax,-yAbsMax,yAbsMax,'Re(Ψ(x))  (superposition sum)','#34d399');
+ctx3.strokeStyle='rgba(148,163,184,0.35)';
+ctx3.lineWidth=1;
+ctx3.setLineDash([4,4]);
+ctx3.beginPath();ctx3.moveTo(m.mx(xMin),m.my(0));ctx3.lineTo(m.mx(xMax),m.my(0));ctx3.stroke();
+ctx3.setLineDash([]);
+drawFillSigned(ctx3,xArr,re3Arr,m.mx,m.my,'rgba(52,211,153,0.25)','rgba(251,146,60,0.25)');
+// Draw individual components as faint dashed reference lines
+drawLine(ctx3,xArr,re1Arr,m.mx,m.my,'rgba(96,165,250,0.35)',1,[3,3]);
+drawLine(ctx3,xArr,re2Arr,m.mx,m.my,'rgba(244,114,182,0.35)',1,[3,3]);
+// Draw the sum
+drawLine(ctx3,xArr,re3Arr,m.mx,m.my,'#34d399',2.5);
+drawMarkers(ctx3,X1,X2,m.mx,m.my,-yAbsMax,yAbsMax);
+
+// Show cancellation annotation
+if(Math.abs(alpha*betaMag)>0.01&&Math.abs(X1-X2)<2*margin*0.6){
+const midX=(X1+X2)/2;
+const midIdx=Math.round((midX-xMin)/dx);
+if(midIdx>=0&&midIdx<N){
+const sumVal=re3Arr[midIdx];
+const comp1=re1Arr[midIdx];
+const comp2=re2Arr[midIdx];
+if(Math.abs(comp1+comp2)>0.001){
+const px=m.mx(midX);
+const py=m.my(sumVal);
+ctx3.fillStyle=sumVal>=0?'#34d399':'#fb923c';
+ctx3.font='bold 9px monospace';
+ctx3.textAlign='center';
+if(cosPhi<-0.3&&Math.abs(sumVal)<Math.max(Math.abs(comp1),Math.abs(comp2))*0.5){
+ctx3.fillText('▼ cancellation',px,m.my(0)+12);
+}else if(cosPhi>0.3&&Math.abs(sumVal)>Math.max(Math.abs(comp1),Math.abs(comp2))*1.2){
+ctx3.fillText('▲ reinforcement',px,py-6);
+}
+}
+}
+}
+
+// FIX #5: Show Im(Ψ) warning when imaginary part is significant
+if(Math.abs(sinPhi)>0.15&&betaMag>0.05&&reFraction<0.95){
+ctx3.fillStyle='rgba(251,191,36,0.85)';
+ctx3.font='bold 9px monospace';
+ctx3.textAlign='right';
+ctx3.fillText('⚠ Im(Ψ) ≠ 0 — Re shows '+Math.round(reFraction*100)+'% of |Ψ|²',m.mx(xMax)-4,m.my(-yAbsMax)+14);
+}
+
+}
+}
+
+// FIX #6: requestAnimationFrame throttle to prevent jank during fast slider drags
+let rafPending=false;
+function scheduleUpdate(){
+if(!rafPending){
+rafPending=true;
+requestAnimationFrame(function(){rafPending=false;update();});
+}
+}
+
+[sX1,sX2,sA,sTheta,sPhi].forEach(s=>s.addEventListener('input',scheduleUpdate));
+window.addEventListener('resize',scheduleUpdate);
+
+update();
+})();
+</script>
+</body>
+</html>

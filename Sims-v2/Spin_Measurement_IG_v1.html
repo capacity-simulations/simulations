@@ -37,11 +37,88 @@
             padding: 0 20px;
             flex-shrink: 0;
         }
+
+        .title-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
         
         .title {
             font-size: 18px;
             font-weight: 600;
             color: #60a5fa;
+        }
+
+        .info-icon-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .info-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 1.5px solid #64748b;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 700;
+            font-style: italic;
+            font-family: Georgia, 'Times New Roman', serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: help;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .info-icon-wrapper:hover .info-icon {
+            border-color: #60a5fa;
+            color: #60a5fa;
+            background: rgba(96, 165, 250, 0.1);
+        }
+
+        .info-tooltip {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            width: 340px;
+            background: rgba(15, 20, 35, 0.98);
+            border: 1px solid rgba(96, 165, 250, 0.28);
+            border-radius: 8px;
+            padding: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+            z-index: 1200;
+        }
+
+        .info-tooltip::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 12px;
+            width: 10px;
+            height: 10px;
+            background: rgba(15, 20, 35, 0.98);
+            border-left: 1px solid rgba(96, 165, 250, 0.28);
+            border-top: 1px solid rgba(96, 165, 250, 0.28);
+            transform: rotate(45deg);
+        }
+
+        .info-icon-wrapper:hover .info-tooltip {
+            display: block;
+        }
+
+        .info-tooltip h4 {
+            color: #60a5fa;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
         }
         
         #canvas-container {
@@ -481,7 +558,20 @@
         <!-- Canvas Area -->
         <div class="canvas-area">
             <div class="title-bar">
-                <div class="title">⚛️ Quantum Spin Measurement - Bloch Sphere</div>
+                <div class="title-wrap">
+                    <div class="title">⚛️ Quantum Spin Measurement - Bloch Sphere</div>
+                    <div class="info-icon-wrapper">
+                        <div class="info-icon" aria-label="About this simulation">i</div>
+                        <div class="info-tooltip">
+                            <h4>About the simulation</h4>
+                            <p class="info-text">
+                                This simulation visualizes a single-qubit spin state on the <span class="highlight">Bloch sphere</span> and shows how projective measurements along the <span class="highlight">X, Y, and Z</span> axes collapse the state.
+                                <br><br>
+                                Use the <span class="highlight">Measure Spin</span> buttons to perform axis measurements, <span class="highlight">Set Custom State</span> to enter amplitudes or presets, and <span class="highlight">Undo / Reset</span> to inspect repeatability and restore states. The wavefunction panel and probability bars update after each action.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="canvas-container">
                 <canvas id="mainCanvas"></canvas>
@@ -572,14 +662,6 @@
                 </div>
             </div>
             
-            <!-- Info -->
-            <div class="panel-section">
-                <h3>About</h3>
-                <p class="info-text">
-                    The Bloch sphere visualizes a qubit's quantum state. The <span class="highlight">colored overlay</span> shows probability amplitude - brighter regions indicate higher measurement probability in that direction. Use <span class="highlight">Undo</span> to restore the pre-measurement state and re-measure to verify probabilities.
-                </p>
-            </div>
-
             <!-- Bottom spacer -->
             <div class="panel-bottom-spacer"></div>
         </div>
@@ -735,61 +817,95 @@
             }
             
             function drawSphere() {
-                ctx.strokeStyle = 'rgba(100, 116, 139, 0.2)';
-                ctx.lineWidth = 1;
-                
-                // Latitude lines
-                for (let lat = -60; lat <= 60; lat += 30) {
+                function depthAlpha(z, minA = 0.05, maxA = 0.30) {
+                    const zn = Math.max(-1, Math.min(1, z));
+                    return minA + (maxA - minA) * ((zn + 1) / 2);
+                }
+
+                function strokeDepthSegments(points, r, g, b, lineWidth, minA, maxA) {
+                    ctx.lineWidth = lineWidth;
+                    for (let i = 1; i < points.length; i++) {
+                        const p0 = points[i - 1];
+                        const p1 = points[i];
+                        const avgZ = (p0.z + p1.z) * 0.5;
+                        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${depthAlpha(avgZ, minA, maxA)})`;
+                        ctx.beginPath();
+                        ctx.moveTo(p0.x, p0.y);
+                        ctx.lineTo(p1.x, p1.y);
+                        ctx.stroke();
+                    }
+                }
+
+                function buildPlaneLoop(plane, steps = 120) {
+                    const pts = [];
+                    for (let i = 0; i <= steps; i++) {
+                        const t = (i / steps) * Math.PI * 2;
+                        let x = 0, y = 0, z = 0;
+                        if (plane === 'xy') {
+                            x = Math.cos(t);
+                            y = Math.sin(t);
+                        } else if (plane === 'xz') {
+                            x = Math.cos(t);
+                            z = Math.sin(t);
+                        } else {
+                            y = Math.cos(t);
+                            z = Math.sin(t);
+                        }
+                        pts.push(project3D(x, y, z));
+                    }
+                    return pts;
+                }
+
+                // Semi-transparent equatorial/meridional discs for stronger 3D depth cues.
+                const planeSpecs = [
+                    { plane: 'xy', color: [59, 130, 246] },  // XY (equatorial)
+                    { plane: 'xz', color: [16, 185, 129] },  // XZ (meridional)
+                    { plane: 'yz', color: [245, 158, 11] }   // YZ (meridional)
+                ];
+                for (const spec of planeSpecs) {
+                    const loop = buildPlaneLoop(spec.plane, 120);
+                    const avgZ = loop.reduce((acc, p) => acc + p.z, 0) / loop.length;
+                    const alpha = depthAlpha(avgZ, 0.045, 0.14);
+                    ctx.fillStyle = `rgba(${spec.color[0]}, ${spec.color[1]}, ${spec.color[2]}, ${alpha})`;
                     ctx.beginPath();
+                    ctx.moveTo(loop[0].x, loop[0].y);
+                    for (let i = 1; i < loop.length; i++) ctx.lineTo(loop[i].x, loop[i].y);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Latitude lines with depth-based opacity.
+                for (let lat = -60; lat <= 60; lat += 30) {
+                    const pts = [];
                     const latRad = lat * Math.PI / 180;
                     const r = Math.cos(latRad);
                     const y = Math.sin(latRad);
-                    
                     for (let lon = 0; lon <= 360; lon += 5) {
                         const lonRad = lon * Math.PI / 180;
-                        const x = r * Math.cos(lonRad);
-                        const z = r * Math.sin(lonRad);
-                        const p = project3D(x, y, z);
-                        
-                        if (lon === 0) ctx.moveTo(p.x, p.y);
-                        else ctx.lineTo(p.x, p.y);
+                        pts.push(project3D(r * Math.cos(lonRad), y, r * Math.sin(lonRad)));
                     }
-                    ctx.stroke();
+                    strokeDepthSegments(pts, 100, 116, 139, 1, 0.05, 0.30);
                 }
-                
-                // Longitude lines
+
+                // Longitude lines with depth-based opacity.
                 for (let lon = 0; lon < 180; lon += 30) {
-                    ctx.beginPath();
+                    const pts = [];
                     const lonRad = lon * Math.PI / 180;
-                    
                     for (let lat = -90; lat <= 90; lat += 5) {
                         const latRad = lat * Math.PI / 180;
                         const r = Math.cos(latRad);
-                        const y = Math.sin(latRad);
-                        const x = r * Math.cos(lonRad);
-                        const z = r * Math.sin(lonRad);
-                        const p = project3D(x, y, z);
-                        
-                        if (lat === -90) ctx.moveTo(p.x, p.y);
-                        else ctx.lineTo(p.x, p.y);
+                        pts.push(project3D(r * Math.cos(lonRad), Math.sin(latRad), r * Math.sin(lonRad)));
                     }
-                    ctx.stroke();
+                    strokeDepthSegments(pts, 100, 116, 139, 1, 0.05, 0.30);
                 }
-                
-                // Equator
-                ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
+
+                // Equator emphasized but still depth-faded.
+                const equatorPts = [];
                 for (let lon = 0; lon <= 360; lon += 5) {
                     const lonRad = lon * Math.PI / 180;
-                    const x = Math.cos(lonRad);
-                    const z = Math.sin(lonRad);
-                    const p = project3D(x, 0, z);
-                    
-                    if (lon === 0) ctx.moveTo(p.x, p.y);
-                    else ctx.lineTo(p.x, p.y);
+                    equatorPts.push(project3D(Math.cos(lonRad), 0, Math.sin(lonRad)));
                 }
-                ctx.stroke();
+                strokeDepthSegments(equatorPts, 100, 116, 139, 2, 0.12, 0.45);
             }
             
             function drawWavefunctionOnSphere() {
@@ -834,12 +950,21 @@
                         const avgZ = (corners[0].z + corners[1].z + corners[2].z + corners[3].z) / 4;
                         if (avgZ < -0.1) continue;
                         
-                        const intensity = Math.pow(overlap, 0.5);
-                        const alpha = 0.1 + intensity * 0.5;
-                        
-                        const r = Math.floor(100 + (1 - intensity) * 60);
-                        const g = Math.floor(150 * intensity + 50);
-                        const b = Math.floor(200 + intensity * 55);
+                        // Multi-colour: deep indigo (low) → cyan (mid) → warm amber (high)
+                        const t = Math.pow(overlap, 0.5);   // intensity 0..1
+                        let r, g, b;
+                        if (t < 0.5) {
+                            const s = t / 0.5;                // 0..1 within low half
+                            r = Math.floor(30 + s * 10);      // 30 → 40
+                            g = Math.floor(30 + s * 150);     // 30 → 180
+                            b = Math.floor(80 + s * 140);     // 80 → 220
+                        } else {
+                            const s = (t - 0.5) / 0.5;        // 0..1 within high half
+                            r = Math.floor(40 + s * 210);      // 40 → 250
+                            g = Math.floor(180 + s * 10);      // 180 → 190
+                            b = Math.floor(220 - s * 180);     // 220 → 40
+                        }
+                        const alpha = 0.08 + t * 0.52;
                         
                         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
                         ctx.beginPath();
@@ -851,6 +976,40 @@
                         ctx.fill();
                     }
                 }
+
+                // On-canvas legend (top-right of canvas)
+                const legendW = 120;
+                const legendH = 10;
+                const legendX = width - legendW - 16;
+                const legendY = 16;
+                
+                // Gradient bar
+                const grad = ctx.createLinearGradient(legendX, 0, legendX + legendW, 0);
+                grad.addColorStop(0,   'rgba(30, 30, 80, 0.8)');
+                grad.addColorStop(0.5, 'rgba(40, 180, 220, 0.8)');
+                grad.addColorStop(1,   'rgba(250, 190, 40, 0.8)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.roundRect(legendX, legendY, legendW, legendH, 3);
+                ctx.fill();
+                
+                // Border
+                ctx.strokeStyle = 'rgba(200, 214, 229, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(legendX, legendY, legendW, legendH, 3);
+                ctx.stroke();
+                
+                // Labels
+                ctx.fillStyle = 'rgba(200, 214, 229, 0.6)';
+                ctx.font = '9px -apple-system, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('0%', legendX, legendY + legendH + 12);
+                ctx.textAlign = 'center';
+                ctx.fillText('P(n̂)', legendX + legendW / 2, legendY - 5);
+                ctx.textAlign = 'right';
+                ctx.fillText('100%', legendX + legendW, legendY + legendH + 12);
+                ctx.textAlign = 'left';
             }
             
             function drawArrowhead(ctx, fromX, fromY, toX, toY, color, size) {
@@ -920,7 +1079,10 @@
                 drawArrowhead(ctx, xNearPos.x, xNearPos.y, xPos.x, xPos.y, '#10b981', 16);
                 
                 ctx.fillStyle = '#f1f5f9';
+                ctx.font = 'bold 14px sans-serif';
                 drawAxisLabel('X', xPos);
+                drawAxisLabel('|+x⟩', xPos, 16);
+                drawAxisLabel('|−x⟩', xNeg, 18);
                 
                 // Y axis (yellow)
                 const yPos = project3D(0, 0, axisLength);
@@ -937,47 +1099,21 @@
                 drawArrowhead(ctx, yNearPos.x, yNearPos.y, yPos.x, yPos.y, '#f59e0b', 16);
                 
                 ctx.fillStyle = '#f1f5f9';
+                ctx.font = 'bold 14px sans-serif';
                 drawAxisLabel('Y', yPos);
+                drawAxisLabel('|+y⟩', yPos, 16);
+                drawAxisLabel('|−y⟩', yNeg);
             }
             
             function drawStateVector() {
-                const x = Math.sin(theta) * Math.cos(phi);
-                const y = Math.cos(theta);
-                const z = Math.sin(theta) * Math.sin(phi);
+                const sx = Math.sin(theta) * Math.cos(phi);
+                const sy = Math.cos(theta);
+                const sz = Math.sin(theta) * Math.sin(phi);
                 
-                const tip = project3D(x, y, z);
+                const tip = project3D(sx, sy, sz);
                 const origin = project3D(0, 0, 0);
                 
-                // Vector
-                const gradient = ctx.createLinearGradient(origin.x, origin.y, tip.x, tip.y);
-                gradient.addColorStop(0, '#f472b6');
-                gradient.addColorStop(1, '#60a5fa');
-                
-                ctx.strokeStyle = gradient;
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(origin.x, origin.y);
-                ctx.lineTo(tip.x, tip.y);
-                ctx.stroke();
-                
-                // Glowing tip
-                const glowSize = 18 + Math.sin(time * 3) * 3;
-                const glow = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, glowSize);
-                glow.addColorStop(0, 'rgba(96, 165, 250, 1)');
-                glow.addColorStop(0.4, 'rgba(96, 165, 250, 0.6)');
-                glow.addColorStop(1, 'rgba(96, 165, 250, 0)');
-                
-                ctx.fillStyle = glow;
-                ctx.beginPath();
-                ctx.arc(tip.x, tip.y, glowSize, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(tip.x, tip.y, 8, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Projection on equatorial plane
+                // Projection on equatorial plane (draw first, behind everything)
                 if (Math.abs(theta) > 0.1 && Math.abs(theta - Math.PI) > 0.1) {
                     const projX = Math.sin(theta) * Math.cos(phi);
                     const projZ = Math.sin(theta) * Math.sin(phi);
@@ -993,6 +1129,71 @@
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
+                
+                // Vector line
+                const gradient = ctx.createLinearGradient(origin.x, origin.y, tip.x, tip.y);
+                gradient.addColorStop(0, '#f472b6');
+                gradient.addColorStop(1, '#60a5fa');
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(origin.x, origin.y);
+                ctx.lineTo(tip.x, tip.y);
+                ctx.stroke();
+                
+                // Surface-tangent circle at state point
+                // Build two tangent vectors on the sphere at (sx, sy, sz)
+                // t1 = normalised cross product of state with "up" (or "right" if near poles)
+                let refX = 0, refY = 1, refZ = 0;
+                if (Math.abs(sy) > 0.95) { refX = 1; refY = 0; refZ = 0; }
+                // t1 = state × ref
+                let t1x = sy * refZ - sz * refY;
+                let t1y = sz * refX - sx * refZ;
+                let t1z = sx * refY - sy * refX;
+                const t1len = Math.sqrt(t1x * t1x + t1y * t1y + t1z * t1z) || 1;
+                t1x /= t1len; t1y /= t1len; t1z /= t1len;
+                // t2 = state × t1
+                let t2x = sy * t1z - sz * t1y;
+                let t2y = sz * t1x - sx * t1z;
+                let t2z = sx * t1y - sy * t1x;
+                const t2len = Math.sqrt(t2x * t2x + t2y * t2y + t2z * t2z) || 1;
+                t2x /= t2len; t2y /= t2len; t2z /= t2len;
+                
+                const circleR = 0.12;
+                const circleSegs = 32;
+                
+                // Subtle glow behind the circle
+                const glow = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, sphereRadius * circleR * 2.5);
+                glow.addColorStop(0, 'rgba(96, 165, 250, 0.35)');
+                glow.addColorStop(1, 'rgba(96, 165, 250, 0)');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(tip.x, tip.y, sphereRadius * circleR * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw the 3D circle
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                for (let i = 0; i <= circleSegs; i++) {
+                    const a = (i / circleSegs) * Math.PI * 2;
+                    const cos_a = Math.cos(a);
+                    const sin_a = Math.sin(a);
+                    const cx = sx + circleR * (cos_a * t1x + sin_a * t2x);
+                    const cy = sy + circleR * (cos_a * t1y + sin_a * t2y);
+                    const cz = sz + circleR * (cos_a * t1z + sin_a * t2z);
+                    const p = project3D(cx, cy, cz);
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+                
+                // Small filled centre dot
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(tip.x, tip.y, 3, 0, Math.PI * 2);
+                ctx.fill();
             }
             
             function drawMeasurementEffect() {
@@ -1022,11 +1223,13 @@
                 ctx.globalAlpha = 1;
                 
                 pulseRings.forEach((ring) => {
-                    const ringProgress = ring.life / ring.maxLife;
-                    const radius = ring.radius * (1 + ringProgress * 2);
+                    const t = ring.life / ring.maxLife;
+                    // Ease-in: rings decelerate as they converge inward
+                    const ease = 1 - Math.pow(1 - t, 2);
+                    const radius = ring.startRadius + (ring.endRadius - ring.startRadius) * ease;
                     ctx.strokeStyle = ring.color;
-                    ctx.lineWidth = 3 * (1 - ringProgress);
-                    ctx.globalAlpha = 1 - ringProgress;
+                    ctx.lineWidth = 2.5 * (1 - t * 0.6);
+                    ctx.globalAlpha = 0.8 - t * 0.7;
                     ctx.beginPath();
                     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
                     ctx.stroke();
@@ -1043,9 +1246,10 @@
             
             function addPulseRing(color) {
                 pulseRings.push({
-                    radius: sphereRadius * 0.5,
+                    startRadius: sphereRadius * 2.0,
+                    endRadius: sphereRadius * 0.3,
                     life: 0,
-                    maxLife: 40,
+                    maxLife: 35,
                     color: color
                 });
             }
@@ -1100,7 +1304,7 @@
                     animProgress = 0;
                     pendingAmplitudeUpdate = true;
                     
-                    history.unshift({ axis, result });
+                    history.unshift({ axis, result, n: measureCount });
                     if (history.length > 10) history.pop();
                     updateHistoryDisplay();
                     
@@ -1129,6 +1333,7 @@
                 }
                 list.innerHTML = history.map((h) => `
                     <div class="history-item">
+                        <span style="color:#e2e8f0; font-size:12px; font-weight:700; min-width:32px; font-variant-numeric: tabular-nums; text-shadow:0 1px 1px rgba(0,0,0,0.45);">#${h.n}</span>
                         <div class="history-axis ${h.axis}">${h.axis.toUpperCase()}</div>
                         <span style="color: ${h.result === 'up' ? '#34d399' : '#f472b6'}">
                             ${h.result === 'up' ? '↑ Spin Up' : '↓ Spin Down'}
