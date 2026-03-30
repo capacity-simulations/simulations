@@ -187,16 +187,17 @@
         .sidebar {
             position: fixed; 
             top: 60px; 
-            right: 20px; 
-            width: 320px;
+            right: 0; 
+            width: 340px;
             background-color: var(--panel-bg);
-            border-radius: 0 0 8px 8px;
+            border-radius: 0 0 0 8px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             color: var(--text-main);
             z-index: 100;
             display: flex; flex-direction: column;
             border: 1px solid var(--border-color);
             border-top: 2px solid var(--accent-blue);
+            border-right: none;
             max-height: calc(100vh - 80px);
             overflow-y: auto;
         }
@@ -309,15 +310,16 @@
         .narration-panel {
             position: fixed;
             top: 70px;
-            left: 20px;
+            left: 0;
             width: 340px;
             background: rgba(26, 29, 47, 0.92);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(100, 120, 200, 0.25);
-            border-radius: 10px;
+            border-radius: 0 10px 10px 0;
             overflow: hidden;
             z-index: 100;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            border-left: none;
         }
         .narration-header {
             display: flex;
@@ -660,9 +662,9 @@
                     <div class="control-range"><span>4000 nm</span><span>8000 nm</span></div>
                 </div>
                 <div class="control-group">
-                    <div class="control-label"><span>Animation Speed</span><span class="control-value" id="rate-value">15</span></div>
-                    <input type="range" id="rate" min="5" max="30" step="1" value="15">
-                    <div class="control-range"><span>5</span><span>30</span></div>
+                    <div class="control-label"><span>Animation Speed</span><span class="control-value" id="rate-value">1.00x</span></div>
+                    <input type="range" id="rate" min="0.25" max="2" step="0.05" value="1">
+                    <div class="control-range"><span>0.25x</span><span>2x</span></div>
                 </div>
             </div>
         </div>
@@ -677,7 +679,11 @@
             numIncidentWaves: 8,
             waveSegments: 150,
             sourceZ: 18,
-            barrierZ: 0
+            barrierZ: 0,
+            /** Physical speed at multiplier 1.0x (matches prior default animationSpeed 15). */
+            baseAnimationSpeed: 15,
+            /** Extra multiplier for incident + secondary wave expansion when detectors are on (single-path visualization). */
+            measuredWaveSpeedFactor: 2.5
         };
 
         // --- STATE ---
@@ -695,7 +701,7 @@
             slitWidth: 200 * NM_TO_SIM.width,
             lambda: 550 * NM_TO_SIM.lambda,
             screenDistance: 6000 * NM_TO_SIM.screenDist,
-            animationSpeed: 15,
+            animationSpeed: 1,
             hits: new Uint32Array(80),
             detectedCount: 0,
             detectorsOn: false
@@ -1109,6 +1115,13 @@
             w.mesh.material.dispose();
         }
 
+        function disposeAllSecondaryWaves() {
+            secondaryWavesS1.forEach(disposeWave);
+            secondaryWavesS1 = [];
+            secondaryWavesS2.forEach(disposeWave);
+            secondaryWavesS2 = [];
+        }
+
         function createWavefronts() {
             incidentWaves.forEach(disposeWave);
             incidentWaves = [];
@@ -1118,7 +1131,8 @@
             secondaryWavesS2 = [];
 
             const distanceSourceToBarrier = CONFIG.sourceZ - CONFIG.barrierZ;
-            for (let i = 0; i < CONFIG.numIncidentWaves; i++) {
+            const maxIncident = state.detectorsOn ? 1 : CONFIG.numIncidentWaves;
+            for (let i = 0; i < maxIncident; i++) {
                 const radius = 0.5 + i * state.lambda * 1.1;
                 if (radius < distanceSourceToBarrier) {
                     createIncidentWave(radius);
@@ -1226,7 +1240,8 @@
         }
 
         function updateWaveMode(dt, time) {
-            const speed = state.animationSpeed;
+            const mult = state.animationSpeed * (state.detectorsOn ? CONFIG.measuredWaveSpeedFactor : 1);
+            const speed = CONFIG.baseAnimationSpeed * mult;
             const screenZ = -state.screenDistance;
             const sourceZ = CONFIG.sourceZ;
             const distanceSourceToBarrier = CONFIG.sourceZ - CONFIG.barrierZ;
@@ -1247,8 +1262,18 @@
                 
                 if (wave.radius >= distanceSourceToBarrier && !wave.hasSpawnedSecondary) {
                     wave.hasSpawnedSecondary = true;
-                    createSecondaryWaveS1(0.5);
-                    createSecondaryWaveS2(0.5);
+                    if (state.detectorsOn) {
+                        disposeAllSecondaryWaves();
+                        const pChooseSlit1 = getMeasuredSlit1Probability();
+                        if (Math.random() < pChooseSlit1) {
+                            createSecondaryWaveS1(0.5);
+                        } else {
+                            createSecondaryWaveS2(0.5);
+                        }
+                    } else {
+                        createSecondaryWaveS1(0.5);
+                        createSecondaryWaveS2(0.5);
+                    }
                 }
                 
                 if (wave.radius >= distanceSourceToBarrier) {
@@ -1270,12 +1295,19 @@
                 ? Math.min(...incidentWaves.map(w => w.radius))
                 : state.lambda * 1.1;
             
-            if (incidentWaves.length === 0 || minRadius > state.lambda * 0.85) {
+            if (state.detectorsOn) {
+                const secondariesInFlight = secondaryWavesS1.length + secondaryWavesS2.length;
+                if (incidentWaves.length === 0 && secondariesInFlight === 0) {
+                    createIncidentWave(0.5);
+                }
+            } else if (incidentWaves.length === 0 || minRadius > state.lambda * 0.85) {
                 createIncidentWave(0.5);
             }
 
             const distanceToScreen = Math.abs(screenZ - CONFIG.barrierZ);
-            const maxRadius = Math.max(35, distanceToScreen + 5);
+            // Keep waves alive past the screen so hit registration is not skipped on large dt / long L.
+            const maxRadius = Math.max(35, distanceToScreen + Math.max(10, distanceToScreen * 0.25));
+            const hitRadius = Math.max(0, distanceToScreen - 1);
 
             const s1ToRemove = [];
             secondaryWavesS1.forEach((wave, index) => {
@@ -1296,7 +1328,7 @@
                 wave.opacity = Math.max(0, 0.7 * (1 - wave.radius / maxRadius));
                 wave.mesh.material.opacity = wave.opacity;
 
-                if (wave.radius > distanceToScreen - 2 && !wave.recordedHit) {
+                if (!wave.recordedHit && wave.radius >= hitRadius) {
                     wave.recordedHit = true;
                     recordInterferenceHits();
                 }
@@ -1329,6 +1361,11 @@
                 
                 wave.opacity = Math.max(0, 0.7 * (1 - wave.radius / maxRadius));
                 wave.mesh.material.opacity = wave.opacity;
+
+                if (!wave.recordedHit && wave.radius >= hitRadius) {
+                    wave.recordedHit = true;
+                    recordInterferenceHits();
+                }
 
                 if (wave.radius > maxRadius) {
                     s2ToRemove.push(index);
@@ -1533,9 +1570,9 @@
                                 font: { size: 10, weight: '600' }
                             },
                             min: 0,
-                            max: 1.1,
-                            grid: { color: 'rgba(255,255,255,0.05)' }, 
-                            ticks: { display: false }
+                            max: 1.0,
+                            grid: { color: 'rgba(255,255,255,0.08)' }, 
+                            ticks: { display: false, stepSize: 0.25 }
                         }
                     },
                     animation: false
@@ -1579,6 +1616,16 @@
             const a = state.slitWidth;
             const lam = state.lambda;
             return (L * lam / a) * 0.025;
+        }
+
+        /** P(particle went through slit 1) for visualization; matches P₁′/(P₁′+P₂′) at screen center. */
+        function getMeasuredSlit1Probability() {
+            const d_half = state.sep / 2;
+            const sigma = getMeasuredGaussianSigma();
+            const p1 = Math.exp(-Math.pow(d_half, 2) / (2 * sigma * sigma));
+            const p2 = Math.exp(-Math.pow(d_half, 2) / (2 * sigma * sigma));
+            const s = p1 + p2;
+            return s > 0 ? p1 / s : 0.5;
         }
 
         // Measured: two Gaussians P₁' and P₂' (centers at ±d/2). Sum = P₁' + P₂'.
@@ -1738,25 +1785,79 @@
         function initUI() {
             const detectorBtn = document.getElementById('classical-btn');
 
+            const DETECTOR_DEFAULTS = {
+                sep: 1600,
+                slitWidth: 480,
+                lambda: 550,
+                screenDist: 6000
+            };
+
+            let preDetectorParams = null;
+
             detectorBtn.onclick = () => {
                 state.detectorsOn = !state.detectorsOn;
                 
                 if (state.detectorsOn) {
+                    preDetectorParams = {
+                        sep: parseFloat(document.getElementById('slit-sep').value),
+                        slitWidth: parseFloat(document.getElementById('slit-width').value),
+                        lambda: parseFloat(document.getElementById('wavelength').value),
+                        screenDist: parseFloat(document.getElementById('screen-dist').value)
+                    };
+
+                    setSlider('slit-sep', DETECTOR_DEFAULTS.sep, 'slit-sep-value', Math.round(DETECTOR_DEFAULTS.sep) + ' nm');
+                    setSlider('slit-width', DETECTOR_DEFAULTS.slitWidth, 'slit-width-value', Math.round(DETECTOR_DEFAULTS.slitWidth) + ' nm');
+                    setSlider('wavelength', DETECTOR_DEFAULTS.lambda, 'wavelength-value', Math.round(DETECTOR_DEFAULTS.lambda) + ' nm');
+                    setSlider('screen-dist', DETECTOR_DEFAULTS.screenDist, 'screen-dist-value', Math.round(DETECTOR_DEFAULTS.screenDist) + ' nm');
+
+                    state.sep = DETECTOR_DEFAULTS.sep * NM_TO_SIM.sep;
+                    state.slitWidth = DETECTOR_DEFAULTS.slitWidth * NM_TO_SIM.width;
+                    state.lambda = DETECTOR_DEFAULTS.lambda * NM_TO_SIM.lambda;
+                    state.screenDistance = DETECTOR_DEFAULTS.screenDist * NM_TO_SIM.screenDist;
+                    if (screenMesh) screenMesh.position.z = -state.screenDistance;
+
+                    const valEl = document.getElementById('wavelength-value');
+                    valEl.style.color = wavelengthToColor(DETECTOR_DEFAULTS.lambda);
+
                     detectorBtn.classList.add('active');
                     detectorBtn.textContent = 'Disable Detectors (No Measurement)';
                     if (detectorGroup) detectorGroup.visible = true;
+                    updateSimParams();
                 } else {
+                    if (preDetectorParams) {
+                        setSlider('slit-sep', preDetectorParams.sep, 'slit-sep-value', Math.round(preDetectorParams.sep) + ' nm');
+                        setSlider('slit-width', preDetectorParams.slitWidth, 'slit-width-value', Math.round(preDetectorParams.slitWidth) + ' nm');
+                        setSlider('wavelength', preDetectorParams.lambda, 'wavelength-value', Math.round(preDetectorParams.lambda) + ' nm');
+                        setSlider('screen-dist', preDetectorParams.screenDist, 'screen-dist-value', Math.round(preDetectorParams.screenDist) + ' nm');
+
+                        state.sep = preDetectorParams.sep * NM_TO_SIM.sep;
+                        state.slitWidth = preDetectorParams.slitWidth * NM_TO_SIM.width;
+                        state.lambda = preDetectorParams.lambda * NM_TO_SIM.lambda;
+                        state.screenDistance = preDetectorParams.screenDist * NM_TO_SIM.screenDist;
+                        if (screenMesh) screenMesh.position.z = -state.screenDistance;
+
+                        const valEl = document.getElementById('wavelength-value');
+                        valEl.style.color = wavelengthToColor(preDetectorParams.lambda);
+
+                        preDetectorParams = null;
+                    }
+
                     detectorBtn.classList.remove('active');
                     detectorBtn.textContent = 'Enable Detectors (Measure Path)';
                     if (detectorGroup) detectorGroup.visible = false;
                     detector1Flash = 0;
                     detector2Flash = 0;
+                    updateSimParams();
                 }
 
-                // Reset sim so particles start accumulating under new distribution
                 resetSim();
                 updateChartForMode();
             };
+
+            function setSlider(id, value, labelId, labelText) {
+                document.getElementById(id).value = value;
+                document.getElementById(labelId).textContent = labelText;
+            }
 
             function wavelengthToColor(nm) {
                 const c = nmToRGB(nm);
@@ -1795,12 +1896,14 @@
                 const val = parseFloat(e.target.value);
                 state.screenDistance = val * NM_TO_SIM.screenDist;
                 document.getElementById('screen-dist-value').textContent = Math.round(val) + ' nm';
-                if (screenMesh) screenMesh.position.z = -state.screenDistance;
+                if (screenMesh) {
+                    screenMesh.position.z = -state.screenDistance;
+                }
                 resetSim();
             };
             document.getElementById('rate').oninput = (e) => {
-                state.animationSpeed = parseInt(e.target.value);
-                document.getElementById('rate-value').textContent = state.animationSpeed;
+                state.animationSpeed = parseFloat(e.target.value);
+                document.getElementById('rate-value').textContent = state.animationSpeed.toFixed(2) + 'x';
             };
             document.getElementById('reset-btn').onclick = resetSim;
 
