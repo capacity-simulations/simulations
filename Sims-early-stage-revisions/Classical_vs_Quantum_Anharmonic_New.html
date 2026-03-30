@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classical vs Quantum-Anharmonic</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* Top title bar */
+.title-bar{height:36px;background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border-bottom:1px solid rgba(148,163,184,0.15);display:flex;align-items:center;justify-content:space-between;padding:0 18px;flex-shrink:0;z-index:100}
+.title-left{display:flex;align-items:center;gap:10px}
+.title-bar h1{font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:1.2px;text-transform:uppercase}
+.title-bar h1 span{color:#3b82f6;font-weight:800}
+
+/* Info icon and tooltip */
+.info-icon-wrap{position:relative;display:flex;align-items:center}
+.info-icon{width:20px;height:20px;border-radius:50%;border:1.5px solid #64748b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;transition:all 0.2s;font-style:italic;font-family:Georgia,serif;line-height:1}
+.info-icon:hover{border-color:#93c5fd;color:#93c5fd;background:rgba(59,130,246,0.1)}
+.info-tooltip{display:none;position:absolute;top:calc(100% + 8px);left:0;width:380px;background:#1e293b;border:1px solid rgba(148,163,184,0.2);border-radius:10px;padding:16px 18px;font-size:12px;color:#cbd5e1;line-height:1.6;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:1000}
+.info-icon-wrap:hover .info-tooltip{display:block}
+.info-tooltip h3{font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px}
+.info-tooltip .tt-section{margin-bottom:10px}
+.info-tooltip .tt-section:last-child{margin-bottom:0}
+.info-tooltip .tt-label{font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px}
+.info-tooltip code{color:#94a3b8;background:rgba(148,163,184,0.1);padding:1px 4px;border-radius:3px;font-size:11px}
+
+/* Title bar buttons */
+.title-right{display:flex;align-items:center;gap:8px}
+.title-btn{padding:5px 14px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.25);border-radius:5px;color:#93c5fd;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;text-align:center;white-space:nowrap}
+.title-btn:hover{background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.4)}
+.title-btn.active{background:rgba(59,130,246,0.4);color:#bfdbfe}
+.title-btn.reset{background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.15);color:#94a3b8}
+.title-btn.reset:hover{background:rgba(148,163,184,0.2)}
+
+/* Main layout: canvas area + right panel */
+.main-layout{flex:1;display:flex;min-height:0}
+
+/* Canvas area */
+.canvas-area{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+.main-plot-wrap{flex:3;position:relative;min-height:0}
+.traj-plot-wrap{flex:1.3;position:relative;min-height:0;border-top:1px solid rgba(148,163,184,0.08)}
+canvas{display:block;width:100%;height:100%}
+.plot-label{position:absolute;top:6px;left:12px;font-size:11px;color:#64748b;font-weight:600;letter-spacing:0.5px;pointer-events:none}
+.legend{position:absolute;top:6px;right:12px;display:flex;gap:12px;font-size:10px;pointer-events:none}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+.legend-line{width:16px;height:2px;border-radius:1px}
+
+/* Right panel */
+.right-panel{width:260px;flex-shrink:0;background:rgba(15,23,42,0.97);border-left:1px solid rgba(148,163,184,0.1);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;z-index:50}
+
+.panel-section{padding:16px 18px;border-bottom:1px solid rgba(148,163,184,0.08)}
+.panel-section:last-child{border-bottom:none}
+.panel-section-title{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px}
+
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-card{background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.08);border-radius:8px;padding:10px 12px}
+.stat-card.wide{grid-column:1/-1}
+.stat-card .stat-label{font-size:10px;color:#64748b;font-weight:500;margin-bottom:2px;display:block}
+.stat-card .stat-value{font-size:18px;color:#e2e8f0;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-card .stat-value.blue{color:#60a5fa}
+.stat-card .stat-value.green{color:#34d399}
+.stat-card .stat-value.pink{color:#f472b6}
+.stat-card .stat-value.yellow{color:#fbbf24}
+.stat-card .stat-value.small{font-size:14px}
+
+/* Controls */
+.control-row{margin-bottom:14px}
+.control-row:last-child{margin-bottom:0}
+.control-row label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#94a3b8;font-weight:500;margin-bottom:6px}
+.control-row label .ctrl-val{color:#e2e8f0;font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+.slider{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:rgba(148,163,184,0.12);border-radius:3px;outline:none;cursor:pointer}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:#3b82f6;border-radius:50%;cursor:pointer;box-shadow:0 0 8px rgba(59,130,246,0.4)}
+.slider::-moz-range-thumb{width:16px;height:16px;background:#3b82f6;border-radius:50%;cursor:pointer;border:none}
+
+/* Info section */
+.info-text{font-size:11px;color:#64748b;line-height:1.5}
+.info-text code{color:#94a3b8;background:rgba(148,163,184,0.1);padding:1px 4px;border-radius:3px;font-size:10px}
+
+/* Responsive */
+@media(max-width:768px){
+  .right-panel{width:220px}
+  .stat-grid{grid-template-columns:1fr}
+  .info-tooltip{width:280px}
+}
+</style>
+</head>
+<body>
+
+<!-- Top Title Bar -->
+<div class="title-bar">
+  <div class="title-left">
+    <h1><span>Classical</span> vs Quantum-Anharmonic</h1>
+    <div class="info-icon-wrap">
+      <div class="info-icon">i</div>
+      <div class="info-tooltip">
+        <h3>About This Simulation</h3>
+        <div class="tt-section">
+          <div class="tt-label">Physics</div>
+          This simulation compares a classical particle and a quantum wavepacket evolving in an anharmonic potential <code>V(x) = x² + εx⁴</code>. The classical particle obeys Newton's 2nd law (<code>F = ma</code>), while the quantum wavepacket evolves via the time-dependent Schrödinger equation using the split-operator method. At <code>ε = 0</code> (harmonic oscillator), both motions overlap perfectly. Increasing <code>ε</code> introduces anharmonicity, causing the quantum wavepacket to disperse and fragment due to interference — a purely quantum effect.
+        </div>
+        <div class="tt-section">
+          <div class="tt-label">Visuals</div>
+          <b>Top plot:</b> The blue curve is the potential V(x). The green curve shows the quantum probability density |ψ(x,t)|². The pink ball is the classical particle on the potential. The yellow diamond marks the quantum expectation value ⟨x⟩.<br>
+          <b>Bottom plot:</b> Trajectory comparison over time — pink for classical position, yellow for quantum ⟨x⟩.
+        </div>
+        <div class="tt-section">
+          <div class="tt-label">Controls</div>
+          <b>ε slider:</b> Anharmonicity strength (0 = harmonic).<br>
+          <b>x₀ slider:</b> Initial displacement of both particle and wavepacket.<br>
+          <b>Speed slider:</b> Simulation speed multiplier.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="title-right">
+    <button class="title-btn" id="btnPause">⏸ Pause</button>
+    <button class="title-btn reset" id="btnReset">↺ Reset</button>
+  </div>
+</div>
+
+<!-- Main layout -->
+<div class="main-layout">
+  <!-- Canvas area -->
+  <div class="canvas-area">
+    <div class="main-plot-wrap">
+      <canvas id="mainCanvas"></canvas>
+      <div class="plot-label">POTENTIAL &amp; WAVEFUNCTION</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-line" style="background:#60a5fa"></div>V(x)</div>
+        <div class="legend-item"><div class="legend-line" style="background:#34d399"></div>|ψ|²</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div>Classical</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>⟨x⟩</div>
+      </div>
+    </div>
+    <div class="traj-plot-wrap">
+      <canvas id="trajCanvas"></canvas>
+      <div class="plot-label">TRAJECTORY COMPARISON</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-line" style="background:#f472b6"></div>Classical x(t)</div>
+        <div class="legend-item"><div class="legend-line" style="background:#fbbf24"></div>Quantum ⟨x⟩(t)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <!-- Stats Section -->
+    <div class="panel-section">
+      <div class="panel-section-title">Live Statistics</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">Time</span>
+          <span class="stat-value blue" id="sTime">0.00</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">FPS</span>
+          <span class="stat-value" id="sFps">60</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">x_classical</span>
+          <span class="stat-value pink" id="sXcl">1.500</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">⟨x⟩ quantum</span>
+          <span class="stat-value yellow" id="sXq">1.500</span>
+        </div>
+        <div class="stat-card wide">
+          <span class="stat-label">Norm ‖ψ‖</span>
+          <span class="stat-value green small" id="sNorm">1.0000</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Section -->
+    <div class="panel-section">
+      <div class="panel-section-title">Parameters</div>
+      <div class="control-row">
+        <label>Anharmonicity ε <span class="ctrl-val" id="vEps">0.000</span></label>
+        <input type="range" class="slider" id="slEps" min="0" max="100" value="0">
+      </div>
+      <div class="control-row">
+        <label>Initial Position x₀ <span class="ctrl-val" id="vX0">1.50</span></label>
+        <input type="range" class="slider" id="slX0" min="50" max="300" value="150">
+      </div>
+      <div class="control-row">
+        <label>Sim Speed <span class="ctrl-val" id="vSpeed">1.00x</span></label>
+        <input type="range" class="slider" id="slSpeed" min="0" max="100" value="43">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const N = 1024;
+const xMin = -8, xMax = 8;
+const L = xMax - xMin;
+const dx = L / N;
+const dt = 0.005;
+const omega = Math.sqrt(2);
+
+let epsilon = 0.0;
+let x0_param = 1.5;
+let speedMultiplier = 1.0;
+const baseStepsPerFrame = 15;
+let paused = false;
+let simTime = 0;
+
+// Grids
+const xGrid = new Float64Array(N);
+const kGrid = new Float64Array(N);
+for(let j=0;j<N;j++){
+  xGrid[j] = xMin + j * dx;
+  kGrid[j] = j <= N/2 ? 2*Math.PI*j/L : 2*Math.PI*(j-N)/L;
+}
+
+// State arrays
+let psiRe = new Float64Array(N);
+let psiIm = new Float64Array(N);
+let potential = new Float64Array(N);
+let probDensity = new Float64Array(N);
+
+// Precomputed phases
+let hpRe = new Float64Array(N);
+let hpIm = new Float64Array(N);
+let kpRe = new Float64Array(N);
+let kpIm = new Float64Array(N);
+
+// Classical state
+let xCl = 1.5, vCl = 0;
+
+// Trajectory history
+let trajData = [];
+const maxTrajLen = 12000;
+
+// ====== FFT (Cooley-Tukey radix-2 in-place) ======
+function fft(re, im, inverse){
+  const n = re.length;
+  for(let i=1,j=0;i<n;i++){
+    let bit = n>>1;
+    while(j & bit){ j ^= bit; bit >>= 1; }
+    j ^= bit;
+    if(i < j){
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for(let len=2;len<=n;len<<=1){
+    const half = len>>1;
+    const ang = (inverse?1:-1)*2*Math.PI/len;
+    const wR = Math.cos(ang), wI = Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cR=1, cI=0;
+      for(let j=0;j<half;j++){
+        const i1=i+j, i2=i+j+half;
+        const tR = re[i2]*cR - im[i2]*cI;
+        const tI = re[i2]*cI + im[i2]*cR;
+        re[i2] = re[i1]-tR; im[i2] = im[i1]-tI;
+        re[i1] += tR; im[i1] += tI;
+        const nR = cR*wR - cI*wI;
+        cI = cR*wI + cI*wR;
+        cR = nR;
+      }
+    }
+  }
+  if(inverse){ for(let i=0;i<n;i++){ re[i]/=n; im[i]/=n; } }
+}
+
+// ====== Potential ======
+function V(x){ return x*x + epsilon*x*x*x*x; }
+function accel(x){ return -2*x - 4*epsilon*x*x*x; }
+
+function computePotential(){
+  for(let j=0;j<N;j++) potential[j] = V(xGrid[j]);
+}
+
+function precomputePhases(){
+  for(let j=0;j<N;j++){
+    const pp = -potential[j]*dt*0.5;
+    hpRe[j] = Math.cos(pp); hpIm[j] = Math.sin(pp);
+    const k = kGrid[j];
+    const kp = -k*k*dt*0.5;
+    kpRe[j] = Math.cos(kp); kpIm[j] = Math.sin(kp);
+  }
+}
+
+// ====== Initialization ======
+function initState(){
+  simTime = 0;
+  trajData = [];
+  const x0 = x0_param, p0 = 0;
+  xCl = x0; vCl = p0;
+  
+  computePotential();
+  precomputePhases();
+  
+  const norm = Math.pow(omega/Math.PI, 0.25);
+  const alpha = omega * 0.5;
+  for(let j=0;j<N;j++){
+    const x = xGrid[j];
+    const d = x - x0;
+    const g = Math.exp(-alpha*d*d);
+    psiRe[j] = norm * g * Math.cos(p0*d);
+    psiIm[j] = norm * g * Math.sin(p0*d);
+  }
+  
+  recordTrajectory();
+}
+
+// ====== Simulation Steps ======
+function quantumStep(){
+  for(let j=0;j<N;j++){
+    const r=psiRe[j], i=psiIm[j];
+    psiRe[j] = r*hpRe[j] - i*hpIm[j];
+    psiIm[j] = r*hpIm[j] + i*hpRe[j];
+  }
+  fft(psiRe, psiIm, false);
+  for(let j=0;j<N;j++){
+    const r=psiRe[j], i=psiIm[j];
+    psiRe[j] = r*kpRe[j] - i*kpIm[j];
+    psiIm[j] = r*kpIm[j] + i*kpRe[j];
+  }
+  fft(psiRe, psiIm, true);
+  for(let j=0;j<N;j++){
+    const r=psiRe[j], i=psiIm[j];
+    psiRe[j] = r*hpRe[j] - i*hpIm[j];
+    psiIm[j] = r*hpIm[j] + i*hpRe[j];
+  }
+}
+
+function classicalStep(){
+  const a0 = accel(xCl);
+  xCl += vCl*dt + 0.5*a0*dt*dt;
+  const a1 = accel(xCl);
+  vCl += 0.5*(a0+a1)*dt;
+}
+
+function computeObservables(){
+  let norm2=0, expX=0, maxProb=0;
+  for(let j=0;j<N;j++){
+    const p = psiRe[j]*psiRe[j] + psiIm[j]*psiIm[j];
+    probDensity[j] = p;
+    norm2 += p;
+    expX += xGrid[j]*p;
+    if(p>maxProb) maxProb = p;
+  }
+  const normVal = Math.sqrt(norm2*dx);
+  const xExp = expX*dx;
+  return {norm: normVal, xExp, maxProb};
+}
+
+function recordTrajectory(){
+  const obs = computeObservables();
+  trajData.push({t: simTime, xCl: xCl, xQ: obs.xExp});
+  if(trajData.length > maxTrajLen) trajData.shift();
+  return obs;
+}
+
+function simStep(){
+  quantumStep();
+  classicalStep();
+  simTime += dt;
+}
+
+// ====== Canvas Setup ======
+const mainCanvas = document.getElementById('mainCanvas');
+const trajCanvas = document.getElementById('trajCanvas');
+const mCtx = mainCanvas.getContext('2d');
+const tCtx = trajCanvas.getContext('2d');
+
+function resizeCanvases(){
+  const dpr = window.devicePixelRatio || 1;
+  const mp = mainCanvas.parentElement;
+  mainCanvas.width = mp.clientWidth * dpr;
+  mainCanvas.height = mp.clientHeight * dpr;
+  mCtx.setTransform(dpr,0,0,dpr,0,0);
+  
+  const tp = trajCanvas.parentElement;
+  trajCanvas.width = tp.clientWidth * dpr;
+  trajCanvas.height = tp.clientHeight * dpr;
+  tCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+
+// ====== Fixed Y-axis ranges ======
+const MAIN_Y_MIN = -0.5;
+const MAIN_Y_MAX = 12;
+const TRAJ_Y_MIN = -3.5;
+const TRAJ_Y_MAX = 3.5;
+
+// ====== Rendering ======
+function drawMainPlot(obs){
+  const w = mainCanvas.parentElement.clientWidth;
+  const h = mainCanvas.parentElement.clientHeight;
+  const pad = {l:58, r:20, t:28, b:44};
+  const pw = w - pad.l - pad.r;
+  const ph = h - pad.t - pad.b;
+  
+  mCtx.clearRect(0,0,w,h);
+  mCtx.fillStyle = '#0f172a';
+  mCtx.fillRect(0,0,w,h);
+  
+  const xDispMin = -5.5, xDispMax = 5.5;
+  const yDispMin = MAIN_Y_MIN;
+  const yDispMax = MAIN_Y_MAX;
+  
+  function toScreenX(x){ return pad.l + (x - xDispMin)/(xDispMax - xDispMin)*pw; }
+  function toScreenY(y){ return pad.t + ph - (y - yDispMin)/(yDispMax - yDispMin)*ph; }
+  
+  // Grid lines
+  mCtx.strokeStyle = 'rgba(148,163,184,0.08)';
+  mCtx.lineWidth = 1;
+  for(let x=Math.ceil(xDispMin);x<=Math.floor(xDispMax);x++){
+    const sx = toScreenX(x);
+    mCtx.beginPath(); mCtx.moveTo(sx, pad.t); mCtx.lineTo(sx, pad.t+ph); mCtx.stroke();
+  }
+  for(let y=0;y<=yDispMax;y+=2){
+    const sy = toScreenY(y);
+    mCtx.beginPath(); mCtx.moveTo(pad.l, sy); mCtx.lineTo(pad.l+pw, sy); mCtx.stroke();
+  }
+  
+  // Axes
+  mCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+  mCtx.lineWidth = 1.5;
+  // X-axis (y=0)
+  const y0s = toScreenY(0);
+  mCtx.beginPath(); mCtx.moveTo(pad.l, y0s); mCtx.lineTo(pad.l+pw, y0s); mCtx.stroke();
+  // Y-axis (left edge)
+  mCtx.beginPath(); mCtx.moveTo(pad.l, pad.t); mCtx.lineTo(pad.l, pad.t+ph); mCtx.stroke();
+  
+  // Tick marks and labels - X axis
+  mCtx.fillStyle = '#94a3b8';
+  mCtx.font = '11px -apple-system, sans-serif';
+  mCtx.textAlign = 'center';
+  for(let x=Math.ceil(xDispMin);x<=Math.floor(xDispMax);x++){
+    const sx = toScreenX(x);
+    // tick
+    mCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+    mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.moveTo(sx, y0s); mCtx.lineTo(sx, y0s+5); mCtx.stroke();
+    mCtx.fillText(x, sx, pad.t+ph+16);
+  }
+  
+  // Tick marks and labels - Y axis
+  mCtx.textAlign = 'right';
+  for(let y=0;y<=yDispMax;y+=2){
+    const sy = toScreenY(y);
+    mCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+    mCtx.lineWidth = 1;
+    mCtx.beginPath(); mCtx.moveTo(pad.l-4, sy); mCtx.lineTo(pad.l, sy); mCtx.stroke();
+    mCtx.fillStyle = '#94a3b8';
+    mCtx.fillText(y.toFixed(0), pad.l-8, sy+4);
+  }
+  
+  // Axis titles
+  mCtx.fillStyle = '#cbd5e1';
+  mCtx.font = '12px -apple-system, sans-serif';
+  mCtx.textAlign = 'center';
+  mCtx.fillText('Position  x', pad.l+pw/2, h-6);
+  
+  // Y-axis title (rotated)
+  mCtx.save();
+  mCtx.translate(14, pad.t + ph/2);
+  mCtx.rotate(-Math.PI/2);
+  mCtx.fillStyle = '#cbd5e1';
+  mCtx.font = '12px -apple-system, sans-serif';
+  mCtx.textAlign = 'center';
+  mCtx.fillText('Energy / |ψ|²', 0, 0);
+  mCtx.restore();
+  
+  // Clip to plot area
+  mCtx.save();
+  mCtx.beginPath();
+  mCtx.rect(pad.l, pad.t, pw, ph);
+  mCtx.clip();
+  
+  // Draw potential fill
+  mCtx.beginPath();
+  mCtx.moveTo(toScreenX(xDispMin), toScreenY(0));
+  for(let px=0;px<=pw;px+=2){
+    const x = xDispMin + px/pw*(xDispMax-xDispMin);
+    const v = V(x);
+    mCtx.lineTo(pad.l+px, toScreenY(v));
+  }
+  mCtx.lineTo(toScreenX(xDispMax), toScreenY(0));
+  mCtx.closePath();
+  const potGrad = mCtx.createLinearGradient(0, toScreenY(yDispMax), 0, toScreenY(0));
+  potGrad.addColorStop(0, 'rgba(59,130,246,0.12)');
+  potGrad.addColorStop(1, 'rgba(59,130,246,0.02)');
+  mCtx.fillStyle = potGrad;
+  mCtx.fill();
+  
+  // Draw potential line
+  mCtx.beginPath();
+  for(let px=0;px<=pw;px+=1){
+    const x = xDispMin + px/pw*(xDispMax-xDispMin);
+    const v = V(x);
+    const sy = toScreenY(v);
+    if(px===0) mCtx.moveTo(pad.l+px, sy);
+    else mCtx.lineTo(pad.l+px, sy);
+  }
+  mCtx.strokeStyle = '#3b82f6';
+  mCtx.lineWidth = 2;
+  mCtx.stroke();
+  
+  // Energy level line
+  const energy = V(x0_param);
+  mCtx.setLineDash([4,4]);
+  mCtx.strokeStyle = 'rgba(148,163,184,0.25)';
+  mCtx.lineWidth = 1;
+  const eSy = toScreenY(energy);
+  mCtx.beginPath(); mCtx.moveTo(pad.l, eSy); mCtx.lineTo(pad.l+pw, eSy); mCtx.stroke();
+  mCtx.setLineDash([]);
+  
+  // Draw |ψ|²
+  const probScale = (yDispMax * 0.55) / (obs.maxProb + 1e-15);
+  
+  mCtx.beginPath();
+  let started = false;
+  const jMin = Math.max(0, Math.floor((xDispMin - xMin)/dx));
+  const jMax = Math.min(N-1, Math.ceil((xDispMax - xMin)/dx));
+  
+  for(let j=jMin;j<=jMax;j++){
+    const sx = toScreenX(xGrid[j]);
+    const sy = toScreenY(probDensity[j]*probScale);
+    if(!started){ mCtx.moveTo(sx, toScreenY(0)); mCtx.lineTo(sx, sy); started=true; }
+    else mCtx.lineTo(sx, sy);
+  }
+  if(started){
+    mCtx.lineTo(toScreenX(xGrid[jMax]), toScreenY(0));
+    mCtx.closePath();
+    const psiGrad = mCtx.createLinearGradient(0, toScreenY(yDispMax*0.5), 0, toScreenY(0));
+    psiGrad.addColorStop(0, 'rgba(52,211,153,0.35)');
+    psiGrad.addColorStop(1, 'rgba(52,211,153,0.03)');
+    mCtx.fillStyle = psiGrad;
+    mCtx.fill();
+  }
+  
+  // |ψ|² line
+  mCtx.beginPath();
+  started = false;
+  for(let j=jMin;j<=jMax;j++){
+    const sx = toScreenX(xGrid[j]);
+    const sy = toScreenY(probDensity[j]*probScale);
+    if(!started){ mCtx.moveTo(sx, sy); started=true; }
+    else mCtx.lineTo(sx, sy);
+  }
+  mCtx.strokeStyle = '#34d399';
+  mCtx.lineWidth = 1.5;
+  mCtx.stroke();
+  
+  // Classical ball
+  if(xCl > xDispMin && xCl < xDispMax){
+    const bx = toScreenX(xCl);
+    const by = toScreenY(V(xCl));
+    const glow = mCtx.createRadialGradient(bx, by, 0, bx, by, 20);
+    glow.addColorStop(0, 'rgba(244,114,182,0.4)');
+    glow.addColorStop(1, 'rgba(244,114,182,0)');
+    mCtx.fillStyle = glow;
+    mCtx.beginPath(); mCtx.arc(bx, by, 20, 0, Math.PI*2); mCtx.fill();
+    mCtx.fillStyle = '#f472b6';
+    mCtx.beginPath(); mCtx.arc(bx, by, 7, 0, Math.PI*2); mCtx.fill();
+    mCtx.strokeStyle = '#fda4af';
+    mCtx.lineWidth = 1.5;
+    mCtx.stroke();
+    mCtx.strokeStyle = 'rgba(244,114,182,0.3)';
+    mCtx.lineWidth = 1;
+    mCtx.setLineDash([3,3]);
+    mCtx.beginPath(); mCtx.moveTo(bx, by); mCtx.lineTo(bx, toScreenY(0)); mCtx.stroke();
+    mCtx.setLineDash([]);
+  }
+  
+  // ⟨x⟩ marker
+  const xQ = obs.xExp;
+  if(xQ > xDispMin && xQ < xDispMax){
+    const qx = toScreenX(xQ);
+    mCtx.strokeStyle = 'rgba(251,191,36,0.4)';
+    mCtx.lineWidth = 1.5;
+    mCtx.setLineDash([5,3]);
+    mCtx.beginPath(); mCtx.moveTo(qx, pad.t); mCtx.lineTo(qx, pad.t+ph); mCtx.stroke();
+    mCtx.setLineDash([]);
+    const peakIdx = Math.round((xQ-xMin)/dx);
+    const clampedIdx = Math.max(0, Math.min(N-1, peakIdx));
+    const peakY = toScreenY(probDensity[clampedIdx]*probScale || 0);
+    mCtx.fillStyle = '#fbbf24';
+    mCtx.beginPath();
+    mCtx.moveTo(qx, peakY-8);
+    mCtx.lineTo(qx+5, peakY);
+    mCtx.lineTo(qx, peakY+8);
+    mCtx.lineTo(qx-5, peakY);
+    mCtx.closePath();
+    mCtx.fill();
+  }
+  
+  mCtx.restore();
+  
+  mCtx.fillStyle = '#34d399';
+  mCtx.font = '9px -apple-system, sans-serif';
+  mCtx.textAlign = 'left';
+  mCtx.fillText('|ψ|² (scaled)', pad.l+4, pad.t+12);
+}
+
+function drawTrajPlot(){
+  const w = trajCanvas.parentElement.clientWidth;
+  const h = trajCanvas.parentElement.clientHeight;
+  const pad = {l:58, r:20, t:24, b:38};
+  const pw = w - pad.l - pad.r;
+  const ph = h - pad.t - pad.b;
+  
+  tCtx.clearRect(0,0,w,h);
+  tCtx.fillStyle = '#0b1120';
+  tCtx.fillRect(0,0,w,h);
+  
+  if(trajData.length < 2) return;
+  
+  const tMax = Math.max(simTime, 10);
+  const tMin = Math.max(0, tMax - 35);
+  
+  // Fixed y range
+  const yMin = TRAJ_Y_MIN;
+  const yMax = TRAJ_Y_MAX;
+  
+  function toSX(t){ return pad.l + (t - tMin)/(tMax - tMin)*pw; }
+  function toSY(y){ return pad.t + ph - (y - yMin)/(yMax - yMin)*ph; }
+  
+  // Grid
+  tCtx.strokeStyle = 'rgba(148,163,184,0.08)';
+  tCtx.lineWidth = 1;
+  const tStep = tMax > 20 ? 5 : tMax > 8 ? 2 : 1;
+  for(let t=Math.ceil(tMin/tStep)*tStep; t<=tMax; t+=tStep){
+    const sx = toSX(t);
+    tCtx.beginPath(); tCtx.moveTo(sx, pad.t); tCtx.lineTo(sx, pad.t+ph); tCtx.stroke();
+  }
+  // y grid lines
+  for(let y=Math.ceil(yMin);y<=Math.floor(yMax);y++){
+    const sy = toSY(y);
+    tCtx.beginPath(); tCtx.moveTo(pad.l, sy); tCtx.lineTo(pad.l+pw, sy); tCtx.stroke();
+  }
+  
+  // Axes
+  tCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+  tCtx.lineWidth = 1.5;
+  // X-axis (y=0)
+  const z0 = toSY(0);
+  tCtx.beginPath(); tCtx.moveTo(pad.l, z0); tCtx.lineTo(pad.l+pw, z0); tCtx.stroke();
+  // Y-axis (left edge)
+  tCtx.beginPath(); tCtx.moveTo(pad.l, pad.t); tCtx.lineTo(pad.l, pad.t+ph); tCtx.stroke();
+  
+  // Tick marks and labels - X axis
+  tCtx.fillStyle = '#94a3b8';
+  tCtx.font = '11px -apple-system, sans-serif';
+  tCtx.textAlign = 'center';
+  for(let t=Math.ceil(tMin/tStep)*tStep; t<=tMax; t+=tStep){
+    const sx = toSX(t);
+    tCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+    tCtx.lineWidth = 1;
+    tCtx.beginPath(); tCtx.moveTo(sx, z0); tCtx.lineTo(sx, z0+4); tCtx.stroke();
+    tCtx.fillStyle = '#94a3b8';
+    tCtx.fillText(t.toFixed(0), sx, pad.t+ph+15);
+  }
+  
+  // Tick marks and labels - Y axis
+  tCtx.textAlign = 'right';
+  for(let y=Math.ceil(yMin);y<=Math.floor(yMax);y++){
+    const sy = toSY(y);
+    tCtx.strokeStyle = 'rgba(203,213,225,0.45)';
+    tCtx.lineWidth = 1;
+    tCtx.beginPath(); tCtx.moveTo(pad.l-4, sy); tCtx.lineTo(pad.l, sy); tCtx.stroke();
+    tCtx.fillStyle = '#94a3b8';
+    tCtx.fillText(y.toFixed(0), pad.l-8, sy+4);
+  }
+  
+  // Axis titles
+  tCtx.fillStyle = '#cbd5e1';
+  tCtx.font = '12px -apple-system, sans-serif';
+  tCtx.textAlign = 'center';
+  tCtx.fillText('Time  t', pad.l+pw/2, h-4);
+  
+  // Y-axis title (rotated)
+  tCtx.save();
+  tCtx.translate(14, pad.t + ph/2);
+  tCtx.rotate(-Math.PI/2);
+  tCtx.fillStyle = '#cbd5e1';
+  tCtx.font = '12px -apple-system, sans-serif';
+  tCtx.textAlign = 'center';
+  tCtx.fillText('Position  x', 0, 0);
+  tCtx.restore();
+  
+  // Clip
+  tCtx.save();
+  tCtx.beginPath();
+  tCtx.rect(pad.l, pad.t, pw, ph);
+  tCtx.clip();
+  
+  // Classical trajectory
+  tCtx.beginPath();
+  let first = true;
+  for(const d of trajData){
+    if(d.t < tMin) continue;
+    const sx = toSX(d.t), sy = toSY(d.xCl);
+    if(first){ tCtx.moveTo(sx, sy); first=false; }
+    else tCtx.lineTo(sx, sy);
+  }
+  tCtx.strokeStyle = '#f472b6';
+  tCtx.lineWidth = 2;
+  tCtx.stroke();
+  
+  // Quantum ⟨x⟩ trajectory
+  tCtx.beginPath();
+  first = true;
+  for(const d of trajData){
+    if(d.t < tMin) continue;
+    const sx = toSX(d.t), sy = toSY(d.xQ);
+    if(first){ tCtx.moveTo(sx, sy); first=false; }
+    else tCtx.lineTo(sx, sy);
+  }
+  tCtx.strokeStyle = '#fbbf24';
+  tCtx.lineWidth = 2;
+  tCtx.stroke();
+  
+  tCtx.restore();
+}
+
+// ====== UI ======
+const slEps = document.getElementById('slEps');
+const slX0 = document.getElementById('slX0');
+const slSpeed = document.getElementById('slSpeed');
+const vEps = document.getElementById('vEps');
+const vX0 = document.getElementById('vX0');
+const vSpeed = document.getElementById('vSpeed');
+const btnPause = document.getElementById('btnPause');
+const btnReset = document.getElementById('btnReset');
+const sTime = document.getElementById('sTime');
+const sXcl = document.getElementById('sXcl');
+const sXq = document.getElementById('sXq');
+const sNorm = document.getElementById('sNorm');
+const sFps = document.getElementById('sFps');
+
+slEps.addEventListener('input', function(){
+  epsilon = this.value / 1000;
+  vEps.textContent = epsilon.toFixed(3);
+  resetSim();
+});
+slX0.addEventListener('input', function(){
+  x0_param = this.value / 100;
+  vX0.textContent = x0_param.toFixed(2);
+  resetSim();
+});
+slSpeed.addEventListener('input', function(){
+  // Slider range 0-100 maps to 0.25x - 2.0x
+  // value 0 -> 0.25, value 100 -> 2.0
+  speedMultiplier = 0.25 + (this.value / 100) * (2.0 - 0.25);
+  vSpeed.textContent = speedMultiplier.toFixed(2) + 'x';
+});
+btnPause.addEventListener('click', function(){
+  paused = !paused;
+  this.textContent = paused ? '▶ Play' : '⏸ Pause';
+  this.classList.toggle('active', paused);
+});
+btnReset.addEventListener('click', resetSim);
+
+function resetSim(){
+  initState();
+}
+
+// Initialize speed display
+speedMultiplier = 0.25 + (43 / 100) * (2.0 - 0.25);
+vSpeed.textContent = speedMultiplier.toFixed(2) + 'x';
+
+// ====== Animation Loop ======
+let lastFrameTime = performance.now();
+let fpsAccum = 0;
+let fpsCount = 0;
+let displayFps = 60;
+let frameCounter = 0;
+
+function animate(now){
+  requestAnimationFrame(animate);
+  
+  const delta = now - lastFrameTime;
+  lastFrameTime = now;
+  fpsAccum += delta;
+  fpsCount++;
+  if(fpsAccum >= 500){
+    displayFps = Math.round(1000 * fpsCount / fpsAccum);
+    fpsAccum = 0; fpsCount = 0;
+  }
+  
+  frameCounter++;
+  if(frameCounter % 60 === 0) resizeCanvases();
+  
+  if(!paused){
+    const stepsPerFrame = Math.max(1, Math.round(baseStepsPerFrame * speedMultiplier));
+    const subSteps = epsilon > 0.1 ? 2 : 1;
+    for(let s = 0; s < stepsPerFrame; s++){
+      for(let sub=0; sub<subSteps; sub++){
+        simStep();
+      }
+      if(s % 3 === 0 || s === stepsPerFrame-1){
+        recordTrajectory();
+      }
+    }
+  }
+  
+  const obs = computeObservables();
+  
+  // Update stats
+  sTime.textContent = simTime.toFixed(2);
+  sXcl.textContent = xCl.toFixed(3);
+  sXq.textContent = obs.xExp.toFixed(3);
+  sNorm.textContent = obs.norm.toFixed(4);
+  sFps.textContent = displayFps;
+  
+  drawMainPlot(obs);
+  drawTrajPlot();
+}
+
+// ====== Start ======
+initState();
+resizeCanvases();
+requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
