@@ -159,7 +159,7 @@ button:hover{transform:translateY(-1px)}
         <p><strong>About this simulation</strong></p>
         <p><span class="hl">Physics:</span> The Stern-Gerlach experiment measures spin along a chosen axis. <span class="hlp">Z-magnets</span> split atoms into Z+ and Z−, while <span class="hlx">X-magnets</span> split into X+ and X−. Switching measurement axis changes the state basis, so prior spin information along a different axis is no longer definite.</p>
         <p><span class="hl">Visuals:</span> The 3D view shows the atom source, magnet stages, optional blockers, beam branching, and detector hits. Beam direction and color encode the current spin channel, and the legend maps colors to unpolarized, Z, and X outcomes.</p>
-        <p><span class="hl">Controls:</span> Build Stage 2/3 by dragging magnets or blockers, set Stage 1 orientation/blocker, tune emission rate and field strength, and use the magnetic-field switch, play/pause, reset, and stats controls. Turn on <span class="hl">Explore</span> to see hover explanations on apparatus parts.</p>
+        <p><span class="hl">Controls:</span> Build Stage 2/3 by dragging magnets or blockers, set Stage 1 orientation/blocker, tune emission rate and field strength, and use play/pause, reset, and stats controls. Turn on <span class="hl">Explore</span> to see hover explanations on apparatus parts.</p>
       </div>
     </div>
     <div class="header-actions">
@@ -234,12 +234,8 @@ button:hover{transform:translateY(-1px)}
           <input type="range" id="rRate" min="1" max="20" value="6" title="Atoms emitted per second (1–20).">
         </div>
         <div class="ctrl-row">
-          <div class="ctrl-hdr"><label>Field Strength</label><span class="ctrl-val"><span id="vField">0.80</span> T</span></div>
-          <input type="range" id="rField" min="30" max="100" value="80" title="Magnet field strength: larger deflection between spin up and down.">
-        </div>
-        <div class="toggle-row">
-          <span class="toggle-lbl">🧲 Magnetic Field</span>
-          <div class="toggle-sw on" id="togMag" title="Turn magnets on or off; when off, beam passes undeflected."></div>
+          <div class="ctrl-hdr"><label>Field Strength</label><span class="ctrl-val"><span id="vField">0.30</span> T</span></div>
+          <input type="range" id="rField" min="0" max="50" value="30" step="1" title="Magnetic field (0–0.5 T). Stronger field increases spin-dependent deflection.">
         </div>
       </div>
 
@@ -270,8 +266,11 @@ scene.background = new THREE.Color(0x050510);
 scene.fog = new THREE.FogExp2(0x050510, 0.008);
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
-camera.position.set(20, 14, 22);
-camera.lookAt(0, 0, -1);
+// Orbit / default view: target sits on the beam axis with slight upward bias so the detector
+// panel (y ≈ ±7) stays fully in frame above the floor grid.
+const ORBIT_TARGET = new THREE.Vector3(0, 1.5, -3);
+camera.position.set(22, 8, 26);
+camera.lookAt(ORBIT_TARGET);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -287,7 +286,7 @@ container.appendChild(renderer.domElement);
 class SimpleOrbitControls {
   constructor(cam, el) {
     this.camera = cam; this.el = el;
-    this.target = new THREE.Vector3(0, 0, -1);
+    this.target = ORBIT_TARGET.clone();
     this.spherical = new THREE.Spherical();
     this.sphericalDelta = new THREE.Spherical();
     this.scale = 1; this.rotateSpeed = 0.8; this.zoomSpeed = 1.2;
@@ -453,13 +452,21 @@ pointLight2.position.set(10, 6, 2);
 scene.add(pointLight2);
 
 // ========== GRID & AXES HELPERS ==========
+// Floor well below the detector (panel spans about y ∈ [-7, 7]) so the full screen reads above the grid.
+const FLOOR_Y = -12;
+// Beam / apparatus: source at +Z, detector at −Z (used by grid-era axes and build* functions below)
+const SOURCE_Z = 12, DETECTOR_Z = -14;
+const DETECTOR_SCREEN_HALF_T = 0.15;
+const DETECTOR_SPOT_FACE_OUTSET = 0.03;
+const DETECTOR_SPOT_Z_FRONT = DETECTOR_Z + DETECTOR_SCREEN_HALF_T + DETECTOR_SPOT_FACE_OUTSET;
+const DETECTOR_SPOT_Z_BACK = DETECTOR_Z - DETECTOR_SCREEN_HALF_T - DETECTOR_SPOT_FACE_OUTSET;
 // Improved grid: visible but not distracting, with major/minor distinction
 const gridSize = 60;
 const gridDivisions = 30; // fewer divisions = cleaner look
 const gridCenterColor = 0x6478a8;  // brighter center axes for readability
 const gridLineColor = 0x2a3556;    // slightly brighter grid lines
 const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, gridCenterColor, gridLineColor);
-gridHelper.position.y = -4;
+gridHelper.position.y = FLOOR_Y;
 gridHelper.material.transparent = true;
 gridHelper.material.opacity = 0.95;
 gridHelper.material.depthWrite = false;
@@ -467,7 +474,7 @@ scene.add(gridHelper);
 
 // Optional: second grid layer for finer detail (fainter)
 const gridFine = new THREE.GridHelper(gridSize, 60, 0x1a2238, 0x131a2d);
-gridFine.position.y = -3.99;
+gridFine.position.y = FLOOR_Y + 0.01;
 gridFine.material.transparent = true;
 gridFine.material.opacity = 0.5;
 gridFine.material.depthWrite = false;
@@ -485,7 +492,7 @@ const groundMat = new THREE.MeshStandardMaterial({
 });
 const groundPlane = new THREE.Mesh(groundGeo, groundMat);
 groundPlane.rotation.x = -Math.PI / 2;
-groundPlane.position.y = -4.02;
+groundPlane.position.y = FLOOR_Y - 0.02;
 groundPlane.receiveShadow = true;
 scene.add(groundPlane);
 
@@ -509,10 +516,13 @@ function makeAxisLabel(text, pos, color) {
   sprite.scale.set(1.05, 0.52, 1);
   scene.add(sprite);
 }
-// Show coordinate axes near origin
+// Coordinate axes at beam height (y = 0); tucked nearer the source than the old x = −15
 const axLen = 2.5;
+const axisOriginY = 0;
+const AXIS_OFFSET_X = -9.5;
+const axisOriginZ = SOURCE_Z + 1.4;
 function addAxis(dir, color, label, lpos) {
-  const origin = new THREE.Vector3(-15, -3.8, 8);
+  const origin = new THREE.Vector3(AXIS_OFFSET_X, axisOriginY, axisOriginZ);
   const d = dir.clone().normalize();
   const axisRadius = 0.035;
   const axisGeo = new THREE.CylinderGeometry(axisRadius, axisRadius, axLen, 14);
@@ -531,9 +541,9 @@ function addAxis(dir, color, label, lpos) {
   scene.add(axisMesh);
   makeAxisLabel(label, lpos, color);
 }
-addAxis(new THREE.Vector3(1, 0, 0), '#ef4444', 'X', new THREE.Vector3(-15 + axLen + 0.45, -3.8, 8));
-addAxis(new THREE.Vector3(0, 1, 0), '#22c55e', 'Z', new THREE.Vector3(-15, -3.8 + axLen + 0.45, 8));
-addAxis(new THREE.Vector3(0, 0, -1), '#3b82f6', 'Y', new THREE.Vector3(-15, -3.8, 8 - axLen - 0.45));
+addAxis(new THREE.Vector3(1, 0, 0), '#ef4444', 'X', new THREE.Vector3(AXIS_OFFSET_X + axLen + 0.45, axisOriginY, axisOriginZ));
+addAxis(new THREE.Vector3(0, 1, 0), '#22c55e', 'Z', new THREE.Vector3(AXIS_OFFSET_X, axisOriginY + axLen + 0.45, axisOriginZ));
+addAxis(new THREE.Vector3(0, 0, -1), '#3b82f6', 'Y', new THREE.Vector3(AXIS_OFFSET_X, axisOriginY, axisOriginZ - axLen - 0.45));
 
 // ========== COLORS (beam colors match legend; deep hues so Z+ and X+ are clearly distinct) ==========
 const COL = {
@@ -557,16 +567,21 @@ let stages = [
   {axis:null, blocker:'none'},
   {axis:null, blocker:'none'}
 ];
-let emissionRate = 6, fieldStrength = 0.8, magEnabled = true;
+let emissionRate = 6, fieldStrength = 0.3;
 let stats = {total:0, detected:0, blocked:0, plus:0, minus:0};
 let atoms = [], detectionSpots = [], apparatusGroup = new THREE.Group();
 scene.add(apparatusGroup);
 
 // ========== 3D APPARATUS CONSTRUCTION ==========
 const BEAM_Z = 0; // Main beam axis is along world Z
-// Source at z=+12, detector at z=-14
-// Stage positions along negative Z
-const SOURCE_Z = 12, DETECTOR_Z = -14;
+// SOURCE_Z, DETECTOR_Z, DETECTOR_SPOT_* defined above with grid/helpers
+/** Slider / state use tesla in [0, MAX_FIELD_TESLA]. */
+const MAX_FIELD_TESLA = 0.5;
+/**
+ * Scales legacy deflection coefficients so that at B = MAX_FIELD_TESLA the worst-case
+ * path (three stages, any Z/X order, same-spin stacking) stays within the ~14×14 detector.
+ */
+const DEFLECTION_B_CALIBRATION = 0.470096813290497;
 
 function getActiveStages() { return stages.filter((s,i) => i===0 || s.axis !== null); }
 
@@ -621,6 +636,8 @@ function buildApparatus() {
     buildMagnet(positions[i], active[i], i);
     buildBlocker(positions[i], active[i], i, positions, active);
   }
+
+  buildOpticalBenchStand(active, positions);
 }
 
 function buildSource() {
@@ -801,7 +818,8 @@ function buildDetector() {
   const lt2 = new THREE.CanvasTexture(lc2);
   const lm2 = new THREE.SpriteMaterial({map: lt2, transparent: true});
   const lb2 = new THREE.Sprite(lm2);
-  lb2.position.set(0, -8.5, 0);
+  // Forward in +Z (beam side) so the text clears the monitor stand centered on the panel
+  lb2.position.set(0, -8.5, 0.48);
   lb2.scale.set(2.5, 0.8, 1);
   g.add(lb2);
 
@@ -817,7 +835,8 @@ function buildMagnet(zPos, stage, index) {
 
   // Magnet dimensions
   const poleW = 1.8, poleH = 1.2, poleD = 2.0;
-  const gap = 2.0 * fieldStrength + 0.8; // gap between poles
+  // Visual pole gap: scale by fraction of max field so 0.5 T matches former “full” magnet size
+  const gap = 2.0 * (fieldStrength / MAX_FIELD_TESLA) + 0.8;
 
   // Colors based on axis
   const nColor = isZ ? COL.northZ : COL.northX;
@@ -893,33 +912,6 @@ function buildMagnet(zPos, stage, index) {
     g.add(poleLabel('S', new THREE.Vector3(-(gap/2 + poleH/2), 0, poleD/2 + 0.2), '#fff'));
   }
 
-  // Field lines (visual)
-  if (magEnabled) {
-    const nLines = 5;
-    for (let i = 0; i < nLines; i++) {
-      const t = (i + 1) / (nLines + 1);
-      const pts = [];
-      const steps = 20;
-      for (let j = 0; j <= steps; j++) {
-        const frac = j / steps;
-        const offset = (t - 0.5) * 1.2;
-        const curveAmt = Math.sin(frac * Math.PI) * offset;
-        if (isZ) {
-          pts.push(new THREE.Vector3(curveAmt, (gap/2+tipH) * (1 - 2*frac), (t - 0.5) * poleD * 0.6));
-        } else {
-          pts.push(new THREE.Vector3((gap/2+tipH) * (1 - 2*frac), (t - 0.5) * poleD * 0.6, curveAmt));
-        }
-      }
-      const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
-      const lineMat = new THREE.LineBasicMaterial({
-        color: 0xc0d0ff,
-        transparent: true,
-        opacity: 0.22
-      });
-      g.add(new THREE.Line(lineGeo, lineMat));
-    }
-  }
-
   // Stage label
   const axLabel = isZ ? 'SG-Z' : 'SG-X';
   const labelColor = isZ ? '#db2777' : '#7c3aed';
@@ -936,8 +928,6 @@ function buildMagnet(zPos, stage, index) {
   lb.position.set(0, labelYOffset, 0);
   lb.scale.set(3.5, 0.85, 1);
   g.add(lb);
-
-  if (!magEnabled) g.children.forEach(c => { if (c.material) c.material.opacity *= 0.4; });
 
   g.userData.tooltip = isZ
     ? 'Stern–Gerlach magnet (Z-axis): splits the beam into spin up ↑ and spin down ↓ along the vertical.'
@@ -991,10 +981,146 @@ function buildBlocker(zPos, stage, index, allPositions, allStages) {
   });
 }
 
+/** Tripods under source & magnets; monitor-style stand under detector (matches buildDetector 14×14 screen). */
+function buildOpticalBenchStand(activeStages, stagePositions) {
+  const standG = new THREE.Group();
+  const footY = FLOOR_Y;
+  const spreadR = 2.05;
+  const legTopR = 0.095;
+  const legFootR = 0.14;
+  const padR = 0.2;
+  // Torus major 0.32 + tube 0.055 — hub top sits this far above crown center (flush to apparatus underside)
+  const HUB_RADIUS_ABOVE_CROWN = 0.32 + 0.055;
+  const legMat = getMat(COL.darkMetal, { metalness: 0.68, roughness: 0.36 });
+  const hubMat = getMat(COL.metal, { metalness: 0.58, roughness: 0.4 });
+  const standBaseMat = getMat(0x2a3142, { metalness: 0.55, roughness: 0.42 });
+  const standStemMat = getMat(COL.darkMetal, { metalness: 0.72, roughness: 0.32 });
+
+  const zStations = [SOURCE_Z];
+  for (let i = 0; i < activeStages.length; i++) {
+    if (activeStages[i].axis) zStations.push(stagePositions[i]);
+  }
+  zStations.push(DETECTOR_Z);
+
+  // buildDetector: BoxGeometry(14,14,0.3) at y=0 → lower face at y = -7
+  const DETECTOR_SCREEN_HALF_H = 7;
+  const detectorBottomY = -DETECTOR_SCREEN_HALF_H;
+
+  /** Crown Y so torus outer top meets lowest point of source / magnet (no air gap). */
+  function tripodCrownY(zc) {
+    if (Math.abs(zc - SOURCE_Z) < 1e-5) {
+      const sourceBottomY = -1.53;
+      return sourceBottomY - HUB_RADIUS_ABOVE_CROWN;
+    }
+    for (let i = 0; i < activeStages.length; i++) {
+      if (!activeStages[i].axis) continue;
+      if (Math.abs(stagePositions[i] - zc) > 1e-5) continue;
+      const gap = 2.0 * (fieldStrength / MAX_FIELD_TESLA) + 0.8;
+      const poleH = 1.2;
+      if (activeStages[i].axis === 'z') {
+        const magnetBottomY = -(gap / 2 + poleH);
+        return magnetBottomY - HUB_RADIUS_ABOVE_CROWN;
+      }
+      // SG-X: poles rotated; conservative lowest y ≈ −poleD/2 including pole extent
+      const magnetBottomY = -1.05;
+      return magnetBottomY - HUB_RADIUS_ABOVE_CROWN;
+    }
+    return -2.65;
+  }
+
+  function addSlantedLeg(parent, x0, y0, z0, x1, y1, z1) {
+    const a = new THREE.Vector3(x0, y0, z0);
+    const b = new THREE.Vector3(x1, y1, z1);
+    const axis = new THREE.Vector3().subVectors(b, a);
+    const len = axis.length();
+    if (len < 0.02) return;
+    const geo = new THREE.CylinderGeometry(legTopR, legFootR, len, 12);
+    const mesh = new THREE.Mesh(geo, legMat);
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+  }
+
+  function addDetectorMonitorStand(parent, zc) {
+    const baseH = 0.14;
+    const baseTopY = footY + baseH;
+    const plateH = 0.12;
+    // Plate top flush with detector screen bottom (y = −7); stem ends at plate underside
+    const plateCenterY = detectorBottomY - plateH * 0.5;
+    const plateBottomY = plateCenterY - plateH * 0.5;
+    const stemLen = Math.max(0.5, plateBottomY - baseTopY);
+    const stemMidY = baseTopY + stemLen * 0.5;
+
+    // Wide foot on the grid (TV / monitor base), shifted slightly toward the beam (−Z)
+    const baseGeo = new THREE.BoxGeometry(5.8, baseH, 3.2);
+    const base = new THREE.Mesh(baseGeo, standBaseMat);
+    base.position.set(0, footY + baseH * 0.5, zc + 0.35);
+    base.castShadow = true;
+    base.receiveShadow = true;
+    parent.add(base);
+
+    // Tapered column from grid to underside of mounting plate
+    const stemGeo = new THREE.CylinderGeometry(0.34, 0.5, stemLen, 16);
+    const stem = new THREE.Mesh(stemGeo, standStemMat);
+    stem.position.set(0, stemMidY, zc);
+    stem.castShadow = true;
+    stem.receiveShadow = true;
+    parent.add(stem);
+
+    // Mounting plate under the full width of the panel bottom (narrow in Z — screen is thin)
+    const plateGeo = new THREE.BoxGeometry(4.2, plateH, 0.85);
+    const plate = new THREE.Mesh(plateGeo, standStemMat);
+    plate.position.set(0, plateCenterY, zc);
+    plate.castShadow = true;
+    plate.receiveShadow = true;
+    parent.add(plate);
+  }
+
+  for (const zc of zStations) {
+    if (zc === DETECTOR_Z) {
+      addDetectorMonitorStand(standG, zc);
+      continue;
+    }
+    const crownY = tripodCrownY(zc);
+    const twist = zc * 0.07;
+    for (let k = 0; k < 3; k++) {
+      const th = twist + (k / 3) * Math.PI * 2;
+      const fx = spreadR * Math.cos(th);
+      const fz = zc + spreadR * Math.sin(th);
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(padR, padR * 1.05, 0.07, 14),
+        hubMat
+      );
+      pad.position.set(fx, footY + 0.035, fz);
+      pad.castShadow = true;
+      pad.receiveShadow = true;
+      standG.add(pad);
+      addSlantedLeg(standG, fx, footY + 0.07, fz, 0, crownY, zc);
+    }
+    const collar = new THREE.Mesh(
+      new THREE.TorusGeometry(0.32, 0.055, 10, 24),
+      hubMat
+    );
+    collar.rotation.x = Math.PI / 2;
+    collar.position.set(0, crownY, zc);
+    collar.castShadow = true;
+    collar.receiveShadow = true;
+    standG.add(collar);
+  }
+
+  standG.userData.tooltip =
+    'Supports: tripods under the source and Stern–Gerlach stages; monitor-style base under the detector.';
+  apparatusGroup.add(standG);
+}
+
 function getDeflections() {
-  const primary = 2.5 * fieldStrength;
-  const secondary = 1.2 * fieldStrength;
-  const tertiary = 0.6 * fieldStrength;
+  const B = fieldStrength;
+  const k = DEFLECTION_B_CALIBRATION;
+  const primary = 2.5 * k * B;
+  const secondary = 1.2 * k * B;
+  const tertiary = 0.6 * k * B;
   return {primary, secondary, tertiary};
 }
 
@@ -1061,10 +1187,7 @@ class Atom3D {
     // Deflection tracking
     this.currentStage = -1;
     this.stageMeasured = [];
-    this.stageDeflectionStart = [];
     this.stageStates = [];
-    this.deflecting = false;
-    this.deflStartZ = 0;
 
     // Visual
     const col = new THREE.Color(COL.initial);
@@ -1122,63 +1245,56 @@ class Atom3D {
     const positions = getStagePositions();
     const deflections = getDeflections();
 
-    if (magEnabled) {
-      for (let i = 0; i < activeStages.length; i++) {
-        const stageZ = positions[i];
-        const stage = activeStages[i];
-        if (!stage.axis) continue;
+    let ax = 0;
+    let ay = 0;
 
-        const defl = i === 0 ? deflections.primary : (i === 1 ? deflections.secondary : deflections.tertiary);
+    for (let i = 0; i < activeStages.length; i++) {
+      const stageZ = positions[i];
+      const stage = activeStages[i];
+      if (!stage.axis) continue;
 
-        // Entering magnet region
-        if (this.pos.z <= stageZ + 1.0 && this.currentStage < i && !this.stageMeasured[i]) {
-          this.currentStage = i;
-          this.measureSpin(stage.axis);
-          this.deflecting = true;
-          this.deflStartZ = stageZ + 1.0;
-          this.stageDeflectionStart[i] = {x: this.pos.x, y: this.pos.y};
-          this.stageMeasured[i] = true;
-        }
+      const defl = i === 0 ? deflections.primary : (i === 1 ? deflections.secondary : deflections.tertiary);
+      const deflStartZ = stageZ + 1.0;
+      const deflEndZ = stageZ - 2.5;
+      const Lz = deflStartZ - deflEndZ;
 
-        // Deflection region — kinematic: displacement ∝ t² (constant force)
-        if (this.deflecting && this.currentStage === i) {
-          const deflEndZ = stageZ - 2.5;
-          if (this.pos.z >= deflEndZ) {
-            const progress = Math.min(1, (this.deflStartZ - this.pos.z) / (this.deflStartZ - deflEndZ));
-            const easedProgress = progress * progress; // Quadratic = constant acceleration
+      // Stern–Gerlach region [deflEndZ, deflStartZ] along −Z beam
+      const inMagnet =
+        this.pos.z <= deflStartZ && this.pos.z >= deflEndZ;
 
-            const start = this.stageDeflectionStart[i];
-            const isZ = stage.axis === 'z';
+      if (inMagnet && !this.stageMeasured[i] && this.currentStage < i) {
+        this.currentStage = i;
+        this.measureSpin(stage.axis);
+        this.stageMeasured[i] = true;
+      }
 
-            if (isZ) {
-              // Z-axis: deflect along Y (vertical)
-              this.pos.y = start.y + this.spinValue * defl * easedProgress;
-            } else {
-              // X-axis: deflect along X (horizontal)
-              this.pos.x = start.x + this.spinValue * defl * easedProgress;
-            }
-          }
-        }
+      // Constant field gradient in the gap ⇒ constant transverse acceleration; integrate v then x.
+      // With vz ≈ const over the gap, u = u0 + vu*t + ½ a t² gives net u = spin·defl and matches
+      // earlier calibration when a = 2·defl·vz² / Lz² (per unit spin).
+      if (this.stageMeasured[i] && inMagnet) {
+        const vz2 = this.vel.z * this.vel.z;
+        const a = ((2 * defl * vz2) / (Lz * Lz)) * this.spinValue;
+        if (stage.axis === 'z') ay += a;
+        else ax += a;
+      }
 
-        // Blocker check at same Z as blocker mesh (stageZ - 2.5) so beams don't appear past it
-        const blockerPlaneZ = stageZ - 2.5;
-        if (this.pos.z <= blockerPlaneZ && this.currentStage === i && !this.stageStates[i]) {
-          this.stageStates[i] = {axis: this.spinAxis, value: this.spinValue};
-          this.deflecting = false;
+      // Blocker at exit plane (same Z as mesh)
+      if (this.pos.z <= deflEndZ && this.currentStage === i && !this.stageStates[i]) {
+        this.stageStates[i] = {axis: this.spinAxis, value: this.spinValue};
 
-          if ((stage.blocker === 'plus' && this.spinValue > 0) ||
-              (stage.blocker === 'minus' && this.spinValue < 0)) {
-            this.blocked = true;
-            stats.blocked++;
-            this.dispose();
-            return false;
-          }
+        if ((stage.blocker === 'plus' && this.spinValue > 0) ||
+            (stage.blocker === 'minus' && this.spinValue < 0)) {
+          this.blocked = true;
+          stats.blocked++;
+          this.dispose();
+          return false;
         }
       }
     }
 
-    // Move
-    this.pos.add(this.vel.clone().multiplyScalar(dt));
+    this.vel.x += ax * dt;
+    this.vel.y += ay * dt;
+    this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
     this.glow.position.copy(this.pos);
 
@@ -1251,21 +1367,33 @@ function addDetectionSpot(x, y, axis, value) {
   const col = spinColor(axis, value);
   const mat = new THREE.MeshBasicMaterial({color: col});
   const spot = new THREE.Mesh(spotGeometry, mat);
-  spot.position.set(x, y, DETECTOR_Z + 0.18);
+  spot.position.set(x, y, DETECTOR_SPOT_Z_FRONT);
   scene.add(spot);
 
-  // Glow
+  const spotBack = new THREE.Mesh(spotGeometry, mat);
+  spotBack.position.set(x, y, DETECTOR_SPOT_Z_BACK);
+  scene.add(spotBack);
+
+  // Glow (shared materials front + back so fade applies to both)
   const glowGeo = new THREE.SphereGeometry(0.15, 8, 8);
   const glowMat = new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.3});
   const glow = new THREE.Mesh(glowGeo, glowMat);
   glow.position.copy(spot.position);
   scene.add(glow);
 
-  detectionSpots.push({mesh: spot, glow, createdAt: performance.now(), mat, glowMat});
+  const glowBack = new THREE.Mesh(glowGeo, glowMat);
+  glowBack.position.copy(spotBack.position);
+  scene.add(glowBack);
+
+  detectionSpots.push({
+    mesh: spot, glow, meshBack: spotBack, glowBack,
+    createdAt: performance.now(), mat, glowMat
+  });
 
   if (detectionSpots.length > 400) {
     const old = detectionSpots.shift();
     scene.remove(old.mesh); scene.remove(old.glow);
+    scene.remove(old.meshBack); scene.remove(old.glowBack);
     old.mat.dispose(); old.glowMat.dispose();
   }
 }
@@ -1273,6 +1401,7 @@ function addDetectionSpot(x, y, axis, value) {
 function clearSpots() {
   detectionSpots.forEach(s => {
     scene.remove(s.mesh); scene.remove(s.glow);
+    scene.remove(s.meshBack); scene.remove(s.glowBack);
     s.mat.dispose(); s.glowMat.dispose();
   });
   detectionSpots = [];
@@ -1497,14 +1626,8 @@ document.getElementById('rRate').addEventListener('input', e => {
 });
 
 document.getElementById('rField').addEventListener('input', e => {
-  fieldStrength = parseInt(e.target.value) / 100;
+  fieldStrength = Math.min(MAX_FIELD_TESLA, parseInt(e.target.value, 10) / 100);
   document.getElementById('vField').textContent = fieldStrength.toFixed(2);
-  rebuild();
-});
-
-document.getElementById('togMag').addEventListener('click', function() {
-  magEnabled = !magEnabled;
-  this.classList.toggle('on', magEnabled);
   rebuild();
 });
 
