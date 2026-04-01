@@ -297,6 +297,11 @@
             pointer-events: none;
         }
 
+        /* Heatmap legend strip width is set in drawHeatmap(); keep status left of that margin */
+        .viz-wrap.heatmap-mode .viz-status {
+            right: 118px;
+        }
+
         .viz-status-dot {
             width: 8px;
             height: 8px;
@@ -511,7 +516,7 @@
         </header>
 
         <div class="main-row">
-            <div class="viz-wrap">
+            <div class="viz-wrap" id="vizWrap">
                 <div class="viz-status" id="vizStatusPill">
                     <span class="viz-status-dot" id="statusDot"></span>
                     <span id="statusShort">Ready</span>
@@ -563,9 +568,9 @@
                     <div class="ctrl-row">
                         <div class="ctrl-head">
                             <label for="speedSlider">Animation Speed</label>
-                            <span class="value-display" id="speedValue">0.10x</span>
+                            <span class="value-display" id="speedValue">0.20x</span>
                         </div>
-                        <input type="range" class="slider" id="speedSlider" min="0.1" max="1" value="0.1" step="0.05">
+                        <input type="range" class="slider" id="speedSlider" min="0.1" max="1" value="0.2" step="0.05">
                     </div>
                 </div>
 
@@ -620,7 +625,7 @@
         let isRunning = false;
         let time = 0;
         let initialWidth = 1.0;
-        let simulationSpeed = 0.1;
+        let simulationSpeed = 0.2;
         let initialPosX = 0;
         let initialPosY = 0;
         let collapseCount = 0;
@@ -637,7 +642,7 @@
         const resolution = 160;
         const hbar = 1;
         const mass = 1;
-        const collapsedSigma0 = 0.05;
+        const collapsedSigma0 = 0.3;
         const maxFrameDeltaSeconds = 0.05;
 
         function initHeatmapCanvas() {
@@ -652,6 +657,8 @@
 
         function setViewMode(mode) {
             viewMode = mode === 'heatmap' ? 'heatmap' : '3d';
+            const vizWrap = document.getElementById('vizWrap');
+            if (vizWrap) vizWrap.classList.toggle('heatmap-mode', viewMode === 'heatmap');
             if (heatmapCanvas) heatmapCanvas.style.display = viewMode === 'heatmap' ? 'block' : 'none';
             const container = document.getElementById('canvas-container');
             if (container) container.style.display = viewMode === 'heatmap' ? 'none' : 'block';
@@ -704,8 +711,18 @@
 
             const w = heatmapCanvas.width;
             const h = heatmapCanvas.height;
-            const legendW = 60;
-            const plotW = w - legendW;
+            // Legend: labels left of a narrow color bar + right padding (avoids clipping wide tick text)
+            const legendRightPad = 10;
+            const legendBarW = 24;
+            const legendLabelGap = 8;
+            const legendLabelReserve = 58;
+            const legendTotalW =
+                legendRightPad + legendBarW + legendLabelGap + legendLabelReserve;
+            const plotW = Math.max(32, w - legendTotalW);
+            const barX = Math.max(plotW, w - legendRightPad - legendBarW);
+            const labelX = barX - legendLabelGap;
+            const legendTickVInsetTop = 12;
+            const legendTickVInsetBottom = 22;
             const bw = HEATMAP_RES;
             const bh = HEATMAP_RES;
             const span = gridSize * 2;
@@ -734,41 +751,45 @@
             heatmapCtx.drawImage(heatmapBuffer, 0, 0, bw, bh, 0, 0, plotW, h);
 
             // Legend gradient via canvas gradient (fast, no per-pixel work)
-            const legendGrad = heatmapCtx.createLinearGradient(plotW, 0, plotW, h);
+            const legendGrad = heatmapCtx.createLinearGradient(barX, 0, barX, h);
             for (let i = 0; i <= 10; i++) {
                 const frac = i / 10;
                 const li = Math.min(255, ((1 - frac) * 255) | 0) * 3;
                 legendGrad.addColorStop(frac, `rgb(${heatmapLUT[li]},${heatmapLUT[li + 1]},${heatmapLUT[li + 2]})`);
             }
             heatmapCtx.fillStyle = legendGrad;
-            heatmapCtx.fillRect(plotW, 0, legendW, h);
+            heatmapCtx.fillRect(barX, 0, legendBarW, h);
 
             // Legend border
             heatmapCtx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
             heatmapCtx.lineWidth = 1;
-            heatmapCtx.strokeRect(plotW, 0, legendW, h);
+            heatmapCtx.strokeRect(barX, 0, legendBarW, h);
 
-            // Legend tick labels
+            // Legend tick labels (right-aligned into reserved label column — stays inside canvas)
             heatmapCtx.shadowColor = 'rgba(2, 6, 23, 0.9)';
             heatmapCtx.shadowBlur = 2;
             heatmapCtx.font = '600 10px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
             heatmapCtx.fillStyle = '#f1f5f9';
             heatmapCtx.strokeStyle = 'rgba(2, 6, 23, 0.95)';
             heatmapCtx.lineWidth = 2;
-            heatmapCtx.textAlign = 'center';
+            heatmapCtx.textAlign = 'right';
+            heatmapCtx.textBaseline = 'middle';
             const legendTickCount = 5;
+            const tickSpan = Math.max(0, h - legendTickVInsetTop - legendTickVInsetBottom);
             for (let i = 0; i <= legendTickCount; i++) {
                 const frac = i / legendTickCount;
                 const val = colorMax * (1 - frac);
-                const ty = frac * (h - 1);
+                const ty = legendTickVInsetTop + frac * tickSpan;
                 const label = val < 0.01 ? val.toExponential(1) : val.toFixed(3);
-                heatmapCtx.strokeText(label, plotW + legendW / 2, Math.max(10, Math.min(h - 6, ty + 4)));
-                heatmapCtx.fillText(label, plotW + legendW / 2, Math.max(10, Math.min(h - 6, ty + 4)));
+                heatmapCtx.strokeText(label, labelX, ty);
+                heatmapCtx.fillText(label, labelX, ty);
             }
             heatmapCtx.font = '700 10px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+            heatmapCtx.textAlign = 'center';
             heatmapCtx.textBaseline = 'bottom';
-            heatmapCtx.strokeText('|ψ|²', plotW + legendW / 2, h - 2);
-            heatmapCtx.fillText('|ψ|²', plotW + legendW / 2, h - 2);
+            const titleY = h - legendRightPad;
+            heatmapCtx.strokeText('|ψ|²', barX + legendBarW / 2, titleY);
+            heatmapCtx.fillText('|ψ|²', barX + legendBarW / 2, titleY);
             heatmapCtx.shadowBlur = 0;
 
             // Grid lines on plot area
