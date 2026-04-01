@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaussian Wave Packet Simulation</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        dark: {
+                            bg: '#0a0a0a',
+                            panel: '#111111',
+                            border: '#262626'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Custom Range Slider */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #ffffff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+        }
+        input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(0.95);
+        }
+
+        /* Canvas Crosshair */
+        canvas {
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="bg-dark-bg text-neutral-200 font-sans h-screen w-screen overflow-hidden flex flex-col selection:bg-blue-500/30">
+
+    <!-- Top Header -->
+    <header class="h-16 border-b border-dark-border bg-dark-bg flex items-center justify-between px-6 shrink-0 z-10">
+        <div class="flex items-center gap-3">
+            <h1 class="text-[15px] font-semibold tracking-wide text-neutral-100 uppercase letter-spacing-wider">Gaussian Wave Packet</h1>
+            <button id="infoBtn" class="text-neutral-500 hover:text-neutral-200 transition-colors focus:outline-none" title="Information">
+                <i data-lucide="info" class="w-4 h-4"></i>
+            </button>
+        </div>
+        
+        <div class="flex items-center gap-2 bg-dark-panel border border-dark-border p-1 rounded-lg">
+            <button id="playBtn" class="p-1.5 text-blue-400 bg-blue-500/10 rounded-md hover:bg-blue-500/20 transition-all focus:outline-none" title="Play">
+                <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            </button>
+            <button id="pauseBtn" class="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md transition-all focus:outline-none" title="Pause">
+                <i data-lucide="pause" class="w-4 h-4 fill-current"></i>
+            </button>
+            <div class="w-[1px] h-4 bg-dark-border mx-1"></div>
+            <button id="resetBtn" class="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md transition-all focus:outline-none" title="Reset">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="flex flex-1 overflow-hidden">
+        
+        <!-- Canvas Container -->
+        <div id="plot-container" class="flex-1 relative bg-dark-bg">
+            <canvas id="mainPlot" class="block w-full h-full"></canvas>
+        </div>
+
+        <!-- Right Sidebar -->
+        <aside class="w-[320px] min-w-[320px] border-l border-dark-border bg-dark-panel flex flex-col h-full z-10 shrink-0">
+            <div class="flex-1 overflow-y-auto p-5 space-y-8 pb-10">
+                
+                <!-- VISUAL CONTROLS -->
+                <section>
+                    <h2 class="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.1em] mb-3">Visual Controls</h2>
+                    <div class="flex bg-[#0a0a0a] border border-dark-border rounded-lg p-1 relative">
+                        <button id="btnReal" class="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-white bg-neutral-800 shadow-sm transition-all focus:outline-none">Re[ψ(x)]</button>
+                        <button id="btnProb" class="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-neutral-500 hover:text-neutral-300 transition-all focus:outline-none">|ψ(x)|²</button>
+                    </div>
+                </section>
+
+                <!-- PHYSICS CONTROLS -->
+                <section>
+                    <h2 class="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.1em] mb-4">Physics Controls</h2>
+                    <div class="space-y-5">
+                        <!-- x0 -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-[11px] text-neutral-400">Center Position (x₀)</label>
+                                <span id="x0Val" class="text-[11px] font-mono text-blue-400">0.00 a.u.</span>
+                            </div>
+                            <input type="range" id="x0Slider" min="-5" max="5" step="0.01" value="0">
+                        </div>
+                        <!-- Sigma -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-[11px] text-neutral-400">Width (σ)</label>
+                                <span id="sigmaVal" class="text-[11px] font-mono text-blue-400">1.00 a.u.</span>
+                            </div>
+                            <input type="range" id="sigmaSlider" min="0.2" max="3.0" step="0.01" value="1.0">
+                        </div>
+                        <!-- k0 -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-[11px] text-neutral-400">Wave Number (k₀)</label>
+                                <span id="k0Val" class="text-[11px] font-mono text-blue-400">5.00 a.u.⁻¹</span>
+                            </div>
+                            <input type="range" id="k0Slider" min="0" max="15" step="0.1" value="5">
+                        </div>
+                        <!-- Probe -->
+                        <div class="pt-2 border-t border-dark-border">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-[11px] text-amber-500/80">Probe Position</label>
+                                <span id="probeVal" class="text-[11px] font-mono text-amber-500">0.00 a.u.</span>
+                            </div>
+                            <input type="range" id="probeSlider" min="-12" max="12" step="0.01" value="0">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- READOUTS & STATISTICS -->
+                <section>
+                    <h2 class="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.1em] mb-3">Probe & Statistics</h2>
+                    <div class="bg-[#0a0a0a] border border-dark-border rounded-lg p-3 space-y-2">
+                        <div class="flex justify-between items-center pb-2 border-b border-neutral-800/50">
+                            <span class="text-[10px] text-neutral-500">Probe x</span>
+                            <span id="rdX" class="text-[11px] font-mono text-neutral-200">0.0000 a.u.</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2 border-b border-neutral-800/50">
+                            <span id="rdFnLabel" class="text-[10px] text-neutral-500">Re[ψ(x)]</span>
+                            <span id="rdFnVal" class="text-[11px] font-mono text-neutral-200">0.000000</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2 border-b border-neutral-800/50">
+                            <span class="text-[10px] text-neutral-500">|ψ(x)|²</span>
+                            <span id="rdProbVal" class="text-[11px] font-mono text-neutral-200">0.000000</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2 border-b border-neutral-800/50">
+                            <span class="text-[10px] text-neutral-500">∫|ψ|²dx</span>
+                            <span class="text-[11px] font-mono text-emerald-400">1.000000</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2 border-b border-neutral-800/50">
+                            <span class="text-[10px] text-neutral-500">P(x₀ ± σ)</span>
+                            <span class="text-[11px] font-mono text-purple-400">68.27%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] text-neutral-500">P(x₀ ± 2σ)</span>
+                            <span class="text-[11px] font-mono text-indigo-400">95.45%</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- EQUATION -->
+                <section>
+                    <h2 class="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.1em] mb-3">Equation</h2>
+                    <div class="bg-[#0a0a0a] border border-dark-border rounded-lg p-4 font-mono text-[10px] text-neutral-400 leading-relaxed overflow-x-auto">
+                        <div class="text-blue-400/80 mb-2">ψ(x) = (2πσ²)⁻¹ᐟ⁴ ·<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exp(-(x-x₀)²/(4σ²)) ·<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exp(ik₀x)</div>
+                        <div class="text-emerald-400/80">|ψ(x)|² = (2πσ²)⁻¹ᐟ² ·<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exp(-(x-x₀)²/(2σ²))</div>
+                    </div>
+                </section>
+
+            </div>
+        </aside>
+    </main>
+
+    <!-- Info Modal Overlay -->
+    <div id="infoModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-[#111] border border-dark-border rounded-xl shadow-2xl w-full max-w-md p-6 transform scale-95 transition-transform duration-300" id="modalContent">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">Simulation Info</h3>
+                <button id="closeModalBtn" class="text-neutral-500 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="space-y-3 text-sm text-neutral-400 leading-relaxed">
+                <p>This simulation visualizes a 1D Gaussian wave packet, a common model in quantum mechanics for a localized free particle.</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li><strong class="text-neutral-200">x₀ (Center):</strong> The expectation value of position.</li>
+                    <li><strong class="text-neutral-200">σ (Width):</strong> Determines the spread (uncertainty) in position.</li>
+                    <li><strong class="text-neutral-200">k₀ (Wave Number):</strong> Determines the momentum and phase velocity of the packet.</li>
+                </ul>
+                <p>Toggle between the real part of the wave function <code>Re[ψ(x)]</code> and the probability density <code>|ψ(x)|²</code>.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initialization and Core Physics Logic -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // UI Interactions (Modal & Playback)
+        const infoBtn = document.getElementById('infoBtn');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const infoModal = document.getElementById('infoModal');
+        const modalContent = document.getElementById('modalContent');
+
+        infoBtn.addEventListener('click', () => {
+            infoModal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        });
+
+        const closeModal = () => {
+            infoModal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+        };
+        closeModalBtn.addEventListener('click', closeModal);
+        infoModal.addEventListener('click', (e) => { if (e.target === infoModal) closeModal(); });
+
+        let isPlaying = true;
+        const playBtn = document.getElementById('playBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function setPlaybackState(playing) {
+            isPlaying = playing;
+            if (isPlaying) {
+                playBtn.className = "p-1.5 text-blue-400 bg-blue-500/10 rounded-md transition-all focus:outline-none";
+                pauseBtn.className = "p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md transition-all focus:outline-none";
+            } else {
+                playBtn.className = "p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md transition-all focus:outline-none";
+                pauseBtn.className = "p-1.5 text-amber-400 bg-amber-500/10 rounded-md transition-all focus:outline-none";
+            }
+        }
+
+        playBtn.addEventListener('click', () => setPlaybackState(true));
+        pauseBtn.addEventListener('click', () => setPlaybackState(false));
+
+        // Physics Canvas Setup
+        const canvas = document.getElementById('mainPlot');
+        const ctx = canvas.getContext('2d');
+
+        let mode = 'real';
+        let x0 = 0, sigma = 1.0, k0 = 5.0, probeX = 0;
+        let time = 0;
+        let dpr = window.devicePixelRatio || 1;
+        let mouseInPlot = false, mouseX = 0, mouseY = 0;
+
+        // Fixed axis ranges
+        const FIXED_X_MIN = -12;
+        const FIXED_X_MAX = 12;
+        const FIXED_Y_MIN_REAL = -1.0;
+        const FIXED_Y_MAX_REAL = 1.0;
+        const FIXED_Y_MIN_PROB = -0.05;
+        const FIXED_Y_MAX_PROB = 1.0;
+
+        function resize() {
+            const c = document.getElementById('plot-container');
+            const w = c.clientWidth;
+            const h = c.clientHeight;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Sliders binding
+        const sliders = {
+            x0: { el: document.getElementById('x0Slider'), disp: document.getElementById('x0Val'), fmt: v => v.toFixed(2) + ' a.u.' },
+            sigma: { el: document.getElementById('sigmaSlider'), disp: document.getElementById('sigmaVal'), fmt: v => v.toFixed(2) + ' a.u.' },
+            k0: { el: document.getElementById('k0Slider'), disp: document.getElementById('k0Val'), fmt: v => v.toFixed(2) + ' a.u.⁻¹' },
+            probe: { el: document.getElementById('probeSlider'), disp: document.getElementById('probeVal'), fmt: v => v.toFixed(2) + ' a.u.' },
+        };
+
+        function updateSliderVal(key, val) {
+            sliders[key].el.value = val;
+            sliders[key].disp.textContent = sliders[key].fmt(val);
+        }
+
+        sliders.x0.el.addEventListener('input', e => { x0 = +e.target.value; sliders.x0.disp.textContent = sliders.x0.fmt(x0); });
+        sliders.sigma.el.addEventListener('input', e => { sigma = +e.target.value; sliders.sigma.disp.textContent = sliders.sigma.fmt(sigma); });
+        sliders.k0.el.addEventListener('input', e => { k0 = +e.target.value; sliders.k0.disp.textContent = sliders.k0.fmt(k0); });
+        sliders.probe.el.addEventListener('input', e => { probeX = +e.target.value; sliders.probe.disp.textContent = sliders.probe.fmt(probeX); });
+
+        // Visual Mode Toggles
+        const btnReal = document.getElementById('btnReal');
+        const btnProb = document.getElementById('btnProb');
+
+        function setMode(m) {
+            mode = m;
+            if (m === 'real') {
+                btnReal.className = "flex-1 py-1.5 text-[11px] font-semibold rounded-md text-white bg-neutral-800 shadow-sm transition-all focus:outline-none";
+                btnProb.className = "flex-1 py-1.5 text-[11px] font-semibold rounded-md text-neutral-500 hover:text-neutral-300 transition-all focus:outline-none";
+            } else {
+                btnProb.className = "flex-1 py-1.5 text-[11px] font-semibold rounded-md text-white bg-neutral-800 shadow-sm transition-all focus:outline-none";
+                btnReal.className = "flex-1 py-1.5 text-[11px] font-semibold rounded-md text-neutral-500 hover:text-neutral-300 transition-all focus:outline-none";
+            }
+        }
+        btnReal.addEventListener('click', () => setMode('real'));
+        btnProb.addEventListener('click', () => setMode('prob'));
+
+        // Reset functionality
+        resetBtn.addEventListener('click', () => {
+            x0 = 0; updateSliderVal('x0', x0);
+            sigma = 1.0; updateSliderVal('sigma', sigma);
+            k0 = 5.0; updateSliderVal('k0', k0);
+            probeX = 0; updateSliderVal('probe', probeX);
+            time = 0;
+            setPlaybackState(true);
+        });
+
+        // Core Physics Functions
+        function envelope(x) {
+            const norm = Math.pow(1.0 / (2.0 * Math.PI * sigma * sigma), 0.25);
+            return norm * Math.exp(-((x - x0) * (x - x0)) / (4.0 * sigma * sigma));
+        }
+        function probDensity(x) {
+            const norm = 1.0 / Math.sqrt(2.0 * Math.PI * sigma * sigma);
+            return norm * Math.exp(-((x - x0) * (x - x0)) / (2.0 * sigma * sigma));
+        }
+        function realPart(x, t) {
+            return envelope(x) * Math.cos(k0 * (x - x0) - k0 * k0 * 0.5 * t);
+        }
+
+        // Helpers
+        function niceStep(range, maxTicks) {
+            const raw = range / maxTicks;
+            const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+            const n = raw / mag;
+            let step;
+            if (n <= 1) step = mag;
+            else if (n <= 2) step = 2 * mag;
+            else if (n <= 5) step = 5 * mag;
+            else step = 10 * mag;
+            return step;
+        }
+
+        function roundRect(x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        // Mouse Interactions
+        canvas.addEventListener('click', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const w = rect.width;
+            const ml = 70, mr = 40, pw = w - ml - mr;
+            const xMin = FIXED_X_MIN, xMax = FIXED_X_MAX;
+            if (mx >= ml && mx <= ml + pw) {
+                probeX = xMin + (mx - ml) / pw * (xMax - xMin);
+                probeX = Math.max(xMin, Math.min(xMax, probeX));
+                updateSliderVal('probe', probeX);
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            const ml = 70, mr = 40, mt = 50, mb = 60;
+            const pw = rect.width - ml - mr;
+            const ph = rect.height - mt - mb;
+            mouseInPlot = mouseX >= ml && mouseX <= ml + pw && mouseY >= mt && mouseY <= mt + ph;
+        });
+        canvas.addEventListener('mouseleave', () => { mouseInPlot = false; });
+
+        // Main Draw Loop
+        function draw() {
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+
+            // Base Background (matches #0a0a0a)
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, w, h);
+
+            const ml = 70, mr = 40, mt = 50, mb = 60;
+            const pw = w - ml - mr;
+            const ph = h - mt - mb;
+
+            if (pw < 10 || ph < 10) { requestAnimationFrame(draw); return; }
+
+            const xMin = FIXED_X_MIN;
+            const xMax = FIXED_X_MAX;
+
+            let yMinVal, yMaxVal;
+            if (mode === 'prob') {
+                yMinVal = FIXED_Y_MIN_PROB;
+                yMaxVal = FIXED_Y_MAX_PROB;
+            } else {
+                yMinVal = FIXED_Y_MIN_REAL;
+                yMaxVal = FIXED_Y_MAX_REAL;
+            }
+
+            const xToP = x => ml + (x - xMin) / (xMax - xMin) * pw;
+            const yToP = y => mt + ph - (y - yMinVal) / (yMaxVal - yMinVal) * ph;
+            const pToX = px => xMin + (px - ml) / pw * (xMax - xMin);
+
+            // Plot Area Background
+            ctx.fillStyle = '#111111';
+            roundRect(ml, mt, pw, ph, 4);
+            ctx.fill();
+
+            const vg = ctx.createRadialGradient(ml + pw/2, mt + ph/2, 0, ml + pw/2, mt + ph/2, Math.max(pw, ph) * 0.8);
+            vg.addColorStop(0, 'rgba(10,10,10,0)');
+            vg.addColorStop(1, 'rgba(0,0,0,0.4)');
+            ctx.fillStyle = vg;
+            ctx.fill();
+
+            ctx.save();
+            ctx.beginPath();
+            roundRect(ml, mt, pw, ph, 4);
+            ctx.clip();
+
+            // Grid
+            const xStep = niceStep(xMax - xMin, Math.max(5, pw / 90));
+            const yStep = niceStep(yMaxVal - yMinVal, Math.max(4, ph / 70));
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 1;
+            for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
+                const px = Math.round(xToP(x)) + 0.5;
+                ctx.beginPath(); ctx.moveTo(px, mt); ctx.lineTo(px, mt + ph); ctx.stroke();
+            }
+            for (let y = Math.ceil(yMinVal / yStep) * yStep; y <= yMaxVal; y += yStep) {
+                const py = Math.round(yToP(y)) + 0.5;
+                ctx.beginPath(); ctx.moveTo(ml, py); ctx.lineTo(ml + pw, py); ctx.stroke();
+            }
+
+            // Zero line
+            const zeroY = yToP(0);
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(ml, zeroY); ctx.lineTo(ml + pw, zeroY); ctx.stroke();
+
+            // Center line (x₀)
+            ctx.strokeStyle = 'rgba(236,72,153,0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            const x0px = xToP(x0);
+            ctx.beginPath(); ctx.moveTo(x0px, mt); ctx.lineTo(x0px, mt + ph); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // σ regions
+            const N = Math.max(400, pw * 2);
+            function fillRegion(xL, xR, fillColor) {
+                ctx.beginPath();
+                const baseline = mode === 'prob' ? Math.max(0, yMinVal) : 0;
+                ctx.moveTo(xToP(xL), yToP(baseline));
+                for (let i = 0; i <= 300; i++) {
+                    const x = xL + (xR - xL) * i / 300;
+                    const y = mode === 'prob' ? probDensity(x) : realPart(x, time);
+                    ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.lineTo(xToP(xR), yToP(baseline));
+                ctx.closePath();
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+            }
+
+            fillRegion(x0 - 2*sigma, x0 - sigma, 'rgba(99,102,241,0.08)');
+            fillRegion(x0 + sigma, x0 + 2*sigma, 'rgba(99,102,241,0.08)');
+            fillRegion(x0 - sigma, x0 + sigma, 'rgba(139,92,246,0.15)');
+
+            // Main curve
+            ctx.beginPath();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = mode === 'real' ? '#3b82f6' : '#10b981';
+
+            for (let i = 0; i <= N; i++) {
+                const x = xMin + (xMax - xMin) * i / N;
+                const y = mode === 'prob' ? probDensity(x) : realPart(x, time);
+                const px = xToP(x);
+                const py = yToP(y);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            // Glow
+            ctx.lineWidth = 6;
+            ctx.globalAlpha = 0.15;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Envelope
+            if (mode === 'real') {
+                ctx.setLineDash([5, 5]);
+                ctx.strokeStyle = 'rgba(163,163,163,0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                for (let i = 0; i <= N; i++) {
+                    const x = xMin + (xMax - xMin) * i / N;
+                    const y = envelope(x);
+                    if (i === 0) ctx.moveTo(xToP(x), yToP(y)); else ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.stroke();
+                ctx.beginPath();
+                for (let i = 0; i <= N; i++) {
+                    const x = xMin + (xMax - xMin) * i / N;
+                    const y = -envelope(x);
+                    if (i === 0) ctx.moveTo(xToP(x), yToP(y)); else ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Probe line
+            const probePx = xToP(probeX);
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(probePx, mt);
+            ctx.lineTo(probePx, mt + ph);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const probeYValForDot = mode === 'prob' ? probDensity(probeX) : envelope(probeX);
+            const dotPx = probePx;
+            const dotPy = yToP(probeYValForDot);
+
+            // Probe Dot
+            ctx.beginPath(); ctx.arc(dotPx, dotPy, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(245,158,11,0.2)'; ctx.fill();
+            ctx.beginPath(); ctx.arc(dotPx, dotPy, 4.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b'; ctx.fill();
+            ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 1.5; ctx.stroke();
+
+            // Mouse crosshair
+            if (mouseInPlot) {
+                const mx = pToX(mouseX);
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 3]);
+                ctx.beginPath(); ctx.moveTo(mouseX, mt); ctx.lineTo(mouseX, mt + ph); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore();
+
+            // Axis Box
+            ctx.strokeStyle = '#262626';
+            ctx.lineWidth = 1;
+            roundRect(ml, mt, pw, ph, 4);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#737373';
+            ctx.font = '11px Inter, sans-serif';
+            
+            // X Ticks
+            ctx.textAlign = 'center';
+            for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
+                const px = xToP(x);
+                if (px > ml + 20 && px < ml + pw - 20) {
+                    ctx.fillText(x.toFixed(Math.abs(xStep) >= 1 ? 0 : 1), px, mt + ph + 18);
+                    ctx.strokeStyle = '#262626';
+                    ctx.beginPath(); ctx.moveTo(px, mt + ph); ctx.lineTo(px, mt + ph + 4); ctx.stroke();
+                }
+            }
+
+            // Y Ticks
+            ctx.textAlign = 'right';
+            for (let y = Math.ceil(yMinVal / yStep) * yStep; y <= yMaxVal; y += yStep) {
+                const py = yToP(y);
+                if (py > mt + 10 && py < mt + ph - 5) {
+                    ctx.fillText(y.toFixed(2), ml - 8, py + 4);
+                    ctx.strokeStyle = '#262626';
+                    ctx.beginPath(); ctx.moveTo(ml - 4, py); ctx.lineTo(ml, py); ctx.stroke();
+                }
+            }
+
+            // X Axis Title
+            ctx.fillStyle = '#a3a3a3';
+            ctx.font = '12px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Position x (atomic units)', ml + pw / 2, mt + ph + 45);
+
+            // Y Axis Title
+            ctx.save();
+            ctx.translate(25, mt + ph / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(mode === 'real' ? 'Amplitude Re[ψ(x)]' : 'Density |ψ(x)|²', 0, 0);
+            ctx.restore();
+
+            // Plot Title
+            ctx.fillStyle = '#e5e5e5';
+            ctx.font = '500 14px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(mode === 'real' ? 'Real Part of Wave Function' : 'Probability Density', ml, mt - 20);
+
+            // Update UI Sidebar
+            const probAtProbe = probDensity(probeX);
+            const psiRealAtProbe = realPart(probeX, time);
+            
+            document.getElementById('rdX').textContent = probeX.toFixed(4) + ' a.u.';
+            document.getElementById('rdFnLabel').textContent = mode === 'real' ? 'Re[ψ(x)]' : '|ψ(x)|²';
+            document.getElementById('rdFnVal').textContent = (mode === 'real' ? psiRealAtProbe : probAtProbe).toFixed(6);
+            document.getElementById('rdProbVal').textContent = probAtProbe.toFixed(6);
+            
+            if (mode === 'real') {
+                document.getElementById('rdFnVal').className = "text-[11px] font-mono text-blue-400";
+            } else {
+                document.getElementById('rdFnVal').className = "text-[11px] font-mono text-emerald-400";
+            }
+
+            if (isPlaying) time += 0.025;
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>

@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Gaussian Wave Packet Simulation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            color: #e2e8f0;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+        }
+        #plot-container {
+            flex: 1;
+            position: relative;
+        }
+        canvas#mainPlot {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        .sidebar {
+            width: 290px;
+            min-width: 290px;
+            background: rgba(15, 23, 42, 0.97);
+            border-left: 1px solid rgba(148, 163, 184, 0.1);
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 2px; }
+        .sidebar h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #f1f5f9;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.08);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+        .control-group { margin-bottom: 14px; }
+        .control-group:last-child { margin-bottom: 0; }
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+        }
+        .control-value {
+            font-weight: 600;
+            color: #60a5fa;
+            font-variant-numeric: tabular-nums;
+            font-size: 11px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.15);
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.35);
+            transition: box-shadow 0.15s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+        }
+        .toggle-group {
+            display: flex;
+            gap: 0;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 8px 10px;
+            font-size: 11.5px;
+            font-weight: 600;
+            background: transparent;
+            color: #64748b;
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s;
+            font-family: inherit;
+        }
+        .toggle-btn:hover { color: #94a3b8; background: rgba(148,163,184,0.05); }
+        .toggle-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .probe-info { font-size: 12px; line-height: 1.9; }
+        .probe-info .label { color: #64748b; font-size: 11px; }
+        .probe-info .value {
+            color: #f1f5f9;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 11px;
+        }
+        .formula-box {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 10.5px;
+            color: #94a3b8;
+            line-height: 1.7;
+            border: 1px solid rgba(148, 163, 184, 0.06);
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(148,163,184,0.04);
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-row .label { color: #64748b; font-size: 11px; }
+        .stat-row .value {
+            color: #f1f5f9;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 11px;
+        }
+        .check-mark { color: #34d399; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div id="plot-container">
+        <canvas id="mainPlot"></canvas>
+    </div>
+    <div class="sidebar">
+        <h1>
+            <span style="font-size:18px;">⚛</span> Gaussian Wave Packet
+        </h1>
+
+        <div class="section">
+            <div class="section-title">View Mode</div>
+            <div class="toggle-group">
+                <button class="toggle-btn active" id="btnReal" onclick="setMode('real')">Re[ψ(x)]</button>
+                <button class="toggle-btn" id="btnProb" onclick="setMode('prob')">|ψ(x)|²</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Parameters</div>
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Center position x₀</span>
+                    <span class="control-value" id="x0Val">0.00 a.u.</span>
+                </div>
+                <input type="range" id="x0Slider" min="-5" max="5" step="0.01" value="0">
+            </div>
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Width σ</span>
+                    <span class="control-value" id="sigmaVal">1.00 a.u.</span>
+                </div>
+                <input type="range" id="sigmaSlider" min="0.2" max="3.0" step="0.01" value="1.0">
+            </div>
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Wave number k₀</span>
+                    <span class="control-value" id="k0Val">5.00 a.u.⁻¹</span>
+                </div>
+                <input type="range" id="k0Slider" min="0" max="15" step="0.1" value="5">
+            </div>
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Probe position</span>
+                    <span class="control-value" id="probeVal">0.00 a.u.</span>
+                </div>
+                <input type="range" id="probeSlider" min="-10" max="10" step="0.01" value="0">
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Probe Readout</div>
+            <div class="probe-info">
+                <div><span class="label">x = </span><span class="value" id="rdX">0.0000 a.u.</span></div>
+                <div><span class="label" id="rdFnLabel">Re[ψ(x)] = </span><span class="value" id="rdFnVal">0.000000</span></div>
+                <div><span class="label">|ψ(x)|² = </span><span class="value" id="rdProbVal">0.000000</span></div>
+                <div><span class="label">ψ(x) envelope = </span><span class="value" id="rdEnvVal">0.000000</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Normalization &amp; Statistics</div>
+            <div class="stat-row">
+                <span class="label">∫|ψ(x)|²dx</span>
+                <span class="value"><span class="check-mark">✓</span> 1.000000</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">P(x₀ ± σ)</span>
+                <span class="value" style="color:#a78bfa;">68.27%</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">P(x₀ ± 2σ)</span>
+                <span class="value" style="color:#818cf8;">95.45%</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">⟨x⟩</span>
+                <span class="value" id="statMean">0.00 a.u.</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">Δx = σ</span>
+                <span class="value" id="statSigma">1.00 a.u.</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">Peak |ψ|²</span>
+                <span class="value" id="statPeak">0.3989</span>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Wave Function</div>
+            <div class="formula-box">
+                ψ(x) = (2πσ²)<sup>-1/4</sup> ·<br>
+                &nbsp; exp(-(x-x₀)²/(4σ²)) ·<br>
+                &nbsp; exp(ik₀x)<br><br>
+                |ψ(x)|² = (2πσ²)<sup>-1/2</sup> ·<br>
+                &nbsp; exp(-(x-x₀)²/(2σ²))
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('mainPlot');
+        const ctx = canvas.getContext('2d');
+
+        let mode = 'real';
+        let x0 = 0, sigma = 1.0, k0 = 5.0, probeX = 0;
+        let time = 0;
+        let dpr = window.devicePixelRatio || 1;
+        let mouseInPlot = false, mouseX = 0, mouseY = 0;
+
+        // Fixed axis ranges — no dynamic scaling
+        const FIXED_X_MIN = -12;
+        const FIXED_X_MAX = 12;
+        const FIXED_Y_MIN_REAL = -1.0;
+        const FIXED_Y_MAX_REAL = 1.0;
+        const FIXED_Y_MIN_PROB = -0.05;
+        const FIXED_Y_MAX_PROB = 1.0;
+
+        function resize() {
+            const c = document.getElementById('plot-container');
+            const w = c.clientWidth;
+            const h = c.clientHeight;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Slider bindings
+        const sliders = {
+            x0: { el: document.getElementById('x0Slider'), disp: document.getElementById('x0Val'), fmt: v => v.toFixed(2) + ' a.u.' },
+            sigma: { el: document.getElementById('sigmaSlider'), disp: document.getElementById('sigmaVal'), fmt: v => v.toFixed(2) + ' a.u.' },
+            k0: { el: document.getElementById('k0Slider'), disp: document.getElementById('k0Val'), fmt: v => v.toFixed(2) + ' a.u.⁻¹' },
+            probe: { el: document.getElementById('probeSlider'), disp: document.getElementById('probeVal'), fmt: v => v.toFixed(2) + ' a.u.' },
+        };
+        sliders.x0.el.addEventListener('input', e => { x0 = +e.target.value; sliders.x0.disp.textContent = sliders.x0.fmt(x0); });
+        sliders.sigma.el.addEventListener('input', e => { sigma = +e.target.value; sliders.sigma.disp.textContent = sliders.sigma.fmt(sigma); });
+        sliders.k0.el.addEventListener('input', e => { k0 = +e.target.value; sliders.k0.disp.textContent = sliders.k0.fmt(k0); });
+        sliders.probe.el.addEventListener('input', e => { probeX = +e.target.value; sliders.probe.disp.textContent = sliders.probe.fmt(probeX); });
+
+        window.setMode = function(m) {
+            mode = m;
+            document.getElementById('btnReal').classList.toggle('active', m === 'real');
+            document.getElementById('btnProb').classList.toggle('active', m === 'prob');
+        };
+
+        // Physics functions
+        function envelope(x) {
+            const norm = Math.pow(1.0 / (2.0 * Math.PI * sigma * sigma), 0.25);
+            return norm * Math.exp(-((x - x0) * (x - x0)) / (4.0 * sigma * sigma));
+        }
+        function probDensity(x) {
+            const norm = 1.0 / Math.sqrt(2.0 * Math.PI * sigma * sigma);
+            return norm * Math.exp(-((x - x0) * (x - x0)) / (2.0 * sigma * sigma));
+        }
+        function realPart(x, t) {
+            return envelope(x) * Math.cos(k0 * (x - x0) - k0 * k0 * 0.5 * t);
+        }
+
+        // Grid step calculation
+        function niceStep(range, maxTicks) {
+            const raw = range / maxTicks;
+            const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+            const n = raw / mag;
+            let step;
+            if (n <= 1) step = mag;
+            else if (n <= 2) step = 2 * mag;
+            else if (n <= 5) step = 5 * mag;
+            else step = 10 * mag;
+            return step;
+        }
+
+        function roundRect(x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        // Click on canvas to set probe
+        canvas.addEventListener('click', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const w = rect.width;
+            const ml = 80, mr = 40, pw = w - ml - mr;
+            const xMin = FIXED_X_MIN, xMax = FIXED_X_MAX;
+            if (mx >= ml && mx <= ml + pw) {
+                probeX = xMin + (mx - ml) / pw * (xMax - xMin);
+                probeX = Math.max(xMin, Math.min(xMax, probeX));
+                sliders.probe.el.value = probeX;
+                sliders.probe.disp.textContent = sliders.probe.fmt(probeX);
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            const ml = 80, mr = 40, mt = 50, mb = 65;
+            const pw = rect.width - ml - mr;
+            const ph = rect.height - mt - mb;
+            mouseInPlot = mouseX >= ml && mouseX <= ml + pw && mouseY >= mt && mouseY <= mt + ph;
+        });
+        canvas.addEventListener('mouseleave', () => { mouseInPlot = false; });
+
+        function draw() {
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, w, h);
+
+            const ml = 80, mr = 40, mt = 50, mb = 65;
+            const pw = w - ml - mr;
+            const ph = h - mt - mb;
+
+            if (pw < 10 || ph < 10) { requestAnimationFrame(draw); return; }
+
+            // Fixed axis ranges
+            const xMin = FIXED_X_MIN;
+            const xMax = FIXED_X_MAX;
+
+            // Update probe slider range to match fixed x range
+            sliders.probe.el.min = xMin;
+            sliders.probe.el.max = xMax;
+
+            // Fixed Y range based on mode
+            let yMinVal, yMaxVal;
+            if (mode === 'prob') {
+                yMinVal = FIXED_Y_MIN_PROB;
+                yMaxVal = FIXED_Y_MAX_PROB;
+            } else {
+                yMinVal = FIXED_Y_MIN_REAL;
+                yMaxVal = FIXED_Y_MAX_REAL;
+            }
+
+            const xToP = x => ml + (x - xMin) / (xMax - xMin) * pw;
+            const yToP = y => mt + ph - (y - yMinVal) / (yMaxVal - yMinVal) * ph;
+            const pToX = px => xMin + (px - ml) / pw * (xMax - xMin);
+
+            // Plot background
+            ctx.fillStyle = '#111827';
+            roundRect(ml, mt, pw, ph, 0);
+            ctx.fill();
+
+            // Subtle vignette
+            const vg = ctx.createRadialGradient(ml + pw/2, mt + ph/2, 0, ml + pw/2, mt + ph/2, Math.max(pw, ph) * 0.7);
+            vg.addColorStop(0, 'rgba(17,24,39,0)');
+            vg.addColorStop(1, 'rgba(10,15,30,0.3)');
+            ctx.fillStyle = vg;
+            ctx.fillRect(ml, mt, pw, ph);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(ml, mt, pw, ph);
+            ctx.clip();
+
+            // Grid
+            const xStep = niceStep(xMax - xMin, Math.max(5, pw / 90));
+            const yStep = niceStep(yMaxVal - yMinVal, Math.max(4, ph / 70));
+
+            ctx.strokeStyle = 'rgba(148,163,184,0.06)';
+            ctx.lineWidth = 1;
+            for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
+                const px = Math.round(xToP(x)) + 0.5;
+                ctx.beginPath(); ctx.moveTo(px, mt); ctx.lineTo(px, mt + ph); ctx.stroke();
+            }
+            for (let y = Math.ceil(yMinVal / yStep) * yStep; y <= yMaxVal; y += yStep) {
+                const py = Math.round(yToP(y)) + 0.5;
+                ctx.beginPath(); ctx.moveTo(ml, py); ctx.lineTo(ml + pw, py); ctx.stroke();
+            }
+
+            // Zero line
+            const zeroY = yToP(0);
+            ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(ml, zeroY); ctx.lineTo(ml + pw, zeroY); ctx.stroke();
+
+            // Center line (x₀)
+            ctx.strokeStyle = 'rgba(244,114,182,0.25)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            const x0px = xToP(x0);
+            ctx.beginPath(); ctx.moveTo(x0px, mt); ctx.lineTo(x0px, mt + ph); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // σ region boundary lines
+            const sigmaLines = [
+                { x: x0 - 2*sigma, c: 'rgba(129,140,248,0.2)', dash: [3,5] },
+                { x: x0 + 2*sigma, c: 'rgba(129,140,248,0.2)', dash: [3,5] },
+                { x: x0 - sigma, c: 'rgba(167,139,250,0.3)', dash: [4,4] },
+                { x: x0 + sigma, c: 'rgba(167,139,250,0.3)', dash: [4,4] },
+            ];
+            sigmaLines.forEach(sl => {
+                ctx.strokeStyle = sl.c;
+                ctx.lineWidth = 1;
+                ctx.setLineDash(sl.dash);
+                const px = xToP(sl.x);
+                ctx.beginPath(); ctx.moveTo(px, mt); ctx.lineTo(px, mt + ph); ctx.stroke();
+            });
+            ctx.setLineDash([]);
+
+            // Shaded regions under curve
+            const N = Math.max(400, pw * 2);
+
+            function fillRegion(xL, xR, fillColor) {
+                ctx.beginPath();
+                const baseline = mode === 'prob' ? Math.max(0, yMinVal) : 0;
+                ctx.moveTo(xToP(xL), yToP(baseline));
+                for (let i = 0; i <= 300; i++) {
+                    const x = xL + (xR - xL) * i / 300;
+                    const y = mode === 'prob' ? probDensity(x) : realPart(x, time);
+                    ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.lineTo(xToP(xR), yToP(baseline));
+                ctx.closePath();
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+            }
+
+            // 2σ region (outer)
+            fillRegion(x0 - 2*sigma, x0 - sigma, 'rgba(99,102,241,0.10)');
+            fillRegion(x0 + sigma, x0 + 2*sigma, 'rgba(99,102,241,0.10)');
+            // 1σ region (inner) - darker
+            fillRegion(x0 - sigma, x0 + sigma, 'rgba(139,92,246,0.18)');
+            // Also fill the 2σ sides that overlap with curve
+            fillRegion(x0 - 2*sigma, x0 - sigma, 'rgba(99,102,241,0.06)');
+            fillRegion(x0 + sigma, x0 + 2*sigma, 'rgba(99,102,241,0.06)');
+
+            // Draw main curve
+            ctx.beginPath();
+            ctx.lineWidth = 2.5;
+            if (mode === 'real') {
+                ctx.strokeStyle = '#60a5fa';
+            } else {
+                ctx.strokeStyle = '#34d399';
+            }
+
+            for (let i = 0; i <= N; i++) {
+                const x = xMin + (xMax - xMin) * i / N;
+                const y = mode === 'prob' ? probDensity(x) : realPart(x, time);
+                const px = xToP(x);
+                const py = yToP(y);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            // Glow effect for curve
+            ctx.lineWidth = 6;
+            ctx.globalAlpha = 0.15;
+            ctx.beginPath();
+            for (let i = 0; i <= N; i++) {
+                const x = xMin + (xMax - xMin) * i / N;
+                const y = mode === 'prob' ? probDensity(x) : realPart(x, time);
+                const px = xToP(x);
+                const py = yToP(y);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Envelope in real mode
+            if (mode === 'real') {
+                ctx.setLineDash([6, 4]);
+                ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+                ctx.lineWidth = 1.5;
+                // Upper
+                ctx.beginPath();
+                for (let i = 0; i <= N; i++) {
+                    const x = xMin + (xMax - xMin) * i / N;
+                    const y = envelope(x);
+                    if (i === 0) ctx.moveTo(xToP(x), yToP(y));
+                    else ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.stroke();
+                // Lower
+                ctx.beginPath();
+                for (let i = 0; i <= N; i++) {
+                    const x = xMin + (xMax - xMin) * i / N;
+                    const y = -envelope(x);
+                    if (i === 0) ctx.moveTo(xToP(x), yToP(y));
+                    else ctx.lineTo(xToP(x), yToP(y));
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Probe line
+            const probePx = xToP(probeX);
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(probePx, mt);
+            ctx.lineTo(probePx, mt + ph);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Probe dot - use envelope value for Y position in real mode so it doesn't bounce
+            const probeYValForDot = mode === 'prob' ? probDensity(probeX) : envelope(probeX);
+            // The actual function value at probe (for display, oscillating)
+            const probeYValActual = mode === 'prob' ? probDensity(probeX) : realPart(probeX, time);
+            const dotPx = probePx;
+            const dotPy = yToP(probeYValForDot);
+
+            // Dot glow
+            ctx.beginPath();
+            ctx.arc(dotPx, dotPy, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(251,191,36,0.2)';
+            ctx.fill();
+            // Dot
+            ctx.beginPath();
+            ctx.arc(dotPx, dotPy, 4.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbf24';
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Probe tooltip on plot - FIXED position, anchored relative to probe line top
+            const ttW = 155, ttH = 48;
+            // Position tooltip at a fixed vertical spot near the top of the plot area
+            const ttFixedY = mt + 12;
+            let ttX = dotPx + 14;
+            let ttY = ttFixedY;
+            if (ttX + ttW > ml + pw - 5) ttX = dotPx - ttW - 14;
+            if (ttY < mt + 5) ttY = mt + 5;
+            if (ttY + ttH > mt + ph - 5) ttY = mt + ph - ttH - 5;
+
+            ctx.fillStyle = 'rgba(15,23,42,0.92)';
+            roundRect(ttX, ttY, ttW, ttH, 5);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(251,191,36,0.25)';
+            ctx.lineWidth = 1;
+            roundRect(ttX, ttY, ttW, ttH, 5);
+            ctx.stroke();
+
+            ctx.font = '11px "SF Mono", "Fira Code", monospace';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText('x = ' + probeX.toFixed(4), ttX + 8, ttY + 17);
+            ctx.fillStyle = mode === 'real' ? '#60a5fa' : '#34d399';
+            const fnLbl = mode === 'real' ? 'Re[ψ]' : '|ψ|²';
+            ctx.fillText(fnLbl + ' = ' + probeYValActual.toFixed(6), ttX + 8, ttY + 35);
+
+            // Mouse crosshair in plot
+            if (mouseInPlot) {
+                const mx = pToX(mouseX);
+                const mval = mode === 'prob' ? probDensity(mx) : realPart(mx, time);
+                ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 3]);
+                ctx.beginPath(); ctx.moveTo(mouseX, mt); ctx.lineTo(mouseX, mt + ph); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore(); // End clipping
+
+            // Axes border
+            ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(ml, mt, pw, ph);
+
+            // X axis tick labels
+            ctx.fillStyle = '#64748b';
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
+                const px = xToP(x);
+                if (px > ml + 20 && px < ml + pw - 20) {
+                    ctx.fillText(x.toFixed(Math.abs(xStep) >= 1 ? 0 : 1), px, mt + ph + 18);
+                    // Small tick
+                    ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+                    ctx.beginPath(); ctx.moveTo(px, mt + ph); ctx.lineTo(px, mt + ph + 4); ctx.stroke();
+                }
+            }
+
+            // Y axis tick labels
+            ctx.textAlign = 'right';
+            for (let y = Math.ceil(yMinVal / yStep) * yStep; y <= yMaxVal; y += yStep) {
+                const py = yToP(y);
+                if (py > mt + 10 && py < mt + ph - 5) {
+                    ctx.fillStyle = '#64748b';
+                    ctx.fillText(y.toFixed(2), ml - 8, py + 4);
+                    ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+                    ctx.beginPath(); ctx.moveTo(ml - 4, py); ctx.lineTo(ml, py); ctx.stroke();
+                }
+            }
+
+            // σ markers below x-axis
+            ctx.font = '9px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            const markers = [
+                { x: x0, label: 'x₀', color: '#f472b6' },
+                { x: x0 - sigma, label: '-σ', color: '#a78bfa' },
+                { x: x0 + sigma, label: '+σ', color: '#a78bfa' },
+                { x: x0 - 2*sigma, label: '-2σ', color: '#818cf8' },
+                { x: x0 + 2*sigma, label: '+2σ', color: '#818cf8' },
+            ];
+            markers.forEach(m => {
+                const px = xToP(m.x);
+                if (px > ml + 10 && px < ml + pw - 10) {
+                    ctx.fillStyle = m.color;
+                    ctx.fillText(m.label, px, mt + ph + 32);
+                    // Tick mark
+                    ctx.strokeStyle = m.color;
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath(); ctx.moveTo(px, mt + ph); ctx.lineTo(px, mt + ph + 6); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            });
+
+            // Axis titles
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('x  (atomic units)', ml + pw / 2, mt + ph + 52);
+
+            ctx.save();
+            ctx.translate(22, mt + ph / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(mode === 'real' ? 'Re[ψ(x)]' : '|ψ(x)|²', 0, 0);
+            ctx.restore();
+
+            // Title
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '600 14px -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(mode === 'real' ? 'Real Part of Wave Function  Re[ψ(x)]' : 'Probability Density  |ψ(x)|²', ml, mt - 18);
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '11px -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('x₀ = ' + x0.toFixed(2) + '   σ = ' + sigma.toFixed(2) + '   k₀ = ' + k0.toFixed(1), ml, mt - 5);
+
+            // Legend (top-right corner of plot)
+            drawLegend(ml + pw - 195, mt + 12);
+
+            // Update sidebar readouts
+            // For the sidebar probe readout, use envelope-based (non-oscillating) value in real mode
+            const envAtProbe = envelope(probeX);
+            const probAtProbe = probDensity(probeX);
+            const psiRealAtProbe = realPart(probeX, time);
+            document.getElementById('rdX').textContent = probeX.toFixed(4) + ' a.u.';
+            document.getElementById('rdFnLabel').textContent = mode === 'real' ? 'Re[ψ(x)] = ' : '|ψ(x)|² = ';
+            // Show the actual oscillating value for Re[ψ] in the readout
+            document.getElementById('rdFnVal').textContent = (mode === 'real' ? psiRealAtProbe : probAtProbe).toFixed(6);
+            document.getElementById('rdProbVal').textContent = probAtProbe.toFixed(6);
+            document.getElementById('rdEnvVal').textContent = envAtProbe.toFixed(6);
+            document.getElementById('statMean').textContent = x0.toFixed(2) + ' a.u.';
+            document.getElementById('statSigma').textContent = sigma.toFixed(2) + ' a.u.';
+            document.getElementById('statPeak').textContent = probDensity(x0).toFixed(6);
+
+            time += 0.025;
+            requestAnimationFrame(draw);
+        }
+
+        function drawLegend(lx, ly) {
+            const entries = [];
+            if (mode === 'real') {
+                entries.push({ type: 'line', color: '#60a5fa', width: 2.5, dash: [], label: 'Re[ψ(x)]' });
+                entries.push({ type: 'line', color: 'rgba(148,163,184,0.4)', width: 1.5, dash: [5,3], label: '±|ψ(x)| envelope' });
+            } else {
+                entries.push({ type: 'line', color: '#34d399', width: 2.5, dash: [], label: '|ψ(x)|²' });
+            }
+            entries.push({ type: 'rect', color: 'rgba(139,92,246,0.35)', label: 'x₀ ± σ  (68.27%)' });
+            entries.push({ type: 'rect', color: 'rgba(99,102,241,0.22)', label: 'x₀ ± 2σ (95.45%)' });
+            entries.push({ type: 'line', color: '#f472b6', width: 1, dash: [4,4], label: 'Center x₀' });
+            entries.push({ type: 'line', color: '#fbbf24', width: 1.5, dash: [5,4], label: 'Probe line' });
+
+            const lw = 185;
+            const rowH = 18;
+            const padT = 10, padB = 8;
+            const lh = padT + entries.length * rowH + padB;
+
+            ctx.fillStyle = 'rgba(15,23,42,0.88)';
+            roundRect(lx, ly, lw, lh, 6);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+            ctx.lineWidth = 1;
+            roundRect(lx, ly, lw, lh, 6);
+            ctx.stroke();
+
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+
+            entries.forEach((e, i) => {
+                const ey = ly + padT + i * rowH + rowH / 2;
+                if (e.type === 'line') {
+                    ctx.strokeStyle = e.color;
+                    ctx.lineWidth = e.width;
+                    ctx.setLineDash(e.dash);
+                    ctx.beginPath();
+                    ctx.moveTo(lx + 10, ey);
+                    ctx.lineTo(lx + 30, ey);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                } else if (e.type === 'rect') {
+                    ctx.fillStyle = e.color;
+                    ctx.fillRect(lx + 10, ey - 5, 20, 10);
+                    ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(lx + 10, ey - 5, 20, 10);
+                }
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillText(e.label, lx + 38, ey + 3.5);
+            });
+        }
+
+        draw();
+    })();
+    </script>
+</body>
+</html>
