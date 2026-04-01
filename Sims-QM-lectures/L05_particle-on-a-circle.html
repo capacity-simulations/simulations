@@ -626,7 +626,7 @@
                         </p>
                         <span class="about-subhead">Controls</span>
                         <p class="about-body">
-                            <strong>Quantum Number:</strong> slider for \(n\); degeneracy note below it. <strong>Display Mode:</strong> ring vs \(\phi\) plot toggle; toggles <strong>Show Probability Density</strong> \(|\psi|^2\) and <strong>Animate Time Evolution</strong>. <strong>Animation:</strong> <strong>Time Speed</strong> slider. <strong>Current State:</strong> ring radius, \(E_n\), wavelength, and the lecture equations. Top bar: <strong>Reset</strong> / <strong>Pause</strong>.
+                            <strong>Quantum Number:</strong> slider for \(n\); degeneracy note below it. <strong>Display Mode:</strong> ring vs \(\phi\) plot toggle; <strong>Show Re part</strong> / <strong>Show Im part</strong>; <strong>Show Probability Density</strong> \(|\psi|^2\); <strong>Animate Time Evolution</strong>. <strong>Animation:</strong> <strong>Time Speed</strong> slider. <strong>Current State:</strong> ring radius, \(E_n\), wavelength, and the lecture equations. Top bar: <strong>Reset</strong> / <strong>Pause</strong>.
                         </p>
                     </div>
                 </div>
@@ -708,6 +708,18 @@
                 <button class="btn btn-primary" id="toggleDisplay">Show on Circle</button>
                 <div style="margin-top: 10px;">
                     <label class="checkbox-group">
+                        <input type="checkbox" id="showRePart" checked>
+                        Show Re part
+                    </label>
+                </div>
+                <div style="margin-top: 8px;">
+                    <label class="checkbox-group">
+                        <input type="checkbox" id="showImPart" checked>
+                        Show Im part
+                    </label>
+                </div>
+                <div style="margin-top: 8px;">
+                    <label class="checkbox-group">
                         <input type="checkbox" id="showProbability" checked>
                         Show Probability Density \(|\psi|^2\)
                     </label>
@@ -725,9 +737,9 @@
                 <div class="control-group">
                     <div class="control-label">
                         <span>Time Speed</span>
-                        <span class="control-value" id="speedValue">1.0x</span>
+                        <span class="control-value" id="speedValue">0.1x</span>
                     </div>
-                    <input type="range" class="slider" id="speedSlider" min="0" max="3" step="0.1" value="1">
+                    <input type="range" class="slider" id="speedSlider" min="0.1" max="1" step="0.05" value="0.1">
                 </div>
             </div>
             
@@ -783,8 +795,10 @@
         let n = 1;
         let showOnRing = false;
         let showProbability = true;
+        let showRePart = true;
+        let showImPart = true;
         let animatePhase = true;
-        let timeSpeed = 1;
+        let timeSpeed = 0.1;
         let time = 0;
         let lastFrameTime = performance.now();
         let isRunning = true;
@@ -806,6 +820,8 @@
         const degeneracyBadge = document.getElementById('degeneracyBadge');
         const toggleDisplayBtn = document.getElementById('toggleDisplay');
         const showProbabilityCheckbox = document.getElementById('showProbability');
+        const showRePartCheckbox = document.getElementById('showRePart');
+        const showImPartCheckbox = document.getElementById('showImPart');
         const animatePhaseCheckbox = document.getElementById('animatePhase');
         const speedSlider = document.getElementById('speedSlider');
         const speedValueDisplay = document.getElementById('speedValue');
@@ -927,7 +943,7 @@
 
             // Draw axis
             energyCtx.strokeStyle = '#94a3b8';
-            energyCtx.lineWidth = 2;
+            energyCtx.lineWidth = 1.45;
             energyCtx.beginPath();
             energyCtx.moveTo(paddingLeft, paddingTop);
             energyCtx.lineTo(paddingLeft, h - paddingBottom);
@@ -1029,20 +1045,24 @@
             
             // Draw axes
             waveCtx.strokeStyle = '#94a3b8';
-            waveCtx.lineWidth = 1.5;
+            waveCtx.lineWidth = 1.15;
             
-            // X axis
+            const axisColor = '#94a3b8';
+            const axisArrowSize = 7;
+
+            // X axis (φ increases to the right)
             waveCtx.beginPath();
             waveCtx.moveTo(padding, centerY);
             waveCtx.lineTo(w - padding, centerY);
             waveCtx.stroke();
-            
-            // Y axis
+
+            // Y axis (ψ increases upward on screen)
             waveCtx.beginPath();
             waveCtx.moveTo(padding, padding);
             waveCtx.lineTo(padding, h - padding);
             waveCtx.stroke();
-            
+            drawArrowheadAtEnd(waveCtx, padding, h - padding, padding, padding, { color: axisColor, size: axisArrowSize });
+
             waveCtx.fillStyle = '#e2e8f0';
             waveCtx.font = '600 11px sans-serif';
             waveCtx.textAlign = 'center';
@@ -1143,8 +1163,12 @@
                 waveCtx.stroke();
             }
 
-            drawWaveComponent('#60a5fa', (phi) => normalization * Math.cos(n * phi - n * n * phase));
-            drawWaveComponent('#34d399', (phi) => normalization * Math.sin(n * phi - n * n * phase));
+            if (showRePart) {
+                drawWaveComponent('#60a5fa', (phi) => normalization * Math.cos(n * phi - n * n * phase));
+            }
+            if (showImPart) {
+                drawWaveComponent('#34d399', (phi) => normalization * Math.sin(n * phi - n * n * phase));
+            }
         }
         
         function rotateRingPoint(x, y, z) {
@@ -1248,12 +1272,27 @@
             });
         }
 
+        function drawArrowheadAtEnd(ctx, x0, y0, x1, y1, opts = {}) {
+            const size = opts.size ?? 8;
+            const color = opts.color ?? '#94a3b8';
+            const angle = Math.atan2(y1 - y0, x1 - x0);
+            const spread = Math.PI / 9;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 - size * Math.cos(angle - spread), y1 - size * Math.sin(angle - spread));
+            ctx.lineTo(x1 - size * Math.cos(angle + spread), y1 - size * Math.sin(angle + spread));
+            ctx.closePath();
+            ctx.fill();
+        }
+
         function drawProjectedAxis(start, end, color, label, width, height, options = {}) {
             const projectedStart = projectRingPoint(start.x, start.y, start.z, width, height);
             const projectedEnd = projectRingPoint(end.x, end.y, end.z, width, height);
             const labelOffsetX = options.labelOffsetX ?? 0;
             const labelOffsetY = options.labelOffsetY ?? -8;
-            const lineWidth = options.lineWidth ?? 1.8;
+            const lineWidth = options.lineWidth ?? 1.45;
+            const arrowSize = options.arrowSize ?? 9;
 
             waveCtx.strokeStyle = color;
             waveCtx.lineWidth = lineWidth;
@@ -1261,6 +1300,11 @@
             waveCtx.moveTo(projectedStart.x, projectedStart.y);
             waveCtx.lineTo(projectedEnd.x, projectedEnd.y);
             waveCtx.stroke();
+
+            drawArrowheadAtEnd(waveCtx, projectedStart.x, projectedStart.y, projectedEnd.x, projectedEnd.y, {
+                color,
+                size: arrowSize
+            });
 
             waveCtx.fillStyle = color;
             waveCtx.font = '700 12px sans-serif';
@@ -1308,7 +1352,7 @@
                 'x',
                 w,
                 h,
-                { labelOffsetX: 14, labelOffsetY: -2, lineWidth: 2.1 }
+                { labelOffsetX: 14, labelOffsetY: -2, lineWidth: 1.65 }
             );
             drawProjectedAxis(
                 { x: 0, y: -1.55, z: 0 },
@@ -1317,7 +1361,7 @@
                 'y',
                 w,
                 h,
-                { labelOffsetX: 12, labelOffsetY: -4, lineWidth: 2.1 }
+                { labelOffsetX: 12, labelOffsetY: -4, lineWidth: 1.65 }
             );
             drawProjectedAxis(
                 { x: 0, y: 0, z: -0.95 },
@@ -1326,7 +1370,7 @@
                 'z',
                 w,
                 h,
-                { labelOffsetX: 12, labelOffsetY: -10, lineWidth: 2.3 }
+                { labelOffsetX: 12, labelOffsetY: -10, lineWidth: 1.8 }
             );
 
             if (showProbability) {
@@ -1346,8 +1390,12 @@
             }
 
             strokeContinuousProjectedPolyline(baseRing, 'rgba(192, 132, 252, 0.95)', 2.2, [7, 5]);
-            strokeProjectedPolyline(realCurve, '#60a5fa', 2.8);
-            strokeProjectedPolyline(imagCurve, '#34d399', 2.8);
+            if (showRePart) {
+                strokeProjectedPolyline(realCurve, '#60a5fa', 2.8);
+            }
+            if (showImPart) {
+                strokeProjectedPolyline(imagCurve, '#34d399', 2.8);
+            }
 
             const origin = projectRingPoint(0, 0, 0, w, h);
             waveCtx.fillStyle = '#475569';
@@ -1415,6 +1463,14 @@
         showProbabilityCheckbox.addEventListener('change', (e) => {
             showProbability = e.target.checked;
         });
+
+        showRePartCheckbox.addEventListener('change', (e) => {
+            showRePart = e.target.checked;
+        });
+
+        showImPartCheckbox.addEventListener('change', (e) => {
+            showImPart = e.target.checked;
+        });
         
         animatePhaseCheckbox.addEventListener('change', (e) => {
             animatePhase = e.target.checked;
@@ -1423,7 +1479,7 @@
         
         speedSlider.addEventListener('input', (e) => {
             timeSpeed = parseFloat(e.target.value);
-            speedValueDisplay.textContent = timeSpeed.toFixed(1) + 'x';
+            speedValueDisplay.textContent = Number(timeSpeed.toFixed(2)) + 'x';
         });
         
         // Top bar controls
@@ -1438,13 +1494,18 @@
             
             showProbability = true;
             showProbabilityCheckbox.checked = true;
+
+            showRePart = true;
+            showRePartCheckbox.checked = true;
+            showImPart = true;
+            showImPartCheckbox.checked = true;
             
             animatePhase = true;
             animatePhaseCheckbox.checked = true;
             
-            timeSpeed = 1;
-            speedSlider.value = 1;
-            speedValueDisplay.textContent = '1.0x';
+            timeSpeed = 0.1;
+            speedSlider.value = '0.1';
+            speedValueDisplay.textContent = '0.1x';
             isRingDragging = false;
             resetRingView();
             

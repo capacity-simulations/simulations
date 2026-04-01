@@ -215,8 +215,6 @@ body.light-theme .barrier-strip-label { color: #64748b; }
     text-transform: uppercase; letter-spacing: 0.8px;
     color: #dbeafe; margin-bottom: 12px;
 }
-.eq-block .math-block { font-size: 13px; overflow-x: auto; text-align: center; }
-.eq-block .katex { font-size: 0.92em; }
 .slider-group { margin-bottom: 14px; }
 .slider-group:last-child { margin-bottom: 0; }
 .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
@@ -368,10 +366,11 @@ body.light-theme .main-area { background: #e2e8f0; }
             <div class="legend-item"><div class="legend-line" style="background:#60a5fa;"></div> Transmission T</div>
             <div class="legend-item" id="legendR" style="display:none;"><div class="legend-line" style="background:#f472b6;"></div> Reflection R</div>
             <div class="legend-item"><div class="legend-dash" style="border-color:#94a3b8;"></div> Classical limit</div>
+            <div class="legend-item" id="legendResonances" style="display:none;"><div class="legend-line" style="background:#d946ef; width:8px; height:8px; border-radius:50%;"></div> Resonance markers (T = 1)</div>
             <div class="legend-item"><div class="legend-line" style="background:#fbbf24; width:8px; height:8px; border-radius:50%;"></div> Scanning marker</div>
         </div>
     </div>
-    <div class="barrier-strip">
+    <div class="barrier-strip" id="barrierStrip" style="display: none;">
         <div class="barrier-strip-label">Barrier diagram (schematic)</div>
         <canvas id="barrierCanvas"></canvas>
     </div>
@@ -416,17 +415,6 @@ body.light-theme .main-area { background: #e2e8f0; }
             <input type="range" id="sliderScannerSpeed" min="0.25" max="1" step="0.05" value="1">
         </div>
     </div>
-    <div class="panel" id="eqPanel">
-        <div class="panel-title">Equation</div>
-        <div id="eqTvsE" class="eq-block">
-            <div class="math-block" style="margin:0 0 6px;">\[ T(E) = \frac{4k^2\eta^2}{4k^2\eta^2 + (k^2{+}\eta^2)^2\sinh^2\!(2\eta a)} \]</div>
-            <div class="math-block">\[ k^2 = \frac{2mE}{\hbar^2}\,,\quad \eta^2 = \frac{2m(U{-}E)}{\hbar^2} \]</div>
-        </div>
-        <div id="eqTvsk" class="eq-block" style="display:none;">
-            <div class="math-block" style="margin:0 0 6px;">\[ T(k) = \frac{4k^2\eta^2}{4k^2\eta^2 + (k^2{+}\eta^2)^2\sinh^2\!(2\eta a)} \]</div>
-            <div class="math-block">\[ E = \frac{\hbar^2 k^2}{2m}\,,\quad \eta = \sqrt{\frac{2m(U{-}E)}{\hbar^2}} \]</div>
-        </div>
-    </div>
     <div class="panel">
         <div class="panel-title">Current Values</div>
         <div class="output-row"><span class="output-name">T</span><span class="output-value" id="statT">—</span></div>
@@ -440,8 +428,9 @@ body.light-theme .main-area { background: #e2e8f0; }
         <label class="checkbox-group"><input type="checkbox" id="chkReflection"> Reflection R = 1 − T</label>
         <label class="checkbox-group"><input type="checkbox" id="chkClassical" checked> Classical prediction</label>
         <label class="checkbox-group"><input type="checkbox" id="chkRegions" checked> Region shading</label>
-        <label class="checkbox-group"><input type="checkbox" id="chkResonances" checked> Resonance markers (T = 1)</label>
-        <label class="checkbox-group"><input type="checkbox" id="chkAnimate" checked> Animated scanner</label>
+        <label class="checkbox-group"><input type="checkbox" id="chkResonances"> Resonance markers (T = 1)</label>
+        <label class="checkbox-group"><input type="checkbox" id="chkAnimate"> Animated scanner</label>
+        <label class="checkbox-group"><input type="checkbox" id="chkBarrierDiagram"> Show barrier diagram</label>
     </div>
 </div>
 
@@ -515,6 +504,14 @@ function getXRange() {
         : Math.sqrt(2 * params.m * Math.max(params.U * 3, 3));
     if (max <= min || !Number.isFinite(max)) max = min + 1;
     return { min, max };
+}
+
+/** Fixed energy scale for the barrier schematic (eV): main plot x-range tracks U, but schematic height must not “zoom” when U changes. */
+function getSchematicEnergyMax() {
+    const el = document.getElementById('sliderU');
+    const uMax = el ? parseFloat(el.max) : 15;
+    const uCap = Number.isFinite(uMax) && uMax > 0 ? uMax : 15;
+    return Math.max(3 * uCap, 3);
 }
 
 function xToE(xVal) {
@@ -605,18 +602,24 @@ function drawPlot() {
     const clBPx = Math.max(pa.x, Math.min(pa.x + pa.w, bPx));
 
     if (document.getElementById('chkRegions').checked) {
-        ctx.fillStyle = 'rgba(96, 165, 250, 0.035)';
+        // Stronger region shading for readability (tuned per theme)
+        const shadeTunnel = isLight ? 'rgba(37, 99, 235, 0.11)' : 'rgba(96, 165, 250, 0.085)';
+        const shadeProp = isLight ? 'rgba(5, 150, 105, 0.10)' : 'rgba(52, 211, 153, 0.075)';
+        const labelTunnel = isLight ? 'rgba(30, 64, 175, 0.65)' : 'rgba(96, 165, 250, 0.55)';
+        const labelProp = isLight ? 'rgba(6, 95, 70, 0.60)' : 'rgba(52, 211, 153, 0.52)';
+
+        ctx.fillStyle = shadeTunnel;
         ctx.fillRect(pa.x, pa.y, clBPx - pa.x, pa.h);
-        ctx.fillStyle = 'rgba(52, 211, 153, 0.035)';
+        ctx.fillStyle = shadeProp;
         ctx.fillRect(clBPx, pa.y, pa.x + pa.w - clBPx, pa.h);
         ctx.font = '10px -apple-system, sans-serif';
         ctx.textAlign = 'center';
         if (clBPx - pa.x > 65) {
-            ctx.fillStyle = 'rgba(96, 165, 250, 0.35)';
+            ctx.fillStyle = labelTunnel;
             ctx.fillText('Tunneling', (pa.x + clBPx) / 2, pa.y + 15);
         }
         if (pa.x + pa.w - clBPx > 65) {
-            ctx.fillStyle = 'rgba(52, 211, 153, 0.35)';
+            ctx.fillStyle = labelProp;
             ctx.fillText('Propagating', (clBPx + pa.x + pa.w) / 2, pa.y + 15);
         }
     }
@@ -696,6 +699,9 @@ function drawPlot() {
 
     const showR = document.getElementById('chkReflection').checked;
     document.getElementById('legendR').style.display = showR ? '' : 'none';
+    const showRes = document.getElementById('chkResonances').checked;
+    const legendRes = document.getElementById('legendResonances');
+    if (legendRes) legendRes.style.display = showRes ? '' : 'none';
     if (showR) {
         ctx.strokeStyle = 'rgba(244, 114, 182, 0.15)';
         ctx.lineWidth = 5;
@@ -718,21 +724,21 @@ function drawPlot() {
         ctx.stroke();
     }
 
-    if (document.getElementById('chkResonances').checked) {
+    if (showRes) {
         for (let n = 1; n < 80; n++) {
             const En = params.U + (n * Math.PI) * (n * Math.PI) / (8 * params.m * params.a * params.a);
             const xVal = mode === 'E' ? En : KfromE(En, params.m);
             if (xVal > xRange.max) break;
             const px = pa.x + (xVal - xRange.min) / (xRange.max - xRange.min) * pa.w;
             if (px >= pa.x && px <= pa.x + pa.w) {
-                ctx.strokeStyle = 'rgba(251, 191, 36, 0.15)';
+                ctx.strokeStyle = 'rgba(192, 38, 211, 0.45)';
                 ctx.lineWidth = 1;
                 ctx.setLineDash([2, 3]);
                 ctx.beginPath(); ctx.moveTo(px, pa.y); ctx.lineTo(px, pa.y + pa.h); ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+                ctx.fillStyle = 'rgba(217, 70, 239, 0.95)';
                 ctx.beginPath(); ctx.arc(px, pa.y, 3.5, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = 'rgba(251, 191, 36, 0.5)';
+                ctx.fillStyle = 'rgba(192, 38, 211, 0.75)';
                 ctx.font = '9px -apple-system, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('n=' + n, px, pa.y - 5);
@@ -939,14 +945,23 @@ function drawBarrier() {
     ctx.lineWidth = 1;
     ctx.strokeRect(mg, mg, plotW, plotH + 8);
 
-    const relW = Math.max(0.06, Math.min(0.35, params.a * 0.06));
+    // Map half-width a -> schematic width: linear in a, narrow band, quantized so each step is small
+    const aMin = 0.05;
+    const aMax = 2.5;
+    const widthSteps = 32;
+    let u = (params.a - aMin) / (aMax - aMin);
+    u = Math.max(0, Math.min(1, u));
+    const stepIdx = Math.round(u * (widthSteps - 1));
+    const t = stepIdx / (widthSteps - 1);
+    const relWMin = 0.05;
+    const relWMax = 0.20;
+    const relW = relWMin + (relWMax - relWMin) * t;
     const bx1 = mg + (0.5 - relW) * plotW;
     const bx2 = mg + (0.5 + relW) * plotW;
 
-    const maxVisE = getXRange().max;
-    const maxE = mode === 'E' ? maxVisE : EfromK(maxVisE, params.m);
+    const schematicEmax = getSchematicEnergyMax();
     const vScale = plotH * 0.85;
-    const barrierH = vScale * Math.min(params.U / Math.max(maxE, 1e-10), 1.0);
+    const barrierH = vScale * Math.min(params.U / Math.max(schematicEmax, 1e-10), 1.0);
 
     const grad = ctx.createLinearGradient(bx1, baseY - barrierH, bx2, baseY);
     grad.addColorStop(0, 'rgba(139, 92, 246, 0.55)');
@@ -978,7 +993,7 @@ function drawBarrier() {
     const sT = computeT(sE, params.U, params.m, params.a);
     const incAmp = plotH * 0.13;
     const transAmp = incAmp * Math.sqrt(Math.max(0, sT));
-    const eLevelY = baseY - vScale * Math.min(sE / Math.max(maxE, 1e-10), 1.0);
+    const eLevelY = baseY - vScale * Math.min(sE / Math.max(schematicEmax, 1e-10), 1.0);
     const waveY = Math.max(mg + incAmp + 2, Math.min(baseY - incAmp - 2, sE > 0 ? eLevelY : baseY - incAmp - 5));
     const omega = animTime * 3.5 * scannerSpeed;
     const kVis = 18;
@@ -1106,10 +1121,6 @@ function setMode(m) {
     const optK = document.getElementById('optTvsk');
     if (optE) optE.classList.toggle('active', m === 'E');
     if (optK) optK.classList.toggle('active', m === 'k');
-    const eqE = document.getElementById('eqTvsE');
-    const eqK = document.getElementById('eqTvsk');
-    if (eqE) eqE.style.display = m === 'E' ? '' : 'none';
-    if (eqK) eqK.style.display = m === 'k' ? '' : 'none';
 }
 
 function resetSimulation() {
@@ -1183,6 +1194,19 @@ function setupEvents() {
     if (optTvsE) optTvsE.addEventListener('click', function() { setMode('E'); });
     if (optTvsk) optTvsk.addEventListener('click', function() { setMode('k'); });
 
+    const barrierStrip = document.getElementById('barrierStrip');
+    const chkBarrierDiagram = document.getElementById('chkBarrierDiagram');
+    function updateBarrierVisibility() {
+        if (!barrierStrip || !chkBarrierDiagram) return;
+        barrierStrip.style.display = chkBarrierDiagram.checked ? '' : 'none';
+        requestAnimationFrame(function() {
+            resizeCanvas(plotCanvas);
+            if (chkBarrierDiagram.checked) resizeBarrier();
+        });
+    }
+    if (chkBarrierDiagram) chkBarrierDiagram.addEventListener('change', updateBarrierVisibility);
+    updateBarrierVisibility();
+
     plotCanvas.addEventListener('mousemove', function(e) {
         const r = plotCanvas.getBoundingClientRect();
         hoverX = e.clientX - r.left;
@@ -1190,7 +1214,11 @@ function setupEvents() {
         isHovering = true;
     });
     plotCanvas.addEventListener('mouseleave', function() { isHovering = false; });
-    window.addEventListener('resize', function() { resizeCanvas(plotCanvas); resizeBarrier(); });
+    window.addEventListener('resize', function() {
+        resizeCanvas(plotCanvas);
+        const chkB = document.getElementById('chkBarrierDiagram');
+        if (chkB && chkB.checked) resizeBarrier();
+    });
 }
 
 let lastTime = performance.now();
@@ -1205,14 +1233,16 @@ function animate(ts) {
     }
 
     drawPlot();
-    drawBarrier();
+    const chkBarrierDiagram = document.getElementById('chkBarrierDiagram');
+    if (!chkBarrierDiagram || chkBarrierDiagram.checked) drawBarrier();
     requestAnimationFrame(animate);
 }
 
 function init() {
     try { const t = localStorage.getItem(THEME_KEY); applyTheme(t === 'light' ? 'light' : 'dark'); } catch (e) { applyTheme('dark'); }
     resizeCanvas(plotCanvas);
-    resizeBarrier();
+    const chkB0 = document.getElementById('chkBarrierDiagram');
+    if (chkB0 && chkB0.checked) resizeBarrier();
     setupEvents();
     requestAnimationFrame(animate);
 }
@@ -1224,6 +1254,7 @@ if (document.readyState === 'loading') {
 }
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous" onload="['aboutPanel','eqPanel'].forEach(function(id){var el=document.getElementById(id);if(el)renderMathInElement(el,{throwOnError:false});});"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous" onload="var el=document.getElementById('aboutPanel');if(el)renderMathInElement(el,{throwOnError:false});"></script>
 </body>
 </html>
+//refined following the curriculum feedback.
