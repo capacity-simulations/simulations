@@ -60,7 +60,7 @@ A simulation fails visualization review if the display is physically misleading 
 - A plot labeled `|ψ|²`, `ψ`, `Re(ψ)`, `Im(ψ)`, energy, etc. does not actually show that quantity.
 - A histogram compares counts to a continuous PDF without density normalization.
 - Decorative effects (opacity, glow, gradients, overlays) obscure nodes, tails, support, zeros, or sign structure.
-- Axis labels, titles, legends, or units are missing, inconsistent, or mathematically wrong.
+- Axis labels, titles, or legends are missing, inconsistent, or mathematically wrong.
 
 ### 3. Lecture alignment
 
@@ -69,7 +69,7 @@ A simulation fails lecture alignment if:
 - notation differs from the lecture notes in content or notation without good reason,
 - the simulation includes extra assumptions that are not disclosed,
 - the simulation omits an equation, definition, or concept that is central to that lecture, or
-- the simulation introduces a model that is materially narrower or broader than the lecture scope without stating so clearly, or
+- the simulation introduces a model that is materially narrower or broader than the lecture scope without stating so clearly
 
 ---
 

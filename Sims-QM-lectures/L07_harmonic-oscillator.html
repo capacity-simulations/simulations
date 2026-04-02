@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Harmonic Oscillator — 1D</title>
+
+<!-- Fonts: Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<!-- MathJax for Equations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+
+<!-- Tailwind Config & Custom Styles -->
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'sans-serif'] },
+        colors: { dark: '#0a0a0a', panel: '#111111' }
+      }
+    }
+  }
+</script>
+<style>
+  /* Custom Range Slider Styling */
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: #3b82f6;
+    cursor: pointer;
+    margin-top: -6px;
+    box-shadow: 0 0 0 2px #111;
+    transition: transform 0.1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    background: #333;
+    border-radius: 2px;
+  }
+  input[type=range]:disabled::-webkit-slider-thumb {
+    background: #555;
+    cursor: not-allowed;
+  }
+  input[type=range]:disabled::-webkit-slider-runnable-track {
+    cursor: not-allowed;
+  }
+</style>
+</head>
+
+<body class="bg-dark text-slate-200 h-screen w-screen overflow-hidden flex flex-col font-sans select-none">
+
+  <!-- TOP HEADER -->
+  <header class="h-16 flex items-center justify-between px-6 border-b border-neutral-800 bg-dark shrink-0 z-20">
+    <!-- Left: Title & Info -->
+    <div class="flex items-center gap-3">
+      <h1 class="text-lg font-semibold tracking-wide text-neutral-100">Quantum Harmonic Oscillator</h1>
+      <button id="infoBtn" class="text-neutral-500 hover:text-white transition-colors focus:outline-none" title="Information">
+        <i data-lucide="info" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- Right: Playback Group -->
+    <div class="flex items-center">
+      <div class="flex items-center bg-neutral-900 rounded-md border border-neutral-800 p-1 shadow-inner">
+        <button id="btnPlay" class="p-2 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors data-[active=true]:bg-blue-600/20 data-[active=true]:text-blue-400" title="Play">
+          <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+        </button>
+        <button id="btnPause" class="p-2 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors data-[active=true]:bg-blue-600/20 data-[active=true]:text-blue-400" title="Pause">
+          <i data-lucide="pause" class="w-4 h-4 fill-current"></i>
+        </button>
+        <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+        <button id="btnReset" class="p-2 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors" title="Reset">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <main class="flex-1 flex overflow-hidden">
+    
+    <!-- Left: Canvas Area -->
+    <div class="flex-1 p-4 flex flex-col gap-4 overflow-hidden relative" id="contentArea">
+      <!-- Plot 1: Potential -->
+      <div class="flex-1 relative bg-neutral-900/40 border border-neutral-800/60 rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div class="absolute top-3 left-4 text-[11px] font-bold text-neutral-500 uppercase tracking-widest z-10 pointer-events-none">Harmonic Potential & Energy Levels</div>
+        <canvas id="potentialCanvas" class="w-full h-full block"></canvas>
+      </div>
+
+      <!-- Plot 2: Wavefunction -->
+      <div class="flex-1 relative bg-neutral-900/40 border border-neutral-800/60 rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div class="absolute top-3 left-4 text-[11px] font-bold text-neutral-500 uppercase tracking-widest z-10 pointer-events-none">Wavefunction ψ(x,t)</div>
+        <div class="absolute bottom-3 right-4 flex gap-4 text-[11px] font-medium text-neutral-400 z-10 pointer-events-none">
+          <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div>Re(ψ)</div>
+          <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-pink-400"></div>Im(ψ)</div>
+        </div>
+        <canvas id="wavefnCanvas" class="w-full h-full block"></canvas>
+      </div>
+
+      <!-- Plot 3: Probability -->
+      <div class="flex-1 relative bg-neutral-900/40 border border-neutral-800/60 rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div class="absolute top-3 left-4 text-[11px] font-bold text-neutral-500 uppercase tracking-widest z-10 pointer-events-none">Probability Density |ψ|²</div>
+        <div class="absolute bottom-3 right-4 flex gap-4 text-[11px] font-medium text-neutral-400 z-10 pointer-events-none">
+          <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>|ψ|²</div>
+        </div>
+        <canvas id="probCanvas" class="w-full h-full block"></canvas>
+      </div>
+    </div>
+
+    <!-- Right: Sidebar -->
+    <aside class="w-[320px] bg-panel border-l border-neutral-800 flex flex-col overflow-y-auto shrink-0 z-10 relative">
+      <div class="p-6 flex flex-col gap-8">
+        
+        <!-- EQUATION -->
+        <section>
+          <h3 class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-3">Governing Equations</h3>
+          <div class="bg-neutral-900 border border-neutral-800 rounded-lg p-3 text-center text-sm text-neutral-300 shadow-inner">
+            <div class="mb-2">\[ -\frac{\hbar^2}{2m}\frac{d^2\psi}{dx^2} + \frac{1}{2}m\omega^2x^2\psi = E\psi \]</div>
+            <div>\[ E_n = \left(n + \frac{1}{2}\right)\hbar\omega \]</div>
+          </div>
+        </section>
+
+        <!-- PHYSICS CONTROLS -->
+        <section>
+          <h3 class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-4">Physics Controls</h3>
+          <div class="flex flex-col gap-5">
+            <div>
+              <div class="flex justify-between items-center text-sm mb-2">
+                <span class="text-neutral-400">Quantum State (n)</span>
+                <span id="nVal" class="font-mono text-blue-400 font-medium">3</span>
+              </div>
+              <input type="range" id="nSlider" min="0" max="10" value="3" step="1" class="w-full">
+            </div>
+            
+            <div>
+              <div class="flex justify-between items-center text-sm mb-2">
+                <span class="text-neutral-400">Mass (m)</span>
+                <span id="massVal" class="font-mono text-blue-400 font-medium">1.0</span>
+              </div>
+              <input type="range" id="massSlider" min="0.2" max="5" value="1" step="0.1" class="w-full">
+            </div>
+
+            <div class="flex justify-between items-center text-sm pt-3 border-t border-neutral-800/60">
+              <span class="text-neutral-400">Angular Freq (ω)</span>
+              <span id="omegaVal" class="font-mono text-blue-400 font-medium">1.00</span>
+            </div>
+            <input type="range" id="omegaSlider" min="0.2" max="3" value="1" step="0.1" class="w-full">
+          </div>
+        </section>
+
+        <!-- VISUAL CONTROLS -->
+        <section>
+          <h3 class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-4">Visual Controls</h3>
+          <div class="flex flex-col gap-5">
+            <div id="speedControlGroup">
+              <div class="flex justify-between items-center text-sm mb-2">
+                <span class="text-neutral-400">Animation speed</span>
+                <span id="speedVal" class="font-mono text-blue-400 font-medium">1.0x</span>
+              </div>
+              <input type="range" id="speedSlider" min="0.1" max="1" value="1" step="0.1" class="w-full">
+              <p class="mt-2 text-xs text-neutral-500">Display-only phase speed. This does not change the physical oscillator parameter \(\omega\).</p>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </aside>
+  </main>
+
+  <!-- INFO MODAL -->
+  <div id="infoModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-[#111] border border-neutral-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-300">
+      <div class="flex justify-between items-center p-5 border-b border-neutral-800">
+        <h2 class="text-lg font-semibold text-neutral-100 flex items-center gap-2">
+          <i data-lucide="info" class="w-5 h-5 text-blue-400"></i>
+          About Simulation
+        </h2>
+        <button id="closeInfoBtn" class="text-neutral-500 hover:text-white transition-colors focus:outline-none">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 text-neutral-300 text-sm leading-relaxed space-y-4">
+        <p>This simulation models a 1D Quantum Harmonic Oscillator in units where \(\hbar = 1\), with user-controlled mass \(m\) and angular frequency \(\omega\).</p>
+        <ul class="list-disc pl-5 space-y-2 text-neutral-400">
+          <li><strong class="text-neutral-200">Harmonic Potential:</strong> Displays the parabolic potential \(V(x)=\tfrac{1}{2}m\omega^2x^2\) and the corresponding energy levels.</li>
+          <li><strong class="text-neutral-200">Wavefunction:</strong> Visualizes the real and imaginary parts of the time-dependent wavefunction <span class="font-mono text-xs">ψ(x,t)</span>.</li>
+          <li><strong class="text-neutral-200">Probability Density:</strong> Shows <span class="font-mono text-xs">|ψ(x,t)|²</span>, representing the particle's position probability distribution.</li>
+        </ul>
+        <div class="bg-neutral-900 p-3 rounded-lg border border-neutral-800 mt-4">
+          <p class="text-xs text-neutral-400">Use the right sidebar to adjust the quantum state <span class="font-mono">n</span>, mass <span class="font-mono">m</span>, and angular frequency <span class="font-mono">\(\omega\)</span> to observe how the eigenstate width and energy spacing change. The animation-speed control only changes how quickly the plotted phase advances on screen.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Initialize Icons
+lucide.createIcons();
+
+(function(){
+
+// ========== PHYSICS ==========
+
+function hermite(n, x) {
+  if (n === 0) return 1;
+  if (n === 1) return 2 * x;
+  let h0 = 1, h1 = 2 * x;
+  for (let i = 2; i <= n; i++) {
+    const h2 = 2 * x * h1 - 2 * (i - 1) * h0;
+    h0 = h1; h1 = h2;
+  }
+  return h1;
+}
+
+function logFactorial(n) {
+  let s = 0;
+  for (let i = 2; i <= n; i++) s += Math.log(i);
+  return s;
+}
+
+function psiN(n, x, mOmegaOverHbar) {
+  const alpha = Math.sqrt(mOmegaOverHbar);
+  const xi = alpha * x;
+  const logNorm = 0.25 * Math.log(mOmegaOverHbar / Math.PI) - 0.5 * (n * Math.log(2) + logFactorial(n));
+  return Math.exp(logNorm) * hermite(n, xi) * Math.exp(-xi * xi / 2);
+}
+
+const hbar = 1.0;
+const MAX_MASS = 5.0;
+const MAX_OMEGA = 3.0;
+const MAX_MU = MAX_MASS * MAX_OMEGA / hbar;
+const WAVEFUNCTION_Y_MAX = Math.pow(MAX_MU / Math.PI, 0.25) * 1.1;
+const PROBABILITY_Y_MAX = Math.sqrt(MAX_MU / Math.PI) * 1.1;
+
+function getMu() { return mass * omega / hbar; }
+
+function getSpringConstant() { return mass * omega * omega; }
+
+function getSuggestedXRange(n = qn) {
+  const mu = getMu();
+  const xtp = Math.sqrt((2 * n + 1) / mu);
+  return Math.max(FIXED_X_RANGE, xtp + 4.0 / Math.sqrt(mu));
+}
+
+function energy1D(n) { return (n + 0.5) * hbar * omega; }
+
+function computeMaxPsi(n) {
+  const mu = getMu();
+  const xtp = Math.sqrt((2 * n + 1) / mu);
+  const xS = xtp + 3.0 / Math.sqrt(mu);
+  let mx = 0;
+  for (let i = 0; i <= 1000; i++) {
+    const v = Math.abs(psiN(n, -xS + i / 500 * xS, mu));
+    if (v > mx) mx = v;
+  }
+  return mx;
+}
+
+// ========== STATE ==========
+
+let qn = 3;
+let mass = 1.0, omega = 1.0;
+let animSpeed = 1.0;
+let time = 0, isPlaying = true;
+const FIXED_X_RANGE = 10;
+
+// ========== DOM ==========
+
+const $ = id => document.getElementById(id);
+const nSlider=$('nSlider');
+const massSlider=$('massSlider'), omegaSlider=$('omegaSlider'), speedSlider=$('speedSlider');
+
+function updateDisplays() {
+  $('massVal').textContent = mass.toFixed(1);
+  $('omegaVal').textContent = omega.toFixed(2);
+}
+
+function updatePlaybackButtons() {
+  $('btnPlay').dataset.active = isPlaying ? "true" : "false";
+  $('btnPause').dataset.active = !isPlaying ? "true" : "false";
+}
+
+nSlider.oninput = () => { qn = +nSlider.value; $('nVal').textContent = qn; updateDisplays(); };
+massSlider.oninput = () => { mass = +massSlider.value; updateDisplays(); };
+omegaSlider.oninput = () => { omega = +omegaSlider.value; updateDisplays(); };
+speedSlider.oninput = () => { animSpeed = +speedSlider.value; $('speedVal').textContent = animSpeed.toFixed(1) + 'x'; };
+
+$('btnPlay').onclick = () => { isPlaying = true; updatePlaybackButtons(); };
+$('btnPause').onclick = () => { isPlaying = false; updatePlaybackButtons(); };
+$('btnReset').onclick = () => { time = 0; };
+
+// ========== INFO MODAL LOGIC ==========
+const infoModal = $('infoModal');
+const infoModalContent = infoModal.firstElementChild;
+
+function toggleModal(show) {
+  if (show) {
+    infoModal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      infoModal.classList.remove('opacity-0');
+      infoModalContent.classList.remove('scale-95');
+    });
+  } else {
+    infoModal.classList.add('opacity-0');
+    infoModalContent.classList.add('scale-95');
+    setTimeout(() => infoModal.classList.add('hidden'), 300);
+  }
+}
+
+$('infoBtn').onclick = () => toggleModal(true);
+$('closeInfoBtn').onclick = () => toggleModal(false);
+infoModal.onclick = (e) => { if (e.target === infoModal) toggleModal(false); };
+
+// ========== 2D CANVASES ==========
+
+const potCanvas=$('potentialCanvas'), wfCanvas=$('wavefnCanvas'), probCanvas=$('probCanvas');
+const potCtx=potCanvas.getContext('2d'), wfCtx=wfCanvas.getContext('2d'), probCtx=probCanvas.getContext('2d');
+
+function resizeCanvases() {
+  [potCanvas, wfCanvas, probCanvas].forEach(c => {
+    const r = c.parentElement.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) { 
+      c.width = r.width * devicePixelRatio; 
+      c.height = r.height * devicePixelRatio; 
+    }
+  });
+}
+
+window.addEventListener('resize', resizeCanvases);
+setTimeout(resizeCanvases, 50);
+
+// ========== DRAWING HELPERS ==========
+
+function mapX(x, xmin, xmax, pxMin, pxMax) { return pxMin + (x - xmin) / (xmax - xmin) * (pxMax - pxMin); }
+function mapY(y, ymin, ymax, pxMin, pxMax) { return pxMax - (y - ymin) / (ymax - ymin) * (pxMax - pxMin); }
+
+function drawAxes(ctx, w, h, xmin, xmax, ymin, ymax, pad, yLabel) {
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)'; ctx.lineWidth = 1;
+  if (ymin <= 0 && ymax >= 0) { const y0 = mapY(0, ymin, ymax, pad.top, h - pad.bottom); ctx.beginPath(); ctx.moveTo(pad.left, y0); ctx.lineTo(w - pad.right, y0); ctx.stroke(); }
+  if (xmin <= 0 && xmax >= 0) { const x0 = mapX(0, xmin, xmax, pad.left, w - pad.right); ctx.beginPath(); ctx.moveTo(x0, pad.top); ctx.lineTo(x0, h - pad.bottom); ctx.stroke(); }
+  ctx.fillStyle = '#475569'; ctx.font = `${10 * devicePixelRatio}px sans-serif`; ctx.textAlign = 'center';
+  for (let x = Math.ceil(xmin); x <= Math.floor(xmax); x++) { if (x === 0) continue; const px = mapX(x, xmin, xmax, pad.left, w - pad.right); const y0 = mapY(0, ymin, ymax, pad.top, h - pad.bottom); ctx.fillText(x, px, Math.min(y0 + 14 * devicePixelRatio, h - 2)); }
+  if (yLabel) { ctx.save(); ctx.fillStyle = '#64748b'; ctx.font = `bold ${11 * devicePixelRatio}px sans-serif`; ctx.textAlign = 'center'; ctx.translate(14 * devicePixelRatio, (pad.top + h - pad.bottom) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(yLabel, 0, 0); ctx.restore(); }
+  ctx.fillStyle = '#475569'; ctx.font = `${9 * devicePixelRatio}px sans-serif`; ctx.textAlign = 'right';
+  const yRange = ymax - ymin; let yStep = 1;
+  if (yRange > 20) yStep = 5; else if (yRange > 10) yStep = 2; else if (yRange > 4) yStep = 1; else if (yRange > 2) yStep = 0.5; else if (yRange > 0.5) yStep = 0.2; else yStep = 0.1;
+  for (let y = Math.ceil(ymin / yStep) * yStep; y <= ymax; y += yStep) { if (Math.abs(y) < yStep * 0.01) continue; const py = mapY(y, ymin, ymax, pad.top, h - pad.bottom); if (py > pad.top + 5 && py < h - pad.bottom - 5) ctx.fillText(y.toFixed(yStep < 1 ? 1 : 0), pad.left - 4 * devicePixelRatio, py + 3 * devicePixelRatio); }
+}
+
+function drawDottedLineWithArrows(ctx, x1, y, x2, color, lw, dpr) {
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash([6*dpr, 4*dpr]); ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke(); ctx.setLineDash([]);
+  const a = 6 * dpr; ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1+a, y-a*0.5); ctx.lineTo(x1+a, y+a*0.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2-a, y-a*0.5); ctx.lineTo(x2-a, y+a*0.5); ctx.closePath(); ctx.fill();
+}
+
+// ========== DRAW 1D PLOTS ==========
+
+function drawPotential(t) {
+  const w = potCanvas.width, h = potCanvas.height, dpr = devicePixelRatio;
+  if (w === 0 || h === 0) return;
+  potCtx.clearRect(0, 0, w, h); potCtx.fillStyle = '#0a0a0a'; potCtx.fillRect(0, 0, w, h);
+  const mu = getMu();
+  const springConstant = getSpringConstant();
+  const potEmax = Math.max(10.5, 8) * 1.15;
+  const potXRange = Math.max(getSuggestedXRange(10), Math.sqrt(2 * potEmax / mu) * 1.1);
+  const xmin = -potXRange, xmax = potXRange, ymin = -0.5, ymax = potEmax;
+  const pad = { top: 35*dpr, bottom: 25*dpr, left: 55*dpr, right: 20*dpr };
+  drawAxes(potCtx, w, h, xmin, xmax, ymin, ymax, pad, 'Energy (ℏω)');
+  potCtx.save(); potCtx.beginPath(); potCtx.rect(pad.left, pad.top, w-pad.left-pad.right, h-pad.top-pad.bottom); potCtx.clip();
+  potCtx.strokeStyle = '#a855f7'; potCtx.lineWidth = 2.5*dpr; potCtx.shadowColor = '#a855f7'; potCtx.shadowBlur = 6*dpr;
+  potCtx.beginPath();
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const VUnits = 0.5 * mu * x * x; const py = mapY(VUnits, ymin, ymax, pad.top, h-pad.bottom); px===pad.left ? potCtx.moveTo(px,py) : potCtx.lineTo(px,py); }
+  potCtx.stroke(); potCtx.shadowBlur = 0;
+  potCtx.fillStyle = 'rgba(168,85,247,0.06)'; potCtx.beginPath();
+  const yBot = mapY(ymin, ymin, ymax, pad.top, h-pad.bottom); potCtx.moveTo(pad.left, yBot);
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); potCtx.lineTo(px, mapY(0.5 * mu * x * x, ymin, ymax, pad.top, h-pad.bottom)); }
+  potCtx.lineTo(w-pad.right, yBot); potCtx.closePath(); potCtx.fill();
+  for (let n = 0; n <= 10; n++) {
+    const En = energy1D(n); const EnUnits = En / (hbar * omega); if (EnUnits > ymax) break;
+    const ey = mapY(EnUnits, ymin, ymax, pad.top, h-pad.bottom), sel = n===qn;
+    const xtp = Math.sqrt(2 * En / springConstant); const x1px = mapX(-xtp, xmin, xmax, pad.left, w-pad.right); const x2px = mapX(xtp, xmin, xmax, pad.left, w-pad.right);
+    if (sel) drawDottedLineWithArrows(potCtx, x1px, ey, x2px, '#60a5fa', 2.5*dpr, dpr);
+    else { potCtx.strokeStyle = 'rgba(148,163,184,0.15)'; potCtx.lineWidth = dpr; potCtx.setLineDash([]); potCtx.beginPath(); potCtx.moveTo(x1px,ey); potCtx.lineTo(x2px,ey); potCtx.stroke(); }
+    potCtx.fillStyle = sel?'#60a5fa':'#64748b'; potCtx.font = `${(sel?11:9)*dpr}px sans-serif`; potCtx.textAlign = 'right';
+    potCtx.fillText(`n=${n}`, Math.max(pad.left+25*dpr, x1px-4*dpr), ey-4*dpr);
+  }
+  potCtx.restore();
+}
+
+function drawWavefunction(t) {
+  const w = wfCanvas.width, h = wfCanvas.height, dpr = devicePixelRatio;
+  if (w === 0) return;
+  wfCtx.clearRect(0, 0, w, h); wfCtx.fillStyle = '#0a0a0a'; wfCtx.fillRect(0, 0, w, h);
+  const xRange = getSuggestedXRange();
+  const mu = getMu();
+  const xmin = -xRange, xmax = xRange, ym = WAVEFUNCTION_Y_MAX;
+  const pad = { top: 35*dpr, bottom: 25*dpr, left: 55*dpr, right: 20*dpr };
+  drawAxes(wfCtx, w, h, xmin, xmax, -ym, ym, pad, 'ψ(x,t)');
+  const phase = energy1D(qn) * animSpeed * t;
+  wfCtx.save(); wfCtx.beginPath(); wfCtx.rect(pad.left, pad.top, w-pad.left-pad.right, h-pad.top-pad.bottom); wfCtx.clip();
+  wfCtx.strokeStyle = '#60a5fa'; wfCtx.lineWidth = 2.5*dpr; wfCtx.beginPath();
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const py = mapY(psiN(qn,x,mu)*Math.cos(-phase), -ym, ym, pad.top, h-pad.bottom); px===pad.left?wfCtx.moveTo(px,py):wfCtx.lineTo(px,py); }
+  wfCtx.stroke();
+  wfCtx.strokeStyle = '#f472b6'; wfCtx.lineWidth = 2.5*dpr; wfCtx.beginPath();
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const py = mapY(psiN(qn,x,mu)*Math.sin(-phase), -ym, ym, pad.top, h-pad.bottom); px===pad.left?wfCtx.moveTo(px,py):wfCtx.lineTo(px,py); }
+  wfCtx.stroke(); wfCtx.restore();
+}
+
+function drawProbability(t) {
+  const w = probCanvas.width, h = probCanvas.height, dpr = devicePixelRatio;
+  if (w === 0) return;
+  probCtx.clearRect(0, 0, w, h); probCtx.fillStyle = '#0a0a0a'; probCtx.fillRect(0, 0, w, h);
+  const xRange = getSuggestedXRange();
+  const mu = getMu();
+  const xmin = -xRange, xmax = xRange, ym = PROBABILITY_Y_MAX, ymn = -PROBABILITY_Y_MAX * 0.05;
+  const pad = { top: 35*dpr, bottom: 25*dpr, left: 55*dpr, right: 20*dpr };
+  drawAxes(probCtx, w, h, xmin, xmax, ymn, ym, pad, '|ψ|²');
+  probCtx.save(); probCtx.beginPath(); probCtx.rect(pad.left, pad.top, w-pad.left-pad.right, h-pad.top-pad.bottom); probCtx.clip();
+  probCtx.fillStyle = 'rgba(52,211,153,0.12)'; probCtx.beginPath();
+  const y0 = mapY(0, ymn, ym, pad.top, h-pad.bottom); probCtx.moveTo(pad.left, y0);
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const p = psiN(qn,x,mu); probCtx.lineTo(px, mapY(p*p, ymn, ym, pad.top, h-pad.bottom)); }
+  probCtx.lineTo(w-pad.right, y0); probCtx.closePath(); probCtx.fill();
+  probCtx.strokeStyle = '#34d399'; probCtx.lineWidth = 2.5*dpr; probCtx.beginPath();
+  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const p = psiN(qn,x,mu); const py = mapY(p*p, ymn, ym, pad.top, h-pad.bottom); px===pad.left?probCtx.moveTo(px,py):probCtx.lineTo(px,py); }
+  probCtx.stroke(); probCtx.restore();
+}
+
+// ========== MAIN LOOP ==========
+
+let lastTime = 0;
+function animate(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  if (isPlaying) time += dt;
+
+  drawPotential(time);
+  drawWavefunction(time);
+  drawProbability(time);
+
+  requestAnimationFrame(animate);
+}
+
+// ========== INIT ==========
+
+function init() {
+  resizeCanvases();
+  updateDisplays();
+  updatePlaybackButtons();
+  $('speedVal').textContent = animSpeed.toFixed(1) + 'x';
+  requestAnimationFrame(animate);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+
+})();
+</script>
+</body>
+</html>
