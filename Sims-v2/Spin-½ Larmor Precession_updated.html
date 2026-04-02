@@ -71,6 +71,7 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 .eq-block{margin:10px 0 4px;padding:12px 12px;background:linear-gradient(180deg,rgba(148,163,184,0.08),rgba(148,163,184,0.045));border:1px solid rgba(148,163,184,0.14);border-radius:10px;color:#e2e8f0;box-shadow:0 10px 24px rgba(0,0,0,0.18);overflow-x:auto}
 .eq-block .eq-label{font-size:12px;font-weight:750;color:#a9b7cf;margin-bottom:8px;letter-spacing:0.02em}
 .eq-block .eq-line{margin:6px 0}
+.eq-block .eq-note{margin-top:8px;color:#a5b4c9;font-size:12px;line-height:1.45}
 .eq-block .katex{font-size:1.03em}
 .eq-block .katex-display{margin:0}
 .eq-block::-webkit-scrollbar{height:8px}
@@ -94,8 +95,12 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
         <div class="about-tt-body">A spin-½ in a constant magnetic field \(B\hat{z}\) picks up opposite phases on |↑⟩ and |↓⟩, producing Larmor precession of the Bloch vector about the z-axis at rate μB. Measuring along x gives outcomes ±½ with oscillating probabilities (ℏ = 1).</div>
       </div>
       <div class="about-tt-section">
+        <div class="about-tt-head">Conventions:</div>
+        <div class="about-tt-body">This implementation assumes real initial amplitudes (relative phase arg(β)−arg(α)=0, with β=√(1−α²)). Sign convention: \(H=-\omega_{0}\hat S_{z}\), \(\omega_{0}=\mu B\), and \(\hbar=1\).</div>
+      </div>
+      <div class="about-tt-section">
         <div class="about-tt-head">Visuals:</div>
-        <div class="about-tt-body">Top: Bloch sphere showing the state vector ⟨S⟩ and its circular precession path (drag to rotate). Bottom: P₊ and P₋ for an Sₓ measurement, plus the expectation value ⟨Sₓ⟩.</div>
+        <div class="about-tt-body">Top: Bloch sphere showing the Bloch vector \(n=\langle\sigma\rangle\) and its circular precession path (drag to rotate). Bottom: P₊ and P₋ for an Sₓ measurement, plus the expectation value ⟨Sₓ⟩.</div>
       </div>
       <div class="about-tt-section">
         <div class="about-tt-head">Controls:</div>
@@ -148,6 +153,7 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 <div class="eq-label">P₊ equation</div>
 <div class="eq-line">\( P_{+}=\tfrac12\left|\alpha e^{i\mu Bt/2}+\beta e^{-i\mu Bt/2}\right|^{2} \)</div>
 <div class="eq-line" style="color:#94a3b8;font-weight:500">\( =\tfrac12\left(1+2\alpha\beta\cos(\mu Bt)\right) \)</div>
+<div class="eq-note">Assumes real \(\alpha,\beta\) (relative phase 0 at \(t=0\)). Uses \(H=-\omega_{0}\hat S_{z}\) with \(\omega_{0}=\mu B\) and \(\hbar=1\).</div>
 </div>
 </div>
 </aside>
@@ -159,14 +165,34 @@ let alpha=Math.SQRT1_2;  // default α = 1/√2
 let beta=Math.sqrt(1-alpha*alpha);
 let omega0=1.0, t=0, playing=true, spd=1.0;
 let lastTs=null;
+const MAX_FRAME_DT=0.05;
+const MAX_PHASE_FRACTION=0.25;
 let blochAz=0.0, blochEl=0.25;
 let blochDragging=false, blochDragId=null, blochLastX=0, blochLastY=0;
 const fps={c:0,lt:0,v:60};
+let lastUIRenderTs=0;
+const UI_INTERVAL_MS=33;
 const ga=()=>alpha;
 const gb=()=>beta;
-const Pp=(tt)=>0.5*(1+2*ga()*gb()*Math.cos(omega0*tt));
-const Pm=(tt)=>1-Pp(tt);
-const Sx=(tt)=>ga()*gb()*Math.cos(omega0*tt);
+function computeStateAt(tt){
+  const a=ga(),b=gb();
+  const ab=a*b;
+  const phase=omega0*tt;
+  const c=Math.cos(phase),s=Math.sin(phase);
+  const nx=2*ab*c;
+  const ny=-2*ab*s;
+  const nz=a*a-b*b;
+  const pp=0.5*(1+2*ab*c);
+  return{
+    a,b,ab,nx,ny,nz,
+    pp,
+    pm:1-pp,
+    sx:ab*c
+  };
+}
+const Pp=(tt)=>computeStateAt(tt).pp;
+const Pm=(tt)=>computeStateAt(tt).pm;
+const Sx=(tt)=>computeStateAt(tt).sx;
 const Tmax=()=>4*Math.PI/omega0;
 
 const $=id=>document.getElementById(id);
@@ -179,6 +205,17 @@ let ctx1,ctx2,ctx3;
 let dims={};
 let showPp=showPpC.checked,showPm=showPmC.checked;
 const clamp01=(x)=>Math.max(0,Math.min(1,x));
+const plotStaticCache={p1:null,p2:null};
+const uiTextCache={};
+const uiIds=['aSlV','omV','spV','tV','ppV','pmV','aV','bV','abV','prV','amV','stS'];
+for(const id of uiIds)uiTextCache[id]='';
+
+function setCachedText(id,next){
+  if(uiTextCache[id]!==next){
+    uiTextCache[id]=next;
+    $(id).textContent=next;
+  }
+}
 
 function updatePlotPanelLayout(){
   const hideProbPanel=!showPp && !showPm;
@@ -206,67 +243,97 @@ function resize(){
   ctx3=setupCanvas(c3,'bl');
 }
 
-function drawPlot(ctx,w,h,cfg){
-  const m={t:32,r:16,b:38,l:48};
-  const pw=w-m.l-m.r, ph=h-m.t-m.b;
-  const xs=v=>m.l+(v-cfg.xr[0])/(cfg.xr[1]-cfg.xr[0])*pw;
-  const ys=v=>m.t+(1-(v-cfg.yr[0])/(cfg.yr[1]-cfg.yr[0]))*ph;
+function getPlotStaticSignature(w,h,cfg,dpr){
+  return JSON.stringify({
+    w,h,dpr,
+    xr:cfg.xr,yr:cfg.yr,
+    xt:cfg.xt,xtl:cfg.xtl,
+    yt:cfg.yt,ytl:cfg.ytl,
+    xl:cfg.xl,yl:cfg.yl,ylSize:cfg.ylSize||12
+  });
+}
 
-  ctx.fillStyle='#0f172a';
-  ctx.fillRect(0,0,w,h);
+function drawPlotStaticLayer(sctx,w,h,cfg,m,pw,ph,xs,ys){
+  sctx.fillStyle='#0f172a';
+  sctx.fillRect(0,0,w,h);
 
   // Plot bg
-  ctx.fillStyle='rgba(30,41,59,0.25)';
-  ctx.fillRect(m.l,m.t,pw,ph);
+  sctx.fillStyle='rgba(30,41,59,0.25)';
+  sctx.fillRect(m.l,m.t,pw,ph);
 
   // Grid
-  ctx.lineWidth=1;
+  sctx.lineWidth=1;
   for(const yy of cfg.yt){
     const y=ys(yy);
-    ctx.strokeStyle=yy===0?'rgba(148,163,184,0.15)':'rgba(148,163,184,0.06)';
-    ctx.beginPath();ctx.moveTo(m.l,y);ctx.lineTo(m.l+pw,y);ctx.stroke();
+    sctx.strokeStyle=yy===0?'rgba(148,163,184,0.15)':'rgba(148,163,184,0.06)';
+    sctx.beginPath();sctx.moveTo(m.l,y);sctx.lineTo(m.l+pw,y);sctx.stroke();
   }
   for(const xx of cfg.xt){
     const x=xs(xx);
-    ctx.strokeStyle='rgba(148,163,184,0.06)';
-    ctx.beginPath();ctx.moveTo(x,m.t);ctx.lineTo(x,m.t+ph);ctx.stroke();
+    sctx.strokeStyle='rgba(148,163,184,0.06)';
+    sctx.beginPath();sctx.moveTo(x,m.t);sctx.lineTo(x,m.t+ph);sctx.stroke();
   }
 
   // Border
-  ctx.strokeStyle='rgba(148,163,184,0.12)';
-  ctx.lineWidth=1;
-  ctx.strokeRect(m.l,m.t,pw,ph);
+  sctx.strokeStyle='rgba(148,163,184,0.12)';
+  sctx.lineWidth=1;
+  sctx.strokeRect(m.l,m.t,pw,ph);
 
-  // Tick labels (higher contrast)
-  ctx.fillStyle='#cbd5e1';
-  ctx.font='11px -apple-system,system-ui,sans-serif';
-  ctx.textBaseline='top';
+  // Tick labels
+  sctx.fillStyle='#cbd5e1';
+  sctx.font='11px -apple-system,system-ui,sans-serif';
+  sctx.textBaseline='top';
   for(let i=0;i<cfg.xt.length;i++){
     const tx=xs(cfg.xt[i]);
     const isFirst=i===0;
     const isLast=i===cfg.xt.length-1;
-    ctx.textAlign=isFirst?'left':(isLast?'right':'center');
+    sctx.textAlign=isFirst?'left':(isLast?'right':'center');
     const safeX=isFirst?Math.max(m.l,tx):(isLast?Math.min(m.l+pw,tx):tx);
-    ctx.fillText(cfg.xtl[i],safeX,m.t+ph+5);
+    sctx.fillText(cfg.xtl[i],safeX,m.t+ph+5);
   }
-  ctx.textAlign='right';ctx.textBaseline='middle';
+  sctx.textAlign='right';sctx.textBaseline='middle';
   for(let i=0;i<cfg.yt.length;i++){
-    ctx.fillText(cfg.ytl[i],m.l-6,ys(cfg.yt[i]));
+    sctx.fillText(cfg.ytl[i],m.l-6,ys(cfg.yt[i]));
   }
 
-  // Axis labels (clear, high contrast)
-  ctx.fillStyle='#f1f5f9';
-  ctx.font='bold 12px -apple-system,system-ui,sans-serif';
-  ctx.textAlign='center';ctx.textBaseline='top';
-  ctx.fillText(cfg.xl||'',m.l+pw/2,m.t+ph+22);
-  ctx.save();
-  ctx.translate(12,m.t+ph/2);
-  ctx.rotate(-Math.PI/2);
-  ctx.textAlign='center';ctx.textBaseline='top';
+  // Axis labels
+  sctx.fillStyle='#f1f5f9';
+  sctx.font='bold 12px -apple-system,system-ui,sans-serif';
+  sctx.textAlign='center';sctx.textBaseline='top';
+  sctx.fillText(cfg.xl||'',m.l+pw/2,m.t+ph+22);
+  sctx.save();
+  sctx.translate(12,m.t+ph/2);
+  sctx.rotate(-Math.PI/2);
+  sctx.textAlign='center';sctx.textBaseline='top';
   const ylFont=cfg.ylSize?'bold '+cfg.ylSize+'px':'bold 12px';
-  ctx.font=ylFont+' -apple-system,system-ui,sans-serif';
-  ctx.fillText(cfg.yl||'',0,0);
-  ctx.restore();
+  sctx.font=ylFont+' -apple-system,system-ui,sans-serif';
+  sctx.fillText(cfg.yl||'',0,0);
+  sctx.restore();
+}
+
+function getPlotStaticLayer(key,w,h,cfg,m,pw,ph,xs,ys){
+  const dpr=window.devicePixelRatio||1;
+  const sig=getPlotStaticSignature(w,h,cfg,dpr);
+  const cached=plotStaticCache[key];
+  if(cached && cached.sig===sig)return cached.canvas;
+  const staticCanvas=document.createElement('canvas');
+  staticCanvas.width=Math.max(1,Math.floor(w*dpr));
+  staticCanvas.height=Math.max(1,Math.floor(h*dpr));
+  const sctx=staticCanvas.getContext('2d');
+  sctx.scale(dpr,dpr);
+  drawPlotStaticLayer(sctx,w,h,cfg,m,pw,ph,xs,ys);
+  plotStaticCache[key]={sig,canvas:staticCanvas};
+  return staticCanvas;
+}
+
+function drawPlot(ctx,w,h,cfg,key){
+  const m={t:32,r:16,b:38,l:48};
+  const pw=w-m.l-m.r, ph=h-m.t-m.b;
+  const xs=v=>m.l+(v-cfg.xr[0])/(cfg.xr[1]-cfg.xr[0])*pw;
+  const ys=v=>m.t+(1-(v-cfg.yr[0])/(cfg.yr[1]-cfg.yr[0]))*ph;
+  const staticLayer=getPlotStaticLayer(key,w,h,cfg,m,pw,ph,xs,ys);
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(staticLayer,0,0,w,h);
 
   // Clip to plot area for curves
   ctx.save();
@@ -389,15 +456,17 @@ function drawBloch(ctx,w,h){
   drawCirc(u=>[0,Math.cos(u),Math.sin(u)],'rgba(203,213,225,0.38)','rgba(148,163,184,0.1)',1);
 
   // Precession circle (vibrant)
-  const a=ga(),b=gb();
-  const nz=a*a-b*b;
-  const rp=2*a*b;
+  const stateNow=computeStateAt(t);
+  const nz=stateNow.nz;
+  const rp=2*stateNow.ab;
   if(rp>0.01){
     drawCirc(u=>[rp*Math.cos(u),rp*Math.sin(u),nz],'rgba(96,165,250,0.7)','rgba(96,165,250,0.25)',2);
   }
 
   // Axes - draw back first, then front (stronger colors and line weight)
   function drawAx(ax,ay,az2,label,col,showNegative=false){
+    const isPosMainAxis=label==='x'||label==='y'||label==='z';
+    const isNegX=label==='-x';
     const o=proj(0,0,0);
     if(showNegative){
       const n=proj(-ax*1.3,-ay*1.3,-az2*1.3);
@@ -416,11 +485,24 @@ function drawBloch(ctx,w,h){
     const e=proj(ax*1.3,ay*1.3,az2*1.3);
     const isFront=e.d>=0;
     ctx.strokeStyle=col;
-    ctx.lineWidth=isFront?2:1;
-    ctx.globalAlpha=isFront?0.95:0.25;
+    if(isPosMainAxis){
+      // Keep +x/+y/+z always solid and stable while rotating.
+      ctx.setLineDash([]);
+      ctx.lineWidth=2.3;
+      ctx.globalAlpha=0.95;
+    }else if(isNegX){
+      // Keep -x consistently dashed while rotating.
+      ctx.setLineDash([4,6]);
+      ctx.lineWidth=1.8;
+      ctx.globalAlpha=0.6;
+    }else{
+      ctx.lineWidth=isFront?(isZAxis?3:2):(isZAxis?1.8:1);
+      ctx.globalAlpha=isFront?(isZAxis?1:0.95):(isZAxis?0.55:0.25);
+    }
     ctx.beginPath();ctx.moveTo(o.x,o.y);ctx.lineTo(e.x,e.y);ctx.stroke();
+    ctx.setLineDash([]);
     // Arrow tip / label
-    ctx.globalAlpha=isFront?1:0.3;
+    ctx.globalAlpha=(isPosMainAxis||isNegX)?1:(isFront?1:0.3);
     ctx.fillStyle=col;
     ctx.font='bold 13px -apple-system,sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';
@@ -430,12 +512,12 @@ function drawBloch(ctx,w,h){
   }
   drawAx(1,0,0,'x','#f472b6',true);
   drawAx(0,1,0,'y','#fbbf24',true);
-  drawAx(0,0,1,'z','#60a5fa');
+  drawAx(0,0,1,'z','#93c5fd',true);
   drawAx(-1,0,0,'-x','#f472b6',false);
 
   // State vector
-  const nx=2*a*b*Math.cos(omega0*t);
-  const ny=-2*a*b*Math.sin(omega0*t);
+  const nx=stateNow.nx;
+  const ny=stateNow.ny;
   const sv=proj(nx,ny,nz);
   const orig=proj(0,0,0);
 
@@ -445,8 +527,9 @@ function drawBloch(ctx,w,h){
   let prevTp=null;
   for(let i=0;i<=trailLen;i++){
     const tt2=t-i*0.05;
-    const tnx=2*a*b*Math.cos(omega0*tt2);
-    const tny=-2*a*b*Math.sin(omega0*tt2);
+    const trailState=computeStateAt(tt2);
+    const tnx=trailState.nx;
+    const tny=trailState.ny;
     const tp=proj(tnx,tny,nz);
     if(prevTp!==null){
       const alpha=Math.max(0,(1-i/trailLen)*0.55);
@@ -482,7 +565,7 @@ function drawBloch(ctx,w,h){
   ctx.fillStyle='#f1f5f9';
   ctx.font='bold 12px -apple-system,sans-serif';
   ctx.textAlign='left';
-  ctx.fillText('⟨S⟩',sv.x+12,sv.y-6);
+  ctx.fillText('n',sv.x+12,sv.y-6);
 
   // z-basis pole labels (|↑⟩ and |↓⟩)
   const zUp=proj(0,0,1.15);
@@ -510,25 +593,25 @@ function drawBloch(ctx,w,h){
 }
 
 function updateUI(){
-  const a=ga(),b=gb();
-  $('aSlV').textContent=a.toFixed(3);
-  $('omV').textContent=omega0.toFixed(1);
-  $('spV').textContent=spd.toFixed(1)+'×';
-  $('tV').textContent=t.toFixed(2)+' s';
-  $('ppV').textContent=Pp(t).toFixed(3);
-  $('pmV').textContent=Pm(t).toFixed(3);
-  $('aV').textContent=a.toFixed(4);
-  $('bV').textContent=b.toFixed(4);
-  $('abV').textContent=(2*a*b).toFixed(4);
-  $('prV').textContent=(2*Math.PI/omega0).toFixed(3)+' s';
-  $('amV').textContent=(a*b).toFixed(4);
+  const s=computeStateAt(t);
+  setCachedText('aSlV',s.a.toFixed(3));
+  setCachedText('omV',omega0.toFixed(1));
+  setCachedText('spV',spd.toFixed(1)+'×');
+  setCachedText('tV',t.toFixed(2)+' s');
+  setCachedText('ppV',s.pp.toFixed(3));
+  setCachedText('pmV',s.pm.toFixed(3));
+  setCachedText('aV',s.a.toFixed(4));
+  setCachedText('bV',s.b.toFixed(4));
+  setCachedText('abV',(2*s.ab).toFixed(4));
+  setCachedText('prV',(2*Math.PI/omega0).toFixed(3)+' s');
+  setCachedText('amV',s.ab.toFixed(4));
   // State string
-  let s='';
-  if(Math.abs(a-1)<0.001)s='|↑⟩';
-  else if(Math.abs(b-1)<0.001)s='|↓⟩';
-  else if(Math.abs(a-b)<0.001)s='(|↑⟩+|↓⟩)/√2';
-  else s=a.toFixed(2)+'|↑⟩+'+b.toFixed(2)+'|↓⟩';
-  $('stS').textContent=s;
+  let st='';
+  if(Math.abs(s.a-1)<0.001)st='|↑⟩';
+  else if(Math.abs(s.b-1)<0.001)st='|↓⟩';
+  else if(Math.abs(s.a-s.b)<0.001)st='(|↑⟩+|↓⟩)/√2';
+  else st=s.a.toFixed(2)+'|↑⟩+'+s.b.toFixed(2)+'|↓⟩';
+  setCachedText('stS',st);
 }
 
 function makePlotCfg1(){
@@ -556,7 +639,7 @@ function makePlotCfg1(){
 function makePlotCfg2(){
   const tm=Tmax();
   const piO=Math.PI/omega0;
-  const amp=ga()*gb();
+  const amp=computeStateAt(0).ab;
   const yMax=Math.max(0.55,amp+0.05);
   return{
     xr:[0,tm],yr:[-yMax,yMax],
@@ -574,7 +657,8 @@ function makePlotCfg2(){
 
 function animate(ts){
   if(lastTs===null)lastTs=ts;
-  const dt=(ts-lastTs)/1000;
+  const rawDt=Math.max(0,(ts-lastTs)/1000);
+  const dt=Math.min(rawDt,MAX_FRAME_DT);
   lastTs=ts;
 
   fps.c++;
@@ -584,16 +668,21 @@ function animate(ts){
   }
 
   if(playing){
-    t+=dt*spd;
     const tm=Tmax();
+    const maxStep=Math.max(1e-6,tm*MAX_PHASE_FRACTION);
+    const phaseStep=Math.min(dt*spd,maxStep);
+    t+=phaseStep;
     if(tm>0){ t=((t%tm)+tm)%tm; if(t===tm)t=0; }
   }
 
   const d1=dims.p1,d2=dims.p2,db=dims.bl;
-  if(d1)drawPlot(ctx1,d1.w,d1.h,makePlotCfg1());
-  if(d2)drawPlot(ctx2,d2.w,d2.h,makePlotCfg2());
+  if(d1)drawPlot(ctx1,d1.w,d1.h,makePlotCfg1(),'p1');
+  if(d2)drawPlot(ctx2,d2.w,d2.h,makePlotCfg2(),'p2');
   if(db)drawBloch(ctx3,db.w,db.h);
-  updateUI();
+  if(ts-lastUIRenderTs>=UI_INTERVAL_MS){
+    updateUI();
+    lastUIRenderTs=ts;
+  }
 
   requestAnimationFrame(animate);
 }
@@ -602,21 +691,25 @@ function animate(ts){
 aS.addEventListener('input', () => {
     alpha = parseFloat(aS.value);
     beta = Math.sqrt(Math.max(0, 1 - alpha*alpha));
+    updateUI();
 });
 omS.addEventListener('input',()=>{
   omega0=parseFloat(omS.value);
   if(t>Tmax())t=t%Tmax();
+  updateUI();
 });
-spS.addEventListener('input',()=>{spd=parseFloat(spS.value);});
+spS.addEventListener('input',()=>{spd=parseFloat(spS.value);updateUI();});
 showPpC.addEventListener('change',()=>{
   showPp=showPpC.checked;
   updatePlotPanelLayout();
   resize();
+  updateUI();
 });
 showPmC.addEventListener('change',()=>{
   showPm=showPmC.checked;
   updatePlotPanelLayout();
   resize();
+  updateUI();
 });
 
 // Bloch sphere drag-to-rotate (360° azimuth + clamped elevation)
@@ -665,8 +758,9 @@ plB.addEventListener('click',()=>{
   playing=!playing;
   plB.textContent=playing?'Pause':'Start';
   plB.classList.toggle('on',playing);
+  updateUI();
 });
-rsB.addEventListener('click',()=>{t=0;lastTs=null;});
+rsB.addEventListener('click',()=>{t=0;lastTs=null;updateUI();});
 
 window.addEventListener('resize',()=>resize());
 
