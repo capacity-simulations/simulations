@@ -1172,6 +1172,33 @@
             return { cx, cy };
         }
 
+        // Helper to get the current electron position (must match drawAtom calculations)
+        function getElectronPosition() {
+            const r = atomRect;
+            const cx = r.x + r.w * 0.55;
+            const cy = r.y + r.h * 0.45;
+            const rightSpace = (r.x + r.w) - cx - 20;
+            const leftSpace = cx - r.x - 20;
+            const topSpace = cy - r.y - 20;
+            const bottomSpace = (r.y + r.h) - cy - 20;
+            const maxRadius = Math.min(rightSpace, leftSpace, topSpace, bottomSpace);
+
+            let currentLevel = electronLevel;
+            if (electronTransitioning) {
+                const elapsed = time - electronTransitionStart;
+                const duration = 0.6 / animationSpeedFactor;
+                const t = Math.min(1, elapsed / duration);
+                const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+                currentLevel = electronFromLevel + (electronToLevel - electronFromLevel) * eased;
+            }
+
+            const eRadius = maxRadius * (currentLevel / maxNAtom) * 0.95;
+            const angle = time * 2.5;
+            const ex = cx + eRadius * Math.cos(angle);
+            const ey = cy + eRadius * Math.sin(angle);
+            return { ex, ey };
+        }
+
         function drawPhotons() {
             for (const p of animationPhotons) {
                 const progress = p.progress;
@@ -1452,14 +1479,17 @@
                     });
                 }, delayAbsorption);
             } else {
-                // Emission: photon goes FROM atom TO the strip
+                // Emission: photon goes FROM electron TO the strip
                 setTimeout(() => {
                     const targetX = wavelengthToStripX(lambda_nm, targetStripRect);
                     const targetY = targetStripRect.y + targetStripRect.h / 2;
 
+                    // Get the electron's current position as the photon origin
+                    const electronPos = getElectronPosition();
+
                     animationPhotons.push({
-                        startX: atomCenter.cx,
-                        startY: atomCenter.cy,
+                        startX: electronPos.ex,
+                        startY: electronPos.ey,
                         endX: targetX,
                         endY: targetY,
                         progress: 0,
