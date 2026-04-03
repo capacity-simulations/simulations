@@ -70,6 +70,9 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 .legend-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:5px}
 .legend-swatch{width:16px;height:16px;border-radius:3px;flex-shrink:0;border:1px solid rgba(148,163,184,0.2)}
 .legend-desc{font-size:10px;color:#64748b;margin-top:6px;line-height:1.4;font-style:italic}
+.preset-tooltip{position:fixed;z-index:400;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.3);border-radius:5px;padding:4px 8px;font-size:12px;color:#e2e8f0;pointer-events:none;opacity:0;transition:opacity 0s;white-space:nowrap;font-weight:600}
+.preset-tooltip[aria-hidden="false"]{opacity:1}
+.preset-tooltip sub{font-size:0.75em;vertical-align:baseline;position:relative;bottom:-0.15em}
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -118,7 +121,7 @@ if(typeof THREE==='undefined'){
     <div class="quantum-row">
       <div class="quantum-group"><label>n (principal)</label><select id="selN"></select></div>
       <div class="quantum-group"><label>l (angular)</label><select id="selL"></select></div>
-      <div class="quantum-group"><label>m (magnetic)</label><select id="selM"></select></div>
+      <div class="quantum-group"><label>m (orbital)</label><select id="selM"></select></div>
     </div>
     <div class="section-title" style="margin-top:6px">Presets</div>
     <div class="presets" id="presets"></div>
@@ -135,7 +138,6 @@ if(typeof THREE==='undefined'){
     </div>
     <div class="params-subtitle">Display</div>
     <div class="slider-row"><label>Brightness</label><input type="range" id="brightness" min="20" max="100" value="100"><span class="val" id="brightnessVal">100%</span></div>
-    <p class="params-footnote" id="realHarmonicNote"><strong>Note:</strong> ψ uses <strong>real</strong> spherical harmonics. The index <strong>m</strong> picks that real combination—only <strong>m = 0</strong> is an <strong>L<sub>z</sub></strong> eigenstate (eigenvalue 0). For <strong>m ≠ 0</strong>, <strong>⟨L<sub>z</sub>⟩ = 0</strong> (not <strong>L<sub>z</sub> = mℏ</strong>, which holds for complex <strong>Y<sub>ℓ</sub><sup>m</sup></strong>).</p>
   </div>
   <div class="section">
     <div class="section-title">Orbital properties</div>
@@ -154,6 +156,7 @@ if(typeof THREE==='undefined'){
   </div>
 </div>
 <div id="aboutTooltip" class="about-tooltip" role="tooltip" aria-hidden="true">About this simulation</div>
+<div id="presetTooltip" class="preset-tooltip" role="tooltip" aria-hidden="true"></div>
 <script>
 function initApp(){
   if(typeof THREE==='undefined'){setTimeout(initApp,50);return;}
@@ -274,7 +277,7 @@ function initApp(){
   }
   setRendererSize();
 
-  const CAM_DEFAULT_THETA=1.4, CAM_DEFAULT_PHI=0.25;
+  const CAM_DEFAULT_THETA=1.2, CAM_DEFAULT_PHI=0.4;
   let camDist=10, camTheta=CAM_DEFAULT_THETA, camPhi=CAM_DEFAULT_PHI;
   function resetCameraToDefaultView(){
     let ext=spatialExtent(QN.n);
@@ -546,20 +549,19 @@ function initApp(){
     let avgR=a0/2*(3*n*n-l*(l+1));
     document.getElementById('infoE').textContent=E.toFixed(3)+' eV';
     document.getElementById('infoL').textContent=L.toFixed(3)+' ℏ';
-    document.getElementById('infoLz').textContent=m===0?'0 ℏ':'⟨L_z⟩ = 0';
     document.getElementById('infoR').textContent=avgR.toFixed(1)+' a₀';
     document.getElementById('infoRadial').textContent=n-l-1;
     document.getElementById('infoAngular').textContent=l;
     document.getElementById('infoTotal').textContent=n-1;
     document.getElementById('infoDegen').textContent=2*n*n;
-    let lName=l<L_LETTERS.length?L_LETTERS[l]:('l='+l);
-    let mLabel='';
-    if(l===1){mLabel=['y','z','x'][m+1]||'';}
-    else if(l===2){mLabel=['xy','yz','z²','xz','x²−y²'][m+2]||'';}
-    let notation=n+lName;
-    if(mLabel)notation+='<sub>'+mLabel+'</sub>';
-    document.getElementById('orbitalNotation').innerHTML='ψ<sub>'+n+','+l+','+m+'</sub> — '+notation;
-    document.getElementById('stateKet').innerHTML='State: |'+n+', '+l+', '+m+'⟩';
+    document.getElementById('orbitalNotation').innerHTML='ψ<sub>'+n+','+l+','+m+'</sub>';
+    if(m===0){
+      document.getElementById('stateKet').innerHTML='n='+n+', l='+l+', m=0 &nbsp;(L<sub>z</sub> eigenstate)';
+      document.getElementById('infoLz').textContent='0 ℏ';
+    } else {
+      document.getElementById('stateKet').innerHTML='n='+n+', l='+l+' &nbsp;(real orbital, ⟨L<sub>z</sub>⟩=0)';
+      document.getElementById('infoLz').textContent='⟨Lz⟩ = 0';
+    }
   }
 
   // === UI SETUP ===
@@ -582,7 +584,11 @@ function initApp(){
   selM.addEventListener('change',()=>{QN.m=parseInt(selM.value);needsUpdate=true;});
   updateLOptions();
 
-  function presetButtonHtml(id){
+  function presetButtonHtml(p){
+    return '|'+p.n+','+p.l+','+p.m+'⟩';
+  }
+
+  function presetTooltipHtml(name){
     const h={
       '1s':'1s','2s':'2s',
       '2p_z':'2p<sub>z</sub>','2p_x':'2p<sub>x</sub>','2p_y':'2p<sub>y</sub>',
@@ -591,13 +597,27 @@ function initApp(){
       '3d_x²-y²':'3d<sub>x²−y²</sub>',
       '4s':'4s','4f':'4f','5g':'5g'
     };
-    return h[id]||id;
+    return h[name]||name.replace('_',' ');
   }
 
   let presets=[{name:'1s',n:1,l:0,m:0},{name:'2s',n:2,l:0,m:0},{name:'2p_z',n:2,l:1,m:0},{name:'2p_x',n:2,l:1,m:1},{name:'2p_y',n:2,l:1,m:-1},{name:'3s',n:3,l:0,m:0},{name:'3p_z',n:3,l:1,m:0},{name:'3p_x',n:3,l:1,m:1},{name:'3p_y',n:3,l:1,m:-1},{name:'3d_z²',n:3,l:2,m:0},{name:'3d_xz',n:3,l:2,m:1},{name:'3d_yz',n:3,l:2,m:-1},{name:'3d_xy',n:3,l:2,m:-2},{name:'3d_x²-y²',n:3,l:2,m:2},{name:'4s',n:4,l:0,m:0},{name:'4f',n:4,l:3,m:0},{name:'5g',n:5,l:4,m:0}];
   let presetsDiv=document.getElementById('presets');
+  let presetTooltip=document.getElementById('presetTooltip');
   presets.forEach(p=>{
-    let btn=document.createElement('div');btn.className='preset-btn';btn.innerHTML=presetButtonHtml(p.name);
+    let btn=document.createElement('div');btn.className='preset-btn';btn.innerHTML=presetButtonHtml(p);
+    btn.addEventListener('mouseenter',function(e){
+      presetTooltip.innerHTML=presetTooltipHtml(p.name);
+      presetTooltip.style.left=(e.clientX+10)+'px';
+      presetTooltip.style.top=(e.clientY-30)+'px';
+      presetTooltip.setAttribute('aria-hidden','false');
+    });
+    btn.addEventListener('mousemove',function(e){
+      presetTooltip.style.left=(e.clientX+10)+'px';
+      presetTooltip.style.top=(e.clientY-30)+'px';
+    });
+    btn.addEventListener('mouseleave',function(){
+      presetTooltip.setAttribute('aria-hidden','true');
+    });
     btn.addEventListener('click',()=>{
       QN.n=p.n;QN.l=p.l;QN.m=p.m;selN.value=p.n;updateLOptions();selL.value=p.l;updateMOptions();selM.value=p.m;
       document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');needsUpdate=true;
@@ -670,9 +690,10 @@ function initApp(){
   function animate(){
     requestAnimationFrame(animate);
     time+=0.016;
-    camera.position.x=camDist*Math.sin(camTheta)*Math.sin(camPhi);
-    camera.position.y=camDist*Math.cos(camTheta);
-    camera.position.z=camDist*Math.sin(camTheta)*Math.cos(camPhi);
+    camera.position.x=camDist*Math.sin(camTheta)*Math.cos(camPhi);
+    camera.position.y=camDist*Math.sin(camTheta)*Math.sin(camPhi);
+    camera.position.z=camDist*Math.cos(camTheta);
+    camera.up.set(0,0,1);
     camera.lookAt(0,0,0);
     if(needsUpdate){updateViz();}
     renderer.render(scene,camera);
