@@ -298,8 +298,8 @@
             <p>
                 Students can drag <strong>k₀</strong> to shift the peak (changing the particle's central momentum) and 
                 adjust <strong>σ</strong> to widen or narrow the distribution. Shaded regions show the amplitude A(k) over 
-                ±σ and ±2σ ranges. The percentages 68.27% and 95.45% refer to the fraction of ∫|A(k)|² dk (probability in k-space) 
-                within those ranges; most of the wavepacket's momentum content clusters near k₀. Click or drag on the plot to move the marker and read A(k) at that k.
+                the note-defined intervals k₀ ± σ and k₀ ± 2σ, making it easier to see how the width parameter changes the profile. 
+                Click or drag on the plot to move the marker and read A(k) at that k.
             </p>
             <div class="equation-block" id="katexEquation"></div>
             <p style="font-size:12px; color:#64748b; margin-bottom:0;">
@@ -353,7 +353,7 @@
 
     <script>
     // Render KaTeX equations (modal and live formula panel) in standard LaTeX
-    const latexFormula = 'A(k) = \\left(2\\pi\\sigma^2\\right)^{-1/4} \\cdot \\exp\\!\\left[ -\\frac{(k - k_0)^2}{4\\sigma^2} \\right]';
+    const latexFormula = 'A(k) = \\exp\\!\\left(-\\frac{(k-k_0)^2}{2\\sigma^2} + \\frac{k_0^2}{2\\sigma^2}\\right)';
     document.addEventListener('DOMContentLoaded', function() {
         if (typeof katex === 'undefined') return;
         const opts = { displayMode: true, throwOnError: false };
@@ -424,18 +424,36 @@
         updateMarkerSliderVisibility();
         shadingToggle.addEventListener('change', e => { showShading = e.target.checked; });
 
-        // Gaussian function A(k)
+        // Lecture-note definition of A(k)
         function gaussian(k, k0, sigma) {
-            const norm = Math.pow(2 * Math.PI * sigma * sigma, -0.25);
-            const exponent = -(k - k0) * (k - k0) / (4 * sigma * sigma);
-            return norm * Math.exp(exponent);
+            const exponent = (k0 * k0 - (k - k0) * (k - k0)) / (2 * sigma * sigma);
+            return Math.exp(exponent);
         }
 
-        // Coordinate transforms — fixed axis ranges (no dynamic scaling)
+        // Coordinate transforms — fixed k range, dynamic A(k) scaling
         const K_MIN = -20, K_MAX = 20;   // k span so curve is visible moving when k₀ ∈ [-5, 5]
-        const A_MAX = 0.75;               // A(k) upper limit for y-axis
         let plotLeft, plotRight, plotTop, plotBottom, plotWidth, plotHeight;
         let kMin, kMax, aMax;
+
+        function getYAxisStep(maxValue) {
+            const roughStep = maxValue / 5;
+            const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+            const residual = roughStep / magnitude;
+
+            if (residual <= 1) return magnitude;
+            if (residual <= 2) return 2 * magnitude;
+            if (residual <= 5) return 5 * magnitude;
+            return 10 * magnitude;
+        }
+
+        function formatValue(value) {
+            if (value === 0) return '0';
+            if (Math.abs(value) >= 1000 || Math.abs(value) < 0.01) {
+                return value.toExponential(2).replace('+', '');
+            }
+            if (Math.abs(value) >= 10) return value.toFixed(1);
+            return value.toFixed(2);
+        }
 
         function resize() {
             const container = document.getElementById('canvas-container');
@@ -506,8 +524,10 @@
                 ctx.stroke();
             }
 
-            const aStep = aMax > 2 ? 0.5 : (aMax > 1 ? 0.2 : 0.1);
-            for (let a = 0; a <= aMax; a += aStep) {
+            const aStep = getYAxisStep(aMax);
+            const yTickCount = Math.floor(aMax / aStep);
+            for (let i = 0; i <= yTickCount; i++) {
+                const a = i * aStep;
                 const y = aToY(a);
                 ctx.beginPath();
                 ctx.moveTo(plotLeft, y);
@@ -551,10 +571,12 @@
 
             ctx.textAlign = 'right';
             ctx.textBaseline = 'middle';
-            const aStep = aMax > 2 ? 0.5 : (aMax > 1 ? 0.2 : 0.1);
-            for (let a = aStep; a <= aMax; a += aStep) {
+            const aStep = getYAxisStep(aMax);
+            const yTickCount = Math.floor(aMax / aStep);
+            for (let i = 1; i <= yTickCount; i++) {
+                const a = i * aStep;
                 const y = aToY(a);
-                ctx.fillText(a.toFixed(2), plotLeft - 8, y);
+                ctx.fillText(formatValue(a), plotLeft - 8, y);
                 ctx.beginPath();
                 ctx.moveTo(plotLeft - 4, y);
                 ctx.lineTo(plotLeft, y);
@@ -665,7 +687,7 @@
             let tooltipY = markerPy - 10;
             if (tooltipY - tooltipBoxTopOffset < plotTop) tooltipY = plotTop + tooltipBoxTopOffset;
             else if (tooltipY + tooltipBoxH - tooltipBoxTopOffset > plotBottom) tooltipY = plotBottom - (tooltipBoxH - tooltipBoxTopOffset);
-            const text = 'A(' + markerK.toFixed(2) + ') = ' + markerA.toFixed(4);
+            const text = 'A(' + markerK.toFixed(2) + ') = ' + formatValue(markerA);
             ctx.font = 'bold 11px -apple-system, sans-serif';
             const tw = ctx.measureText(text).width;
 
@@ -720,7 +742,7 @@
 
             kMin = K_MIN;
             kMax = K_MAX;
-            aMax = A_MAX;
+            aMax = Math.max(1, gaussian(k0, k0, sigma) * 1.1);
 
             // Draw elements in order
             drawGrid();

@@ -502,8 +502,8 @@
                         <div class="info-icon">i</div>
                         <div class="about-tooltip" role="tooltip">
                             <strong>About the Simulation</strong>
-                            <strong>Physics:</strong> A 2D Gaussian wavepacket evolves under free-particle spreading (ℏ = m = 1). The probability density <em>|ψ(x,y,t)|²</em> is properly normalized to integrate to 1. Pressing <em>Measure</em> performs a position measurement: the outcome is sampled from <em>|ψ|²</em> (the Born rule), and the state collapses to a narrow Gaussian centered at the measured point, approximating a position eigenstate. The post-collapse packet then re-spreads according to the uncertainty principle.<br><br>
-                            <strong>Visuals:</strong> In <em>3D mode</em>, surface height is proportional to <em>|ψ|²</em> (clamped when the peak exceeds the display range; the actual peak is shown in the statistics panel). In <em>Heatmap mode</em>, color maps to <em>|ψ|²</em> on a fixed scale with a legend.<br><br>
+                            <strong>Physics:</strong> A 2D Gaussian wavepacket evolves under free-particle spreading (ℏ = m = 1). The probability density <em>|ψ(x,y,t)|²</em> is normalized on the full plane, so <em>∫∫|ψ|² dx dy = 1</em> at all times. Pressing <em>Measure</em> performs a position measurement: the outcome is sampled exactly from <em>|ψ|²</em> within the finite viewing window (renormalized there by the Born rule), and the state collapses to a narrow Gaussian centered at the measured point, approximating a position eigenstate. The post-collapse packet then re-spreads according to the uncertainty principle.<br><br>
+                            <strong>Visuals:</strong> In <em>3D mode</em>, surface height is proportional to <em>|ψ|²</em> (clamped when the peak exceeds the display range; the actual peak is shown in the statistics panel). In <em>Heatmap mode</em>, color maps to <em>|ψ|²</em> on a fixed scale with a legend. The plotted square is finite, so the visible probability can be slightly below 1 when tails extend beyond the view.<br><br>
                             <strong>Controls:</strong> Use <em>Play</em>/<em>Reset</em>, switch between 3D and Heatmap views, and press <em>Measure</em> to trigger collapse. Sliders set initial position, width, and animation speed. All quantities are in natural units (ℏ = m = 1).
                         </div>
                     </div>
@@ -584,6 +584,14 @@
                         <div class="stat-row">
                             <span class="stat-label">Peak |ψ|²</span>
                             <span class="stat-value" id="peakDisplay">1.00</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Total Probability</span>
+                            <span class="stat-value" id="normalizationDisplay">1.000000</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Visible Probability</span>
+                            <span class="stat-value" id="visibleMassDisplay">1.000000</span>
                         </div>
                         <div class="stat-row">
                             <span class="stat-label">Initial X</span>
@@ -902,6 +910,37 @@
             return 0.5 * (erfApprox(hi) - erfApprox(lo));
         }
 
+        function gaussianDensityNorm2D(sigma) {
+            return 1 / (2 * Math.PI * sigma * sigma);
+        }
+
+        let spareStandardNormal = null;
+
+        function sampleStandardNormal() {
+            if (spareStandardNormal !== null) {
+                const cached = spareStandardNormal;
+                spareStandardNormal = null;
+                return cached;
+            }
+
+            let u1 = 0;
+            let u2 = 0;
+            while (u1 <= Number.EPSILON) u1 = Math.random();
+            u2 = Math.random();
+
+            const mag = Math.sqrt(-2 * Math.log(u1));
+            const angle = 2 * Math.PI * u2;
+            spareStandardNormal = mag * Math.sin(angle);
+            return mag * Math.cos(angle);
+        }
+
+        function sampleTruncatedGaussian1D(mu, sigma, minVal, maxVal) {
+            while (true) {
+                const sample = mu + sigma * sampleStandardNormal();
+                if (sample >= minVal && sample <= maxVal) return sample;
+            }
+        }
+
         function getCurrentSigma(t) {
             if (isCollapsed) {
                 const dt = Math.max(0, t - collapseTime);
@@ -917,7 +956,7 @@
             return { x: initialPosX, y: initialPosY };
         }
 
-        function getDetectorCapturedMass(t) {
+        function getVisibleProbabilityMass(t) {
             const sigma = getCurrentSigma(t);
             const center = getCurrentCenter();
             const min = -gridSize;
@@ -1135,7 +1174,8 @@
             const y0 = center.y;
 
             const r2 = (x - x0) ** 2 + (y - y0) ** 2;
-            const amplitude = 1 / (2 * Math.PI * sigma * sigma);
+            // This returns the probability density |psi|^2, normalized on the full x-y plane.
+            const amplitude = gaussianDensityNorm2D(sigma);
             return amplitude * Math.exp(-r2 / (2 * sigma * sigma));
         }
 
@@ -1163,8 +1203,11 @@
             positions.needsUpdate = true;
             waveGeometry.computeVertexNormals();
 
+            const visibleMass = getVisibleProbabilityMass(time);
             document.getElementById('timeDisplay').textContent = time.toFixed(2);
             document.getElementById('peakDisplay').textContent = peakPsi2 < 0.01 ? peakPsi2.toExponential(2) : peakPsi2.toFixed(4);
+            document.getElementById('normalizationDisplay').textContent = '1.000000';
+            document.getElementById('visibleMassDisplay').textContent = visibleMass.toFixed(6);
             document.getElementById('initialXDisplay').textContent = initialPosX.toFixed(1);
             document.getElementById('initialYDisplay').textContent = initialPosY.toFixed(1);
 
@@ -1189,31 +1232,14 @@
         }
 
         function measureWavefunction() {
-            // Sample from probability distribution within the finite detector window.
-            const samples = 10000;
-            let totalProb = 0;
-            const probMap = [];
+            // Exact sampling from the Born distribution conditioned on the finite detector window.
+            const sigma = getCurrentSigma(time);
+            const center = getCurrentCenter();
+            const min = -gridSize;
+            const max = gridSize;
 
-            for (let i = 0; i < samples; i++) {
-                const x = (Math.random() - 0.5) * gridSize * 2;
-                const y = (Math.random() - 0.5) * gridSize * 2;
-                const prob = gaussianWavepacket(x, y, time);
-                totalProb += prob;
-                probMap.push({ x, y, prob });
-            }
-
-            // Normalize and sample
-            const rand = Math.random() * totalProb;
-            let cumProb = 0;
-
-            for (const point of probMap) {
-                cumProb += point.prob;
-                if (cumProb >= rand) {
-                    collapsePosition.x = point.x;
-                    collapsePosition.y = point.y;
-                    break;
-                }
-            }
+            collapsePosition.x = sampleTruncatedGaussian1D(center.x, sigma, min, max);
+            collapsePosition.y = sampleTruncatedGaussian1D(center.y, sigma, min, max);
 
             isCollapsed = true;
             collapseTime = time;
