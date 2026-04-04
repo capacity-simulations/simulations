@@ -249,6 +249,7 @@ input[type="range"]::-moz-range-thumb {
     margin-bottom: 8px; font-size: 12px; color: #e2e8f0; cursor: pointer;
 }
 .checkbox-group input { accent-color: #3b82f6; }
+.is-hidden { display: none !important; }
 .view-mode-options { display: flex; gap: 8px; flex-wrap: wrap; }
 .view-mode-btn {
     flex: 1; min-width: 0;
@@ -367,7 +368,7 @@ body.light-theme .main-area { background: #e2e8f0; }
             <div class="legend-item" id="legendR" style="display:none;"><div class="legend-line" style="background:#f472b6;"></div> Reflection R</div>
             <div class="legend-item"><div class="legend-dash" style="border-color:#94a3b8;"></div> Classical limit</div>
             <div class="legend-item" id="legendResonances" style="display:none;"><div class="legend-line" style="background:#d946ef; width:8px; height:8px; border-radius:50%;"></div> Resonance markers (T = 1)</div>
-            <div class="legend-item"><div class="legend-line" style="background:#fbbf24; width:8px; height:8px; border-radius:50%;"></div> Scanning marker</div>
+            <div class="legend-item" id="legendScanner" style="display:none;"><div class="legend-line" style="background:#fbbf24; width:8px; height:8px; border-radius:50%;"></div> Scanning marker</div>
         </div>
     </div>
     <div class="barrier-strip" id="barrierStrip" style="display: none;">
@@ -407,7 +408,7 @@ body.light-theme .main-area { background: #e2e8f0; }
             </div>
             <input type="range" id="sliderM" min="0.1" max="1.0" step="0.01" value="1.0">
         </div>
-        <div class="slider-group">
+        <div class="slider-group" id="scannerSpeedGroup">
             <div class="slider-header">
                 <span class="slider-name">Animated scanner speed</span>
                 <span class="slider-val" id="valScannerSpeed">1.00×</span>
@@ -415,21 +416,24 @@ body.light-theme .main-area { background: #e2e8f0; }
             <input type="range" id="sliderScannerSpeed" min="0.25" max="1" step="0.05" value="1">
         </div>
     </div>
-    <div class="panel">
+    <div class="panel" id="panelLectureDisplay">
+        <label class="checkbox-group"><input type="checkbox" id="chkLectureDisplay"> Lecture display</label>
+    </div>
+    <div class="panel" id="panelCurrentValues">
         <div class="panel-title">Current Values</div>
         <div class="output-row"><span class="output-name">T</span><span class="output-value" id="statT">—</span></div>
         <div class="output-row"><span class="output-name">R = 1 − T</span><span class="output-value" id="statR">—</span></div>
-        <div class="output-row"><span class="output-name">E (eV)</span><span class="output-value" id="statE">—</span></div>
-        <div class="output-row"><span class="output-name">k (Å⁻¹)</span><span class="output-value" id="statK">—</span></div>
+        <div class="output-row"><span class="output-name" id="statELabel">E (eV)</span><span class="output-value" id="statE">—</span></div>
+        <div class="output-row"><span class="output-name" id="statKLabel">k (Å⁻¹)</span><span class="output-value" id="statK">—</span></div>
         <div class="output-row"><span class="output-name" id="statEtaLabel">η (Å⁻¹)</span><span class="output-value" id="statEta">—</span></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="panelDisplay">
         <div class="panel-title">Display</div>
         <label class="checkbox-group"><input type="checkbox" id="chkReflection"> Reflection R = 1 − T</label>
         <label class="checkbox-group"><input type="checkbox" id="chkClassical" checked> Classical prediction</label>
         <label class="checkbox-group"><input type="checkbox" id="chkRegions" checked> Region shading</label>
         <label class="checkbox-group"><input type="checkbox" id="chkResonances"> Resonance markers (T = 1)</label>
-        <label class="checkbox-group"><input type="checkbox" id="chkAnimate"> Animated scanner</label>
+        <label class="checkbox-group" id="animateToggleWrap"><input type="checkbox" id="chkAnimate"> Animated scanner</label>
         <label class="checkbox-group"><input type="checkbox" id="chkBarrierDiagram"> Show barrier diagram</label>
     </div>
 </div>
@@ -484,6 +488,53 @@ function computeT(E, U, m, a) {
 
 function KfromE(E, m) { return E > 0 ? Math.sqrt(2 * m * E) : 0; }
 function EfromK(k, m) { return k * k / (2 * m); }
+
+function isLectureDisplay() {
+    const chk = document.getElementById('chkLectureDisplay');
+    return !!(chk && chk.checked);
+}
+
+function formatAValue(a) {
+    return isLectureDisplay() ? a.toFixed(2) : a.toFixed(2) + ' Å';
+}
+
+function formatUValue(U) {
+    return isLectureDisplay() ? U.toFixed(2) : U.toFixed(2) + ' eV';
+}
+
+function formatMValue(m) {
+    return isLectureDisplay() ? m.toFixed(2) : m.toFixed(2) + ' m<sub>e</sub>';
+}
+
+function formatScannerSpeedValue(speed) {
+    return isLectureDisplay() ? speed.toFixed(2) : speed.toFixed(2) + '×';
+}
+
+function getScannerPosition() {
+    return document.getElementById('chkAnimate').checked ? scanPos : 0.5;
+}
+
+function updateParameterDisplays() {
+    const valA = document.getElementById('valA');
+    const valU = document.getElementById('valU');
+    const valM = document.getElementById('valM');
+    const valScannerSpeed = document.getElementById('valScannerSpeed');
+    if (valA) valA.textContent = formatAValue(params.a);
+    if (valU) valU.textContent = formatUValue(params.U);
+    if (valM) valM.innerHTML = formatMValue(params.m);
+    if (valScannerSpeed) valScannerSpeed.textContent = formatScannerSpeedValue(scannerSpeed);
+}
+
+function updateLectureDisplayUI() {
+    const lectureMode = isLectureDisplay();
+    const panelCurrentValues = document.getElementById('panelCurrentValues');
+    const scannerSpeedGroup = document.getElementById('scannerSpeedGroup');
+    const panelDisplay = document.getElementById('panelDisplay');
+    if (panelCurrentValues) panelCurrentValues.classList.toggle('is-hidden', lectureMode);
+    if (scannerSpeedGroup) scannerSpeedGroup.classList.toggle('is-hidden', lectureMode);
+    if (panelDisplay) panelDisplay.classList.toggle('is-hidden', lectureMode);
+    updateParameterDisplays();
+}
 
 const plotMargin = { top: 45, right: 35, bottom: 60, left: 70 };
 
@@ -748,12 +799,14 @@ function drawPlot() {
 
     let currentScanE = 0, currentScanT = 0, currentScanK = 0;
     const useAnimPos = document.getElementById('chkAnimate').checked;
-    const statPos = useAnimPos ? scanPos : 0.5;
+    const statPos = getScannerPosition();
     const sxVal = xRange.min + statPos * (xRange.max - xRange.min);
     const sE = xToE(sxVal);
     const sT = computeT(sE, params.U, params.m, params.a);
     const sK = KfromE(sE, params.m);
     currentScanE = sE; currentScanT = sT; currentScanK = sK;
+    const legendScanner = document.getElementById('legendScanner');
+    if (legendScanner) legendScanner.style.display = useAnimPos ? '' : 'none';
     if (useAnimPos) {
         const sPx = pa.x + scanPos * pa.w;
         const sPy = pa.y + pa.h - sT * pa.h;
@@ -801,11 +854,13 @@ function drawPlot() {
 
         let eta_or_kappa = '';
         if (hE < params.U) {
-            eta_or_kappa = 'η=' + Math.sqrt(2 * params.m * (params.U - hE)).toFixed(3) + ' Å⁻¹';
+            eta_or_kappa = 'η=' + Math.sqrt(2 * params.m * (params.U - hE)).toFixed(3) + (isLectureDisplay() ? '' : ' Å⁻¹');
         } else {
-            eta_or_kappa = 'κ=' + Math.sqrt(2 * params.m * (hE - params.U)).toFixed(3) + ' Å⁻¹';
+            eta_or_kappa = 'κ=' + Math.sqrt(2 * params.m * (hE - params.U)).toFixed(3) + (isLectureDisplay() ? '' : ' Å⁻¹');
         }
-        const txt = `T=${hT.toFixed(4)}  E=${hE.toFixed(2)} eV  k=${hK.toFixed(2)} Å⁻¹  ${eta_or_kappa}`;
+        const txt = isLectureDisplay()
+            ? `T=${hT.toFixed(4)}  E=${hE.toFixed(2)}  k=${hK.toFixed(2)}  ${eta_or_kappa}`
+            : `T=${hT.toFixed(4)}  E=${hE.toFixed(2)} eV  k=${hK.toFixed(2)} Å⁻¹  ${eta_or_kappa}`;
         ctx.font = '11px -apple-system, sans-serif';
         const tw = ctx.measureText(txt).width + 18;
         let tx = hoverX + 15;
@@ -882,7 +937,9 @@ function drawPlot() {
     ctx.fillStyle = axisTitleStyle;
     ctx.font = '600 14px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    const xLabel = mode === 'E' ? 'Energy  E  (eV)' : 'Wave Number  k  (Å⁻¹)';
+    const xLabel = mode === 'E'
+        ? (isLectureDisplay() ? 'Energy  E' : 'Energy  E  (eV)')
+        : (isLectureDisplay() ? 'Wave Number  k' : 'Wave Number  k  (Å⁻¹)');
     ctx.fillText(xLabel, pa.x + pa.w / 2, pa.y + pa.h + 45);
 
     ctx.save();
@@ -906,14 +963,16 @@ function drawPlot() {
 
     // Always update sidebar stats from current scan (or hover), including when E = 0
     let etaStr = '—';
-    let etaLabel = 'η (Å⁻¹)';
+    let etaLabel = isLectureDisplay() ? 'η' : 'η (Å⁻¹)';
     if (currentScanE < params.U && currentScanE > 0) {
         etaStr = Math.sqrt(2 * params.m * (params.U - currentScanE)).toFixed(3);
-        etaLabel = 'η (Å⁻¹)';
+        etaLabel = isLectureDisplay() ? 'η' : 'η (Å⁻¹)';
     } else if (currentScanE >= params.U) {
         etaStr = Math.sqrt(2 * params.m * (currentScanE - params.U)).toFixed(3);
-        etaLabel = 'κ (Å⁻¹)';
+        etaLabel = isLectureDisplay() ? 'κ' : 'κ (Å⁻¹)';
     }
+    document.getElementById('statELabel').textContent = isLectureDisplay() ? 'E' : 'E (eV)';
+    document.getElementById('statKLabel').textContent = isLectureDisplay() ? 'k' : 'k (Å⁻¹)';
     document.getElementById('statEtaLabel').textContent = etaLabel;
     document.getElementById('statT').textContent = currentScanT.toFixed(4);
     document.getElementById('statR').textContent = (1 - currentScanT).toFixed(4);
@@ -988,7 +1047,7 @@ function drawBarrier() {
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(mg, baseY); ctx.lineTo(mg + plotW, baseY); ctx.stroke();
 
-    const sxVal = getXRange().min + scanPos * (getXRange().max - getXRange().min);
+    const sxVal = getXRange().min + getScannerPosition() * (getXRange().max - getXRange().min);
     const sE = xToE(sxVal);
     const sT = computeT(sE, params.U, params.m, params.a);
     const incAmp = plotH * 0.13;
@@ -1132,28 +1191,29 @@ function resetSimulation() {
     const sliderU = document.getElementById('sliderU');
     const sliderM = document.getElementById('sliderM');
     const sliderSpeed = document.getElementById('sliderScannerSpeed');
-    if (sliderA) { sliderA.value = '1.0'; document.getElementById('valA').textContent = '1.00 Å'; }
-    if (sliderU) { sliderU.value = '5.0'; document.getElementById('valU').textContent = '5.00 eV'; }
-    if (sliderM) { sliderM.value = '1.0'; document.getElementById('valM').innerHTML = '1.00 m<sub>e</sub>'; }
-    if (sliderSpeed) { sliderSpeed.value = '1'; document.getElementById('valScannerSpeed').textContent = '1.00×'; }
+    if (sliderA) sliderA.value = '1.0';
+    if (sliderU) sliderU.value = '5.0';
+    if (sliderM) sliderM.value = '1.0';
+    if (sliderSpeed) sliderSpeed.value = '1';
+    updateParameterDisplays();
 }
 
 function setupEvents() {
     document.getElementById('sliderA').addEventListener('input', function() {
         params.a = parseFloat(this.value);
-        document.getElementById('valA').textContent = params.a.toFixed(2) + ' Å';
+        updateParameterDisplays();
     });
     document.getElementById('sliderU').addEventListener('input', function() {
         params.U = parseFloat(this.value);
-        document.getElementById('valU').textContent = params.U.toFixed(2) + ' eV';
+        updateParameterDisplays();
     });
     document.getElementById('sliderM').addEventListener('input', function() {
         params.m = parseFloat(this.value);
-        document.getElementById('valM').innerHTML = params.m.toFixed(2) + ' m<sub>e</sub>';
+        updateParameterDisplays();
     });
     document.getElementById('sliderScannerSpeed').addEventListener('input', function() {
         scannerSpeed = parseFloat(this.value);
-        document.getElementById('valScannerSpeed').textContent = scannerSpeed.toFixed(2) + '×';
+        updateParameterDisplays();
     });
 
     const btnReset = document.getElementById('btnReset');
@@ -1166,11 +1226,15 @@ function setupEvents() {
             btnStart.textContent = chkAnimate.checked ? 'Pause' : 'Start';
         }
         updateStartLabel();
+        chkAnimate.addEventListener('change', updateStartLabel);
         btnStart.addEventListener('click', function() {
             chkAnimate.checked = !chkAnimate.checked;
             updateStartLabel();
         });
     }
+
+    const chkLectureDisplay = document.getElementById('chkLectureDisplay');
+    if (chkLectureDisplay) chkLectureDisplay.addEventListener('change', updateLectureDisplayUI);
 
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
@@ -1244,6 +1308,7 @@ function init() {
     const chkB0 = document.getElementById('chkBarrierDiagram');
     if (chkB0 && chkB0.checked) resizeBarrier();
     setupEvents();
+    updateLectureDisplayUI();
     requestAnimationFrame(animate);
 }
 

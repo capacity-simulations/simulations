@@ -30,7 +30,7 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 .main-area{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden;}
 
 .equation-bar{background:rgba(15,23,42,0.85);border-bottom:1px solid rgba(148,163,184,0.12);padding:16px 24px;min-height:80px;display:flex;align-items:center;justify-content:safe center;overflow-x:auto;overflow-y:hidden;}
-.equation-bar .katex{font-size:1.3em;}
+.equation-bar .katex{font-size:1.15em;}
 .equation-bar .katex-display{margin:0 auto;flex-shrink:0;}
 
 .panels-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
@@ -60,11 +60,15 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 
 .right-panel .section-title{font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .right-panel .section-title span{color:#60a5fa;}
+.is-hidden{display:none !important;}
 
-.toggle-group{display:flex;gap:0;border-radius:6px;overflow:hidden;border:1px solid rgba(148,163,184,0.2);width:100%;}
-.toggle-btn{flex:1;padding:8px 10px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:rgba(30,41,59,0.9);color:#e5e7eb;transition:all 0.2s;text-align:center;}
+.toggle-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;}
+.toggle-btn{padding:8px 10px;font-size:12px;font-weight:600;border:1px solid rgba(148,163,184,0.2);border-radius:6px;cursor:pointer;background:rgba(30,41,59,0.9);color:#e5e7eb;transition:all 0.2s;text-align:center;}
 .toggle-btn.active{background:#3b82f6;color:#f9fafb;}
 .toggle-btn:hover:not(.active){background:rgba(59,130,246,0.2);color:#e2e8f0;}
+.lecture-mode-wrap{margin-top:auto;padding-top:4px;}
+.lecture-toggle{display:flex;align-items:center;gap:10px;color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;}
+.lecture-toggle input{accent-color:#3b82f6;}
 
 .control-row{display:flex;flex-direction:column;gap:6px;}
 .control-row label{color:#e2e8f0;font-size:12px;display:flex;justify-content:space-between;align-items:center;}
@@ -118,8 +122,8 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
       <div class="about-tooltip" role="tooltip">
         <div class="note-title">About This Simulation</div>
         <p>This interactive visualization demonstrates how complex waveforms can be constructed by summing simple sine waves — the core idea behind <em>Fourier series</em>.</p>
-        <p>Choose a <em>square wave</em>, <em>sawtooth wave</em>, or <em>Gaussian in a box</em> and adjust the number of terms (N). The <em>top panel</em> shows each individual sine component with its amplitude and frequency. The <em>bottom panel</em> overlays the partial Fourier sum (colored line) against the ideal target (dashed line).</p>
-        <p>The square and sawtooth waves have discontinuities whose coefficients decay as 1/n, producing the <em>Gibbs phenomenon</em> (~9% overshoot even as N→∞). The Gaussian's coefficients decay super-exponentially, so convergence is dramatically faster — compare the two regimes by switching wave types.</p>
+        <p>Choose a <em>square wave</em>, <em>sawtooth wave</em>, <em>Gaussian in a box</em>, or <em>double Gaussian</em> and adjust the number of terms (N). The <em>top panel</em> shows each individual sine component with its amplitude and frequency. The <em>bottom panel</em> overlays the partial Fourier sum (colored line) against the ideal target (dashed line).</p>
+        <p>The square and sawtooth waves have discontinuities whose coefficients decay as 1/n, producing the <em>Gibbs phenomenon</em> (~9% overshoot even as N→∞). The Gaussian modes' coefficients decay super-exponentially, so convergence is dramatically faster. The double Gaussian breaks the single Gaussian's mid-box symmetry, activating even-n harmonics — compare the two regimes by switching wave types.</p>
         <p>The equation bar at the top displays the current partial sum formula up to N terms.</p>
       </div>
     </span>
@@ -141,7 +145,7 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
     </div>
   </div>
   <div class="right-panel" id="rightPanel">
-    <div>
+    <div id="controlPanelHeader">
       <div class="section-title"><span>∿</span> Control Panel</div>
     </div>
     <div class="narration-panel" id="narration-panel">
@@ -172,6 +176,7 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
         <button class="toggle-btn active" id="btnSquare" onclick="setWaveType('square')">Square</button>
         <button class="toggle-btn" id="btnSawtooth" onclick="setWaveType('sawtooth')">Sawtooth</button>
         <button class="toggle-btn" id="btnGaussian" onclick="setWaveType('gaussian')">Gaussian</button>
+        <button class="toggle-btn" id="btnDoubleGaussian" onclick="setWaveType('doubleGaussian')">Two Gaussians</button>
       </div>
     </div>
     <div class="control-row" id="sigmaControl" style="display:none;">
@@ -186,6 +191,12 @@ body{background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
         <button id="btnNPlus" style="width:26px;height:26px;border-radius:999px;border:1px solid rgba(148,163,184,0.4);background:rgba(15,23,42,0.9);color:#e5e7eb;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">+</button>
       </div>
     </div>
+    <div class="lecture-mode-wrap">
+      <label class="lecture-toggle" for="chkLectureModeDisplay">
+        <input type="checkbox" id="chkLectureModeDisplay">
+        <span>Lecture mode display</span>
+      </label>
+    </div>
   </div>
 </div>
 
@@ -196,9 +207,13 @@ let animPhase = 0;
 let xMin = -2 * Math.PI;
 let xMax = 2 * Math.PI;
 let xRange = xMax - xMin;
+let lectureModeDisplay = false;
 
 let sigma = 0.10;
 const L_box = 1.0;
+const GAUSSIAN_SIGMA_MAX = 0.25;
+const DOUBLE_GAUSSIAN_SIGMA_MAX = 0.15;
+const DOUBLE_GAUSSIAN_DEFAULT_SIGMA = 0.05;
 
 // Drag handle state
 let isDragging = false;
@@ -215,6 +230,7 @@ function initDragHandle() {
     panelTop.style.height = topH + 'px';
     panelTop.style.flexShrink = '0';
     panelTop.style.flexGrow = '0';
+    requestAnimationFrame(drawTermCanvases);
   }
   applyLayout();
 
@@ -260,13 +276,21 @@ function initDragHandle() {
 }
 
 function setWaveType(type) {
+  const previousType = waveType;
   waveType = type;
   document.getElementById('btnSquare').classList.toggle('active', type === 'square');
   document.getElementById('btnSawtooth').classList.toggle('active', type === 'sawtooth');
   document.getElementById('btnGaussian').classList.toggle('active', type === 'gaussian');
-  document.getElementById('sigmaControl').style.display = type === 'gaussian' ? '' : 'none';
+  document.getElementById('btnDoubleGaussian').classList.toggle('active', type === 'doubleGaussian');
+  document.getElementById('sigmaControl').style.display = (type === 'gaussian' || type === 'doubleGaussian') ? '' : 'none';
+  if (type === 'doubleGaussian' && previousType !== 'doubleGaussian') {
+    sigma = DOUBLE_GAUSSIAN_DEFAULT_SIGMA;
+    document.getElementById('sliderSigma').value = sigma.toFixed(2);
+    document.getElementById('sigmaValue').textContent = sigma.toFixed(2);
+  }
+  updateSigmaSliderRange();
 
-  if (type === 'gaussian') {
+  if (type === 'gaussian' || type === 'doubleGaussian') {
     xMin = 0;
     xMax = L_box;
   } else {
@@ -277,6 +301,29 @@ function setWaveType(type) {
 
   buildTermCards();
   updateEquation();
+}
+
+function updateSigmaSliderRange() {
+  const slider = document.getElementById('sliderSigma');
+  const sigmaMax = waveType === 'doubleGaussian' ? DOUBLE_GAUSSIAN_SIGMA_MAX : GAUSSIAN_SIGMA_MAX;
+  slider.max = sigmaMax.toFixed(2);
+  if (sigma > sigmaMax) {
+    sigma = sigmaMax;
+    slider.value = sigma.toFixed(2);
+    document.getElementById('sigmaValue').textContent = sigma.toFixed(2);
+  }
+}
+
+function applyLectureModeDisplay() {
+  const lectureOn = lectureModeDisplay;
+  document.getElementById('controlPanelHeader').classList.toggle('is-hidden', lectureOn);
+  document.getElementById('narration-panel').classList.toggle('is-hidden', lectureOn);
+  document.getElementById('btnSquare').classList.toggle('is-hidden', lectureOn);
+  document.getElementById('btnSawtooth').classList.toggle('is-hidden', lectureOn);
+
+  if (lectureOn && (waveType === 'square' || waveType === 'sawtooth')) {
+    setWaveType('gaussian');
+  }
 }
 
 document.getElementById('sliderN').addEventListener('input', function() {
@@ -311,6 +358,11 @@ document.getElementById('sliderSigma').addEventListener('input', function() {
   document.getElementById('sigmaValue').textContent = sigma.toFixed(2);
   buildTermCards();
   updateEquation();
+});
+
+document.getElementById('chkLectureModeDisplay').addEventListener('change', function() {
+  lectureModeDisplay = this.checked;
+  applyLectureModeDisplay();
 });
 
 function squareWaveTerm(k, x) {
@@ -350,14 +402,33 @@ function idealGaussian(x) {
   return Math.exp(-d * d / (2 * sigma * sigma));
 }
 
+function doubleGaussianCoeff(n) {
+  const s = sigma;
+  const L = L_box;
+  const envelope = (2 * s * Math.sqrt(2 * Math.PI) / L) * Math.exp(-n * n * Math.PI * Math.PI * s * s / (2 * L * L));
+  return envelope * (Math.sin(n * Math.PI / 4) + Math.sin(n * Math.PI / 2));
+}
+
+function doubleGaussianTerm(n, x) {
+  return doubleGaussianCoeff(n) * Math.sin(n * Math.PI * x / L_box);
+}
+
+function idealDoubleGaussian(x) {
+  const d1 = x - L_box / 4;
+  const d2 = x - L_box / 2;
+  return Math.exp(-d1 * d1 / (2 * sigma * sigma)) + Math.exp(-d2 * d2 / (2 * sigma * sigma));
+}
+
 function partialSum(x, numTerms) {
   let sum = 0;
   if (waveType === 'square') {
     for (let k = 0; k < numTerms; k++) sum += squareWaveTerm(k, x);
   } else if (waveType === 'sawtooth') {
     for (let n = 1; n <= numTerms; n++) sum += sawtoothWaveTerm(n, x);
-  } else {
+  } else if (waveType === 'gaussian') {
     for (let n = 1; n <= numTerms; n++) sum += gaussianTerm(n, x);
+  } else {
+    for (let n = 1; n <= numTerms; n++) sum += doubleGaussianTerm(n, x);
   }
   return sum;
 }
@@ -365,7 +436,8 @@ function partialSum(x, numTerms) {
 function getTermValue(termIndex, x) {
   if (waveType === 'square') return squareWaveTerm(termIndex, x);
   else if (waveType === 'sawtooth') return sawtoothWaveTerm(termIndex + 1, x);
-  else return gaussianTerm(termIndex + 1, x);
+  else if (waveType === 'gaussian') return gaussianTerm(termIndex + 1, x);
+  else return doubleGaussianTerm(termIndex + 1, x);
 }
 
 function getTermAmplitude(termIndex) {
@@ -375,8 +447,10 @@ function getTermAmplitude(termIndex) {
   } else if (waveType === 'sawtooth') {
     const n = termIndex + 1;
     return 2 / (Math.PI * n);
-  } else {
+  } else if (waveType === 'gaussian') {
     return Math.abs(gaussianCoeff(termIndex + 1));
+  } else {
+    return Math.abs(doubleGaussianCoeff(termIndex + 1));
   }
 }
 
@@ -392,9 +466,15 @@ function getTermLabel(termIndex) {
     const coeff = (2 / (Math.PI * n)).toFixed(3);
     const harmStr = n === 1 ? 'x' : `${n}x`;
     return `${sign === '+' ? '' : '-'}${coeff}·sin(${harmStr})`;
-  } else {
+  } else if (waveType === 'gaussian') {
     const n = termIndex + 1;
     const bn = gaussianCoeff(n);
+    const coeff = bn.toFixed(4);
+    const argStr = n === 1 ? 'πx/L' : `${n}πx/L`;
+    return `${coeff}·sin(${argStr})`;
+  } else {
+    const n = termIndex + 1;
+    const bn = doubleGaussianCoeff(n);
     const coeff = bn.toFixed(4);
     const argStr = n === 1 ? 'πx/L' : `${n}πx/L`;
     return `${coeff}·sin(${argStr})`;
@@ -409,9 +489,13 @@ function getTermAmplitudeDisplay(termIndex) {
     const n = termIndex + 1;
     const signChar = Math.pow(-1, n + 1) > 0 ? '' : '-';
     return `A = ${signChar}${(2 / (Math.PI * n)).toFixed(4)}`;
-  } else {
+  } else if (waveType === 'gaussian') {
     const n = termIndex + 1;
     const bn = gaussianCoeff(n);
+    return `b${n} = ${bn.toFixed(4)}`;
+  } else {
+    const n = termIndex + 1;
+    const bn = doubleGaussianCoeff(n);
     return `b${n} = ${bn.toFixed(4)}`;
   }
 }
@@ -438,8 +522,10 @@ function updateEquation() {
       latex += `\\frac{2}{${denomStr}}\\sin(${argStr})`;
       if (n >= 6 && N > 6) { latex += ' + \\cdots'; break; }
     }
-  } else {
+  } else if (waveType === 'gaussian') {
     latex = 'f(x) = \\sum_{n=1}^{' + N + '} b_n \\sin\\!\\left(\\frac{n\\pi x}{L}\\right), \\quad b_n = \\frac{2\\sigma\\sqrt{2\\pi}}{L}\\,\\sin\\!\\left(\\frac{n\\pi}{2}\\right) e^{-n^2\\pi^2\\sigma^2/2L^2}';
+  } else {
+    latex = 'f(x) = \\sum_{n=1}^{' + N + '} b_n \\sin\\!\\left(\\frac{n\\pi x}{L}\\right), \\quad b_n = \\frac{2\\sigma\\sqrt{2\\pi}}{L}\\left[\\sin\\!\\left(\\frac{n\\pi}{4}\\right)+\\sin\\!\\left(\\frac{n\\pi}{2}\\right)\\right] e^{-n^2\\pi^2\\sigma^2/2L^2}';
   }
   try {
     katex.render(latex, bar, { displayMode: true, throwOnError: false, maxSize: 500 });
@@ -488,11 +574,14 @@ function drawTermCanvases() {
   for (let i = 0; i < termCanvases.length; i++) {
     const cvs = termCanvases[i];
     const rect = cvs.getBoundingClientRect();
-    const w = rect.width || 220, h = rect.height || 100;
-    cvs.width = w * dpr;
-    cvs.height = h * dpr;
+    const w = Math.max(1, Math.round(rect.width || 220));
+    const h = Math.max(1, Math.round(rect.height || 100));
+    cvs.style.width = w + 'px';
+    cvs.style.height = h + 'px';
+    cvs.width = Math.max(1, Math.round(w * dpr));
+    cvs.height = Math.max(1, Math.round(h * dpr));
     const ctx = cvs.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
@@ -514,7 +603,7 @@ function drawTermCanvases() {
   // Grid lines
   ctx.strokeStyle = 'rgba(148,163,184,0.15)';
     ctx.lineWidth = 1;
-    const xTicks = waveType === 'gaussian'
+    const xTicks = (waveType === 'gaussian' || waveType === 'doubleGaussian')
       ? [{v:0,l:'0'},{v:0.25*L_box,l:'L/4'},{v:0.5*L_box,l:'L/2'},{v:0.75*L_box,l:'3L/4'},{v:L_box,l:'L'}]
       : [{v:-2*Math.PI,l:'-2π'},{v:-Math.PI,l:'-π'},{v:0,l:'0'},{v:Math.PI,l:'π'},{v:2*Math.PI,l:'2π'}];
     xTicks.forEach(pv => {
@@ -538,7 +627,7 @@ function drawTermCanvases() {
     if (y0 >= padT && y0 <= padT + plotH) {
       ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(padL + plotW, y0); ctx.stroke();
     }
-    if (waveType !== 'gaussian') {
+    if (waveType !== 'gaussian' && waveType !== 'doubleGaussian') {
       const x0 = txToScreen(0);
       if (x0 >= padL && x0 <= padL + plotW) {
         ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, padT + plotH); ctx.stroke();
@@ -610,7 +699,8 @@ function drawMainCanvas() {
     let yIdeal;
     if (waveType === 'square') yIdeal = idealSquare(x);
     else if (waveType === 'sawtooth') yIdeal = idealSawtooth(x);
-    else yIdeal = idealGaussian(x);
+    else if (waveType === 'gaussian') yIdeal = idealGaussian(x);
+    else yIdeal = idealDoubleGaussian(x);
     const lo = Math.min(ySum, yIdeal);
     const hi = Math.max(ySum, yIdeal);
     if (lo < yMinVal) yMinVal = lo;
@@ -627,7 +717,7 @@ function drawMainCanvas() {
   // Grid
   ctx.strokeStyle = 'rgba(148,163,184,0.15)';
   ctx.lineWidth = 1;
-  if (waveType === 'gaussian') {
+  if (waveType === 'gaussian' || waveType === 'doubleGaussian') {
     [0, 0.25*L_box, 0.5*L_box, 0.75*L_box, L_box].forEach(gx => {
       const sx = xToScreen(gx);
       if (sx >= padL && sx <= padL + plotW) {
@@ -658,7 +748,7 @@ function drawMainCanvas() {
   if (y0Screen >= padT && y0Screen <= padT + plotH) {
     ctx.beginPath(); ctx.moveTo(padL, y0Screen); ctx.lineTo(padL + plotW, y0Screen); ctx.stroke();
   }
-  if (waveType !== 'gaussian') {
+  if (waveType !== 'gaussian' && waveType !== 'doubleGaussian') {
     const x0Screen = xToScreen(0);
     if (x0Screen >= padL && x0Screen <= padL + plotW) {
       ctx.beginPath(); ctx.moveTo(x0Screen, padT); ctx.lineTo(x0Screen, padT + plotH); ctx.stroke();
@@ -669,7 +759,8 @@ function drawMainCanvas() {
   ctx.fillStyle = '#e5e7eb';
   ctx.font = '10px -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  const xAxisLabels = waveType === 'gaussian'
+  const isBoxBasis = (waveType === 'gaussian' || waveType === 'doubleGaussian');
+  const xAxisLabels = isBoxBasis
     ? [{v:0,l:'0'},{v:0.25*L_box,l:'L/4'},{v:0.5*L_box,l:'L/2'},{v:0.75*L_box,l:'3L/4'},{v:L_box,l:'L'}]
     : [{v:-2*Math.PI,l:'-2π'},{v:-Math.PI,l:'-π'},{v:0,l:'0'},{v:Math.PI,l:'π'},{v:2*Math.PI,l:'2π'}];
   xAxisLabels.forEach(p => {
@@ -697,10 +788,11 @@ function drawMainCanvas() {
     let y;
     if (waveType === 'square') y = idealSquare(x);
     else if (waveType === 'sawtooth') y = idealSawtooth(x);
-    else y = idealGaussian(x);
+    else if (waveType === 'gaussian') y = idealGaussian(x);
+    else y = idealDoubleGaussian(x);
     const sx = padL + px;
     const sy = yToScreen(y);
-    if (prevIdeal !== null && Math.abs(y - prevIdeal) > 1 && waveType !== 'gaussian') {
+    if (prevIdeal !== null && Math.abs(y - prevIdeal) > 1 && !isBoxBasis) {
       ctx.moveTo(sx, sy);
     } else {
       if (px === 0) ctx.moveTo(sx, sy);
@@ -767,7 +859,7 @@ function drawMainCanvas() {
   ctx.setLineDash([]);
   ctx.fillStyle = '#e5e7eb';
   ctx.textAlign = 'left';
-  const targetLabel = waveType === 'gaussian' ? 'Target Gaussian' : `Target ${waveType} wave`;
+  const targetLabel = waveType === 'gaussian' ? 'Target Gaussian' : waveType === 'doubleGaussian' ? 'Target Double Gaussian' : `Target ${waveType} wave`;
   ctx.fillText(targetLabel, legendX + 30, legendY + 4);
   
   const legendGrad = ctx.createLinearGradient(legendX, 0, legendX + 24, 0);
@@ -784,7 +876,7 @@ function drawMainCanvas() {
   ctx.fillStyle = '#e5e7eb';
   ctx.font = '12px -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  const titleLabel = waveType === 'square' ? 'Square Wave' : waveType === 'sawtooth' ? 'Sawtooth Wave' : 'Gaussian in a Box';
+  const titleLabel = waveType === 'square' ? 'Square Wave' : waveType === 'sawtooth' ? 'Sawtooth Wave' : waveType === 'gaussian' ? 'Gaussian in a Box' : 'Double Gaussian in a Box';
   ctx.fillText(`${titleLabel} — ${N} term${N>1?'s':''}`, w / 2, 18);
 }
 
@@ -811,13 +903,13 @@ const narrationSteps = [
     duration: 16000
   },
   {
-    text: `<span class="hl">Wave Type</span> toggles between a <span class="hl-yellow">square wave</span>, a <span class="hl-purple">sawtooth</span>, and a <span class="hl-green">Gaussian in a box</span>. Each choice changes which Fourier coefficients appear—odd harmonics dominate the square, the sawtooth uses all harmonics, and the Gaussian uses a particle-in-a-box sin basis on [0, L].`,
-    speech: `Wave Type toggles between a square wave, a sawtooth, and a Gaussian in a box. Each choice changes which Fourier coefficients appear—odd harmonics dominate the square, the sawtooth uses all harmonics, and the Gaussian uses a particle-in-a-box sine basis on the interval zero to L.`,
+    text: `<span class="hl">Wave Type</span> toggles between a <span class="hl-yellow">square wave</span>, a <span class="hl-purple">sawtooth</span>, a <span class="hl-green">Gaussian in a box</span>, and a <span class="hl-cyan">double Gaussian</span>. Each choice changes which Fourier coefficients appear—odd harmonics dominate the square, the sawtooth uses all harmonics, and the Gaussian modes use a particle-in-a-box sin basis on [0, L].`,
+    speech: `Wave Type toggles between a square wave, a sawtooth, a Gaussian in a box, and a double Gaussian. Each choice changes which Fourier coefficients appear—odd harmonics dominate the square, the sawtooth uses all harmonics, and the Gaussian modes use a particle-in-a-box sine basis on the interval zero to L.`,
     duration: 17000
   },
   {
-    text: `The <span class="hl-green">Gaussian in a box</span> uses analytically known coefficients: b_n decays as a <span class="hl-cyan">Gaussian envelope</span> in n-space, so convergence is <span class="hl-yellow">super-exponential</span>—dramatically faster than the 1/n decay of the discontinuous waves. Even-n coefficients vanish by symmetry. Adjust <span class="hl-purple">σ/L</span> to see how the width controls how many terms matter.`,
-    speech: `The Gaussian in a box uses analytically known coefficients: b sub n decays as a Gaussian envelope in n-space, so convergence is super-exponential—dramatically faster than the one-over-n decay of the discontinuous waves. Even-n coefficients vanish by symmetry. Adjust sigma over L to see how the width controls how many terms matter.`,
+    text: `The <span class="hl-green">Gaussian in a box</span> uses analytically known coefficients: b_n decays as a <span class="hl-cyan">Gaussian envelope</span> in n-space, so convergence is <span class="hl-yellow">super-exponential</span>—dramatically faster than the 1/n decay of the discontinuous waves. Even-n coefficients vanish by symmetry. The <span class="hl-cyan">double Gaussian</span> places peaks at L/4 and L/2, breaking the mid-box symmetry so that even-n coefficients become nonzero. Adjust <span class="hl-purple">σ/L</span> to see how the width controls how many terms matter.`,
+    speech: `The Gaussian in a box uses analytically known coefficients: b sub n decays as a Gaussian envelope in n-space, so convergence is super-exponential—dramatically faster than the one-over-n decay of the discontinuous waves. Even-n coefficients vanish by symmetry. The double Gaussian places peaks at L over 4 and L over 2, breaking the mid-box symmetry so that even-n coefficients become nonzero. Adjust sigma over L to see how the width controls how many terms matter.`,
     duration: 18000
   },
   {
@@ -1052,10 +1144,12 @@ function animate(time) {
 }
 
 function init() {
+  updateSigmaSliderRange();
   buildTermCards();
   updateEquation();
   initDragHandle();
   initNarration();
+  applyLectureModeDisplay();
   requestAnimationFrame(animate);
 }
 

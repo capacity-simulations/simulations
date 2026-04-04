@@ -71,6 +71,23 @@ A simulation fails lecture alignment if:
 - the simulation omits an equation, definition, or concept that is central to that lecture, or
 - the simulation introduces a model that is materially narrower or broader than the lecture scope without stating so clearly
 
+### 4. Symbol fidelity
+
+Every symbol in the simulation (variable names, axis labels, UI text, 
+LaTeX in the HTML) must match the lecture notes exactly unless a 
+substitution is explicitly declared and justified in the audit output. 
+A symbol mismatch (e.g. V_0 vs U, k vs κ, n vs N) is always flagged 
+as NOTATION MISMATCH regardless of whether it affects the physics.
+
+### 5. No symbol or quantity introductions
+
+The simulation must not introduce any symbol, parameter, control, 
+displayed statistic, or UI element that does not appear in the 
+matching lecture section. This rule is unconditional — physical 
+justifiability is not a sufficient reason to add something. 
+If a quantity seems missing, flag it as AMBIGUOUS / REQUIRES REVIEW 
+and do not implement it.
+
 ---
 
 ## Required audit procedure
