@@ -1,4 +1,5 @@
-# Sim Pain Points
+# Simulation Revision/Review Pain Points
+### Erin Crawley, April 2, 2026
 
 Synthesized from 6 audit batches (`issues-batch-1.md` through `issues-batch-6.md`). Covers 22 distinct sims, 181 unique issues (after deduplicating cross-session repeats), and ~145 reviewer back-and-forth messages.
 
@@ -250,3 +251,5 @@ The pattern: sims with more panels, more parameter interactions, and more visual
 **Takeaway:**
 
 The three most common issue types — layout, labeling, and lecture-note alignment — account for almost half of all issues (84/181). None of these require deep physics knowledge to fix; they require knowing what the lecturer wants the student to see, and then making sure the sim shows exactly that. The agent's default instincts are wrong in predictable ways: it auto-scales axes, adds derived readouts the student doesn't need, uses whatever notation seems standard rather than matching the lecture, and lays out panels for information density rather than visual comparison. The less common but more dangerous categories — dishonest visualization (17 issues) and physics model errors (12 issues) — are harder to catch because they produce output that looks plausible. Peak normalization, hidden rescaling, and nonlinear display mappings all make a sim "work" visually while quietly misrepresenting the physics. These need reviewer attention specifically because the agent won't flag them on its own.
+
+April 3, 2026 follow-up: `L09_Transmission_probability_plot.html` was cleaned up for lecture use by removing the scanning marker whenever the animated scanner is off and adding a separate `Lecture display` toggle below the parameters box that hides the current-values and display panels and strips units from the lecture-facing readouts.
