@@ -2,4 +2,4 @@ EC 04/03/26: The simulation was audited against the Lecture 09 scattering/tunnel
 
 EC 04/03/26: The lecture presentation was also cleaned up by adding a separate Lecture display toggle that hides the Wavepacket Info, Physics, and reflection/transmission estimate panels while stripping units from the lecture-facing values. The plot chrome was simplified to better match the lecture style, and the wave display is now labeled more honestly as using a fixed initial scale so the visualization does not imply a changing physical normalization.
 
-BS 04/06/26: Fixed the lecture diaplay bug (previously was working in the opposite direction), inmproved the contrast of all the texts in the controls, improved the contents of the 'About the simulation section'.
+BS 04/06/26: Fixed the lecture diaplay bug (previously was working in the opposite direction), inmproved the contrast of all the texts in the controls, improved the contents of the 'About the simulation section'. (in both the sims--plane and gaussian wave)
