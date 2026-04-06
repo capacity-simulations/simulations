@@ -152,6 +152,20 @@
             cursor: not-allowed;
         }
 
+        #measureBtn {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        #measureBtn:hover:not(:disabled) {
+            background: #3b82f6;
+        }
+
+        #measureBtn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
         .mode-switch-wrap {
             display: inline-flex;
             align-items: center;
@@ -504,7 +518,7 @@
                             <strong>About the Simulation</strong>
                             <strong>Physics:</strong> A 2D Gaussian wavepacket evolves under free-particle spreading (ℏ = m = 1). The probability density <em>|ψ(x,y,t)|²</em> is normalized on the full plane, so <em>∫∫|ψ|² dx dy = 1</em> at all times. Pressing <em>Measure</em> performs a position measurement: the outcome is sampled exactly from <em>|ψ|²</em> within the finite viewing window (renormalized there by the Born rule), and the state collapses to a narrow Gaussian centered at the measured point, approximating a position eigenstate. The post-collapse packet then re-spreads according to the uncertainty principle.<br><br>
                             <strong>Visuals:</strong> In <em>3D mode</em>, surface height is proportional to <em>|ψ|²</em> (clamped when the peak exceeds the display range; the actual peak is shown in the statistics panel). In <em>Heatmap mode</em>, color maps to <em>|ψ|²</em> on a fixed scale with a legend. The plotted square is finite, so the visible probability can be slightly below 1 when tails extend beyond the view.<br><br>
-                            <strong>Controls:</strong> Use <em>Play</em>/<em>Reset</em>, switch between 3D and Heatmap views, and press <em>Measure</em> to trigger collapse. Sliders set initial position, width, and animation speed. All quantities are in natural units (ℏ = m = 1).
+                            <strong>Controls:</strong> Use <em>Play</em>/<em>Reset</em>, switch between 3D and Heatmap views, and press <em>Measure</em> to trigger collapse. Sliders set initial position, measurement width, and animation speed. The initial packet uses the same σ as the measurement collapse. All quantities are in natural units (ℏ = m = 1).
                         </div>
                     </div>
                 </div>
@@ -529,9 +543,12 @@
                 <div class="panel-title">Controls</div>
 
                 <div class="panel-section">
-                    <div class="section-label">View &amp; measurement</div>
-                    <button type="button" id="viewModeBtn" class="btn-header btn-measure-h btn-panel-measure" style="margin-bottom:12px">View as Heatmap</button>
-                    <button type="button" id="measureBtn" class="btn-header btn-measure-h btn-panel-measure" disabled>Measure</button>
+                    <button type="button" id="measureBtn" class="btn-header btn-panel-measure" disabled>Measure</button>
+                </div>
+
+                <div class="panel-section">
+                    <div class="section-label">View</div>
+                    <button type="button" id="viewModeBtn" class="btn-header btn-measure-h btn-panel-measure">View as Heatmap</button>
                 </div>
 
                 <div class="panel-section">
@@ -556,15 +573,15 @@
                     <div class="section-label">Wavepacket Properties</div>
                     <div class="ctrl-row">
                         <div class="ctrl-head">
-                            <label for="widthSlider">Initial Width (sigma)</label>
-                            <span class="value-display" id="widthValue">1.00</span>
+                            <label for="widthSlider">Measurement Width</label>
+                            <span class="value-display" id="widthValue">0.75</span>
                         </div>
-                        <input type="range" class="slider" id="widthSlider" min="0.72" max="1.96" value="1.0" step="0.01">
+                        <input type="range" class="slider" id="widthSlider" min="0.7" max="2.0" value="0.75" step="0.01">
                     </div>
                 </div>
 
                 <div class="panel-section">
-                    <div class="section-label">Animation Speed</div>
+                    <div class="section-label">Visuals</div>
                     <div class="ctrl-row">
                         <div class="ctrl-head">
                             <label for="speedSlider">Animation Speed</label>
@@ -572,9 +589,15 @@
                         </div>
                         <input type="range" class="slider" id="speedSlider" min="0.1" max="1" value="0.2" step="0.05">
                     </div>
+                    <div class="ctrl-row" style="margin-top:6px">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#cbd5e1;cursor:pointer;user-select:none">
+                            <input type="checkbox" id="lectureModeToggle">
+                            Lecture display
+                        </label>
+                    </div>
                 </div>
 
-                <div class="panel-section">
+                <div class="panel-section" id="statsSection">
                     <div class="section-label">Statistics</div>
                     <div class="stats-block">
                         <div class="stat-row">
@@ -604,7 +627,7 @@
                     </div>
                 </div>
 
-                <div class="panel-section">
+                <div class="panel-section" id="collapsesSection">
                     <div class="section-label">Recent Collapses</div>
                     <table class="collapse-table" aria-label="Latest collapse coordinates">
                         <thead>
@@ -632,7 +655,7 @@
         let edgeAxesGroup;
         let isRunning = false;
         let time = 0;
-        let initialWidth = 1.0;
+        let initialWidth = 0.75;
         let simulationSpeed = 0.2;
         let initialPosX = 0;
         let initialPosY = 0;
@@ -643,14 +666,14 @@
         let collapseTime = 0;
         let viewMode = '3d';
         let lastFrameTimestamp = null;
-        let referenceMax = 1 / (2 * Math.PI * 1.0 * 1.0);
+        let referenceMax = 1 / (2 * Math.PI * 0.75 * 0.75);
 
         const gridSize = 10;
         // Higher mesh density reduces visible faceting after narrow collapse peaks.
         const resolution = 160;
         const hbar = 1;
         const mass = 1;
-        const collapsedSigma0 = 0.3;
+        let measurementSigma = 0.75;
         const maxFrameDeltaSeconds = 0.05;
 
         function initHeatmapCanvas() {
@@ -800,20 +823,19 @@
             heatmapCtx.fillText('|ψ|²', barX + legendBarW / 2, titleY);
             heatmapCtx.shadowBlur = 0;
 
-            // Grid lines on plot area
-            heatmapCtx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+            // Grid lines on plot area aligned to 1-unit physical spacing
             heatmapCtx.lineWidth = 1;
-            const step = Math.max(24, Math.floor(Math.min(plotW, h) / 12));
-            for (let x = 0; x <= plotW; x += step) {
+            for (let v = -gridSize; v <= gridSize; v++) {
+                const px = ((v + gridSize) / (2 * gridSize)) * plotW;
+                const py = ((gridSize - v) / (2 * gridSize)) * h;
+                heatmapCtx.strokeStyle = (v % 5 === 0) ? 'rgba(148, 163, 184, 0.38)' : 'rgba(148, 163, 184, 0.15)';
                 heatmapCtx.beginPath();
-                heatmapCtx.moveTo(x, 0);
-                heatmapCtx.lineTo(x, h);
+                heatmapCtx.moveTo(px, 0);
+                heatmapCtx.lineTo(px, h);
                 heatmapCtx.stroke();
-            }
-            for (let y = 0; y <= h; y += step) {
                 heatmapCtx.beginPath();
-                heatmapCtx.moveTo(0, y);
-                heatmapCtx.lineTo(plotW, y);
+                heatmapCtx.moveTo(0, py);
+                heatmapCtx.lineTo(plotW, py);
                 heatmapCtx.stroke();
             }
 
@@ -944,7 +966,7 @@
         function getCurrentSigma(t) {
             if (isCollapsed) {
                 const dt = Math.max(0, t - collapseTime);
-                return Math.sqrt(collapsedSigma0 * collapsedSigma0 + (hbar * dt / (2 * mass * collapsedSigma0)) ** 2);
+                return Math.sqrt(measurementSigma * measurementSigma + (hbar * dt / (2 * mass * measurementSigma)) ** 2);
             }
             return Math.sqrt(initialWidth * initialWidth + (hbar * t / (2 * mass * initialWidth)) ** 2);
         }
@@ -1343,9 +1365,10 @@
         });
 
         document.getElementById('widthSlider').addEventListener('input', function() {
-            initialWidth = parseFloat(this.value);
-            referenceMax = 1 / (2 * Math.PI * initialWidth * initialWidth);
-            document.getElementById('widthValue').textContent = initialWidth.toFixed(2);
+            measurementSigma = parseFloat(this.value);
+            initialWidth = measurementSigma;
+            referenceMax = 1 / (2 * Math.PI * measurementSigma * measurementSigma);
+            document.getElementById('widthValue').textContent = measurementSigma.toFixed(2);
             resetSimulation();
         });
 
@@ -1364,6 +1387,12 @@
             initialPosY = parseFloat(this.value);
             document.getElementById('yPosValue').textContent = initialPosY.toFixed(1);
             resetSimulation();
+        });
+
+        document.getElementById('lectureModeToggle').addEventListener('change', function() {
+            const hidden = this.checked;
+            document.getElementById('statsSection').style.display = hidden ? 'none' : '';
+            document.getElementById('collapsesSection').style.display = hidden ? 'none' : '';
         });
 
         window.addEventListener('resize', function() {
