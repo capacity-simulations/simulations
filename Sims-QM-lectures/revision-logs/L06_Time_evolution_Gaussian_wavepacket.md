@@ -3,3 +3,5 @@ EC 04/03/26: The simulation was audited against Lecture 06 (The Gaussian Wavepac
 EC 04/03/26: The lecture presentation was also cleaned up by consolidating the displayed equations into a single compact box, adding a Lecture Display toggle for a cleaner teaching view, removing references to \(a_0\), and fixing the wavefunction scaling so the plotted upper curve is consistent with the lecture convention \(P(x,t)=C|\psi(x,t)|^2\). The y-axes are now fixed from the initial state for each slider choice rather than rescaling continuously during time evolution.
 
 EC 04/09/26: Reset behavior was adjusted for teaching: when Lecture Display is on, pressing Reset returns the simulation to \(t=0\) and leaves it paused; when Lecture Display is off, Reset still resumes playback as before.
+
+EC 04/09/26: The simulation now opens paused by default so the lecture view starts at \(t=0\) without immediately evolving, and the "Units: \(\hbar = 1\)" badge is hidden whenever Lecture Display is enabled to keep that teaching mode cleaner.
