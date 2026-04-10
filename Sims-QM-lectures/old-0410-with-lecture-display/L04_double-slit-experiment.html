@@ -1,0 +1,2466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double-Slit Experiment</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #060E11;
+            --panel-bg: #060E11;
+            --accent-blue: #3b9b8f;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: rgba(19, 49, 49, 0.5);
+            --track-bg: rgba(30, 77, 58, 0.35);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        html[data-theme="light"] {
+            --bg-color: #f3f4f6;
+            --panel-bg: #e5e7eb;
+            --accent-blue: #2a8a7e;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #d1d5db;
+            --track-bg: rgba(30, 77, 58, 0.2);
+        }
+        html[data-theme="light"] .top-bar {
+            background: #FAF8F4;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.2);
+            box-shadow: none;
+        }
+        html[data-theme="light"] #combined-chart-container {
+            background: #ffffff;
+        }
+        html[data-theme="light"] .chart-legend {
+            background: rgba(229, 231, 235, 0.6);
+        }
+        html[data-theme="light"] .rotate-drag-hint-wrap {
+            background: var(--bg-color, #f3f4f6);
+            color: #1f2937;
+        }
+        html[data-theme="light"] .sidebar {
+            box-shadow: -2px 0 16px rgba(15, 23, 42, 0.08);
+            border-left-color: rgba(148, 163, 184, 0.45);
+        }
+
+        body { margin: 0; overflow: hidden; background-color: var(--bg-color); font-family: var(--font-family); }
+
+        /* --- TOP TITLE BAR --- */
+
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 62px;
+            min-height: 62px;
+            background: #FAF8F4;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 30px;
+            padding-right: 20px;
+            box-sizing: border-box;
+            z-index: 200;
+            box-shadow: none;
+        }
+        .top-bar h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+        .top-bar-accent {
+            display: none;
+        }
+
+        .top-bar-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+            width: 396px;
+            height: 36px;
+        }
+        .btn-topbar {
+            padding: 4.5px 24px;
+            border: 1px solid rgba(19, 49, 49, 0.5);
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .top-bar-actions > .btn-topbar {
+            flex: 1 1 0;
+            min-width: 0;
+            height: 36px;
+            padding: 0 8px;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.1;
+            font-size: 11px;
+            white-space: normal;
+            text-align: center;
+        }
+        .btn-topbar-toggle {
+            background-color: rgba(30, 77, 58, 0.15);
+            color: #1e293b;
+        }
+        .btn-topbar-toggle:hover { background-color: rgba(30, 77, 58, 0.25); }
+        .btn-topbar-toggle.active {
+            background-color: #f59e0b;
+            border-color: #d97706;
+            color: white;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+        }
+        .btn-topbar-toggle.active:hover { background-color: #d97706; }
+        .btn-topbar-playpause {
+            background-color: rgba(30, 77, 58, 0.15);
+            color: #1e293b;
+        }
+        .btn-topbar-playpause:hover { background-color: rgba(30, 77, 58, 0.25); }
+        .btn-topbar-reset {
+            background-color: #1E4D3A;
+            color: #ffffff;
+            border-color: #163d30;
+        }
+        .btn-topbar-reset:hover { background-color: #163d30; border-color: #143528; }
+
+        /* Info Icon and Tooltip */
+        .info-container {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-left: 12px;
+        }
+        .info-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(100, 116, 139, 0.12);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            font-style: italic;
+            font-family: Georgia, serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: none;
+        }
+        .info-icon:hover {
+            background: rgba(59, 130, 246, 0.12);
+            border-color: rgba(59, 130, 246, 0.4);
+            color: #2563eb;
+            transform: scale(1.1);
+            box-shadow: none;
+        }
+        .info-tooltip {
+            position: absolute;
+            top: 40px;
+            left: 0;
+            width: 350px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 300;
+        }
+        .info-container:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .info-tooltip::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 8px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 8px solid var(--border-color);
+        }
+        .info-tooltip::after {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 9px;
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-bottom: 7px solid var(--panel-bg);
+        }
+        .info-tooltip-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .info-tooltip p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin: 0;
+        }
+        .info-tooltip .highlight {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        /* Theme toggle (Dark/Light) */
+        .theme-toggle-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 16px;
+        }
+        .theme-toggle-wrap span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        /* Explore hover toggle */
+        .explore-toggle-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 14px;
+        }
+        .explore-toggle-wrap span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .lecture-toggle-wrap {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .lecture-toggle-wrap label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .lecture-toggle-wrap input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+        .theme-toggle {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+        .theme-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .theme-track {
+            position: absolute;
+            inset: 0;
+            background: #cbd5e1;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 13px;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .theme-toggle input:focus-visible + .theme-track {
+            outline: 2px solid var(--accent-blue);
+            outline-offset: 2px;
+        }
+        .theme-thumb {
+            position: absolute;
+            top: 50%;
+            left: 2px;
+            width: 22px;
+            height: 22px;
+            box-sizing: border-box;
+            border-radius: 50%;
+            background: #9ca3af;
+            border: 2px solid #f3f4f6;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        html[data-theme="light"] .theme-thumb {
+            background: #6b7280;
+            border-color: #fafafa;
+        }
+        /* Dark (checked): thumb left; Light (unchecked): thumb right — both vertically centered */
+        .theme-toggle input:checked + .theme-track .theme-thumb {
+            transform: translate(0, -50%);
+        }
+        .theme-toggle input:not(:checked) + .theme-track .theme-thumb {
+            transform: translate(22px, -50%);
+        }
+        .theme-thumb-icon {
+            font-size: 10px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .explore-tooltip {
+            position: fixed;
+            max-width: 260px;
+            background: rgba(6, 14, 17, 0.98);
+            color: var(--text-main);
+            border: 1px solid rgba(19, 49, 49, 0.5);
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 0.75rem;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            z-index: 250;
+        }
+        .explore-tooltip.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 62px;
+            left: 0;
+            width: calc(100% - 340px);
+            height: calc(100vh - 62px);
+            z-index: 1;
+        }
+
+        /* Detector chart overlay (top-right of 3D view; keeps sidebar for parameters only) */
+        .detector-chart-panel {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: min(252px, calc(100% - 16px));
+            z-index: 40;
+            pointer-events: auto;
+            border-radius: 6px;
+            padding: 6px 7px 4px;
+            background: rgba(6, 14, 17, 0.94);
+            border: 1px solid rgba(19, 49, 49, 0.5);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+        }
+        html[data-theme="light"] .detector-chart-panel {
+            background: rgba(243, 244, 246, 0.96);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+        }
+        .detector-chart-panel .section-title {
+            font-size: 0.62rem;
+            margin-bottom: 4px;
+            letter-spacing: 0.04em;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            position: fixed;
+            top: 62px;
+            right: 0;
+            bottom: 0;
+            width: 340px;
+            background-color: var(--panel-bg);
+            box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+            color: var(--text-main);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid rgba(148, 163, 184, 0.35);
+            border-top: none;
+            overflow-y: auto;
+        }
+
+        .header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .header p { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
+        .header-bar { height: 4px; width: 40%; background: var(--accent-blue); margin-top: 10px; border-radius: 2px; }
+
+        .content { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+        .section-title {
+            font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;
+        }
+
+        /* CONTROLS */
+        .control-group { margin-bottom: 15px; }
+        .control-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 8px; }
+        .control-value { color: var(--accent-blue); font-weight: 600; }
+        .control-range { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; }
+
+        /* SLIDERS */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: var(--track-bg); border-radius: 3px; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%;
+            background: var(--accent-blue); border: 2px solid var(--panel-bg); margin-top: -6px;
+            box-shadow: 0 2px 6px rgba(59, 155, 143, 0.4);
+        }
+
+        /* COMBINED CHART */
+        #combined-chart-container {
+            background: var(--bg-color);
+            border-radius: 4px;
+            padding: 6px 5px 2px 5px;
+            height: 128px;
+            border: 1px solid var(--border-color);
+        }
+        .detector-chart-panel #combined-chart-container {
+            background: rgba(6, 14, 17, 0.65);
+        }
+        html[data-theme="light"] .detector-chart-panel #combined-chart-container {
+            background: #ffffff;
+        }
+        
+        /* LEGEND */
+        .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(6, 14, 17, 0.5);
+            border-radius: 4px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .legend-color {
+            width: 16px;
+            height: 4px;
+            border-radius: 2px;
+        }
+        .legend-color.detected {
+            background: #3b82f6;
+        }
+        .legend-color.theoretical {
+            background: #10b981;
+        }
+        .legend-color.classical {
+            background: #f59e0b;
+        }
+
+        .detector-chart-panel .chart-legend {
+            gap: 8px;
+            margin-top: 5px;
+            padding: 4px 5px;
+        }
+        .detector-chart-panel .legend-item {
+            font-size: 0.62rem;
+            gap: 4px;
+        }
+        .detector-chart-panel .legend-color {
+            width: 12px;
+            height: 3px;
+        }
+
+        /* 360° ROTATE HINT ICON */
+        .rotate-drag-hint-wrap {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 100;
+            pointer-events: none;
+            padding: 5px 7px;
+            border-radius: 8px;
+            background: rgba(6, 14, 17, 0.9);
+            border: 1px solid rgba(148,163,184,0.12);
+            color: #e2e8f0;
+        }
+        .rotate-icon-svg {
+            display: block;
+            width: 40px;
+            height: 40px;
+        }
+
+    </style>
+    <script>
+        (function() {
+            var saved = localStorage.getItem('double-slit-theme');
+            var theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+</head>
+<body>
+
+    <!-- TOP TITLE BAR -->
+    <div class="top-bar">
+        <div class="top-bar-accent"></div>
+        <h1>Double Slit Experiment</h1>
+        <div class="info-container">
+            <div class="info-icon">i</div>
+            <div class="info-tooltip">
+                <div class="info-tooltip-title">About the Simulation</div>
+                <p>
+                    The <span class="highlight">double-slit experiment</span> demonstrates wave-particle duality. When particles pass through two slits, they create an <span class="highlight">interference pattern</span> on the detection screen.
+                    <br><br>
+                    <span class="highlight">Quantum (green):</span> |ψ₁ + ψ₂|² — amplitudes add, then square. The interference fringes arise from constructive/destructive interference.
+                    <br><br>
+                    <span class="highlight">Classical (orange):</span> A broad spray of particles is incident on the slits, and pass through either slit 1 or slit 2.
+                    <br><br>
+                    <span class="highlight">Close a slit:</span> Use the S1/S2 buttons to close one slit and see single-slit diffraction. Reduce λ into the UV range to see sinc² zeros and secondary maxima. Notice that some screen positions receive <em>fewer</em> particles with two slits open than with one — evidence of destructive interference!
+                    <br><br>
+                </p>
+            </div>
+        </div>
+        <div class="theme-toggle-wrap">
+            <span id="theme-label">Dark</span>
+            <label class="theme-toggle" aria-label="Toggle dark or light theme">
+                <input type="checkbox" id="theme-checkbox" checked>
+                <span class="theme-track">
+                    <span class="theme-thumb"><span class="theme-thumb-icon">☾</span></span>
+                </span>
+            </label>
+        </div>
+
+        <div class="top-bar-actions">
+            <button type="button" class="btn-topbar btn-topbar-toggle" id="classical-btn">Classical Pattern</button>
+            <button type="button" class="btn-topbar btn-topbar-playpause" id="reset-btn">Reset</button>
+            <button type="button" class="btn-topbar btn-topbar-reset" id="playpause-btn">Pause</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+        <div class="detector-chart-panel">
+            <div class="section-title">Detection Pattern vs Theoretical Intensity</div>
+            <div id="combined-chart-container" data-explore="Bar chart: normalized count of detections across the screen. Green line: theoretical quantum |ψ₁+ψ₂|². Dashed orange: classical bullets P₁+P₂ (when shown), the sum of two smooth one-slit bullet lobes with no interference.">
+                <canvas id="combined-chart-canvas"></canvas>
+            </div>
+            <div class="chart-legend">
+                <div class="legend-item" id="detected-legend">
+                    <div class="legend-color detected"></div>
+                    <span>Detected Pattern</span>
+                </div>
+                <div class="legend-item" id="quantum-legend">
+                    <div class="legend-color theoretical"></div>
+                    <span>Quantum |ψ₁+ψ₂|²</span>
+                </div>
+                <div class="legend-item" id="classical-legend" style="display: none;">
+                    <div class="legend-color classical"></div>
+                    <span>Classical P₁+P₂</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="rotate-drag-hint-wrap" aria-hidden="true" title="Drag to rotate">
+        <svg class="rotate-icon-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">
+            <path d="M511.197,243.923c-0.73-5.474-5.764-9.319-11.234-8.589c-5.475,0.73-9.32,5.76-8.59,11.235C491.789,249.687,492,252.86,492,256c0,33.646-23.794,65.716-66.998,90.304C380.022,371.902,320.003,386,256,386c-40.443,0-79.29-5.635-113.762-16.238C131.635,335.29,126,296.443,126,256c0-64.002,14.098-124.022,39.696-169.002C190.284,43.793,222.354,20,256,20c28.234,0,50.716,16.282,66.904,34.183h-10.242c-5.522,0-10,4.477-10,10s4.478,10,10,10h31.025c5.522,0,10-4.477,10-10V33.157c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v3.369C310.495,12.798,283.585,0,256,0c-41.146,0-79.389,27.383-107.687,77.105C121.027,125.052,106,188.584,106,256c0,37.042,4.546,72.904,13.16,105.659c-11.384-4.531-22.148-9.656-32.162-15.356C43.794,321.716,20,289.646,20,256c0-28.401,16.474-50.985,34.5-67.195v10.19c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-31.026c0-5.523-4.478-10-10-10H33.475c-5.522,0-10,4.477-10,10s4.478,10,10,10h3.408C12.928,201.24,0,228.278,0,256c0,41.145,27.383,79.389,77.105,107.686c15.014,8.544,31.556,15.886,49.267,21.941c6.055,17.711,13.397,34.254,21.941,49.267C176.611,484.617,214.854,512,256,512c23.589,0,47.014-9.379,67.741-27.124c4.195-3.592,4.686-9.904,1.094-14.1c-3.591-4.195-9.904-4.685-14.1-1.094C293.437,484.492,275.021,492,256,492c-33.646,0-65.716-23.793-90.304-66.998c-5.699-10.015-10.825-20.779-15.355-32.162C183.096,401.454,218.958,406,256,406c67.416,0,130.948-15.027,178.895-42.314C484.617,335.389,512,297.145,512,256C512,251.978,511.729,247.915,511.197,243.923z"/>
+            <path d="M498.905,208.119c-0.01-0.017-0.026-0.048-0.042-0.076c-2.654-4.793-8.682-6.56-13.51-3.946c-4.856,2.63-6.661,8.699-4.03,13.555c0.014,0.026,0.067,0.122,0.082,0.148c1.824,3.299,5.238,5.161,8.759,5.161c1.638,0,3.298-0.403,4.832-1.251C499.828,219.037,501.579,212.952,498.905,208.119z"/>
+            <path d="M349.398,439.813c-4.486-3.213-10.768-2.123-13.988,2.352c-0.017,0.024-0.034,0.047-0.051,0.071c-3.182,4.503-2.165,10.799,2.332,13.991c1.739,1.234,3.744,1.825,5.735,1.825c3.157,0,6.278-1.485,8.242-4.238C354.87,449.325,353.881,443.025,349.398,439.813z"/>
+            <path d="M326.516,227.193c-0.17-14.063-11.712-25.504-25.729-25.504h-35.271v-26.376c0-3.102,2.523-5.625,5.625-5.625h28.995c5.522,0,10-4.477,10-10s-4.478-10-10-10h-28.995c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.646c14.017,0,25.559-11.441,25.729-25.504c0.001-0.041,0.001-0.081,0.001-0.121v-28.728C326.517,227.273,326.517,227.233,326.516,227.193z M306.515,255.966c-0.063,3.147-2.623,5.7-5.729,5.7H271.14c-3.102,0-5.625-2.523-5.625-5.625v-34.353h35.271v0.001c3.106,0,5.667,2.553,5.729,5.7V255.966z"/>
+            <path d="M392.891,149.688h-29.75c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.75c14.13,0,25.625-11.495,25.625-25.625v-80.729C418.516,161.183,407.021,149.688,392.891,149.688z M398.516,256.042c0,3.102-2.523,5.625-5.625,5.625h-29.75c-3.102,0-5.625-2.523-5.625-5.625v-80.729c0-3.102,2.523-5.625,5.625-5.625h29.75c3.102,0,5.625,2.523,5.625,5.625V256.042z"/>
+            <path d="M208.875,149.688h-25.531c-14.13,0-25.625,11.495-25.625,25.625v0.353c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-0.353c0-3.102,2.523-5.625,5.625-5.625h25.531c3.102,0,5.625,2.523,5.625,5.625v30.365h-25.65c-5.522,0-10,4.477-10,10s4.478,10,10,10h25.65v30.364c0,3.102-2.523,5.625-5.625,5.625h-25.531c-3.102,0-5.625-2.523-5.625-5.625v-1.384c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v1.384c0,14.13,11.495,25.625,25.625,25.625h25.531c14.13,0,25.625-11.495,25.625-25.625v-80.729C234.5,161.183,223.005,149.688,208.875,149.688z"/>
+            <path d="M458.949,133.163c-14.626,0-26.525,11.899-26.525,26.525s11.899,26.525,26.525,26.525c14.626,0,26.525-11.899,26.525-26.525S473.575,133.163,458.949,133.163z M458.949,166.212c-3.597,0-6.525-2.927-6.525-6.525c0-3.598,2.928-6.525,6.525-6.525c3.598,0,6.525,2.927,6.525,6.525C465.474,163.285,462.546,166.212,458.949,166.212z"/>
+        </svg>
+    </div>
+
+    <div class="sidebar">
+        <div class="header">
+            <p>Simulator Controls</p>
+            <div class="header-bar"></div>
+        </div>
+
+        <div class="content">
+            <div>
+                <div class="section-title">Parameters</div>
+                <div class="control-group">
+                    <div class="control-label"><span>Slit Separation (d)</span><span class="control-value" id="slit-sep-value">1600 nm</span></div>
+                    <input type="range" id="slit-sep" min="400" max="1600" step="10" value="1600" data-explore="Controls the distance between the two slits. Larger d makes interference fringes more closely spaced on the screen.">
+                    <div class="control-range"><span>400 nm</span><span>1600 nm</span></div>
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Slit Width (a)</span><span class="control-value" id="slit-width-value">490 nm</span></div>
+                    <input type="range" id="slit-width" min="100" max="500" step="10" value="490" data-explore="Sets the width of each slit. Narrow slits give a broad diffraction envelope; wide slits give a narrower envelope.">
+                    <div class="control-range"><span>100 nm</span><span>500 nm</span></div>
+                </div>
+                <div class="control-group" id="wavelength-group">
+                    <div class="control-label"><span>Wavelength (λ)</span><span class="control-value" id="wavelength-value">525 nm</span></div>
+                    <input type="range" id="wavelength" min="50" max="700" step="5" value="525" data-explore="Photon wavelength. Shorter λ increases the a/λ ratio, making sinc² diffraction zeros visible in single-slit mode. Below 380 nm is UV (shown in grey). Classical bullets mode does not depend on λ.">
+                    <div class="control-range"><span>50 nm (UV)</span><span>700 nm <span style="color:#ff0000;">■</span></span></div>
+                    <div id="uv-note" style="display:none; margin-top:6px; font-size:0.7rem; color:#9ca3af; line-height:1.4; background:rgba(107,114,128,0.15); padding:5px 8px; border-radius:4px; border-left:3px solid #6b7280;">
+                        <span style="color:#a5b4fc; font-weight:600;">UV / Deep-UV region</span> — wavelength below visible range (380 nm). Shown in grey. Useful for demonstrating sinc² diffraction zeros at realistic slit widths.
+                    </div>
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Screen Distance (L)</span><span class="control-value" id="screen-dist-value">4000 nm</span></div>
+                    <input type="range" id="screen-dist" min="4000" max="8000" step="100" value="4000" data-explore="Distance from the slits to the detection screen. Increasing L spreads the pattern out in space.">
+                    <div class="control-range"><span>4000 nm</span><span>8000 nm</span></div>
+                </div>
+                <div class="control-group" id="animation-speed-group">
+                    <div class="control-label"><span>Animation Speed</span><span class="control-value" id="rate-value">10</span></div>
+                    <input type="range" id="rate" min="5" max="30" step="1" value="10" data-explore="Controls how fast wavefronts expand and detections accumulate. Slower speeds make individual events easier to follow.">
+                    <div class="control-range"><span>5</span><span>30</span></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="lecture-toggle-wrap">
+                    <label><input type="checkbox" id="lecture-display-checkbox" checked aria-label="Lecture display: hide hint text and animation speed"><span>Lecture display</span></label>
+                </div>
+                <div class="section-title">Slit Control</div>
+                <div style="display:flex; gap:10px; margin-bottom:8px;">
+                    <button id="slit1-toggle" class="btn-topbar" style="flex:1; padding:8px 10px; font-size:0.8rem; font-weight:600; border:none; border-radius:6px; cursor:pointer; transition:all 0.2s; background:#059669; color:white;" data-explore="Toggle Slit 1 (S1) open or closed. Closing a slit lets you compare single-slit diffraction with the double-slit interference pattern.">S1: Open</button>
+                    <button id="slit2-toggle" class="btn-topbar" style="flex:1; padding:8px 10px; font-size:0.8rem; font-weight:600; border:none; border-radius:6px; cursor:pointer; transition:all 0.2s; background:#059669; color:white;" data-explore="Toggle Slit 2 (S2) open or closed. Closing a slit lets you compare single-slit diffraction with the double-slit interference pattern.">S2: Open</button>
+                </div>
+                <p id="slit-control-hint" style="font-size:0.72rem; color:var(--text-muted); line-height:1.5; margin:0;">Close one slit to see single-slit diffraction (quantum) or a single Gaussian (classical). To see sinc² zeros and side lobes, reduce λ so that a/λ &gt; 2. Compare with both slits open to see where <span style="color:#10b981; font-weight:600;">destructive interference</span> makes fewer detections than one slit alone.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIG ---
+        const CONFIG = {
+            screenRes: { w: 512, h: 256 },
+            sceneWidth: 40,
+            screenHeight: 20,
+            numIncidentWaves: 8,
+            waveSegments: 150,
+            sourceZ: 18,
+            barrierZ: 0,
+            classicalParticleCount: 380,
+            /** Visual width factor for the classical gun muzzle. */
+            classicalEmitSpread: 0.32,
+            /** Number of histogram bins for detection pattern */
+            numBins: 160,
+            /** Sub-samples per bin for chart curves (quantum + classical); reduces aliasing. */
+            chartBinSubSamples: 8
+        };
+
+        // --- STATE ---
+        // All physical lengths in nm (nanometers) — same unit throughout.
+        // Visible wavelengths (380–700 nm) are comparable to slit dimensions
+        // (100–1600 nm), which is the condition for observable interference.
+        //
+        // Slider nm values map linearly to internal sim units:
+        //   sim_value = slider_nm * NM_TO_SIM
+        //
+        // CRITICAL: Every spatial quantity must use the SAME scale factor so
+        // that physical ratios (d/λ, a/λ, L/λ) are preserved in sim-space.
+        // Using different factors per quantity distorts the interference pattern.
+        
+        const UNIFORM_SCALE = 30 / 6000;   // 0.005 sim-units per nm
+
+        const NM_TO_SIM = {
+            sep:        UNIFORM_SCALE,   // 800 nm → 4.0  sim units
+            width:      UNIFORM_SCALE,   // 200 nm → 1.0  sim units
+            lambda:     UNIFORM_SCALE,   // 550 nm → 2.75 sim units
+            screenDist: UNIFORM_SCALE    // 6000 nm → 30   sim units
+        };
+
+        let state = {
+            sep: 1600 * NM_TO_SIM.sep,
+            slitWidth: 490 * NM_TO_SIM.width,
+            lambda: 525 * NM_TO_SIM.lambda,
+            screenDistance: 4000 * NM_TO_SIM.screenDist,   // L: slits → screen
+            animationSpeed: 10,
+            hits: new Uint32Array(CONFIG.numBins),
+            classicalHits: new Uint32Array(CONFIG.numBins),
+            detectedCount: 0,
+            showClassical: false,
+            simulationPaused: false,
+            hoverExplore: false,
+            slit1Open: true,
+            slit2Open: true
+        };
+
+        /**
+         * When both slits are open, enforce center separation d > slit width a by at least
+         * one width-slider step (nm), and sync sliders + state. Call on load and after any
+         * path that could desync DOM from state.
+         */
+        function enforceDoubleSlitSliderConsistency() {
+            if (!state.slit1Open || !state.slit2Open) return;
+            const sepSlider = document.getElementById('slit-sep');
+            const widthSlider = document.getElementById('slit-width');
+            if (!sepSlider || !widthSlider) return;
+            const minGap = parseFloat(widthSlider.step) || 10;
+            const sepMax = parseFloat(sepSlider.max);
+            const widMin = parseFloat(widthSlider.min);
+            let sep = parseFloat(sepSlider.value);
+            let wid = parseFloat(widthSlider.value);
+            if (sep < wid + minGap) {
+                sep = wid + minGap;
+                if (sep > sepMax) {
+                    sep = sepMax;
+                    wid = sep - minGap;
+                    if (wid < widMin) wid = widMin;
+                }
+                sepSlider.value = String(sep);
+                widthSlider.value = String(wid);
+            }
+            state.sep = sep * NM_TO_SIM.sep;
+            state.slitWidth = wid * NM_TO_SIM.width;
+            const sepValEl = document.getElementById('slit-sep-value');
+            const widValEl = document.getElementById('slit-width-value');
+            if (sepValEl) sepValEl.textContent = Math.round(sep) + ' nm';
+            if (widValEl) widValEl.textContent = Math.round(wid) + ' nm';
+        }
+
+        // --- GLOBALS ---
+        let scene, camera, renderer, screenTexture, screenContext, screenMesh;
+        let classicalOverlayTexture, classicalOverlayContext, classicalOverlayMesh;
+        let barrierGroup;
+        let combinedChart;
+        let incidentWaves = [];
+        let secondaryWavesS1 = [];
+        let secondaryWavesS2 = [];
+        let sourceMarker;
+        let slitLabels = [];
+        let controls;
+        let exploreTooltip;
+        let raycaster, mouseVec2;
+        /** Classical mode only: 3D particle spray (does not affect detection math). */
+        let classicalParticlesGroup;
+        let classicalPointsMesh;
+        let classicalParticleData = [];
+
+        // --- WAVELENGTH → COLOR ---
+        // Returns {r, g, b} each 0–1 for the current wavelength slider value (nm)
+        function getCurrentWavelengthNM() {
+            return parseFloat(document.getElementById('wavelength')?.value || 525);
+        }
+
+        function nmToRGB(nm) {
+            let r, g, b;
+            if (nm < 380) {
+                // UV / Deep-UV: uniform cool grey (non-visible)
+                r = 0.55; g = 0.55; b = 0.65;
+                return { r, g, b };
+            }
+            if (nm >= 380 && nm < 440) { r = -(nm-440)/(440-380); g = 0; b = 1; }
+            else if (nm >= 440 && nm < 490) { r = 0; g = (nm-440)/(490-440); b = 1; }
+            else if (nm >= 490 && nm < 510) { r = 0; g = 1; b = -(nm-510)/(510-490); }
+            else if (nm >= 510 && nm < 580) { r = (nm-510)/(580-510); g = 1; b = 0; }
+            else if (nm >= 580 && nm < 645) { r = 1; g = -(nm-645)/(645-580); b = 0; }
+            else if (nm >= 645 && nm <= 700) { r = 1; g = 0; b = 0; }
+            else { r = 0.4; g = 0.6; b = 1; }
+            // Boost brightness so waves are visible against dark background
+            const boost = 0.15;
+            r = Math.min(1, r + boost);
+            g = Math.min(1, g + boost);
+            b = Math.min(1, b + boost);
+            return { r, g, b };
+        }
+
+        function nmToThreeColor(nm) {
+            const c = nmToRGB(nm);
+            return new THREE.Color(c.r, c.g, c.b);
+        }
+
+        function nmToCSSRGBA(nm, alpha) {
+            const c = nmToRGB(nm);
+            return `rgba(${Math.round(c.r*255)},${Math.round(c.g*255)},${Math.round(c.b*255)},${alpha})`;
+        }
+
+        // Lighter/pastel variant for secondary waves from each slit
+        function nmToSecondaryColor(nm, shift) {
+            const c = nmToRGB(nm);
+            // shift towards pink for S1, towards purple for S2
+            if (shift === 1) {
+                return new THREE.Color(
+                    Math.min(1, c.r * 0.7 + 0.3),
+                    c.g * 0.5,
+                    Math.min(1, c.b * 0.7 + 0.3)
+                );
+            } else {
+                return new THREE.Color(
+                    Math.min(1, c.r * 0.5 + 0.2),
+                    c.g * 0.4,
+                    Math.min(1, c.b * 0.7 + 0.4)
+                );
+            }
+        }
+
+        // Update all existing wave + source colors when wavelength changes
+        function updateAllWaveColors() {
+            const nm = getCurrentWavelengthNM();
+            const col = nmToThreeColor(nm);
+            const s1Col = nmToSecondaryColor(nm, 1);
+            const s2Col = nmToSecondaryColor(nm, 2);
+
+            // Incident waves
+            incidentWaves.forEach(w => { w.mesh.material.color.copy(col); });
+            // Secondary waves
+            secondaryWavesS1.forEach(w => { w.mesh.material.color.copy(s1Col); });
+            secondaryWavesS2.forEach(w => { w.mesh.material.color.copy(s2Col); });
+            // Source marker bar + glow
+            if (sourceMarker) {
+                sourceMarker.children.forEach(child => {
+                    if (child.isMesh && child.material) {
+                        child.material.color.copy(col);
+                    }
+                });
+            }
+        }
+
+        // --- INIT ---
+        function init() {
+            enforceDoubleSlitSliderConsistency();
+            initThree();
+            initCombinedChart();
+            requestAnimationFrame(() => { if (combinedChart) combinedChart.resize(); });
+            initUI();
+            animate();
+        }
+
+        function getSceneThemeColors() {
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            return {
+                background: isLight ? 0xf3f4f6 : 0x060E11,
+                fogColor: isLight ? 0xf3f4f6 : 0x060E11,
+                barrierColor: isLight ? 0xb0b8c0 : 0x4b5563,
+                screenClearColor: isLight ? '#e5e7eb' : '#1e293b'
+            };
+        }
+
+        function isLightTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'light';
+        }
+
+        /** Quantum hit dots: "lighter" works on dark screen; light screen needs opaque dark ink. */
+        function getQuantumHitDrawStyle() {
+            const nm = getCurrentWavelengthNM();
+            if (!isLightTheme()) {
+                return { compositeOperation: 'lighter', fillStyle: nmToCSSRGBA(nm, 0.3) };
+            }
+            if (nm < 380) {
+                return { compositeOperation: 'source-over', fillStyle: 'rgba(32, 42, 72, 0.92)' };
+            }
+            const c = nmToRGB(nm);
+            const r = Math.round(Math.min(255, c.r * 240));
+            const g = Math.round(Math.min(255, c.g * 240));
+            const b = Math.round(Math.min(255, c.b * 240));
+            return { compositeOperation: 'source-over', fillStyle: `rgba(${r},${g},${b},0.9)` };
+        }
+
+        function getClassicalHitDrawStyle() {
+            if (!isLightTheme()) {
+                return { compositeOperation: 'lighter', fillStyle: 'rgba(245, 158, 11, 0.3)' };
+            }
+            return { compositeOperation: 'source-over', fillStyle: 'rgba(154, 72, 0, 0.88)' };
+        }
+
+        function applySceneTheme() {
+            if (!scene) return;
+            const c = getSceneThemeColors();
+            scene.background = new THREE.Color(c.background);
+            if (scene.fog) {
+                scene.fog.color.setHex(c.fogColor);
+            }
+            if (barrierGroup && barrierGroup.userData.barrierMaterial) {
+                barrierGroup.userData.barrierMaterial.color.setHex(c.barrierColor);
+            }
+            if (screenContext) {
+                screenContext.globalCompositeOperation = 'source-over';
+                screenContext.fillStyle = c.screenClearColor;
+                screenContext.fillRect(0, 0, CONFIG.screenRes.w, CONFIG.screenRes.h);
+                if (screenTexture) screenTexture.needsUpdate = true;
+            }
+        }
+
+        function initThree() {
+            const canvas = document.getElementById('main-canvas');
+            scene = new THREE.Scene();
+            const c = getSceneThemeColors();
+            scene.background = new THREE.Color(c.background);
+            // Fog far > 150 so screen remains visible at max L (8000 nm → camera distance ~87)
+            scene.fog = new THREE.Fog(c.fogColor, 60, 220);
+
+            const container = document.getElementById('canvas-container');
+            const cw = container ? container.clientWidth : window.innerWidth;
+            const ch = container ? container.clientHeight : window.innerHeight - 60;
+            camera = new THREE.PerspectiveCamera(50, cw / ch, 0.1, 500);
+            /* Default: elevated front-left view toward the screen (matches lecture default framing). */
+            camera.position.set(22, 36, 50);
+            camera.lookAt(4, -2.5, -16);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(cw, ch);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = true;
+            controls.minDistance = 20;
+            controls.maxDistance = 200;
+            controls.target.set(4, -2.5, -16);
+            controls.update();
+
+            scene.add(new THREE.AmbientLight(0x404060, 2));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(20, 50, 20);
+            scene.add(dirLight);
+
+            const sCanvas = document.createElement('canvas');
+            sCanvas.width = CONFIG.screenRes.w;
+            sCanvas.height = CONFIG.screenRes.h;
+            screenContext = sCanvas.getContext('2d');
+            const screenClear = getSceneThemeColors().screenClearColor;
+            screenContext.fillStyle = screenClear;
+            screenContext.fillRect(0,0, CONFIG.screenRes.w, CONFIG.screenRes.h);
+            
+            screenTexture = new THREE.CanvasTexture(sCanvas);
+            
+            const screenGeo = new THREE.BoxGeometry(CONFIG.sceneWidth, CONFIG.screenHeight, 0.5);
+            const screenMat = new THREE.MeshStandardMaterial({ 
+                map: screenTexture, 
+                roughness: 0.1,
+                side: THREE.DoubleSide
+            });
+            screenMesh = new THREE.Mesh(screenGeo, screenMat);
+            screenMesh.position.z = -state.screenDistance;
+            screenMesh.userData.exploreText = 'Detection screen: where particles are recorded. Green dots build the quantum interference pattern; orange dots show the classical bullets pattern P1 + P2 built from a broad spray with wall blocking and two smooth lobes behind the slits.';
+            scene.add(screenMesh);
+
+            // Create classical overlay (separate plane in front of screen)
+            createClassicalOverlay();
+
+            createSourceMarker();
+            createBarrier();
+            createSlitLabels();
+            createWavefronts();
+            createClassicalParticleVisuals();
+            syncWaveAndSourceVisibilityForMode();
+        }
+
+        function createClassicalOverlay() {
+            // Create a separate canvas for the classical pattern overlay
+            const overlayCanvas = document.createElement('canvas');
+            overlayCanvas.width = CONFIG.screenRes.w;
+            overlayCanvas.height = CONFIG.screenRes.h;
+            classicalOverlayContext = overlayCanvas.getContext('2d');
+            
+            classicalOverlayTexture = new THREE.CanvasTexture(overlayCanvas);
+            
+            const overlayGeo = new THREE.PlaneGeometry(CONFIG.sceneWidth, CONFIG.screenHeight);
+            const overlayMat = new THREE.MeshBasicMaterial({ 
+                map: classicalOverlayTexture, 
+                transparent: true,
+                opacity: 1,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            classicalOverlayMesh = new THREE.Mesh(overlayGeo, overlayMat);
+            classicalOverlayMesh.position.z = -state.screenDistance + 0.3; // Slightly in front of the detection screen
+            classicalOverlayMesh.visible = false;
+            scene.add(classicalOverlayMesh);
+            
+            // Start with clear overlay (dots accumulate when classical mode is on)
+            clearClassicalOverlay();
+        }
+
+        function clearClassicalOverlay() {
+            const ctx = classicalOverlayContext;
+            const w = CONFIG.screenRes.w;
+            const h = CONFIG.screenRes.h;
+            ctx.clearRect(0, 0, w, h);
+            classicalOverlayTexture.needsUpdate = true;
+        }
+
+        function createSourceMarker() {
+            if (sourceMarker) scene.remove(sourceMarker);
+
+            const sourceGroup = new THREE.Group();
+            const waveColor = nmToThreeColor(getCurrentWavelengthNM());
+
+            const pointRadius = 0.6;
+            const glowRadius = 1.2;
+            const sphereGeometry = new THREE.SphereGeometry(pointRadius, 16, 12);
+            const sphereMaterial = new THREE.MeshBasicMaterial({
+                color: waveColor,
+                transparent: true,
+                opacity: 0.95
+            });
+            const point = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sourceGroup.add(point);
+
+            const glowGeometry = new THREE.SphereGeometry(glowRadius, 16, 12);
+            const glowMaterial = new THREE.MeshBasicMaterial({
+                color: waveColor,
+                transparent: true,
+                opacity: 0.25
+            });
+            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            sourceGroup.add(glow);
+
+            const labelCanvas = document.createElement('canvas');
+            labelCanvas.width = 256;
+            labelCanvas.height = 64;
+            const ctx = labelCanvas.getContext('2d');
+            const labelRGB = nmToRGB(getCurrentWavelengthNM());
+            ctx.fillStyle = `rgb(${Math.round(labelRGB.r*255)},${Math.round(labelRGB.g*255)},${Math.round(labelRGB.b*255)})`;
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('SOURCE', 128, 40);
+            
+            const labelTexture = new THREE.CanvasTexture(labelCanvas);
+            const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture, transparent: true });
+            const labelSprite = new THREE.Sprite(labelMaterial);
+            labelSprite.scale.set(8, 2, 1);
+            labelSprite.position.y = 3;
+            sourceGroup.add(labelSprite);
+            
+            sourceGroup.position.set(0, 0, CONFIG.sourceZ);
+            sourceGroup.userData.exploreText = 'Point source: emits circular wavefronts that expand toward the barrier. Wavelength (and color) are set by the λ slider.';
+            scene.add(sourceGroup);
+            sourceMarker = sourceGroup;
+        }
+
+        function createSlitLabels() {
+            slitLabels.forEach(label => scene.remove(label));
+            slitLabels = [];
+            
+            const s1Canvas = document.createElement('canvas');
+            s1Canvas.width = 128;
+            s1Canvas.height = 64;
+            let ctx = s1Canvas.getContext('2d');
+            ctx.fillStyle = state.slit1Open ? '#f472b6' : '#666666';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(state.slit1Open ? 'S1' : 'S1 ✕', 64, 50);
+            
+            const s1Texture = new THREE.CanvasTexture(s1Canvas);
+            const s1Material = new THREE.SpriteMaterial({ map: s1Texture, transparent: true, opacity: state.slit1Open ? 1.0 : 0.4 });
+            const s1Sprite = new THREE.Sprite(s1Material);
+            s1Sprite.scale.set(5, 2.5, 1);
+            s1Sprite.position.set(-state.sep/2, 10, CONFIG.barrierZ);
+            scene.add(s1Sprite);
+            slitLabels.push(s1Sprite);
+            
+            const s2Canvas = document.createElement('canvas');
+            s2Canvas.width = 128;
+            s2Canvas.height = 64;
+            ctx = s2Canvas.getContext('2d');
+            ctx.fillStyle = state.slit2Open ? '#a78bfa' : '#666666';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(state.slit2Open ? 'S2' : 'S2 ✕', 64, 50);
+            
+            const s2Texture = new THREE.CanvasTexture(s2Canvas);
+            const s2Material = new THREE.SpriteMaterial({ map: s2Texture, transparent: true, opacity: state.slit2Open ? 1.0 : 0.4 });
+            const s2Sprite = new THREE.Sprite(s2Material);
+            s2Sprite.scale.set(5, 2.5, 1);
+            s2Sprite.position.set(state.sep/2, 10, CONFIG.barrierZ);
+            scene.add(s2Sprite);
+            slitLabels.push(s2Sprite);
+        }
+
+        function createBarrier() {
+            if(barrierGroup) scene.remove(barrierGroup);
+            barrierGroup = new THREE.Group();
+
+            const c = getSceneThemeColors();
+            const mat = new THREE.MeshStandardMaterial({ color: c.barrierColor, roughness: 0.4 });
+            barrierGroup.userData.barrierMaterial = mat;
+            const height = 15;
+            const depth = 1;
+            const halfScene = CONFIG.sceneWidth / 2;  // 20
+            const bothOpen = state.slit1Open && state.slit2Open;
+
+            if (!state.slit1Open && !state.slit2Open) {
+                // Both closed: single solid wall
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(CONFIG.sceneWidth, height, depth), mat);
+                barrierGroup.add(wall);
+            } else if (bothOpen) {
+                // Both open: original double-slit layout (center bar = edge-to-edge gap d − a)
+                const centerW = Math.max(state.sep - state.slitWidth, 0.001);
+                const sideW = Math.max(0, (CONFIG.sceneWidth - centerW - (state.slitWidth * 2)) / 2);
+                if (centerW > 0.001) {
+                    const center = new THREE.Mesh(new THREE.BoxGeometry(centerW, height, depth), mat);
+                    barrierGroup.add(center);
+                }
+                if (sideW > 0.01) {
+                    const left = new THREE.Mesh(new THREE.BoxGeometry(sideW, height, depth), mat);
+                    left.position.x = -(centerW/2 + state.slitWidth + sideW/2);
+                    const right = new THREE.Mesh(new THREE.BoxGeometry(sideW, height, depth), mat);
+                    right.position.x = (centerW/2 + state.slitWidth + sideW/2);
+                    barrierGroup.add(left, right);
+                }
+            } else {
+                // Single-slit mode: one opening at the open slit's position
+                const openSlitX = state.slit1Open ? -state.sep / 2 : state.sep / 2;
+                const halfW = state.slitWidth / 2;
+                const leftEdge = openSlitX - halfW;
+                const rightEdge = openSlitX + halfW;
+
+                // Left barrier: from -halfScene to leftEdge
+                const leftW = leftEdge + halfScene;
+                if (leftW > 0.01) {
+                    const left = new THREE.Mesh(new THREE.BoxGeometry(leftW, height, depth), mat);
+                    left.position.x = -halfScene + leftW / 2;
+                    barrierGroup.add(left);
+                }
+                // Right barrier: from rightEdge to +halfScene
+                const rightW = halfScene - rightEdge;
+                if (rightW > 0.01) {
+                    const right = new THREE.Mesh(new THREE.BoxGeometry(rightW, height, depth), mat);
+                    right.position.x = halfScene - rightW / 2;
+                    barrierGroup.add(right);
+                }
+            }
+
+            barrierGroup.userData.exploreText = 'Barrier with slits. Each open slit acts as a secondary source. Close one slit to see single-slit diffraction.';
+            barrierGroup.position.z = CONFIG.barrierZ;
+            scene.add(barrierGroup);
+            
+            if (slitLabels.length >= 2) {
+                slitLabels[0].position.x = -state.sep/2;
+                slitLabels[1].position.x = state.sep/2;
+            }
+        }
+
+        function disposeWave(w) {
+            scene.remove(w.mesh);
+            w.mesh.geometry.dispose();
+            w.mesh.material.dispose();
+        }
+
+        function createWavefronts() {
+            incidentWaves.forEach(disposeWave);
+            incidentWaves = [];
+            secondaryWavesS1.forEach(disposeWave);
+            secondaryWavesS1 = [];
+            secondaryWavesS2.forEach(disposeWave);
+            secondaryWavesS2 = [];
+
+            const distanceSourceToBarrier = CONFIG.sourceZ - CONFIG.barrierZ;
+            for (let i = 0; i < CONFIG.numIncidentWaves; i++) {
+                const radius = 0.5 + i * state.lambda * 1.1;
+                if (radius < distanceSourceToBarrier) {
+                    createIncidentWave(radius);
+                }
+            }
+            
+            if (sourceMarker) sourceMarker.visible = true;
+            slitLabels.forEach(l => l.visible = true);
+        }
+
+        function createIncidentWave(initialRadius) {
+            if (initialRadius == null) initialRadius = 0.5;
+            const sourceX = 0;
+            const sourceZ = CONFIG.sourceZ;
+            const numPoints = 120;
+            const points = [];
+
+            for (let i = 0; i <= numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI - Math.PI / 2;
+                const x = sourceX + initialRadius * Math.sin(angle);
+                const z = sourceZ - initialRadius * Math.cos(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: nmToThreeColor(getCurrentWavelengthNM()),
+                transparent: true,
+                opacity: 0.8,
+                linewidth: 2
+            });
+            const line = new THREE.Line(geometry, material);
+
+            scene.add(line);
+            incidentWaves.push({
+                mesh: line,
+                radius: initialRadius,
+                hasSpawnedSecondary: false,
+                opacity: 0.8
+            });
+        }
+
+        function createSecondaryWaveS1(initialRadius) {
+            const slitX = -state.sep / 2;
+            const numPoints = 120;
+            const points = [];
+            
+            for (let i = 0; i <= numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI - Math.PI/2;
+                const x = slitX + initialRadius * Math.sin(angle);
+                const z = CONFIG.barrierZ - initialRadius * Math.cos(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+            
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: nmToSecondaryColor(getCurrentWavelengthNM(), 1),
+                transparent: true,
+                opacity: 0.7
+            });
+            const arc = new THREE.Line(geometry, material);
+            
+            scene.add(arc);
+            secondaryWavesS1.push({
+                mesh: arc,
+                slitX: slitX,
+                radius: initialRadius,
+                opacity: 0.7,
+                recordedHit: false
+            });
+        }
+
+        function createSecondaryWaveS2(initialRadius) {
+            const slitX = state.sep / 2;
+            const numPoints = 120;
+            const points = [];
+            
+            for (let i = 0; i <= numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI - Math.PI/2;
+                const x = slitX + initialRadius * Math.sin(angle);
+                const z = CONFIG.barrierZ - initialRadius * Math.cos(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+            
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: nmToSecondaryColor(getCurrentWavelengthNM(), 2),
+                transparent: true,
+                opacity: 0.7
+            });
+            const arc = new THREE.Line(geometry, material);
+            
+            scene.add(arc);
+            secondaryWavesS2.push({
+                mesh: arc,
+                slitX: slitX,
+                radius: initialRadius,
+                opacity: 0.7,
+                recordedHit: false
+            });
+        }
+
+        // --- PHYSICS LOOP ---
+        function updatePhysics(dt, time) {
+            updateWaveMode(dt, time);
+            updateClassicalParticleVisuals(dt);
+            syncWaveAndSourceVisibilityForMode();
+        }
+
+        function updateWaveMode(dt, time) {
+            const speed = state.animationSpeed;
+            const screenZ = -state.screenDistance;
+            const sourceZ = CONFIG.sourceZ;
+            const distanceSourceToBarrier = CONFIG.sourceZ - CONFIG.barrierZ;
+
+            const incidentToRemove = [];
+            incidentWaves.forEach((wave, index) => {
+                wave.radius += speed * dt;
+
+                const numPoints = 120;
+                const positions = wave.mesh.geometry.attributes.position.array;
+                for (let i = 0; i <= numPoints; i++) {
+                    const angle = (i / numPoints) * Math.PI - Math.PI / 2;
+                    positions[i * 3] = wave.radius * Math.sin(angle);
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = sourceZ - wave.radius * Math.cos(angle);
+                }
+                wave.mesh.geometry.attributes.position.needsUpdate = true;
+
+                if (wave.radius >= distanceSourceToBarrier && !wave.hasSpawnedSecondary) {
+                    wave.hasSpawnedSecondary = true;
+                    if (state.slit1Open) createSecondaryWaveS1(0.5);
+                    if (state.slit2Open) createSecondaryWaveS2(0.5);
+                }
+
+                if (wave.radius >= distanceSourceToBarrier) {
+                    wave.opacity -= dt * 3;
+                    wave.mesh.material.opacity = Math.max(0, wave.opacity);
+                    if (wave.opacity <= 0) {
+                        incidentToRemove.push(index);
+                    }
+                }
+            });
+
+            incidentToRemove.reverse().forEach(index => {
+                disposeWave(incidentWaves[index]);
+                incidentWaves.splice(index, 1);
+            });
+
+            const minRadius = incidentWaves.length > 0
+                ? Math.min(...incidentWaves.map(w => w.radius))
+                : state.lambda * 1.1;
+            if (incidentWaves.length === 0 || minRadius > state.lambda * 0.85) {
+                createIncidentWave(0.5);
+            }
+
+            // Waves must survive past the screen to trigger detection.
+            // At default L=30 this gives 35; at max L=40 it gives 45.
+            const maxRadius = state.screenDistance + 5;
+
+            const s1ToRemove = [];
+            secondaryWavesS1.forEach((wave, index) => {
+                wave.radius += speed * dt;
+                
+                const numPoints = 120;
+                const positions = wave.mesh.geometry.attributes.position.array;
+                const slitX = -state.sep / 2;
+                
+                for (let i = 0; i <= numPoints; i++) {
+                    const angle = (i / numPoints) * Math.PI - Math.PI/2;
+                    positions[i * 3] = slitX + wave.radius * Math.sin(angle);
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = CONFIG.barrierZ - wave.radius * Math.cos(angle);
+                }
+                wave.mesh.geometry.attributes.position.needsUpdate = true;
+                
+                wave.opacity = Math.max(0, 0.7 * (1 - wave.radius / maxRadius));
+                wave.mesh.material.opacity = wave.opacity;
+
+                // Only S1 triggers hit recording (S2 grows at the same rate,
+                // so one trigger per wavefront pair is sufficient)
+                if (wave.radius > Math.abs(screenZ - CONFIG.barrierZ) - 2 && !wave.recordedHit) {
+                    wave.recordedHit = true;
+                    recordInterferenceHits();
+                }
+
+                if (wave.radius > maxRadius) {
+                    s1ToRemove.push(index);
+                }
+            });
+
+            s1ToRemove.reverse().forEach(index => {
+                disposeWave(secondaryWavesS1[index]);
+                secondaryWavesS1.splice(index, 1);
+            });
+
+            const s2ToRemove = [];
+            secondaryWavesS2.forEach((wave, index) => {
+                wave.radius += speed * dt;
+                
+                const numPoints = 120;
+                const positions = wave.mesh.geometry.attributes.position.array;
+                const slitX = state.sep / 2;
+                
+                for (let i = 0; i <= numPoints; i++) {
+                    const angle = (i / numPoints) * Math.PI - Math.PI/2;
+                    positions[i * 3] = slitX + wave.radius * Math.sin(angle);
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = CONFIG.barrierZ - wave.radius * Math.cos(angle);
+                }
+                wave.mesh.geometry.attributes.position.needsUpdate = true;
+                
+                wave.opacity = Math.max(0, 0.7 * (1 - wave.radius / maxRadius));
+                wave.mesh.material.opacity = wave.opacity;
+
+                // If S1 is closed, S2 must trigger hit recording
+                if (!state.slit1Open && wave.radius > Math.abs(screenZ - CONFIG.barrierZ) - 2 && !wave.recordedHit) {
+                    wave.recordedHit = true;
+                    recordInterferenceHits();
+                }
+
+                if (wave.radius > maxRadius) {
+                    s2ToRemove.push(index);
+                }
+            });
+
+            s2ToRemove.reverse().forEach(index => {
+                disposeWave(secondaryWavesS2[index]);
+                secondaryWavesS2.splice(index, 1);
+            });
+        }
+
+        function recordInterferenceHits() {
+            const L = state.screenDistance;
+            const numSamples = 150;
+
+            // Quantum mode: sample from interference/diffraction pattern
+            if (!state.showClassical) {
+                for (let i = 0; i < numSamples; i++) {
+                    const x = (Math.random() - 0.5) * CONFIG.sceneWidth;
+
+                    const probability = quantumProbabilityAtX(x, L);
+
+                    if (Math.random() < probability) {
+                        state.detectedCount++;
+
+                        const tx = ((x / CONFIG.sceneWidth) + 0.5) * CONFIG.screenRes.w;
+                        const ty = (0.5 + (Math.random() - 0.5) * 0.3) * CONFIG.screenRes.h;
+
+                        const qStyle = getQuantumHitDrawStyle();
+                        screenContext.globalCompositeOperation = qStyle.compositeOperation;
+                        screenContext.beginPath();
+                        screenContext.arc(tx, ty, 2, 0, Math.PI * 2);
+                        screenContext.fillStyle = qStyle.fillStyle;
+                        screenContext.fill();
+                        screenTexture.needsUpdate = true;
+
+                        const bin = Math.floor(((x / CONFIG.sceneWidth) + 0.5) * CONFIG.numBins);
+                        if (bin >= 0 && bin < CONFIG.numBins) state.hits[bin]++;
+                    }
+                }
+            }
+
+            // Classical mode: broad bullet spray, wall blocking at the barrier, and a
+            // smooth no-interference sum P₁ + P₂ on the screen.
+            if (state.showClassical) {
+                for (let i = 0; i < numSamples; i++) {
+                    const landing = sampleClassicalBulletLanding(L);
+                    if (!landing.passed) continue;
+                    const cx = landing.screenX;
+                    const cxDraw = classicalScreenXForOverlayTexture(cx, L, landing.slitCenter);
+                    const tx = ((cxDraw / CONFIG.sceneWidth) + 0.5) * CONFIG.screenRes.w;
+                    const ty = (0.5 + (Math.random() - 0.5) * 0.3) * CONFIG.screenRes.h;
+
+                    const cStyle = getClassicalHitDrawStyle();
+                    classicalOverlayContext.globalCompositeOperation = cStyle.compositeOperation;
+                    classicalOverlayContext.beginPath();
+                    classicalOverlayContext.arc(tx, ty, 2, 0, Math.PI * 2);
+                    classicalOverlayContext.fillStyle = cStyle.fillStyle;
+                    classicalOverlayContext.fill();
+                    classicalOverlayTexture.needsUpdate = true;
+
+                    const cbin = Math.floor(((cx / CONFIG.sceneWidth) + 0.5) * CONFIG.numBins);
+                    if (cbin >= 0 && cbin < CONFIG.numBins) state.classicalHits[cbin]++;
+                }
+            }
+        }
+
+        // --- COMBINED CHART ---
+        // Area-matched normalization: scale histogram so its sum equals the
+        // theory curve's sum.  This avoids the systematic downward bias of
+        // max-normalization at low sample counts.
+        function getNormalizedHits() {
+            const total = state.hits.reduce((a, b) => a + b, 0);
+            if (total === 0) return Array(state.hits.length).fill(0);
+            const theoryData = combinedChart.data.datasets[1].data;
+            const theorySum = theoryData.reduce((a, b) => a + b, 0);
+            const scale = theorySum / total;
+            return Array.from(state.hits, v => v * scale);
+        }
+
+        function getNormalizedClassicalHits() {
+            const total = state.classicalHits.reduce((a, b) => a + b, 0);
+            if (total === 0) return Array(state.classicalHits.length).fill(0);
+            const theoryData = combinedChart.data.datasets[2].data;
+            const theorySum = theoryData.reduce((a, b) => a + b, 0);
+            const scale = theorySum / total;
+            return Array.from(state.classicalHits, v => v * scale);
+        }
+
+        function initCombinedChart() {
+            const ctx = document.getElementById('combined-chart-canvas').getContext('2d');
+            
+            const theoreticalData = generateTheoreticalData();
+            
+            combinedChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array(CONFIG.numBins).fill(''),
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Detected Pattern',
+                            data: getNormalizedHits(),
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderWidth: 0,
+                            barPercentage: 1.1,
+                            categoryPercentage: 1.0,
+                            yAxisID: 'y',
+                            order: 3
+                        },
+                        {
+                            type: 'line',
+                            label: 'Quantum |ψ₁+ψ₂|²',
+                            data: theoreticalData,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            borderWidth: 1.8,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            yAxisID: 'y',
+                            order: 1
+                        },
+                        {
+                            type: 'line',
+                            label: 'Classical P₁+P₂',
+                            data: generateClassicalData(),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                            borderWidth: 1.8,
+                            borderDash: [6, 4],
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            yAxisID: 'y',
+                            order: 2,
+                            hidden: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: { 
+                        legend: { display: false }, 
+                        tooltip: { enabled: false } 
+                    },
+                    scales: {
+                        x: { 
+                            display: true, 
+                            title: {
+                                display: true,
+                                text: 'Position (x)',
+                                color: '#9ca3af',
+                                font: { size: 8, weight: '600' }
+                            },
+                            ticks: { display: false },
+                            grid: { display: false }
+                        },
+                        y: { 
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Normalized Intensity (I/I₀)',
+                                color: '#9ca3af',
+                                font: { size: 8, weight: '600' }
+                            },
+                            min: 0,
+                            max: 1.1,
+                            grid: { color: 'rgba(255,255,255,0.05)' }, 
+                            ticks: { display: false }
+                        }
+                    },
+                    animation: false
+                }
+            });
+        }
+
+        function singleSlitProbabilityAtX(x, L) {
+            const theta = Math.atan(x / L);
+            const sinTheta = Math.sin(theta);
+            const beta = (Math.PI * state.slitWidth * sinTheta) / state.lambda;
+            if (Math.abs(beta) <= 0.001) return 1.0;
+            return Math.pow(Math.sin(beta) / beta, 2);
+        }
+
+        // Single-slit diffraction centered on a slit at position slitX
+        function singleSlitProbabilityAtXCentered(x, slitX, L) {
+            const theta = Math.atan((x - slitX) / L);
+            const sinTheta = Math.sin(theta);
+            const beta = (Math.PI * state.slitWidth * sinTheta) / state.lambda;
+            if (Math.abs(beta) <= 0.001) return 1.0;
+            return Math.pow(Math.sin(beta) / beta, 2);
+        }
+
+        function quantumProbabilityAtX(x, L) {
+            const bothOpen = state.slit1Open && state.slit2Open;
+            const s1x = -state.sep / 2;
+            const s2x = state.sep / 2;
+
+            if (bothOpen) {
+                // Exact distances from each slit to the point x on the screen
+                const r1 = Math.sqrt(Math.pow(x - s1x, 2) + Math.pow(L, 2));
+                const r2 = Math.sqrt(Math.pow(x - s2x, 2) + Math.pow(L, 2));
+
+                // Exact phase difference
+                const pathDiff = r2 - r1;
+                const phaseDiff = (2 * Math.PI * pathDiff) / state.lambda;
+
+                const interference = Math.pow(Math.cos(phaseDiff / 2), 2);
+                return interference * singleSlitProbabilityAtX(x, L);
+            } else if (state.slit1Open) {
+                return singleSlitProbabilityAtXCentered(x, s1x, L);
+            } else if (state.slit2Open) {
+                return singleSlitProbabilityAtXCentered(x, s2x, L);
+            }
+            return 0;
+        }
+
+        function classicalMagnification(L) {
+            return L / (CONFIG.sourceZ - CONFIG.barrierZ);
+        }
+
+        function gaussianPDF(x, mean, sigma) {
+            if (sigma <= 0) return 0;
+            const dx = x - mean;
+            return Math.exp(-0.5 * (dx * dx) / (sigma * sigma)) / (sigma * Math.sqrt(2 * Math.PI));
+        }
+
+        function sampleGaussian(mean, sigma) {
+            let u = 0;
+            let v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+            return mean + sigma * z;
+        }
+
+        function sampleClampedGaussian(mean, sigma, min, max, attempts = 24) {
+            for (let i = 0; i < attempts; i++) {
+                const value = sampleGaussian(mean, sigma);
+                if (value >= min && value <= max) return value;
+            }
+            const v = sampleGaussian(mean, sigma);
+            return Math.min(max, Math.max(min, v));
+        }
+
+        function classicalBeamSigmaAtBarrier() {
+            return Math.max(0.28 * state.sep, 0.8 + 0.35 * state.slitWidth);
+        }
+
+        function classicalSourceSigma() {
+            return 0.55 * classicalBeamSigmaAtBarrier();
+        }
+
+        function classicalScreenSigma(L) {
+            const m = classicalMagnification(L);
+            const sigmaSource = classicalSourceSigma();
+            const sigmaSlit = Math.max(0.18, state.slitWidth / 5);
+            return Math.sqrt(
+                Math.pow(m * sigmaSource, 2) +
+                Math.pow((1 + m) * sigmaSlit, 2)
+            );
+        }
+
+        /** σ in sim units of a radial dot stamp of radius `radiusPx` on the overlay canvas (matches chart x scaling). */
+        function classicalOverlayBrushSigmaSim(radiusPx) {
+            return (radiusPx / CONFIG.screenRes.w) * CONFIG.sceneWidth;
+        }
+
+        /**
+         * Display-only: compresses x for drawing on the 3D overlay canvas so blob width matches the
+         * chart after canvas dot blur. Histogram bins still use the true sampled screenX (cx).
+         */
+        function classicalScreenXForOverlayTexture(cx, L, slitCenter) {
+            const mu = slitCenter * (1 + classicalMagnification(L));
+            const sigma = classicalScreenSigma(L);
+            const sigmaBrush = classicalOverlayBrushSigmaSim(2);
+            if (sigma <= sigmaBrush) return cx;
+            const k = Math.sqrt(1 - (sigmaBrush * sigmaBrush) / (sigma * sigma));
+            return mu + (cx - mu) * k;
+        }
+
+        function classicalSingleSlitProbabilityAtX(x, slitCenter, L) {
+            const mean = slitCenter * (1 + classicalMagnification(L));
+            return gaussianPDF(x, mean, classicalScreenSigma(L));
+        }
+
+        function classicalProbabilityAtX(x, L) {
+            let prob = 0;
+            if (state.slit1Open) prob += classicalSingleSlitProbabilityAtX(x, -state.sep / 2, L);
+            if (state.slit2Open) prob += classicalSingleSlitProbabilityAtX(x, state.sep / 2, L);
+            return prob;
+        }
+
+        function generateTheoreticalData() {
+            const numBins = CONFIG.numBins;
+            const values = [];
+            const L = state.screenDistance;
+            const binWidth = CONFIG.sceneWidth / numBins;
+            const subSamples = CONFIG.chartBinSubSamples;
+
+            for (let i = 0; i < numBins; i++) {
+                const binLeft = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
+                let sum = 0;
+                for (let s = 0; s < subSamples; s++) {
+                    const x = binLeft + ((s + 0.5) / subSamples) * binWidth;
+                    sum += quantumProbabilityAtX(x, L);
+                }
+                values.push(sum / subSamples);
+            }
+
+            const maxVal = Math.max(...values);
+            return values.map(v => maxVal > 0 ? v / maxVal : 0);
+        }
+
+        // Classical bullets pattern: P₁ + P₂ from a broad spray with barrier blocking,
+        // modeled as two smooth one-slit bullet lobes on the screen.
+        function generateClassicalData() {
+            const numBins = CONFIG.numBins;
+            const L = state.screenDistance;
+            const binWidth = CONFIG.sceneWidth / numBins;
+            const subSamples = CONFIG.chartBinSubSamples;
+
+            const classicalRaw = [];
+            for (let i = 0; i < numBins; i++) {
+                const binLeft = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
+                let sum = 0;
+                for (let s = 0; s < subSamples; s++) {
+                    const x = binLeft + ((s + 0.5) / subSamples) * binWidth;
+                    sum += classicalProbabilityAtX(x, L);
+                }
+                classicalRaw.push(sum / subSamples);
+            }
+
+            const maxClassical = Math.max(...classicalRaw);
+            return classicalRaw.map(v => maxClassical > 0 ? v / maxClassical : 0);
+        }
+
+        function sampleClassicalBulletState(L) {
+            const halfScene = CONFIG.sceneWidth / 2;
+            const dHalf = state.sep / 2;
+            const halfA = state.slitWidth / 2;
+            const sourceX = sampleClampedGaussian(0, classicalSourceSigma(), -halfScene, halfScene);
+            const barrierX = sampleClampedGaussian(0, classicalBeamSigmaAtBarrier(), -halfScene, halfScene);
+
+            let slitCenter = null;
+            if (state.slit1Open && barrierX >= -dHalf - halfA && barrierX <= -dHalf + halfA) {
+                slitCenter = -dHalf;
+            } else if (state.slit2Open && barrierX >= dHalf - halfA && barrierX <= dHalf + halfA) {
+                slitCenter = dHalf;
+            }
+
+            let screenX = barrierX;
+            if (slitCenter !== null) {
+                const screenMean = slitCenter * (1 + classicalMagnification(L));
+                screenX = sampleClampedGaussian(
+                    screenMean,
+                    classicalScreenSigma(L),
+                    -halfScene,
+                    halfScene
+                );
+            }
+
+            return {
+                sourceX,
+                barrierX,
+                screenX,
+                slitCenter,
+                passed: slitCenter !== null
+            };
+        }
+
+        function sampleClassicalBulletLanding(L) {
+            for (let i = 0; i < 96; i++) {
+                const shot = sampleClassicalBulletState(L);
+                if (shot.passed) return shot;
+            }
+            // No artificial pass-through — preserves low-transmission statistics
+            return { sourceX: 0, barrierX: 0, screenX: 0, slitCenter: null, passed: false };
+        }
+
+        function initClassicalParticleRandom(i) {
+            const t0 = Math.random();
+            const shot = sampleClassicalBulletState(state.screenDistance);
+            const ey = (Math.random() - 0.5) * 1.2;
+            const r = 0.42 + Math.random() * 0.28;
+            const g = 0.78 + Math.random() * 0.22;
+            const b = 1;
+            classicalParticleData[i] = {
+                phase: 'emit',
+                t: t0,
+                emitX: shot.sourceX,
+                emitY: ey,
+                x0: shot.barrierX,
+                x1: shot.screenX,
+                passedBarrier: shot.passed,
+                y0: 0,
+                cr: r,
+                cg: g,
+                cb: b
+            };
+            const sourceZ = CONFIG.sourceZ;
+            const barrierZ = CONFIG.barrierZ;
+            const z = sourceZ + t0 * (barrierZ - sourceZ);
+            const i3 = i * 3;
+            const pos = classicalPointsMesh.geometry.attributes.position.array;
+            const col = classicalPointsMesh.geometry.attributes.color.array;
+            pos[i3] = shot.sourceX + t0 * (shot.barrierX - shot.sourceX);
+            pos[i3 + 1] = ey * (1 - 0.92 * t0);
+            pos[i3 + 2] = z;
+            col[i3] = r;
+            col[i3 + 1] = g;
+            col[i3 + 2] = b;
+        }
+
+        function createClassicalParticleVisuals() {
+            if (classicalParticlesGroup) {
+                scene.remove(classicalParticlesGroup);
+                classicalParticlesGroup.traverse((obj) => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        const m = obj.material;
+                        if (Array.isArray(m)) m.forEach((mat) => mat.dispose());
+                        else m.dispose();
+                    }
+                });
+            }
+            classicalParticleData = [];
+            const n = CONFIG.classicalParticleCount;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(n * 3);
+            const colors = new Float32Array(n * 3);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            const material = new THREE.PointsMaterial({
+                size: 0.42,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.92,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                sizeAttenuation: true
+            });
+            classicalPointsMesh = new THREE.Points(geometry, material);
+            classicalParticlesGroup = new THREE.Group();
+            classicalParticlesGroup.add(classicalPointsMesh);
+
+            // 3D planar classical source: thin slab matching particle emission extent (x,y) + thickness (z)
+            const emitPlaneW = Math.max(3.5, 6 * classicalSourceSigma());
+            const emitPlaneH = 1.35; // matches particle emitY range (~±0.6) with margin
+            const emitSlabDepth = 0.28; // physical thickness along beam axis (z)
+            const emitterRoot = new THREE.Group();
+            emitterRoot.position.set(0, 0, CONFIG.sourceZ);
+
+            const slabGeo = new THREE.BoxGeometry(emitPlaneW, emitPlaneH, emitSlabDepth);
+            const slabMat = new THREE.MeshStandardMaterial({
+                color: 0x4a7a98,
+                emissive: 0x1a6080,
+                emissiveIntensity: 0.55,
+                metalness: 0.22,
+                roughness: 0.48,
+                transparent: true,
+                opacity: 0.98
+            });
+            const emitterSlab = new THREE.Mesh(slabGeo, slabMat);
+            // Downstream emission face is −Z (toward barrier); slab centered so that face sits at z = −emitSlabDepth/2
+
+            const edgesGeo = new THREE.EdgesGeometry(slabGeo, 22);
+            const edgesMat = new THREE.LineBasicMaterial({
+                color: 0xe8fdff,
+                transparent: true,
+                opacity: 0.92
+            });
+            const emitterEdges = new THREE.LineSegments(edgesGeo, edgesMat);
+
+            const solidGroup = new THREE.Group();
+            solidGroup.add(emitterSlab);
+            solidGroup.add(emitterEdges);
+
+            const shellGeo = new THREE.BoxGeometry(
+                emitPlaneW * 1.05,
+                emitPlaneH * 1.07,
+                emitSlabDepth * 1.25
+            );
+            const shellMat = new THREE.MeshBasicMaterial({
+                color: 0x7ee8ff,
+                transparent: true,
+                opacity: 0.2,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            const emitterShell = new THREE.Mesh(shellGeo, shellMat);
+
+            emitterRoot.add(emitterShell);
+            emitterRoot.add(solidGroup);
+            classicalParticlesGroup.add(emitterRoot);
+            classicalParticlesGroup.userData.classicalEmitter = {
+                root: emitterRoot,
+                solidGroup: solidGroup,
+                slab: emitterSlab,
+                shell: emitterShell,
+                edges: emitterEdges,
+                phase: Math.random() * Math.PI * 2
+            };
+
+            const exploreHit = new THREE.Mesh(
+                new THREE.BoxGeometry(emitPlaneW + 1.2, Math.max(3.5, emitPlaneH + 2), emitSlabDepth + 1.6),
+                new THREE.MeshBasicMaterial({
+                    transparent: true,
+                    opacity: 0,
+                    depthWrite: false
+                })
+            );
+            exploreHit.position.set(0, 0, CONFIG.sourceZ - 0.35);
+            exploreHit.userData.exploreText = 'Classical bullets mode: a broad spray of particles hits the barrier, most are blocked by the wall, and only particles through slit 1 or slit 2 continue to the screen. The orange pattern is the smooth sum P1 + P2.';
+            classicalParticlesGroup.add(exploreHit);
+
+            classicalParticlesGroup.visible = false;
+            classicalParticlesGroup.userData.exploreText = exploreHit.userData.exploreText;
+            scene.add(classicalParticlesGroup);
+
+            for (let i = 0; i < n; i++) initClassicalParticleRandom(i);
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+        }
+
+        function updateClassicalParticleVisuals(dt) {
+            if (!classicalPointsMesh || !state.showClassical) return;
+            const posAttr = classicalPointsMesh.geometry.attributes.position;
+            const colAttr = classicalPointsMesh.geometry.attributes.color;
+            const positions = posAttr.array;
+            const colors = colAttr.array;
+
+            const sourceZ = CONFIG.sourceZ;
+            const barrierZ = CONFIG.barrierZ;
+            const screenZ = -state.screenDistance;
+            const dist1 = sourceZ - barrierZ;
+            const dist2 = barrierZ - screenZ;
+            const L = state.screenDistance;
+            const v = Math.max(6, state.animationSpeed * 2.4);
+
+            const n = CONFIG.classicalParticleCount;
+            for (let i = 0; i < n; i++) {
+                const p = classicalParticleData[i];
+                const i3 = i * 3;
+
+                if (p.phase === 'emit') {
+                    p.t += (dt * v) / dist1;
+                    if (p.t >= 1) {
+                        p.t = 0;
+                        if (p.passedBarrier) {
+                            p.phase = 'fly';
+                            p.y0 = p.emitY;
+                            positions[i3] = p.x0;
+                            positions[i3 + 1] = p.y0 * 0.08;
+                            positions[i3 + 2] = barrierZ;
+                        } else {
+                            const shot = sampleClassicalBulletState(L);
+                            p.emitX = shot.sourceX;
+                            p.x0 = shot.barrierX;
+                            p.x1 = shot.screenX;
+                            p.passedBarrier = shot.passed;
+                            p.emitY = (Math.random() - 0.5) * 1.2;
+                            p.t = Math.random() * 0.35;
+                            const z = sourceZ + p.t * (barrierZ - sourceZ);
+                            positions[i3] = p.emitX + p.t * (p.x0 - p.emitX);
+                            positions[i3 + 1] = p.emitY * (1 - 0.92 * p.t);
+                            positions[i3 + 2] = z;
+                        }
+                    } else {
+                        const z = sourceZ + p.t * (barrierZ - sourceZ);
+                        positions[i3] = p.emitX + p.t * (p.x0 - p.emitX);
+                        positions[i3 + 1] = p.emitY * (1 - 0.92 * p.t);
+                        positions[i3 + 2] = z;
+                    }
+                } else if (p.phase === 'fly') {
+                    p.t += (dt * v) / dist2;
+                    if (p.t >= 1) {
+                        const shot = sampleClassicalBulletState(L);
+                        p.phase = 'emit';
+                        p.emitX = shot.sourceX;
+                        p.x0 = shot.barrierX;
+                        p.x1 = shot.screenX;
+                        p.passedBarrier = shot.passed;
+                        p.emitY = (Math.random() - 0.5) * 1.2;
+                        p.t = Math.random() * 0.2;
+                        const z = sourceZ + p.t * (barrierZ - sourceZ);
+                        positions[i3] = p.emitX + p.t * (p.x0 - p.emitX);
+                        positions[i3 + 1] = p.emitY * (1 - 0.92 * p.t);
+                        positions[i3 + 2] = z;
+                    } else {
+                        const x = p.x0 + p.t * (p.x1 - p.x0);
+                        const z = barrierZ + p.t * (screenZ - barrierZ);
+                        const y = p.y0 * (1 - p.t);
+                        positions[i3] = x;
+                        positions[i3 + 1] = y;
+                        positions[i3 + 2] = z;
+                    }
+                }
+
+                colors[i3] = p.cr;
+                colors[i3 + 1] = p.cg;
+                colors[i3 + 2] = p.cb;
+            }
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+
+            const em = classicalParticlesGroup.userData.classicalEmitter;
+            if (em && em.slab) {
+                const spd = 0.45 + state.animationSpeed * 0.028;
+                em.phase += dt * spd * Math.PI * 2;
+                const s = Math.sin(em.phase);
+                const s2 = Math.sin(em.phase * 1.17);
+                if (em.solidGroup) {
+                    em.solidGroup.scale.set(1, 1 + 0.05 * s2, 1 + 0.06 * s);
+                }
+                em.slab.material.emissiveIntensity = 0.45 + 0.42 * Math.abs(s);
+                em.shell.material.opacity = 0.12 + 0.14 * Math.abs(s2);
+                em.shell.scale.set(1 + 0.03 * s, 1 + 0.04 * s2, 1 + 0.05 * Math.abs(s));
+                if (em.edges && em.edges.material) {
+                    em.edges.material.opacity = 0.78 + 0.2 * Math.abs(s);
+                }
+            }
+        }
+
+        function syncWaveAndSourceVisibilityForMode() {
+            const classical = state.showClassical;
+            if (sourceMarker) sourceMarker.visible = !classical;
+            if (classicalParticlesGroup) classicalParticlesGroup.visible = classical;
+            incidentWaves.forEach(w => { w.mesh.visible = !classical; });
+            secondaryWavesS1.forEach(w => { w.mesh.visible = !classical && state.slit1Open; });
+            secondaryWavesS2.forEach(w => { w.mesh.visible = !classical && state.slit2Open; });
+        }
+
+        function updateCombinedChart() {
+            if (state.showClassical) {
+                combinedChart.data.datasets[0].data = getNormalizedClassicalHits();
+                combinedChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.7)';
+                combinedChart.data.datasets[2].data = generateClassicalData();
+            } else {
+                combinedChart.data.datasets[0].data = getNormalizedHits();
+                combinedChart.data.datasets[0].backgroundColor = 'rgba(59, 130, 246, 0.7)';
+                combinedChart.data.datasets[1].data = generateTheoreticalData();
+            }
+            
+            combinedChart.update('none');
+        }
+
+        function getExploreTextFromObject(obj) {
+            let o = obj;
+            while (o) {
+                if (o.userData && o.userData.exploreText) return o.userData.exploreText;
+                o = o.parent;
+            }
+            return null;
+        }
+
+        function setupExploreTooltip() {
+            if (exploreTooltip) return;
+            exploreTooltip = document.createElement('div');
+            exploreTooltip.className = 'explore-tooltip';
+            document.body.appendChild(exploreTooltip);
+
+            raycaster = new THREE.Raycaster();
+            mouseVec2 = new THREE.Vector2();
+
+            const position = (e) => {
+                if (!state.hoverExplore) {
+                    exploreTooltip.classList.remove('visible');
+                    return;
+                }
+                const offset = 14;
+                let x = e.clientX + offset;
+                let y = e.clientY + offset;
+                const rect = exploreTooltip.getBoundingClientRect();
+                if (x + rect.width > window.innerWidth - 12) x = window.innerWidth - rect.width - 12;
+                if (y + rect.height > window.innerHeight - 12) y = window.innerHeight - rect.height - 12;
+                exploreTooltip.style.left = x + 'px';
+                exploreTooltip.style.top = y + 'px';
+            };
+
+            var canvas = document.getElementById('main-canvas');
+            if (canvas && scene && camera) {
+                canvas.addEventListener('mousemove', function(e) {
+                    if (!state.hoverExplore) {
+                        exploreTooltip.classList.remove('visible');
+                        return;
+                    }
+                    var rect = canvas.getBoundingClientRect();
+                    mouseVec2.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouseVec2.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    var list = [];
+                    if (screenMesh) list.push(screenMesh);
+                    if (barrierGroup) list.push(barrierGroup);
+                    if (state.showClassical && classicalParticlesGroup) list.push(classicalParticlesGroup);
+                    else if (sourceMarker) list.push(sourceMarker);
+                    raycaster.setFromCamera(mouseVec2, camera);
+                    var hits = raycaster.intersectObjects(list, true);
+                    if (hits.length > 0) {
+                        var text = getExploreTextFromObject(hits[0].object);
+                        if (text) {
+                            exploreTooltip.textContent = text;
+                            exploreTooltip.classList.add('visible');
+                            position(e);
+                            return;
+                        }
+                    }
+                    exploreTooltip.classList.remove('visible');
+                });
+                canvas.addEventListener('mouseleave', function() {
+                    exploreTooltip.classList.remove('visible');
+                });
+            }
+
+            const targets = document.querySelectorAll('[data-explore]');
+            targets.forEach(el => {
+                el.addEventListener('mouseenter', (e) => {
+                    if (!state.hoverExplore) return;
+                    const text = el.getAttribute('data-explore');
+                    if (!text) return;
+                    exploreTooltip.textContent = text;
+                    exploreTooltip.classList.add('visible');
+                    position(e);
+                });
+                el.addEventListener('mousemove', position);
+                el.addEventListener('mouseleave', () => {
+                    exploreTooltip.classList.remove('visible');
+                });
+            });
+        }
+
+        // --- UI & LOGIC ---
+        function applyTheme(isDark) {
+            var theme = isDark ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('double-slit-theme', theme);
+            var label = document.getElementById('theme-label');
+            var cb = document.getElementById('theme-checkbox');
+            if (label) label.textContent = isDark ? 'Dark' : 'Light';
+            if (cb) cb.checked = isDark;
+            applySceneTheme();
+        }
+
+        function initUI() {
+            var themeCb = document.getElementById('theme-checkbox');
+            var currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            if (themeCb) {
+                themeCb.checked = (currentTheme === 'dark');
+                document.getElementById('theme-label').textContent = currentTheme === 'dark' ? 'Dark' : 'Light';
+                themeCb.addEventListener('change', function() {
+                    applyTheme(themeCb.checked);
+                });
+            }
+
+            var exploreCb = document.getElementById('explore-checkbox');
+            if (exploreCb) {
+                state.hoverExplore = !exploreCb.checked;
+                document.getElementById('explore-label').textContent = 'Explore';
+                exploreCb.addEventListener('change', function() {
+                    state.hoverExplore = !exploreCb.checked;
+                    if (!state.hoverExplore && exploreTooltip) {
+                        exploreTooltip.classList.remove('visible');
+                    }
+                });
+            }
+
+            function syncUvNoteVisibility() {
+                var uvNote = document.getElementById('uv-note');
+                var lectureCb = document.getElementById('lecture-display-checkbox');
+                var wvSlider = document.getElementById('wavelength');
+                if (!uvNote || !wvSlider) return;
+                var lambdaNm = parseFloat(wvSlider.value);
+                var lectureOn = lectureCb && lectureCb.checked;
+                uvNote.style.display = (!lectureOn && lambdaNm < 380) ? 'block' : 'none';
+            }
+
+            function applyLectureDisplay(checked) {
+                var animGroup = document.getElementById('animation-speed-group');
+                var hint = document.getElementById('slit-control-hint');
+                if (animGroup) animGroup.style.display = checked ? 'none' : '';
+                if (hint) hint.style.display = checked ? 'none' : '';
+                syncUvNoteVisibility();
+            }
+            var lectureDisplayCb = document.getElementById('lecture-display-checkbox');
+            if (lectureDisplayCb) {
+                lectureDisplayCb.addEventListener('change', function() {
+                    applyLectureDisplay(lectureDisplayCb.checked);
+                });
+                applyLectureDisplay(lectureDisplayCb.checked);
+            }
+
+            setupExploreTooltip();
+
+            const classicalBtn = document.getElementById('classical-btn');
+            const wavelengthSlider = document.getElementById('wavelength');
+            const wavelengthGroup = document.getElementById('wavelength-group');
+
+            classicalBtn.onclick = () => {
+                state.showClassical = !state.showClassical;
+
+                if (state.showClassical) {
+                    // --- Switch to classical mode ---
+                    classicalBtn.classList.add('active');
+
+                    if (wavelengthSlider) wavelengthSlider.disabled = true;
+                    if (wavelengthGroup) wavelengthGroup.style.opacity = '0.5';
+
+                    // Clear quantum screen (blank dark), show classical overlay
+                    screenContext.globalCompositeOperation = 'source-over';
+                    screenContext.fillStyle = getSceneThemeColors().screenClearColor;
+                    screenContext.fillRect(0, 0, CONFIG.screenRes.w, CONFIG.screenRes.h);
+                    screenTexture.needsUpdate = true;
+                    state.hits.fill(0);
+
+                    classicalOverlayMesh.visible = true;
+                    clearClassicalOverlay();
+                    state.classicalHits.fill(0);
+
+                    // Chart: hide quantum datasets, show classical curve
+                    combinedChart.data.datasets[0].data = getNormalizedClassicalHits();
+                    combinedChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.7)';
+                    combinedChart.data.datasets[0].hidden = false;
+                    combinedChart.data.datasets[1].hidden = true;   // quantum theoretical
+                    combinedChart.data.datasets[2].hidden = false;  // classical bullets curve
+                    combinedChart.data.datasets[2].data = generateClassicalData();
+
+                    // Legends: show classical, hide quantum
+                    document.getElementById('detected-legend').style.display = 'flex';
+                    document.getElementById('quantum-legend').style.display = 'none';
+                    document.getElementById('classical-legend').style.display = 'flex';
+                    combinedChart.update('none');
+                    updateChartLegendLabels();
+                    syncWaveAndSourceVisibilityForMode();
+                } else {
+                    // --- Switch back to quantum mode ---
+                    classicalBtn.classList.remove('active');
+
+                    if (wavelengthSlider) wavelengthSlider.disabled = false;
+                    if (wavelengthGroup) wavelengthGroup.style.opacity = '1';
+
+                    classicalOverlayMesh.visible = false;
+                    clearClassicalOverlay();
+                    state.classicalHits.fill(0);
+
+                    // Chart: show quantum datasets, hide classical curve
+                    combinedChart.data.datasets[0].backgroundColor = 'rgba(59, 130, 246, 0.7)';
+                    combinedChart.data.datasets[0].hidden = false;
+                    combinedChart.data.datasets[1].hidden = false;  // quantum theoretical
+                    combinedChart.data.datasets[2].hidden = true;   // classical bullets curve
+
+                    // Legends: show quantum, hide classical
+                    document.getElementById('detected-legend').style.display = 'flex';
+                    document.getElementById('quantum-legend').style.display = 'flex';
+                    document.getElementById('classical-legend').style.display = 'none';
+
+                    // Restart quantum accumulation from scratch
+                    resetSim();
+                    updateChartLegendLabels();
+                }
+            };
+
+            // Use global nmToRGB for CSS color display
+            function wavelengthToColor(nm) {
+                const c = nmToRGB(nm);
+                return `rgb(${Math.round(c.r*255)},${Math.round(c.g*255)},${Math.round(c.b*255)})`;
+            }
+
+            function updateSimParams() {
+                createBarrier();
+                createSlitLabels();
+                resetSim();   // handles clear, hit reset, and chart update
+            }
+
+            // --- Slit toggle handlers ---
+            function updateSlitButtonAppearance() {
+                const btn1 = document.getElementById('slit1-toggle');
+                const btn2 = document.getElementById('slit2-toggle');
+                if (btn1) {
+                    btn1.textContent = state.slit1Open ? 'S1: Open' : 'S1: Closed';
+                    btn1.style.background = state.slit1Open ? '#059669' : '#dc2626';
+                }
+                if (btn2) {
+                    btn2.textContent = state.slit2Open ? 'S2: Open' : 'S2: Closed';
+                    btn2.style.background = state.slit2Open ? '#059669' : '#dc2626';
+                }
+            }
+
+            function updateChartLegendLabels() {
+                const bothOpen = state.slit1Open && state.slit2Open;
+                const qLabel = document.querySelector('#quantum-legend span');
+                const cLabel = document.querySelector('#classical-legend span');
+                if (qLabel) {
+                    if (bothOpen) qLabel.textContent = 'Quantum |ψ₁+ψ₂|²';
+                    else if (state.slit1Open) qLabel.textContent = 'Quantum |ψ₁|² (S1 only)';
+                    else if (state.slit2Open) qLabel.textContent = 'Quantum |ψ₂|² (S2 only)';
+                    else qLabel.textContent = 'Quantum (no slits)';
+                }
+                if (cLabel) {
+                    if (bothOpen) cLabel.textContent = 'Classical P₁+P₂';
+                    else if (state.slit1Open) cLabel.textContent = 'Classical P₁ (S1 only)';
+                    else if (state.slit2Open) cLabel.textContent = 'Classical P₂ (S2 only)';
+                    else cLabel.textContent = 'Classical (no slits)';
+                }
+            }
+
+            function onSlitToggle() {
+                updateSlitButtonAppearance();
+                updateChartLegendLabels();
+                createBarrier();
+                createSlitLabels();
+                // Reinitialize classical particles so they respect new slit state immediately
+                createClassicalParticleVisuals();
+                resetSim();
+            }
+
+            document.getElementById('slit1-toggle').onclick = () => {
+                // Prevent closing both slits
+                if (state.slit1Open && !state.slit2Open) return;
+                state.slit1Open = !state.slit1Open;
+                onSlitToggle();
+            };
+            document.getElementById('slit2-toggle').onclick = () => {
+                // Prevent closing both slits
+                if (state.slit2Open && !state.slit1Open) return;
+                state.slit2Open = !state.slit2Open;
+                onSlitToggle();
+            };
+
+            document.getElementById('slit-sep').oninput = (e) => {
+                const sepSlider = e.target;
+                const widthSlider = document.getElementById('slit-width');
+                let val = parseFloat(sepSlider.value);
+                const currentWidth = parseFloat(widthSlider.value);
+                const minGap = parseFloat(widthSlider.step) || 10;
+                const bothOpen = state.slit1Open && state.slit2Open;
+                if (bothOpen && val <= currentWidth) {
+                    val = currentWidth + minGap;
+                    sepSlider.value = val;
+                }
+                state.sep = val * NM_TO_SIM.sep;
+                document.getElementById('slit-sep-value').textContent = Math.round(val) + ' nm';
+                updateSimParams();
+            };
+            document.getElementById('slit-width').oninput = (e) => {
+                const widthSlider = e.target;
+                const sepSlider = document.getElementById('slit-sep');
+                let val = parseFloat(widthSlider.value);
+                const currentSep = parseFloat(sepSlider.value);
+                const minGap = parseFloat(widthSlider.step) || 10;
+                const bothOpen = state.slit1Open && state.slit2Open;
+                if (bothOpen && val >= currentSep) {
+                    val = currentSep - minGap;
+                    widthSlider.value = val;
+                }
+                state.slitWidth = val * NM_TO_SIM.width;
+                document.getElementById('slit-width-value').textContent = Math.round(val) + ' nm';
+                updateSimParams();
+            };
+            document.getElementById('wavelength').oninput = (e) => {
+                const val = parseFloat(e.target.value);
+                state.lambda = val * NM_TO_SIM.lambda;
+                const valEl = document.getElementById('wavelength-value');
+                valEl.textContent = Math.round(val) + ' nm';
+                valEl.style.color = wavelengthToColor(val);
+                syncUvNoteVisibility();
+                createSourceMarker();
+                updateSimParams();  // recreates all waves with current color
+            };
+            document.getElementById('screen-dist').oninput = (e) => {
+                const val = parseFloat(e.target.value);
+                state.screenDistance = val * NM_TO_SIM.screenDist;
+                document.getElementById('screen-dist-value').textContent = Math.round(val) + ' nm';
+                if (screenMesh) screenMesh.position.z = -state.screenDistance;
+                if (classicalOverlayMesh) classicalOverlayMesh.position.z = -state.screenDistance + 0.3;
+                resetSim();
+            };
+            document.getElementById('rate').oninput = (e) => {
+                state.animationSpeed = parseInt(e.target.value);
+                document.getElementById('rate-value').textContent = state.animationSpeed;
+            };
+            document.getElementById('reset-btn').onclick = resetSim;
+
+            const playpauseBtn = document.getElementById('playpause-btn');
+            playpauseBtn.onclick = () => {
+                state.simulationPaused = !state.simulationPaused;
+                playpauseBtn.textContent = state.simulationPaused ? 'Play' : 'Pause';
+            };
+
+            window.addEventListener('resize', () => {
+                const container = document.getElementById('canvas-container');
+                const w = container ? container.clientWidth : window.innerWidth;
+                const h = container ? container.clientHeight : window.innerHeight - 60;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+                if (combinedChart) combinedChart.resize();
+            });
+
+            document.getElementById('slit-sep-value').textContent = Math.round(parseFloat(document.getElementById('slit-sep').value)) + ' nm';
+            document.getElementById('slit-width-value').textContent = Math.round(parseFloat(document.getElementById('slit-width').value)) + ' nm';
+            const wvNm0 = parseFloat(document.getElementById('wavelength').value);
+            const wvEl0 = document.getElementById('wavelength-value');
+            wvEl0.textContent = Math.round(wvNm0) + ' nm';
+            wvEl0.style.color = wavelengthToColor(wvNm0);
+            syncUvNoteVisibility();
+            updateSlitButtonAppearance();
+            updateChartLegendLabels();
+            document.getElementById('screen-dist-value').textContent = Math.round(parseFloat(document.getElementById('screen-dist').value)) + ' nm';
+            document.getElementById('rate-value').textContent = document.getElementById('rate').value;
+        }
+
+        function resetSim() {
+            state.detectedCount = 0;
+            state.hits.fill(0);
+            state.classicalHits.fill(0);
+            
+            screenContext.globalCompositeOperation = 'source-over';
+            screenContext.fillStyle = getSceneThemeColors().screenClearColor;
+            screenContext.fillRect(0, 0, CONFIG.screenRes.w, CONFIG.screenRes.h);
+            screenTexture.needsUpdate = true;
+
+            // Clear classical overlay (dots restart fresh if classical mode is on)
+            clearClassicalOverlay();
+            
+            createWavefronts();
+            
+            updateCombinedChart();
+            syncWaveAndSourceVisibilityForMode();
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            const dt = Math.min((time - (animate.lastTime || time))/1000, 0.1) || 0;
+            animate.lastTime = time;
+
+            controls.update();
+
+            if (!state.simulationPaused) {
+                updatePhysics(dt, time);
+            }
+            renderer.render(scene, camera);
+
+            if (time - (animate.lastFps || 0) > 250) {
+                if (state.showClassical) {
+                    combinedChart.data.datasets[0].data = getNormalizedClassicalHits();
+                } else {
+                    combinedChart.data.datasets[0].data = getNormalizedHits();
+                }
+                combinedChart.update('none');
+                animate.lastFps = time;
+            }
+        }
+
+        window.onload = init;
+
+    </script>
+</body>
+</html>
