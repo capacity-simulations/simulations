@@ -652,6 +652,98 @@ function getXRange() {
     return { min, max };
 }
 
+function sampleTransmissionPoint(xVal) {
+    const E = xToE(xVal);
+    let T = computeT(E, params.U, params.m, params.a);
+    if (!Number.isFinite(T)) T = 0;
+    T = Math.max(0, Math.min(1, T));
+    return { x: xVal, T, E };
+}
+
+function buildTransmissionCurveData(xRange, plotWidth) {
+    const xSpan = xRange.max - xRange.min;
+    const Emax = mode === 'E' ? xRange.max : EfromK(xRange.max, params.m);
+    const kappaMax = Math.sqrt(2 * params.m * Math.max(Emax - params.U, 0));
+    const oscillations = 2 * params.a * kappaMax / Math.PI;
+    const uniformCount = Math.min(45000, Math.max(5000, Math.round(plotWidth * 6 + xSpan * 260), Math.round(oscillations * 18)));
+    const sampleXs = [];
+
+    for (let i = 0; i <= uniformCount; i++) {
+        sampleXs.push(xRange.min + xSpan * i / uniformCount);
+    }
+
+    // The first oscillations above threshold are squeezed into a very small x-range,
+    // especially in T vs k at large a, U, and m. Sample uniformly in eta/kappa so the
+    // E = U neighborhood stays smooth without oversampling the entire curve.
+    if (params.U > 0 && Emax > 0) {
+        const thresholdX = mode === 'E' ? params.U : KfromE(params.U, params.m);
+        if (thresholdX >= xRange.min && thresholdX <= xRange.max) {
+            sampleXs.push(thresholdX);
+        }
+
+        const qSpanAbove = Math.sqrt(2 * params.m * Math.max(Emax - params.U, 0));
+        const qSpanBelow = Math.sqrt(2 * params.m * Math.max(params.U, 0));
+        const focusQMax = Math.max(
+            0,
+            Math.min(
+                Math.max(3 * Math.PI / Math.max(2 * params.a, 1e-6), 0.4),
+                Math.max(qSpanAbove, qSpanBelow)
+            )
+        );
+        const focusCount = Math.max(9000, Math.round(plotWidth * 12));
+
+        for (let i = 0; i <= focusCount; i++) {
+            const q = focusQMax * i / focusCount;
+
+            const Ebelow = params.U - q * q / (2 * params.m);
+            if (Ebelow >= 0) {
+                const xBelow = mode === 'E' ? Ebelow : KfromE(Ebelow, params.m);
+                if (xBelow >= xRange.min && xBelow <= xRange.max) sampleXs.push(xBelow);
+            }
+
+            const Eabove = params.U + q * q / (2 * params.m);
+            if (Eabove <= Emax) {
+                const xAbove = mode === 'E' ? Eabove : KfromE(Eabove, params.m);
+                if (xAbove >= xRange.min && xAbove <= xRange.max) sampleXs.push(xAbove);
+            }
+        }
+
+        const ultraFocusQMax = Math.max(
+            0,
+            Math.min(
+                Math.max(Math.PI / Math.max(2 * params.a, 1e-6), 0.22),
+                focusQMax
+            )
+        );
+        const ultraFocusCount = Math.max(18000, Math.round(plotWidth * 24));
+        for (let i = 0; i <= ultraFocusCount; i++) {
+            const q = ultraFocusQMax * i / ultraFocusCount;
+
+            const Ebelow = params.U - q * q / (2 * params.m);
+            if (Ebelow >= 0) {
+                const xBelow = mode === 'E' ? Ebelow : KfromE(Ebelow, params.m);
+                if (xBelow >= xRange.min && xBelow <= xRange.max) sampleXs.push(xBelow);
+            }
+
+            const Eabove = params.U + q * q / (2 * params.m);
+            if (Eabove <= Emax) {
+                const xAbove = mode === 'E' ? Eabove : KfromE(Eabove, params.m);
+                if (xAbove >= xRange.min && xAbove <= xRange.max) sampleXs.push(xAbove);
+            }
+        }
+    }
+
+    sampleXs.sort((a, b) => a - b);
+
+    const data = [];
+    const eps = Math.max(1e-7, xSpan * 1e-7);
+    for (const xVal of sampleXs) {
+        if (data.length && Math.abs(xVal - data[data.length - 1].x) <= eps) continue;
+        data.push(sampleTransmissionPoint(xVal));
+    }
+    return data;
+}
+
 /** Fixed energy scale for the barrier schematic (eV): main plot x-range tracks U, but schematic height must not “zoom” when U changes. */
 function getSchematicEnergyMax() {
     const el = document.getElementById('sliderU');
@@ -803,19 +895,7 @@ function drawPlot() {
     }
 
     const xSpan = xRange.max - xRange.min;
-    const Emax = mode === 'E' ? xRange.max : EfromK(xRange.max, params.m);
-    const kappaMax = Math.sqrt(2 * params.m * Math.max(Emax - params.U, 0));
-    const oscillations = 2 * params.a * kappaMax / Math.PI;
-    const N = Math.min(30000, Math.max(800, Math.round(pa.w * 2 + xSpan * 140), Math.round(oscillations * 12)));
-    const data = [];
-    for (let i = 0; i <= N; i++) {
-        const xVal = xRange.min + xSpan * i / N;
-        const E = xToE(xVal);
-        let T = computeT(E, params.U, params.m, params.a);
-        if (!Number.isFinite(T)) T = 0;
-        T = Math.max(0, Math.min(1, T));
-        data.push({ x: xVal, T, E });
-    }
+    const data = buildTransmissionCurveData(xRange, pa.w);
 
     ctx.save();
     ctx.beginPath();
