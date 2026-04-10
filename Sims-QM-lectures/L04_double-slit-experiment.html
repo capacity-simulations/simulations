@@ -605,8 +605,8 @@
                     <div class="control-range"><span>100 nm</span><span>500 nm</span></div>
                 </div>
                 <div class="control-group" id="wavelength-group">
-                    <div class="control-label"><span>Wavelength (λ)</span><span class="control-value" id="wavelength-value">175 nm</span></div>
-                    <input type="range" id="wavelength" min="50" max="700" step="5" value="175" data-explore="Photon wavelength. Shorter λ increases the a/λ ratio, making sinc² diffraction zeros visible in single-slit mode. Below 380 nm is UV (shown in grey). Classical bullets mode does not depend on λ.">
+                    <div class="control-label"><span>Wavelength (λ)</span><span class="control-value" id="wavelength-value">525 nm</span></div>
+                    <input type="range" id="wavelength" min="50" max="700" step="5" value="525" data-explore="Photon wavelength. Shorter λ increases the a/λ ratio, making sinc² diffraction zeros visible in single-slit mode. Below 380 nm is UV (shown in grey). Classical bullets mode does not depend on λ.">
                     <div class="control-range"><span>50 nm (UV)</span><span>700 nm <span style="color:#ff0000;">■</span></span></div>
                     <div id="uv-note" style="display:none; margin-top:6px; font-size:0.7rem; color:#9ca3af; line-height:1.4; background:rgba(107,114,128,0.15); padding:5px 8px; border-radius:4px; border-left:3px solid #6b7280;">
                         <span style="color:#a5b4fc; font-weight:600;">UV / Deep-UV region</span> — wavelength below visible range (380 nm). Shown in grey. Useful for demonstrating sinc² diffraction zeros at realistic slit widths.
@@ -681,7 +681,7 @@
         let state = {
             sep: 1600 * NM_TO_SIM.sep,
             slitWidth: 490 * NM_TO_SIM.width,
-            lambda: 175 * NM_TO_SIM.lambda,
+            lambda: 525 * NM_TO_SIM.lambda,
             screenDistance: 4000 * NM_TO_SIM.screenDist,   // L: slits → screen
             animationSpeed: 10,
             hits: new Uint32Array(CONFIG.numBins),
@@ -748,7 +748,7 @@
         // --- WAVELENGTH → COLOR ---
         // Returns {r, g, b} each 0–1 for the current wavelength slider value (nm)
         function getCurrentWavelengthNM() {
-            return parseFloat(document.getElementById('wavelength')?.value || 175);
+            return parseFloat(document.getElementById('wavelength')?.value || 525);
         }
 
         function nmToRGB(nm) {
@@ -1446,16 +1446,25 @@
         }
 
         // --- COMBINED CHART ---
+        // Area-matched normalization: scale histogram so its sum equals the
+        // theory curve's sum.  This avoids the systematic downward bias of
+        // max-normalization at low sample counts.
         function getNormalizedHits() {
-            const max = Math.max(...state.hits);
-            if (max === 0) return Array(state.hits.length).fill(0);
-            return Array.from(state.hits, v => v / max);
+            const total = state.hits.reduce((a, b) => a + b, 0);
+            if (total === 0) return Array(state.hits.length).fill(0);
+            const theoryData = combinedChart.data.datasets[1].data;
+            const theorySum = theoryData.reduce((a, b) => a + b, 0);
+            const scale = theorySum / total;
+            return Array.from(state.hits, v => v * scale);
         }
 
         function getNormalizedClassicalHits() {
-            const max = Math.max(...state.classicalHits);
-            if (max === 0) return Array(state.classicalHits.length).fill(0);
-            return Array.from(state.classicalHits, v => v / max);
+            const total = state.classicalHits.reduce((a, b) => a + b, 0);
+            if (total === 0) return Array(state.classicalHits.length).fill(0);
+            const theoryData = combinedChart.data.datasets[2].data;
+            const theorySum = theoryData.reduce((a, b) => a + b, 0);
+            const scale = theorySum / total;
+            return Array.from(state.classicalHits, v => v * scale);
         }
 
         function initCombinedChart() {
@@ -1675,24 +1684,18 @@
             const values = [];
             const L = state.screenDistance;
             const binWidth = CONFIG.sceneWidth / numBins;
-            // Supersample each bin to avoid aliasing when fringes are
-            // narrower than the bin width (high d/λ ratio).
-            // Use enough sub-samples so that even at d/λ=32 (max slider
-            // values) no fringe peak is missed.
             const subSamples = CONFIG.chartBinSubSamples;
 
             for (let i = 0; i < numBins; i++) {
                 const binLeft = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
-                let maxInBin = 0;
+                let sum = 0;
                 for (let s = 0; s < subSamples; s++) {
                     const x = binLeft + ((s + 0.5) / subSamples) * binWidth;
-                    const val = quantumProbabilityAtX(x, L);
-                    if (val > maxInBin) maxInBin = val;
+                    sum += quantumProbabilityAtX(x, L);
                 }
-                values.push(maxInBin);
+                values.push(sum / subSamples);
             }
 
-            // Normalize to max = 1
             const maxVal = Math.max(...values);
             return values.map(v => maxVal > 0 ? v / maxVal : 0);
         }
@@ -1708,16 +1711,14 @@
             const classicalRaw = [];
             for (let i = 0; i < numBins; i++) {
                 const binLeft = ((i / numBins) - 0.5) * CONFIG.sceneWidth;
-                let maxInBin = 0;
+                let sum = 0;
                 for (let s = 0; s < subSamples; s++) {
                     const x = binLeft + ((s + 0.5) / subSamples) * binWidth;
-                    const val = classicalProbabilityAtX(x, L);
-                    if (val > maxInBin) maxInBin = val;
+                    sum += classicalProbabilityAtX(x, L);
                 }
-                classicalRaw.push(maxInBin);
+                classicalRaw.push(sum / subSamples);
             }
 
-            // Normalize classical peak to 1.0 so it matches the detected bar histogram
             const maxClassical = Math.max(...classicalRaw);
             return classicalRaw.map(v => maxClassical > 0 ? v / maxClassical : 0);
         }
@@ -2254,54 +2255,6 @@
                 return `rgb(${Math.round(c.r*255)},${Math.round(c.g*255)},${Math.round(c.b*255)})`;
             }
 
-            /** Defaults when exactly one slit is open in quantum mode (single-slit diffraction demo). */
-            const SINGLE_SLIT_QUANTUM_PRESET = {
-                sepNm: 1600,
-                widthNm: 490,
-                lambdaNm: 175,
-                screenNm: 4000,
-                rate: 10
-            };
-
-            function applySingleSlitQuantumPreset() {
-                if (state.showClassical) return;
-                const oneSlit = (state.slit1Open !== state.slit2Open);
-                if (!oneSlit) return;
-
-                const p = SINGLE_SLIT_QUANTUM_PRESET;
-                const sepSlider = document.getElementById('slit-sep');
-                const widthSlider = document.getElementById('slit-width');
-                const wvSlider = document.getElementById('wavelength');
-                const screenSlider = document.getElementById('screen-dist');
-                const rateSlider = document.getElementById('rate');
-                if (!sepSlider || !widthSlider || !wvSlider || !screenSlider || !rateSlider) return;
-
-                sepSlider.value = String(p.sepNm);
-                widthSlider.value = String(p.widthNm);
-                wvSlider.value = String(p.lambdaNm);
-                screenSlider.value = String(p.screenNm);
-                rateSlider.value = String(p.rate);
-
-                state.sep = p.sepNm * NM_TO_SIM.sep;
-                state.slitWidth = p.widthNm * NM_TO_SIM.width;
-                state.lambda = p.lambdaNm * NM_TO_SIM.lambda;
-                state.screenDistance = p.screenNm * NM_TO_SIM.screenDist;
-                state.animationSpeed = p.rate;
-
-                document.getElementById('slit-sep-value').textContent = p.sepNm + ' nm';
-                document.getElementById('slit-width-value').textContent = p.widthNm + ' nm';
-                const wvEl = document.getElementById('wavelength-value');
-                wvEl.textContent = p.lambdaNm + ' nm';
-                wvEl.style.color = wavelengthToColor(p.lambdaNm);
-                syncUvNoteVisibility();
-                document.getElementById('screen-dist-value').textContent = p.screenNm + ' nm';
-                document.getElementById('rate-value').textContent = String(p.rate);
-
-                createSourceMarker();
-                if (screenMesh) screenMesh.position.z = -state.screenDistance;
-                if (classicalOverlayMesh) classicalOverlayMesh.position.z = -state.screenDistance + 0.3;
-            }
-
             function updateSimParams() {
                 createBarrier();
                 createSlitLabels();
@@ -2341,13 +2294,6 @@
             }
 
             function onSlitToggle() {
-                const bothOpen = state.slit1Open && state.slit2Open;
-                if (bothOpen) {
-                    enforceDoubleSlitSliderConsistency();
-                } else {
-                    applySingleSlitQuantumPreset();
-                }
-
                 updateSlitButtonAppearance();
                 updateChartLegendLabels();
                 createBarrier();

@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
+[hidden]{display:none !important;}
 :root{
   --bg:#060E11;
   --text:#e2e8f0;
@@ -112,6 +113,9 @@ body.light-theme .panel-card{background:rgba(30,77,58,0.08);border-color:rgba(19
 
 .control-group{display:flex;flex-direction:column;gap:6px;}
 .control-group label{font-size:12px;color:var(--text);font-weight:600;}
+.checkbox-row{display:flex;align-items:center;gap:10px;}
+.checkbox-row input[type=checkbox]{width:16px;height:16px;accent-color:#3b9b8f;cursor:pointer;}
+.checkbox-row label{margin:0;cursor:pointer;}
 .slider-row{display:flex;align-items:center;gap:10px;}
 .slider-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;background:rgba(30,77,58,0.35);border-radius:3px;outline:none;}
 .slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:#3b9b8f;border-radius:50%;cursor:pointer;box-shadow:0 0 8px rgba(59,155,143,0.35);}
@@ -181,7 +185,7 @@ body.light-theme .stat-value,body.light-theme .stat-value.highlight{color:#2a8a7
     <button class="theme-toggle" id="themeToggle" title="Toggle dark/light theme" aria-label="Toggle dark/light theme">☀︎</button>
     <div class="top-bar-spacer"></div>
     <div class="top-actions">
-      <button class="btn" id="btnPlayPause">⏸ Pause</button>
+      <button class="btn paused" id="btnPlayPause">▶ Play</button>
       <button class="btn" id="btnReset">↺ Reset</button>
     </div>
   </div>
@@ -202,7 +206,7 @@ body.light-theme .stat-value,body.light-theme .stat-value.highlight{color:#2a8a7
         <canvas id="cvWavefunction"></canvas>
         <div class="legend">
           <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Re(ψ)</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div>Im(ψ)</div>
+          <div class="legend-item" id="waveLegendImag" hidden><div class="legend-dot" style="background:#f472b6"></div>Im(ψ)</div>
         </div>
       </div>
       <div class="plot-box" id="plotDensity">
@@ -220,13 +224,19 @@ body.light-theme .stat-value,body.light-theme .stat-value.highlight{color:#2a8a7
     <div class="sidebar">
       <h3>Controls</h3>
       <div class="control-group">
+        <div class="checkbox-row">
+          <input type="checkbox" id="toggleLectureDisplay" checked>
+          <label for="toggleLectureDisplay">Lecture Display</label>
+        </div>
+      </div>
+      <div class="control-group">
         <label>Energy Level n</label>
         <div class="slider-row">
           <input type="range" id="sliderN" min="0" max="60" value="40" step="1">
           <span class="slider-val" id="valN">40</span>
         </div>
       </div>
-      <div class="control-group">
+      <div class="control-group" id="speedControlGroup" hidden>
         <label>Animation Speed</label>
         <div class="slider-row">
           <input type="range" id="sliderSpeed" min="0.1" max="1" value="0.1" step="0.1">
@@ -328,7 +338,8 @@ document.addEventListener('keydown', function(e) {
 
 // --- State ---
 let n = 40;
-let playing = true;
+let lectureDisplay = true;
+let playing = false;
 let animSpeed = 0.1;
 let time = 0;
 let lastTimestamp = 0;
@@ -378,11 +389,14 @@ function getXiMax(nn) {
 // --- DOM ---
 const sliderN = document.getElementById('sliderN');
 const valN = document.getElementById('valN');
+const toggleLectureDisplay = document.getElementById('toggleLectureDisplay');
 const sliderSpeed = document.getElementById('sliderSpeed');
 const valSpeed = document.getElementById('valSpeed');
+const speedControlGroup = document.getElementById('speedControlGroup');
 const btnPlay = document.getElementById('btnPlayPause');
 const btnReset = document.getElementById('btnReset');
 const themeToggle = document.getElementById('themeToggle');
+const waveLegendImag = document.getElementById('waveLegendImag');
 
 const cvP = document.getElementById('cvPotential');
 const cvW = document.getElementById('cvWavefunction');
@@ -404,6 +418,28 @@ if(themeToggle) {
     const nextIsLight = !document.body.classList.contains('light-theme');
     applyTheme(nextIsLight);
   });
+}
+
+function syncPlayButton() {
+  if(!btnPlay) return;
+  btnPlay.textContent = playing ? '⏸ Pause' : '▶ Play';
+  btnPlay.classList.toggle('paused', !playing);
+}
+
+function syncLectureDisplayUI() {
+  if(speedControlGroup) {
+    speedControlGroup.hidden = lectureDisplay;
+    speedControlGroup.style.display = lectureDisplay ? 'none' : 'flex';
+  }
+  if(waveLegendImag) {
+    waveLegendImag.hidden = lectureDisplay;
+    waveLegendImag.style.display = lectureDisplay ? 'none' : 'flex';
+  }
+}
+
+function applyLectureDisplayLayout() {
+  if(!lectureDisplay || currentMaximized === 'plotDensity') return;
+  toggleMaximize('plotDensity');
 }
 
 // --- Canvas size cache (avoid resize every frame) ---
@@ -691,7 +727,7 @@ function drawWavefunction() {
   
   drawAxes(ctx, w, h, margin, 'x', 'ψₙ(x,t)', xm, -ymax, ymax, 6, 4);
   
-  const phase = -(n + 0.5) * time;
+  const phase = lectureDisplay ? 0 : -(n + 0.5) * time;
   const cosP = Math.cos(phase);
   const sinP = Math.sin(phase);
   
@@ -725,19 +761,21 @@ function drawWavefunction() {
   }
   ctx.stroke();
   
-  // Im(ψ)
-  ctx.strokeStyle = '#f472b6';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  let imStarted = false;
-  for(let i=0;i<pts;i++) {
-    const im = psiCache[i] * sinP;
-    const px = mapX(psiXi[i], xm, w, margin);
-    if(px < margin || px > w - margin) { imStarted = false; continue; }
-    const py = mapY(im, -ymax, ymax, h, margin);
-    if(!imStarted){ctx.moveTo(px,py);imStarted=true;} else ctx.lineTo(px,py);
+  if(!lectureDisplay) {
+    // Im(ψ)
+    ctx.strokeStyle = '#f472b6';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    let imStarted = false;
+    for(let i=0;i<pts;i++) {
+      const im = psiCache[i] * sinP;
+      const px = mapX(psiXi[i], xm, w, margin);
+      if(px < margin || px > w - margin) { imStarted = false; continue; }
+      const py = mapY(im, -ymax, ymax, h, margin);
+      if(!imStarted){ctx.moveTo(px,py);imStarted=true;} else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
   
   // Zero line
   ctx.strokeStyle = 'rgba(148,163,184,0.2)';
@@ -893,6 +931,17 @@ function updateStats() {
 }
 
 // --- Controls ---
+toggleLectureDisplay.addEventListener('change', function() {
+  lectureDisplay = this.checked;
+  if(lectureDisplay) {
+    playing = false;
+    time = 0;
+  }
+  syncLectureDisplayUI();
+  syncPlayButton();
+  applyLectureDisplayLayout();
+});
+
 sliderN.addEventListener('input', function() {
   let val = parseInt(this.value, 10);
   if(isNaN(val)) val = 40;
@@ -912,31 +961,40 @@ sliderSpeed.addEventListener('input', function() {
 });
 
 btnPlay.addEventListener('click', function() {
+  if(lectureDisplay) {
+    playing = false;
+    time = 0;
+    syncPlayButton();
+    return;
+  }
   playing = !playing;
-  this.textContent = playing ? '⏸ Pause' : '▶ Play';
-  this.classList.toggle('paused', !playing);
+  syncPlayButton();
   if(playing) lastTimestamp = performance.now();
 });
 
 btnReset.addEventListener('click', function() {
   // Restore default simulation state from any current configuration
   n = 40;
+  lectureDisplay = true;
   animSpeed = 0.1;
   time = 0;
-  playing = true;
+  playing = false;
   lastTimestamp = performance.now();
 
+  toggleLectureDisplay.checked = lectureDisplay;
   sliderN.value = String(n);
   valN.textContent = String(n);
   sliderSpeed.value = animSpeed.toFixed(1);
   valSpeed.textContent = animSpeed.toFixed(1) + 'x';
-  btnPlay.textContent = '⏸ Pause';
-  btnPlay.classList.remove('paused');
+  syncLectureDisplayUI();
+  syncPlayButton();
 
   // Restore default multi-plot layout if any panel is maximized
   if(currentMaximized) {
     toggleMaximize(currentMaximized);
   }
+
+  applyLectureDisplayLayout();
 
   computeWavefunction(n);
   needsResize = true;
@@ -969,8 +1027,11 @@ function animate(timestamp) {
 
 // --- Init ---
 applyTheme(false);
+syncLectureDisplayUI();
+syncPlayButton();
 computeWavefunction(n);
 resizeAll();
+applyLectureDisplayLayout();
 requestAnimationFrame(animate);
 
 })();

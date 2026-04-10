@@ -31,6 +31,7 @@
   }
 </script>
 <style>
+  [hidden] { display: none !important; }
   /* Top bar action buttons (avoid Tailwind purge on JS class swaps) */
   .ho-btn-play-playing {
     padding: 4.5px 24px;
@@ -136,8 +137,8 @@
     <!-- Right: Playback Group -->
     <div class="flex items-center">
       <div class="flex items-center gap-2">
-        <button id="btnPlayPause" type="button" class="ho-btn-play-playing" title="Play or Pause">
-          Pause
+        <button id="btnPlayPause" type="button" class="ho-btn-play-paused" title="Play or Pause">
+          Play
         </button>
         <div class="w-px h-4 bg-[rgba(19,49,49,0.35)] mx-0.5" aria-hidden="true"></div>
         <button id="btnReset" type="button" class="ho-btn-reset" title="Reset">
@@ -163,7 +164,7 @@
         <div class="absolute top-3 left-4 text-[11px] font-bold text-neutral-200 tracking-widest z-10 pointer-events-none"><span class="uppercase">Wavefunction</span> <span class="normal-case">ψ(x,t)</span></div>
         <div class="absolute top-3 right-4 flex gap-4 text-[11px] font-medium text-neutral-400 z-10 pointer-events-none">
           <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div>Re(ψ)</div>
-          <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-pink-400"></div>Im(ψ)</div>
+          <div id="imagLegendItem" class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-pink-400"></div>Im(ψ)</div>
         </div>
         <canvas id="wavefnCanvas" class="w-full h-full block"></canvas>
       </div>
@@ -223,7 +224,7 @@
         <section>
           <h3 class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-4">Visual Controls</h3>
           <div class="flex flex-col gap-5">
-            <div id="speedControlGroup">
+            <div id="speedControlGroup" hidden>
               <div class="flex justify-between items-center text-sm mb-2">
                 <span class="text-neutral-400">Animation speed</span>
                 <span id="speedVal" class="font-mono ho-stat-val">1.0x</span>
@@ -354,7 +355,7 @@ function energy1D(n) { return (n + 0.5) * hbar * omega; }
 let qn = 3;
 let mass = 1.0, omega = 1.0;
 let animSpeed = 1.0;
-let time = 0, isPlaying = true;
+let time = 0, isPlaying = false;
 
 // ========== DOM ==========
 
@@ -363,6 +364,8 @@ const nSlider=$('nSlider');
 const massSlider=$('massSlider'), omegaSlider=$('omegaSlider'), speedSlider=$('speedSlider');
 const lectureDisplayCheckbox = $('lectureDisplayCheckbox');
 const equationsSection = $('equationsSection');
+const speedControlGroup = $('speedControlGroup');
+const imagLegendItem = $('imagLegendItem');
 
 function updateDisplays() {
   $('massVal').textContent = mass.toFixed(2);
@@ -383,28 +386,50 @@ omegaSlider.oninput = () => { omega = +omegaSlider.value; updateDisplays(); };
 speedSlider.oninput = () => { animSpeed = +speedSlider.value; $('speedVal').textContent = animSpeed.toFixed(1) + 'x'; };
 
 function setLecturePausedWaveView() {
-  const targetPhase = Math.PI / 4;
-  const angularRate = energy1D(qn) * Math.max(animSpeed, 1e-6);
-  time = targetPhase / angularRate;
+  time = 0;
 }
 
 function updateLectureDisplay() {
   if (!lectureDisplayCheckbox || !equationsSection) return;
   const lectureMode = lectureDisplayCheckbox.checked;
   equationsSection.classList.toggle('hidden', lectureMode);
+  if (speedControlGroup) {
+    speedControlGroup.hidden = lectureMode;
+    speedControlGroup.style.display = lectureMode ? 'none' : 'block';
+  }
+  if (imagLegendItem) {
+    imagLegendItem.hidden = lectureMode;
+    imagLegendItem.style.display = lectureMode ? 'none' : 'flex';
+  }
   if (lectureMode) {
     setLecturePausedWaveView();
     isPlaying = false;
-    updatePlaybackButtons();
   }
+  updatePlaybackButtons();
 }
 
 if (lectureDisplayCheckbox) {
   lectureDisplayCheckbox.addEventListener('change', updateLectureDisplay);
 }
 
-$('btnPlayPause').onclick = () => { isPlaying = !isPlaying; updatePlaybackButtons(); };
-$('btnReset').onclick = () => { time = 0; };
+$('btnPlayPause').onclick = () => {
+  if (lectureDisplayCheckbox && lectureDisplayCheckbox.checked) {
+    setLecturePausedWaveView();
+    isPlaying = false;
+    updatePlaybackButtons();
+    return;
+  }
+  isPlaying = !isPlaying;
+  updatePlaybackButtons();
+};
+$('btnReset').onclick = () => {
+  time = 0;
+  if (lectureDisplayCheckbox && lectureDisplayCheckbox.checked) {
+    setLecturePausedWaveView();
+    isPlaying = false;
+    updatePlaybackButtons();
+  }
+};
 
 // ========== INFO MODAL LOGIC ==========
 const infoModal = $('infoModal');
@@ -546,14 +571,18 @@ function drawWavefunction(t) {
   const xmin = -PLOT_X_MAX, xmax = PLOT_X_MAX, ym = PSI_Y_MAX;
   const pad = { top: 35*dpr, bottom: 25*dpr, left: 55*dpr, right: 20*dpr };
   drawAxes(wfCtx, w, h, xmin, xmax, -ym, ym, pad, 'ψ(x,t)');
-  const phase = energy1D(qn) * animSpeed * t;
+  const lectureMode = lectureDisplayCheckbox && lectureDisplayCheckbox.checked;
+  const phase = lectureMode ? 0 : energy1D(qn) * animSpeed * t;
   wfCtx.save(); wfCtx.beginPath(); wfCtx.rect(pad.left, pad.top, w-pad.left-pad.right, h-pad.top-pad.bottom); wfCtx.clip();
   wfCtx.strokeStyle = '#60a5fa'; wfCtx.lineWidth = 2.5*dpr; wfCtx.beginPath();
   for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const py = mapY(psiN(qn,x,mu)*Math.cos(-phase), -ym, ym, pad.top, h-pad.bottom); px===pad.left?wfCtx.moveTo(px,py):wfCtx.lineTo(px,py); }
   wfCtx.stroke();
-  wfCtx.strokeStyle = '#f472b6'; wfCtx.lineWidth = 2.5*dpr; wfCtx.beginPath();
-  for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const py = mapY(psiN(qn,x,mu)*Math.sin(-phase), -ym, ym, pad.top, h-pad.bottom); px===pad.left?wfCtx.moveTo(px,py):wfCtx.lineTo(px,py); }
-  wfCtx.stroke(); wfCtx.restore();
+  if (!lectureMode) {
+    wfCtx.strokeStyle = '#f472b6'; wfCtx.lineWidth = 2.5*dpr; wfCtx.beginPath();
+    for (let px = pad.left; px <= w-pad.right; px++) { const x = xmin+(px-pad.left)/(w-pad.left-pad.right)*(xmax-xmin); const py = mapY(psiN(qn,x,mu)*Math.sin(-phase), -ym, ym, pad.top, h-pad.bottom); px===pad.left?wfCtx.moveTo(px,py):wfCtx.lineTo(px,py); }
+    wfCtx.stroke();
+  }
+  wfCtx.restore();
 }
 
 function drawProbability(t) {
