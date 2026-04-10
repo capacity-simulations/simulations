@@ -681,6 +681,7 @@
             infoPanel.style.display = lectureMode ? 'none' : '';
             statusText.style.display = lectureMode ? 'none' : '';
             btnPaschen.style.display = lectureMode ? 'none' : '';
+            resize();
         }
 
         function updateModeUI() {
@@ -776,12 +777,22 @@
             const contentBottom = H - totalStripArea;
             const mainH = contentBottom - contentTop;
 
-            energyDiagramRect = {
-                x: margin + 60,
-                y: contentTop + 10,
-                w: W * 0.30 - margin,
-                h: mainH - 30  // Reduced height to leave gap before spectrum strip label
-            };
+            if (lectureDisplayToggle.checked) {
+                const edW = W * 0.50;
+                energyDiagramRect = {
+                    x: (W - edW) / 2 + 30,
+                    y: contentTop + 10,
+                    w: edW - 60,
+                    h: mainH - 30
+                };
+            } else {
+                energyDiagramRect = {
+                    x: margin + 60,
+                    y: contentTop + 10,
+                    w: W * 0.30 - margin,
+                    h: mainH - 30
+                };
+            }
 
             atomRect = {
                 x: W * 0.38,
@@ -1265,6 +1276,17 @@
             return { ex, ey };
         }
 
+        function getArrowTipPosition(nHigh, nLow, isAbsorption) {
+            const r = energyDiagramRect;
+            const lineLeft = r.x;
+            const lineRight = r.x + r.w;
+            const xMid = lineLeft + (lineRight - lineLeft) * 0.4;
+            const yHigh = yForEnergy(energyForN(nHigh));
+            const yLow = yForEnergy(energyForN(nLow));
+            const midY = (yHigh + yLow) / 2;
+            return { x: xMid, y: midY };
+        }
+
         function drawPhotons() {
             for (const p of animationPhotons) {
                 const progress = p.progress;
@@ -1523,17 +1545,28 @@
 
             const delayAbsorption = Math.round(200 / animationSpeedFactor);
             const delayEmission = Math.round(400 / animationSpeedFactor);
+            const lectureMode = lectureDisplayToggle.checked;
+
             if (absorption) {
-                // For absorption, photon comes FROM the strip TO the atom
                 setTimeout(() => {
                     const sourceX = wavelengthToStripX(lambda_nm, targetStripRect);
                     const sourceY = targetStripRect.y + targetStripRect.h / 2;
 
+                    let destX, destY;
+                    if (lectureMode) {
+                        const tip = getArrowTipPosition(nHigh, nLow, true);
+                        destX = tip.x;
+                        destY = tip.y;
+                    } else {
+                        destX = atomCenter.cx;
+                        destY = atomCenter.cy;
+                    }
+
                     animationPhotons.push({
                         startX: sourceX,
                         startY: sourceY,
-                        endX: atomCenter.cx,
-                        endY: atomCenter.cy,
+                        endX: destX,
+                        endY: destY,
                         progress: 0,
                         speed: 0.8,
                         color,
@@ -1545,17 +1578,24 @@
                     });
                 }, delayAbsorption);
             } else {
-                // Emission: photon goes FROM electron TO the strip
                 setTimeout(() => {
                     const targetX = wavelengthToStripX(lambda_nm, targetStripRect);
                     const targetY = targetStripRect.y + targetStripRect.h / 2;
 
-                    // Get the electron's current position as the photon origin
-                    const electronPos = getElectronPosition();
+                    let originX, originY;
+                    if (lectureMode) {
+                        const tip = getArrowTipPosition(nHigh, nLow, false);
+                        originX = tip.x;
+                        originY = tip.y;
+                    } else {
+                        const electronPos = getElectronPosition();
+                        originX = electronPos.ex;
+                        originY = electronPos.ey;
+                    }
 
                     animationPhotons.push({
-                        startX: electronPos.ex,
-                        startY: electronPos.ey,
+                        startX: originX,
+                        startY: originY,
                         endX: targetX,
                         endY: targetY,
                         progress: 0,
@@ -1758,7 +1798,9 @@
             }
 
             drawEnergyDiagram();
-            drawAtom();
+            if (!lectureDisplayToggle.checked) {
+                drawAtom();
+            }
             drawPhotons();
             drawSpectrumStrip();
 

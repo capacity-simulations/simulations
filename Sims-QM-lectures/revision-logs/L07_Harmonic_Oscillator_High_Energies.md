@@ -3,3 +3,5 @@ EC 04/02/26: The high-energy harmonic oscillator simulation (`L07_Harmonic_Oscil
 EC 04/09/26: A `Lecture Display` mode was added for teaching use and is now enabled by default. In that mode the simulation opens paused, the wavefunction panel shows only the real-part trace at the phase where \(\operatorname{Im}\psi = 0\), the imaginary-part legend entry is hidden, the animation-speed control is hidden, and the probability-density panel opens maximized by default. Reset restores that same lecture presentation. These changes were made to give a cleaner lecture-facing view while preserving the full animated complex-wavefunction controls when lecture display is turned off.
 
 EC 04/09/26: The explanatory text in `L07_Harmonic_Oscillator_High_Energies.html` was also adjusted slightly for clarity.
+
+EC 04/10/26: In `L07_Harmonic_Oscillator_High_Energies.html`, the sidebar `Classical Limit` section is now hidden whenever `Lecture Display` mode is enabled and reappears when that mode is turned off. This was done to keep the lecture-facing view cleaner and more presentation-focused while preserving the full comparison readout in the regular interactive display.
