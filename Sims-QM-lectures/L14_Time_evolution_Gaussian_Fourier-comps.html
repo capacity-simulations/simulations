@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Wave Packet — Fourier Mode Evolution</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;user-select:none;display:flex;flex-direction:column;height:100vh;width:100vw}
+
+/* Title Bar */
+.title-bar{height:52px;min-height:52px;background:rgba(15,23,42,0.95);border-bottom:2px solid rgba(59,130,246,0.35);display:flex;align-items:center;padding:0 20px;gap:14px;z-index:200}
+.title-bar .title{font-weight:700;font-size:17px;color:#94a3b8;white-space:nowrap;letter-spacing:0.3px}
+.title-bar .title span{color:#60a5fa}
+
+/* Info icon & tooltip */
+.info-wrapper{position:relative;display:inline-flex;align-items:center}
+.info-icon{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(96,165,250,0.5);background:rgba(59,130,246,0.15);color:#60a5fa;font-size:13px;font-weight:700;font-style:italic;font-family:Georgia,serif;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;flex-shrink:0}
+.info-icon:hover{background:rgba(59,130,246,0.35);border-color:#60a5fa;transform:scale(1.1)}
+.info-tooltip{display:none;position:absolute;top:calc(100% + 10px);left:0;width:520px;max-height:80vh;overflow-y:auto;background:rgba(15,23,42,0.97);backdrop-filter:blur(16px);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:20px 22px;z-index:1000;box-shadow:0 20px 60px rgba(0,0,0,0.6);font-size:13px;line-height:1.65;color:#cbd5e1}
+.info-wrapper:hover .info-tooltip{display:block}
+.info-tooltip h3{color:#60a5fa;font-size:15px;margin:0 0 10px 0;font-weight:700}
+.info-tooltip h4{color:#fbbf24;font-size:12px;margin:14px 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.info-tooltip p{margin:0 0 8px 0;color:#94a3b8}
+.info-tooltip ul{margin:0 0 8px 16px;color:#94a3b8}
+.info-tooltip ul li{margin-bottom:3px}
+.info-tooltip code{background:rgba(59,130,246,0.15);padding:1px 5px;border-radius:3px;font-size:12px;color:#93c5fd}
+
+/* Playback buttons in title bar (right corner) */
+.title-playback{display:flex;gap:8px;margin-left:auto;align-items:center}
+.revival-badge{padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:0.5px;display:none;animation:badgePulse 0.8s ease infinite alternate}
+.revival-badge.full{display:inline-block;background:rgba(251,191,36,0.2);color:#fbbf24;border:1px solid rgba(251,191,36,0.4)}
+.revival-badge.half{display:inline-block;background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid rgba(168,85,247,0.4)}
+@keyframes badgePulse{0%{opacity:0.7;transform:scale(1)}100%{opacity:1;transform:scale(1.05)}}
+
+/* Main layout */
+.main-layout{flex:1;display:flex;overflow:hidden}
+
+/* Right control panel */
+.control-panel{width:240px;min-width:240px;background:rgba(15,23,42,0.92);border-left:1px solid rgba(148,163,184,0.12);display:flex;flex-direction:column;padding:16px 14px;gap:6px;overflow-y:auto;z-index:50;order:2}
+.panel-section{margin-bottom:12px}
+.panel-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#93c5fd;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid rgba(96,165,250,0.25)}
+.ctrl-group{margin-bottom:10px}
+.ctrl-group .ctrl-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.ctrl-group .ctrl-label label{color:#e2e8f0;font-size:12.5px;font-weight:600}
+.ctrl-group .ctrl-label .val{color:#93c5fd;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;background:rgba(100,116,139,0.25);border-radius:2px;outline:none;cursor:pointer;width:100%}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:#3b82f6;border-radius:50%;cursor:pointer;border:2px solid #1e3a5f;transition:transform 0.1s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;background:#3b82f6;border-radius:50%;cursor:pointer;border:2px solid #1e3a5f}
+.btn-row{display:flex;gap:6px;margin-top:6px}
+.btn{padding:7px 14px;border:1px solid rgba(148,163,184,0.2);background:rgba(30,41,59,0.8);color:#cbd5e1;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;text-align:center}
+.btn:hover{background:rgba(51,65,85,0.8);color:#f1f5f9}
+.btn.active{background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.5);color:#93c5fd}
+.title-btn{padding:6px 16px;border:1px solid rgba(148,163,184,0.25);background:rgba(30,41,59,0.8);color:#e2e8f0;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;text-align:center;white-space:nowrap}
+.title-btn:hover{background:rgba(51,65,85,0.8);color:#f1f5f9}
+.title-btn.active{background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.5);color:#93c5fd}
+
+/* Statistics section in panel */
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(100,116,139,0.08)}
+.stat-row:last-child{border-bottom:none}
+.stat-label-panel{color:#cbd5e1;font-size:12px;font-weight:500}
+.stat-value-panel{color:#93c5fd;font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+
+/* Canvas area */
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;order:1}
+#modeCanvas{flex:0 0 auto;display:block}
+.plot-container{flex:1 1 auto;position:relative;min-height:200px}
+#plotCanvas{display:block;width:100%;height:100%}
+
+/* Legend */
+.legend-overlay{position:absolute;top:22px;right:28px;display:flex;gap:14px;font-size:14px;padding:6px 12px;background:rgba(15,23,42,0.85);backdrop-filter:blur(8px);border-radius:6px;border:1px solid rgba(148,163,184,0.1);z-index:10}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-swatch{width:16px;height:3px;border-radius:1px}
+.legend-swatch.dashed{border-top:2px dashed;height:0;background:none}
+</style>
+</head>
+<body>
+
+<!-- Title Bar -->
+<div class="title-bar">
+  <div class="title">Quantum <span>ψ</span> Wave Packet — Fourier Mode Evolution</div>
+  <div class="info-wrapper">
+    <div class="info-icon">i</div>
+    <div class="info-tooltip">
+      <h3>About This Simulation</h3>
+      <h4>⚛ Physics</h4>
+      <p>A <strong>Gaussian wave packet</strong> evolving under the free-particle Schrödinger equation, built from a superposition of plane waves with different momenta.</p>
+      <ul>
+        <li><strong>Dispersion:</strong> Each momentum component <code>k</code> travels at phase velocity <code>ω/k = k</code>, causing the packet to spread over time</li>
+        <li><strong>Wave function:</strong> <code>ψ(x,t) = Σ cₖ exp(ikx − iωt)</code> where <code>ω = k²</code></li>
+        <li><strong>Spreading:</strong> Width grows as <code>σ(t) = σ₀√(1 + t²/σ₀⁴)</code> — narrower packets spread faster</li>
+      </ul>
+      <h4>🎨 Visuals</h4>
+      <ul>
+        <li><strong>Top panel:</strong> Individual Fourier modes with rotating phasors showing phase evolution <code>e^{−iωt}</code></li>
+        <li><strong>Bottom panel:</strong> The coherent sum — <span style="color:#ffffff">|ψ|²</span> (probability density), <span style="color:#a3e635">Re[ψ]</span>, <span style="color:#f43f5e">Im[ψ]</span></li>
+        <li><strong>Dashed gray:</strong> Initial |ψ₀|² for comparison</li>
+        <li><strong>Gold line:</strong> Classical particle position (group velocity)</li>
+      </ul>
+      <h4>🎮 Controls</h4>
+      <ul>
+        <li><strong>σ</strong> — Initial width (smaller = faster spreading)</li>
+        <li><strong>x₀</strong> — Starting position of the wave packet</li>
+        <li><strong>N</strong> — Number of Fourier modes to display</li>
+        <li><strong>Speed</strong> — Animation playback rate</li>
+        <li><strong>Show Real/Imag</strong> — Toggle visibility of Re[ψ] and Im[ψ]</li>
+      </ul>
+    </div>
+  </div>
+  <div class="title-playback">
+    <span class="revival-badge" id="revBadge"></span>
+    <button class="title-btn active" id="btnPlay">❚❚ Pause</button>
+    <button class="title-btn" id="btnReset">↺ Reset</button>
+  </div>
+</div>
+
+<div class="main-layout">
+  <!-- Canvas Area -->
+  <div class="canvas-area">
+    <canvas id="modeCanvas"></canvas>
+    <div class="plot-container">
+      <canvas id="plotCanvas"></canvas>
+      <div class="legend-overlay">
+        <div class="legend-item"><div class="legend-swatch" style="background:#ffffff"></div>Fourier Sum |ψ|²</div>
+        <div class="legend-item" id="legendRe"><div class="legend-swatch" style="background:#a3e635"></div>Re ψ</div>
+        <div class="legend-item" id="legendIm"><div class="legend-swatch" style="background:#f43f5e"></div>Im ψ</div>
+        <div class="legend-item"><div class="legend-swatch dashed" style="border-color:#64748b"></div>Target Gaussian |ψ|²</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Control Panel -->
+  <div class="control-panel">
+    <div class="panel-section">
+      <div class="panel-section-title">Wave Packet Parameters</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label"><label>σ — Width</label><span class="val" id="vSig">0.25</span></div>
+        <input type="range" id="rSig" min="0.15" max="1.5" step="0.05" value="0.25">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label"><label>x₀ — Center Position</label><span class="val" id="vX0">0.0</span></div>
+        <input type="range" id="rX0" min="-3.14" max="3.14" step="0.1" value="0">
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Display Settings</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label"><label>N — Modes Shown</label><span class="val" id="vN">3</span></div>
+        <input type="range" id="rN" min="3" max="13" step="1" value="3">
+      </div>
+      <div class="ctrl-group" style="margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:#e2e8f0">
+          <input type="checkbox" id="chkReal" checked style="width:16px;height:16px;accent-color:#a3e635;cursor:pointer">
+          Show Real Part
+        </label>
+      </div>
+      <div class="ctrl-group" style="margin-top:6px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:#e2e8f0">
+          <input type="checkbox" id="chkImag" checked style="width:16px;height:16px;accent-color:#f43f5e;cursor:pointer">
+          Show Imaginary Part
+        </label>
+      </div>
+      <div class="ctrl-group" style="margin-top:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:#e2e8f0">
+          <input type="checkbox" id="chkLectureDisplay" checked style="width:16px;height:16px;accent-color:#3b82f6;cursor:pointer">
+          Lecture display
+        </label>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Playback</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label"><label>Speed</label><span class="val" id="vSpd">0.2x</span></div>
+        <input type="range" id="rSpd" min="0.006" max="0.06" step="0.002" value="0.012">
+      </div>
+    </div>
+    <div class="panel-section" id="statisticsSection">
+      <div class="panel-section-title">Statistics</div>
+      <div class="stat-row">
+        <span class="stat-label-panel">Time (t)</span>
+        <span class="stat-value-panel" id="sT">0.000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label-panel">t / 2π</span>
+        <span class="stat-value-panel" id="sTn">0.000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label-panel">Total Norm</span>
+        <span class="stat-value-panel" id="sNorm">1.000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label-panel">Plotted Norm</span>
+        <span class="stat-value-panel" id="sNormPlot">1.000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label-panel">Captured</span>
+        <span class="stat-value-panel" id="sCapt">100%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const PI=Math.PI, TWO_PI=2*PI;
+const COLORS=['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb923c','#2dd4bf','#e879f9','#4ade80','#f87171','#38bdf8','#c084fc','#facc15'];
+
+let k0=0,sigma=0.25,x0=0,N=3,speed=0.012,t=0,running=true;
+let showReal=true,showImag=true;
+let lectureDisplay=false;
+const Nx=512,nMin=-40,nMax=39,totalN=nMax-nMin+1;
+let xGrid=new Float64Array(Nx);
+let coeffs=[],selected=[],initialPsiSq=new Float64Array(Nx);
+let normTotal=0,normSelected=0;
+
+// Fixed y-axis range
+let fixedYMax=1.2;
+let fixedYMin=-0.66;
+
+const modeCanvas=document.getElementById('modeCanvas');
+const plotCanvas=document.getElementById('plotCanvas');
+let mCtx,pCtx;
+let dpr=window.devicePixelRatio||1;
+
+function initGrid(){for(let i=0;i<Nx;i++)xGrid[i]=-PI+TWO_PI*i/Nx;}
+
+function computeCoeffs(){
+  const dx=TWO_PI/Nx;
+  const psiRe=new Float64Array(Nx),psiIm=new Float64Array(Nx);
+  for(let i=0;i<Nx;i++){
+    let x=xGrid[i],re=0,im=0;
+    for(let m=-4;m<=4;m++){
+      let xs=x-x0-TWO_PI*m;
+      let g=Math.exp(-xs*xs/(4*sigma*sigma));
+      re+=g*Math.cos(k0*xs);
+      im+=g*Math.sin(k0*xs);
+    }
+    psiRe[i]=re;psiIm[i]=im;
+  }
+  coeffs=[];
+  for(let n=nMin;n<=nMax;n++){
+    let cR=0,cI=0;
+    for(let i=0;i<Nx;i++){
+      let ph=-n*xGrid[i],c=Math.cos(ph),s=Math.sin(ph);
+      cR+=(psiRe[i]*c-psiIm[i]*s)*dx;
+      cI+=(psiRe[i]*s+psiIm[i]*c)*dx;
+    }
+    cR/=TWO_PI;cI/=TWO_PI;
+    coeffs.push({n,re:cR,im:cI,amp:Math.hypot(cR,cI),phase:Math.atan2(cI,cR)});
+  }
+  let sumSq=0;for(let c of coeffs)sumSq+=c.amp*c.amp;
+  normTotal=sumSq;
+  let nrm=1/Math.sqrt(TWO_PI*sumSq);
+  for(let c of coeffs){c.re*=nrm;c.im*=nrm;c.amp*=nrm;c.phase=Math.atan2(c.im,c.re);}
+  normTotal=0;for(let c of coeffs)normTotal+=c.amp*c.amp;
+  selectModes();
+  computeInitialPsiSq();
+  computeFixedYRange();
+}
+
+function selectModes(){
+  let sorted=[...coeffs].sort((a,b)=>b.amp-a.amp);
+  selected=sorted.slice(0,N).sort((a,b)=>a.n-b.n);
+  normSelected=0;for(let c of selected)normSelected+=c.amp*c.amp;
+}
+
+function computeInitialPsiSq(){
+  for(let i=0;i<Nx;i++){
+    let re=0,im=0;
+    for(let c of coeffs){
+      let ph=c.phase+c.n*xGrid[i];
+      re+=c.amp*Math.cos(ph);im+=c.amp*Math.sin(ph);
+    }
+    initialPsiSq[i]=re*re+im*im;
+  }
+}
+
+function computeFixedYRange(){
+  let yMax=0;
+  for(let i=0;i<Nx;i++){
+    yMax=Math.max(yMax,initialPsiSq[i]);
+  }
+  let psi0=evalPsi(0,coeffs);
+  for(let i=0;i<Nx;i++){
+    yMax=Math.max(yMax,Math.abs(psi0.re[i]),Math.abs(psi0.im[i]));
+  }
+  fixedYMax=yMax*1.4;
+  if(fixedYMax<0.5)fixedYMax=0.5;
+  fixedYMin=-fixedYMax*0.55;
+}
+
+function evalPsi(tt,modes){
+  const re=new Float64Array(Nx),im=new Float64Array(Nx);
+  for(let c of modes){
+    let bp=c.phase-c.n*c.n*tt;
+    for(let i=0;i<Nx;i++){
+      let ph=bp+c.n*xGrid[i];
+      re[i]+=c.amp*Math.cos(ph);
+      im[i]+=c.amp*Math.sin(ph);
+    }
+  }
+  return{re,im};
+}
+
+function evalModeContrib(c,tt){
+  const arr=new Float64Array(Nx);
+  let bp=c.phase-c.n*c.n*tt;
+  for(let i=0;i<Nx;i++)arr[i]=c.amp*Math.cos(bp+c.n*xGrid[i]);
+  return arr;
+}
+
+function checkRevival(tt){
+  let tm=((tt%TWO_PI)+TWO_PI)%TWO_PI;
+  if(tm<0.3||tm>TWO_PI-0.3)return'full';
+  return null;
+}
+
+function setupCanvases(){
+  dpr=window.devicePixelRatio||1;
+  let canvasArea=document.querySelector('.canvas-area');
+  let plotContainer=document.querySelector('.plot-container');
+  let w=canvasArea.clientWidth;
+  let totalH=canvasArea.clientHeight;
+  let modeH=Math.min(210,Math.max(160,totalH*0.3));
+  let plotH=totalH-modeH;
+  modeCanvas.style.width=w+'px';modeCanvas.style.height=modeH+'px';
+  modeCanvas.width=w*dpr;modeCanvas.height=modeH*dpr;
+  mCtx=modeCanvas.getContext('2d');mCtx.setTransform(dpr,0,0,dpr,0,0);
+  plotContainer.style.height=plotH+'px';
+  plotCanvas.style.width=w+'px';plotCanvas.style.height=plotH+'px';
+  plotCanvas.width=w*dpr;plotCanvas.height=plotH*dpr;
+  pCtx=plotCanvas.getContext('2d');pCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function drawModeCards(){
+  let w=parseInt(modeCanvas.style.width),h=parseInt(modeCanvas.style.height);
+  mCtx.clearRect(0,0,w,h);
+  let gap=6,padL=12;
+  let cardW=Math.min(160,(w-padL*2-gap*(N-1))/N);
+  let totalW=N*cardW+(N-1)*gap;
+  let startX=(w-totalW)/2;
+  let cardH=h-12;
+  let maxAmp=0;for(let c of selected)if(c.amp>maxAmp)maxAmp=c.amp;
+
+  for(let idx=0;idx<selected.length;idx++){
+    let c=selected[idx];
+    let cx=startX+idx*(cardW+gap);
+    let cy=4;
+    mCtx.fillStyle='rgba(30,41,59,0.7)';
+    roundRect(mCtx,cx,cy,cardW,cardH,6);mCtx.fill();
+    mCtx.strokeStyle='rgba(100,116,139,0.2)';mCtx.lineWidth=1;
+    roundRect(mCtx,cx,cy,cardW,cardH,6);mCtx.stroke();
+
+    let col=COLORS[idx%COLORS.length];
+    mCtx.fillStyle=col;mCtx.font='bold 14px monospace';
+    mCtx.textAlign='center';
+    mCtx.fillText('k='+c.n,cx+cardW/2,cy+16);
+    mCtx.fillStyle='#94a3b8';mCtx.font='10px sans-serif';
+    mCtx.fillText((lectureDisplay?'|b\u2096|=':'|c|=')+c.amp.toFixed(3),cx+cardW/2,cy+29);
+
+    let pCx=cx+cardW/2,pCy=cy+28+Math.min(35,(cardH-60)*0.35);
+    let pR=Math.min(30,(cardH-60)*0.3,(cardW-16)/2);
+    mCtx.strokeStyle='rgba(100,116,139,0.25)';mCtx.lineWidth=1;
+    mCtx.beginPath();mCtx.arc(pCx,pCy,pR,0,TWO_PI);mCtx.stroke();
+    let phase=c.phase-c.n*c.n*t;
+    let arrowLen=pR*(c.amp/maxAmp)*0.9+pR*0.1;
+    for(let tr=20;tr>=1;tr--){
+      let tp=c.phase-c.n*c.n*(t-tr*speed*2);
+      let tx=pCx+arrowLen*Math.cos(tp),ty=pCy-arrowLen*Math.sin(tp);
+      let alpha=0.08*(1-tr/21);
+      mCtx.globalAlpha=alpha;
+      mCtx.fillStyle=col;
+      mCtx.beginPath();mCtx.arc(tx,ty,2,0,TWO_PI);mCtx.fill();
+    }
+    mCtx.globalAlpha=1;
+    let ax=pCx+arrowLen*Math.cos(phase),ay=pCy-arrowLen*Math.sin(phase);
+    mCtx.strokeStyle=col;mCtx.lineWidth=2;
+    mCtx.beginPath();mCtx.moveTo(pCx,pCy);mCtx.lineTo(ax,ay);mCtx.stroke();
+    mCtx.fillStyle=col;
+    mCtx.beginPath();mCtx.arc(ax,ay,3,0,TWO_PI);mCtx.fill();
+    mCtx.fillStyle='rgba(148,163,184,0.5)';
+    mCtx.beginPath();mCtx.arc(pCx,pCy,2,0,TWO_PI);mCtx.fill();
+
+    let wTop=pCy+pR+8;
+    let wH=cardH-(wTop-cy)-6;
+    if(wH<15)wH=15;
+    let wMid=wTop+wH/2;
+    mCtx.strokeStyle='rgba(100,116,139,0.15)';mCtx.lineWidth=0.5;
+    mCtx.beginPath();mCtx.moveTo(cx+4,wMid);mCtx.lineTo(cx+cardW-4,wMid);mCtx.stroke();
+    let bp=c.phase-c.n*c.n*t;
+    let amp=c.amp;
+    mCtx.strokeStyle=col;mCtx.lineWidth=1.5;
+    mCtx.beginPath();
+    let pts=Math.min(Nx,Math.floor(cardW*2));
+    for(let i=0;i<pts;i++){
+      let xi=-PI+TWO_PI*i/pts;
+      let val=amp*Math.cos(bp+c.n*xi);
+      let px=cx+4+(cardW-8)*i/pts;
+      let py=wMid-val/(maxAmp*1.15)*wH/2;
+      if(i===0)mCtx.moveTo(px,py);else mCtx.lineTo(px,py);
+    }
+    mCtx.stroke();
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+
+function drawPlot(){
+  let w=parseInt(plotCanvas.style.width),h=parseInt(plotCanvas.style.height);
+  pCtx.clearRect(0,0,w,h);
+  pCtx.fillStyle='#0b1120';pCtx.fillRect(0,0,w,h);
+
+  let pad={l:65,r:20,t:16,b:46};
+  let pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+  if(pw<50||ph<50)return;
+
+  let psi=evalPsi(t,selected);
+  let psiSq=new Float64Array(Nx),reArr=psi.re,imArr=psi.im;
+  for(let i=0;i<Nx;i++)psiSq[i]=reArr[i]*reArr[i]+imArr[i]*imArr[i];
+
+  let yMax=fixedYMax;
+  let yMin=fixedYMin;
+
+  function toX(x){return pad.l+(x+PI)/TWO_PI*pw;}
+  function toY(y){return pad.t+ph*(1-(y-yMin)/(yMax-yMin));}
+
+  // Grid lines
+  pCtx.strokeStyle='rgba(100,116,139,0.15)';pCtx.lineWidth=0.5;
+  let xTicks=[-PI,-PI/2,0,PI/2,PI];
+  let xLabels=['-π','-π/2','0','π/2','π'];
+  for(let i=0;i<xTicks.length;i++){
+    let px=toX(xTicks[i]);
+    pCtx.beginPath();pCtx.moveTo(px,pad.t);pCtx.lineTo(px,pad.t+ph);pCtx.stroke();
+    pCtx.fillStyle='#cbd5e1';pCtx.font='bold 11px sans-serif';pCtx.textAlign='center';
+    pCtx.fillText(xLabels[i],px,pad.t+ph+16);
+  }
+  // Y grid & labels with fixed range
+  let yRange=yMax-yMin;
+  let yStep=Math.pow(10,Math.floor(Math.log10(yMax)));
+  if(yMax/yStep<3)yStep/=2;
+  if(yMax/yStep>8)yStep*=2;
+  pCtx.textAlign='right';
+  for(let yv=0;yv<=yMax;yv+=yStep){
+    let py=toY(yv);
+    if(py>pad.t-5&&py<pad.t+ph+5){
+      pCtx.strokeStyle='rgba(100,116,139,0.15)';pCtx.lineWidth=0.5;
+      pCtx.beginPath();pCtx.moveTo(pad.l,py);pCtx.lineTo(pad.l+pw,py);pCtx.stroke();
+      pCtx.fillStyle='#cbd5e1';pCtx.font='bold 10px sans-serif';
+      pCtx.fillText(yv.toFixed(2),pad.l-4,py+3);
+    }
+    if(yv>0){
+      let pyN=toY(-yv);
+      if(pyN>pad.t-5&&pyN<pad.t+ph+5){
+        pCtx.strokeStyle='rgba(100,116,139,0.15)';pCtx.lineWidth=0.5;
+        pCtx.beginPath();pCtx.moveTo(pad.l,pyN);pCtx.lineTo(pad.l+pw,pyN);pCtx.stroke();
+        pCtx.fillStyle='#cbd5e1';pCtx.font='bold 10px sans-serif';
+        pCtx.fillText((-yv).toFixed(2),pad.l-4,pyN+3);
+      }
+    }
+  }
+  // Zero line
+  pCtx.strokeStyle='rgba(148,163,184,0.4)';pCtx.lineWidth=1;
+  let y0=toY(0);
+  pCtx.beginPath();pCtx.moveTo(pad.l,y0);pCtx.lineTo(pad.l+pw,y0);pCtx.stroke();
+
+  // Border - improved contrast
+  pCtx.strokeStyle='rgba(148,163,184,0.35)';pCtx.lineWidth=1.5;
+  pCtx.strokeRect(pad.l,pad.t,pw,ph);
+
+  // Ghost |ψ₀|²
+  pCtx.setLineDash([8,5]);
+  pCtx.strokeStyle='rgba(100,116,139,0.75)';pCtx.lineWidth=2.5;
+  pCtx.beginPath();
+  for(let i=0;i<Nx;i++){let px=toX(xGrid[i]),py=toY(initialPsiSq[i]);if(i===0)pCtx.moveTo(px,py);else pCtx.lineTo(px,py);}
+  pCtx.stroke();pCtx.setLineDash([]);
+
+
+  // |ψ|² filled
+  pCtx.fillStyle='rgba(255,255,255,0.07)';
+  pCtx.beginPath();pCtx.moveTo(toX(-PI),toY(0));
+  for(let i=0;i<Nx;i++)pCtx.lineTo(toX(xGrid[i]),toY(psiSq[i]));
+  pCtx.lineTo(toX(PI),toY(0));pCtx.closePath();pCtx.fill();
+  // |ψ|² line
+  pCtx.strokeStyle='#ffffff';pCtx.lineWidth=2.5;
+  pCtx.beginPath();
+  for(let i=0;i<Nx;i++){let px=toX(xGrid[i]),py=toY(psiSq[i]);if(i===0)pCtx.moveTo(px,py);else pCtx.lineTo(px,py);}
+  pCtx.stroke();
+
+  // Re ψ
+  if(showReal){
+    pCtx.strokeStyle='#a3e635';pCtx.lineWidth=1.5;
+    pCtx.beginPath();
+    for(let i=0;i<Nx;i++){let px=toX(xGrid[i]),py=toY(reArr[i]);if(i===0)pCtx.moveTo(px,py);else pCtx.lineTo(px,py);}
+    pCtx.stroke();
+  }
+
+  // Im ψ
+  if(showImag){
+    pCtx.strokeStyle='#f43f5e';pCtx.lineWidth=1.5;
+    pCtx.beginPath();
+    for(let i=0;i<Nx;i++){let px=toX(xGrid[i]),py=toY(imArr[i]);if(i===0)pCtx.moveTo(px,py);else pCtx.lineTo(px,py);}
+    pCtx.stroke();
+  }
+
+  // Group velocity marker
+  let vg=2*k0;
+  let xCenter=((x0+vg*t)%TWO_PI+TWO_PI+PI)%TWO_PI-PI;
+  let markerX=toX(xCenter);
+  if(!lectureDisplay&&markerX>=pad.l&&markerX<=pad.l+pw){
+    pCtx.strokeStyle='rgba(251,191,36,0.4)';pCtx.lineWidth=1;
+    pCtx.setLineDash([3,3]);
+    pCtx.beginPath();pCtx.moveTo(markerX,pad.t);pCtx.lineTo(markerX,pad.t+ph);pCtx.stroke();
+    pCtx.setLineDash([]);
+    pCtx.fillStyle='rgba(251,191,36,0.7)';pCtx.font='bold 10px sans-serif';pCtx.textAlign='center';
+    pCtx.fillText('vg',markerX,pad.t+ph+28);
+  }
+
+  // Axes labels - improved contrast
+  pCtx.fillStyle='#e2e8f0';pCtx.font='bold 12px sans-serif';pCtx.textAlign='center';
+  pCtx.fillText('x',pad.l+pw/2,h-14);
+  pCtx.save();pCtx.translate(22,pad.t+ph/2);pCtx.rotate(-PI/2);
+  pCtx.fillStyle='#e2e8f0';pCtx.font='bold 12px sans-serif';
+  pCtx.fillText('Amplitude / Probability Density',0,0);pCtx.restore();
+}
+
+function updateStats(){
+  document.getElementById('sT').textContent=t.toFixed(3);
+  document.getElementById('sTn').textContent=(t/TWO_PI).toFixed(3);
+  let normSel=normSelected;
+  let normTot=normTotal;
+  document.getElementById('sNorm').textContent=(normTot*TWO_PI).toFixed(4);
+  document.getElementById('sNormPlot').textContent=(normSel*TWO_PI).toFixed(4);
+  document.getElementById('sCapt').textContent=(normSel/normTot*100).toFixed(1)+'%';
+  let rev=checkRevival(t);
+  let badge=document.getElementById('revBadge');
+  badge.className='revival-badge';
+  if(rev==='full'&&t>0.01){badge.className='revival-badge full';badge.textContent='⟳ FULL REVIVAL';}
+}
+
+let lastTime=0;
+function animate(timestamp){
+  if(!lastTime)lastTime=timestamp;
+  let dt=(timestamp-lastTime)/1000;
+  lastTime=timestamp;
+  if(dt>0.1)dt=0.1;
+  if(running){
+    t+=speed*dt*60;
+    if(t>4*PI)t-=4*PI;
+  }
+  drawModeCards();
+  drawPlot();
+  updateStats();
+  requestAnimationFrame(animate);
+}
+
+// Control bindings
+function bindControl(id,valId,prop,fmt,onChange){
+  let el=document.getElementById(id);
+  el.addEventListener('input',function(){
+    let v=parseFloat(this.value);
+    document.getElementById(valId).textContent=fmt(v);
+    if(onChange)onChange(v);
+  });
+}
+
+function recompute(){
+  computeCoeffs();
+  t=0;
+}
+
+bindControl('rSig','vSig','sigma',v=>v.toFixed(2),v=>{sigma=v;recompute();});
+bindControl('rX0','vX0','x0',v=>v.toFixed(1),v=>{x0=v;recompute();});
+bindControl('rN','vN','N',v=>v.toFixed(0),v=>{N=Math.round(v);selectModes();});
+bindControl('rSpd','vSpd','speed',v=>(v/0.06).toFixed(1)+'x',v=>{speed=v;});
+
+document.getElementById('chkReal').addEventListener('change',function(){showReal=this.checked;document.getElementById('legendRe').style.display=this.checked?'':'none';});
+document.getElementById('chkImag').addEventListener('change',function(){showImag=this.checked;document.getElementById('legendIm').style.display=this.checked?'':'none';});
+document.getElementById('chkLectureDisplay').addEventListener('change',function(){
+  lectureDisplay=this.checked;
+  document.getElementById('statisticsSection').style.display=lectureDisplay?'none':'';
+  if(lectureDisplay){
+    showReal=false;showImag=false;
+    document.getElementById('chkReal').checked=false;
+    document.getElementById('chkImag').checked=false;
+    document.getElementById('legendRe').style.display='none';
+    document.getElementById('legendIm').style.display='none';
+  }else{
+    showReal=true;showImag=true;
+    document.getElementById('chkReal').checked=true;
+    document.getElementById('chkImag').checked=true;
+    document.getElementById('legendRe').style.display='';
+    document.getElementById('legendIm').style.display='';
+  }
+});
+lectureDisplay=document.getElementById('chkLectureDisplay').checked;
+document.getElementById('statisticsSection').style.display=lectureDisplay?'none':'';
+if(lectureDisplay){
+  showReal=false;showImag=false;
+  document.getElementById('chkReal').checked=false;
+  document.getElementById('chkImag').checked=false;
+  document.getElementById('legendRe').style.display='none';
+  document.getElementById('legendIm').style.display='none';
+}
+
+document.getElementById('btnPlay').addEventListener('click',function(){
+  running=!running;
+  this.textContent=running?'❚❚ Pause':'▶ Play';
+  this.className=running?'title-btn active':'title-btn';
+});
+document.getElementById('btnReset').addEventListener('click',function(){
+  t=0;
+});
+
+window.addEventListener('resize',function(){
+  setupCanvases();
+});
+
+// Init
+initGrid();
+setupCanvases();
+computeCoeffs();
+requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
