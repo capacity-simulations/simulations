@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spherical Harmonics Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+if(typeof THREE==='undefined'){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';document.head.appendChild(s);}
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#060E11;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;color:#e2e8f0;}
+.top-bar{position:fixed;top:0;left:0;right:0;height:62px;min-height:62px;box-sizing:border-box;background:#FAF8F4;border-bottom:1px solid rgba(19,49,49,0.25);display:flex;align-items:center;padding:0 24px;z-index:200;}
+.top-bar-left{display:flex;align-items:center;gap:12px;}
+.top-bar-spacer{flex:1;min-width:0;}
+.sim-playback-btn-group{display:flex;align-items:center;gap:8px;width:96px;height:36px;flex-shrink:0}
+.sim-playback-btn-group .top-bar-reset{flex:1 1 0;min-width:0;height:36px;padding:0 8px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.top-bar-reset{padding:4.5px 24px;border-radius:6px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .2s,border-color .2s,color .2s;background:rgba(30,77,58,0.22);color:#1a2433;border:1px solid rgba(19,49,49,0.5);flex-shrink:0;}
+.top-bar-reset:hover{background:rgba(59,155,143,0.25);border-color:rgba(19,49,49,0.55);color:#111827;}
+.top-title{font-size:15px;font-weight:600;color:#0f172a;letter-spacing:0.2px;}
+.info-wrapper{position:relative;display:inline-flex;align-items:center;}
+.info-icon{width:22px;height:22px;border-radius:50%;border:1px solid rgba(15,23,42,0.18);display:flex;align-items:center;justify-content:center;font-size:13px;font-style:italic;font-family:Georgia,serif;color:#64748b;cursor:pointer;transition:border-color 0.2s,color 0.2s,background 0.2s;user-select:none;background:transparent;}
+.info-icon:hover{border-color:rgba(37,99,235,0.35);color:#2563eb;background:rgba(37,99,235,0.06);}
+.info-tooltip{display:none;position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-30px);width:380px;background:#060E11;border:1px solid rgba(19,49,49,0.5);border-radius:10px;padding:18px 20px;z-index:1000;box-shadow:0 12px 40px rgba(0,0,0,0.5);}
+.info-tooltip::before{content:'';position:absolute;top:-6px;left:30px;width:12px;height:12px;background:#060E11;border-left:1px solid rgba(19,49,49,0.5);border-top:1px solid rgba(19,49,49,0.5);transform:rotate(45deg);}
+.info-wrapper:hover .info-tooltip{display:block;}
+.info-tooltip h3{font-size:13px;font-weight:600;color:#3b9b8f;margin-bottom:10px;}
+.info-tooltip p{font-size:12px;line-height:1.6;color:#94a3b8;margin-bottom:8px;}
+.info-tooltip p:last-child{margin-bottom:0;}
+#canvas-container{position:fixed;top:62px;left:0;right:280px;bottom:0;}
+.rotate-drag-hint-wrap{position:absolute;left:14px;bottom:14px;z-index:40;pointer-events:none;padding:5px 7px;border-radius:8px;background:#060E11;border:1px solid rgba(19,49,49,0.35);color:#e2e8f0;}
+.rotate-icon-svg{display:block;width:40px;height:40px;}
+.sidebar{position:fixed;top:62px;right:0;width:280px;height:calc(100vh - 62px);background:#060E11;border-left:1px solid rgba(148,163,184,0.35);overflow-y:auto;z-index:100;display:flex;flex-direction:column;}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.2);border-radius:2px;}
+.sidebar-controls-label{padding:16px 18px 12px;border-bottom:1px solid rgba(19,49,49,0.28);font-size:13px;font-weight:750;color:#cbd5e1;letter-spacing:0.14em;text-transform:uppercase;}
+.panel{padding:14px 18px;border-bottom:1px solid rgba(19,49,49,0.22);}
+.panel-title{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#b6c2d6;margin-bottom:10px;font-weight:650;}
+.control-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.control-row label{font-size:12px;color:#cbd5e1;min-width:30px;}
+.control-row .val{font-size:13px;color:#3b9b8f;font-weight:600;font-variant-numeric:tabular-nums;min-width:28px;text-align:right;}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;background:transparent;border-radius:3px;outline:none;margin:6px 0;cursor:pointer;}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:rgba(30,77,58,0.35);border-radius:2px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;background:#3b9b8f;border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 0 2px #060E11;transition:transform 0.15s;}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+input[type=range]::-moz-range-track{height:4px;background:rgba(30,77,58,0.35);border-radius:2px;}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;background:#3b9b8f;border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 0 2px #060E11;}
+.toggle-group{display:flex;gap:2px;background:rgba(30,77,58,0.15);border-radius:6px;padding:2px;border:1px solid rgba(19,49,49,0.35);}
+.toggle-btn{flex:1;padding:6px 0;text-align:center;font-size:11px;font-weight:600;border:none;background:transparent;color:#cbd5e1;cursor:pointer;border-radius:4px;transition:all 0.2s;}
+.toggle-btn.active{background:#2a8a6e;color:#fff;}
+.mode-group{display:flex;flex-direction:column;gap:3px;}
+.mode-btn{padding:7px 10px;text-align:left;font-size:11px;font-weight:600;border:1px solid rgba(19,49,49,0.35);background:rgba(30,77,58,0.12);color:#cbd5e1;cursor:pointer;border-radius:5px;transition:all 0.2s;display:flex;align-items:center;gap:8px;}
+.mode-btn.active{background:rgba(42,138,110,0.22);border-color:rgba(35,128,96,0.55);color:#5ec4b8;}
+.mode-btn:hover:not(.active){background:rgba(59,155,143,0.12);}
+.mode-icon{font-size:14px;}
+.formula-display{background:rgba(30,77,58,0.12);border:1px solid rgba(19,49,49,0.3);border-radius:6px;padding:10px 12px;text-align:center;margin-top:6px;}
+.formula-display .ql{font-size:22px;font-style:italic;color:#3b9b8f;font-weight:300;}
+.formula-display .ql sub,.formula-display .ql sup{font-size:14px;}
+.formula-display .type-label{font-size:10px;color:#b6c2d6;margin-top:2px;}
+.dynamic-info-wrap{margin-top:2px;}
+.dynamic-info-note{background:rgba(30,77,58,0.1);border:1px solid rgba(19,49,49,0.35);border-radius:8px;padding:10px 10px;font-size:11px;line-height:1.45;color:#a8b3c7;}
+.dynamic-info-note a{color:#3b9b8f;text-decoration:none;font-weight:600;pointer-events:auto;}
+.dynamic-info-note a:hover{text-decoration:underline;color:#5ec4b8;}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.stat-box{background:rgba(30,77,58,0.1);border:1px solid rgba(19,49,49,0.28);border-radius:5px;padding:8px 10px;}
+.stat-box .stat-label{font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:#b6c2d6;}
+.stat-box .stat-value{font-size:14px;font-weight:600;color:#3b9b8f;font-variant-numeric:tabular-nums;margin-top:2px;}
+.stat-box.full-width{grid-column:1 / -1;}
+.point-count-footer{text-align:center;font-size:12px;color:#94a3b8;}
+.point-count-footer #pointCountVal{color:#3b9b8f;font-weight:600;}
+#legend-overlay{position:absolute;top:20px;right:20px;z-index:50;pointer-events:none;}
+.legend-box{background:#060E11;border:1px solid rgba(19,49,49,0.4);border-radius:8px;padding:10px 14px 8px;min-width:220px;}
+.legend-header{font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:7px;letter-spacing:0.2px;}
+.legend-header sub,.legend-header sup{font-size:9px;}
+.legend-bar-wrap{position:relative;}
+.legend-bar-label{font-size:9px;color:#94a3b8;margin-bottom:3px;font-weight:500;letter-spacing:0.3px;}
+.legend-box canvas{display:block;border-radius:3px;border:1px solid rgba(19,49,49,0.35);}
+.legend-real-canvas{width:200px;height:14px;}
+.legend-phase-canvas{width:200px;height:14px;}
+.legend-mag-canvas{width:200px;height:10px;}
+.legend-ticks{display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-top:2px;padding:0 1px;font-variant-numeric:tabular-nums;}
+.legend-note{font-size:9px;color:#64748b;margin-top:7px;line-height:1.5;border-top:1px solid rgba(148,163,184,0.08);padding-top:6px;}
+/* Projection + Real: match reference legend panel (rounded bar, two-line footer) */
+.legend-projection-real.legend-box{background:#060E11;border:1px solid rgba(19,49,49,0.4);border-radius:10px;padding:12px 16px 10px;min-width:232px;}
+.legend-projection-real .legend-header{font-size:11px;font-weight:600;color:#f1f5f9;margin-bottom:8px;}
+.legend-projection-real .legend-bar-label{color:#94a3b8;margin-bottom:4px;}
+.legend-projection-real .legend-real-canvas{border-radius:7px;border:1px solid rgba(19,49,49,0.35);}
+.legend-projection-real .legend-ticks{color:#94a3b8;margin-top:3px;}
+.legend-note.legend-note-projection{border-top:1px solid rgba(148,163,184,0.12);padding-top:8px;margin-top:8px;color:#64748b;}
+.legend-proj-line{font-size:9px;line-height:1.55;margin:0;}
+.legend-proj-line+.legend-proj-line{margin-top:4px;}
+.legend-proj-key{color:#e2e8f0;font-weight:650;}
+.legend-proj-val{color:#94a3b8;font-weight:500;}
+.legend-spacer{height:8px;}
+@media(max-width:700px){.top-bar{height:62px;min-height:62px;padding:0 14px;}.top-title{font-size:13px;}.sidebar{width:100%;height:auto;max-height:40vh;bottom:0;top:auto;border-left:none;border-top:1px solid rgba(19,49,49,0.35);}#canvas-container{right:0;bottom:40vh;top:62px;}.rotate-drag-hint-wrap{left:10px;bottom:10px;padding:4px 6px;}.rotate-icon-svg{width:34px;height:34px;}.info-tooltip{width:280px;left:50%;transform:translateX(-50%);}#legend-overlay{top:10px;right:10px;}.legend-box{min-width:180px;padding:8px 10px 6px;}.legend-real-canvas,.legend-phase-canvas{width:170px;}.legend-mag-canvas{width:170px;}.legend-header{font-size:10px;}.legend-ticks{font-size:8px;}.legend-note{font-size:8px;}.legend-bar-label{font-size:8px;}}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <div class="top-bar-left">
+    <h1 class="top-title">Spherical Harmonics Explorer</h1>
+    <div class="info-wrapper">
+      <div class="info-icon">i</div>
+      <div class="info-tooltip">
+        <h3>About This Simulation</h3>
+        <p><b style="color:#3b9b8f">Physics.</b> Spherical harmonics <span style="font-style:italic;color:#e2e8f0">Y</span><sub>ℓ</sub><sup>m</sup>(θ, φ) are the angular eigenfunctions of orbital angular momentum in quantum mechanics. The integer <b style="color:#e2e8f0">ℓ</b> sets the overall nodal complexity, while <b style="color:#e2e8f0">m</b> sets the azimuthal structure around the z-axis.</p>
+        <p><b style="color:#3b9b8f">Axes.</b> The white <b style="color:#e2e8f0">z-axis</b> (vertical) is the polar/quantization axis from which θ is measured. This matches the standard QM convention where <b style="color:#e2e8f0">L<sub>z</sub></b> eigenstates have definite <b style="color:#e2e8f0">m</b>.</p>
+        <p><b style="color:#3b9b8f">Visuals.</b> In <b style="color:#e2e8f0">Polar Surface</b>, the radius is proportional to <b style="color:#e2e8f0">|Y|</b>. In <b style="color:#e2e8f0">Projection</b>, the surface is a fixed sphere colored by <b style="color:#e2e8f0">Y</b> (real: sign + magnitude emphasis; complex: hue and brightness from phase and <b style="color:#e2e8f0">|Y|</b>). In <b style="color:#e2e8f0">Point Cloud</b>, angular acceptance is proportional to <b style="color:#e2e8f0">|Y|²</b> while radius is mapped as <b style="color:#e2e8f0">r ∝ |Y|</b>. Color encodes the field: <b style="color:#e2e8f0">Real</b> uses a red↔blue sign/magnitude scale, while <b style="color:#e2e8f0">Complex</b> uses hue for phase <b style="color:#e2e8f0">arg(Y)</b> and brightness for <b style="color:#e2e8f0">|Y|</b>.</p>
+        <p style="font-size:11px;color:#a8b3c7;margin-top:4px;"><b style="color:#e2e8f0">Controls:</b> Left-drag rotate · Scroll/pinch zoom · Right-drag (or two-finger drag) pan</p>
+      </div>
+    </div>
+  </div>
+  <div class="top-bar-spacer" aria-hidden="true"></div>
+  <div class="sim-playback-btn-group">
+  <button type="button" class="top-bar-reset" id="btnResetDefault" title="Reset to default view" aria-label="Reset simulation to default view">Reset</button>
+  </div>
+</div>
+<div id="canvas-container">
+  <div id="legend-overlay">
+    <div id="legend-real" class="legend-box">
+      <div class="legend-header">Real Y<sub>ℓ</sub><sup>m</sup>(θ, φ)</div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Sign &amp; Magnitude</div>
+        <canvas id="legendRealCanvas" class="legend-real-canvas" width="400" height="28"></canvas>
+        <div class="legend-ticks"><span>− (negative)</span><span>0</span><span>+ (positive)</span></div>
+      </div>
+      <div class="legend-note" id="legendRealNote"></div>
+    </div>
+    <div id="legend-complex" class="legend-box" style="display:none;">
+      <div class="legend-header">Complex Y<sub>ℓ</sub><sup>m</sup>(θ, φ)</div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Phase (arg Y)</div>
+        <canvas id="legendPhaseCanvas" class="legend-phase-canvas" width="400" height="28"></canvas>
+        <div class="legend-ticks"><span>0</span><span>π</span><span>2π</span></div>
+      </div>
+      <div class="legend-spacer"></div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Magnitude |Y|</div>
+        <canvas id="legendMagCanvas" class="legend-mag-canvas" width="400" height="20"></canvas>
+        <div class="legend-ticks"><span>0</span><span>max</span></div>
+      </div>
+      <div class="legend-note" id="legendComplexNote"></div>
+    </div>
+  </div>
+  <div class="rotate-drag-hint-wrap" aria-hidden="true" title="Drag to rotate">
+    <svg class="rotate-icon-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">
+      <path d="M511.197,243.923c-0.73-5.474-5.764-9.319-11.234-8.589c-5.475,0.73-9.32,5.76-8.59,11.235C491.789,249.687,492,252.86,492,256c0,33.646-23.794,65.716-66.998,90.304C380.022,371.902,320.003,386,256,386c-40.443,0-79.29-5.635-113.762-16.238C131.635,335.29,126,296.443,126,256c0-64.002,14.098-124.022,39.696-169.002C190.284,43.793,222.354,20,256,20c28.234,0,50.716,16.282,66.904,34.183h-10.242c-5.522,0-10,4.477-10,10s4.478,10,10,10h31.025c5.522,0,10-4.477,10-10V33.157c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v3.369C310.495,12.798,283.585,0,256,0c-41.146,0-79.389,27.383-107.687,77.105C121.027,125.052,106,188.584,106,256c0,37.042,4.546,72.904,13.16,105.659c-11.384-4.531-22.148-9.656-32.162-15.356C43.794,321.716,20,289.646,20,256c0-28.401,16.474-50.985,34.5-67.195v10.19c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-31.026c0-5.523-4.478-10-10-10H33.475c-5.522,0-10,4.477-10,10s4.478,10,10,10h3.408C12.928,201.24,0,228.278,0,256c0,41.145,27.383,79.389,77.105,107.686c15.014,8.544,31.556,15.886,49.267,21.941c6.055,17.711,13.397,34.254,21.941,49.267C176.611,484.617,214.854,512,256,512c23.589,0,47.014-9.379,67.741-27.124c4.195-3.592,4.686-9.904,1.094-14.1c-3.591-4.195-9.904-4.685-14.1-1.094C293.437,484.492,275.021,492,256,492c-33.646,0-65.716-23.793-90.304-66.998c-5.699-10.015-10.825-20.779-15.355-32.162C183.096,401.454,218.958,406,256,406c67.416,0,130.948-15.027,178.895-42.314C484.617,335.389,512,297.145,512,256C512,251.978,511.729,247.915,511.197,243.923z"/>
+      <path d="M498.905,208.119c-0.01-0.017-0.026-0.048-0.042-0.076c-2.654-4.793-8.682-6.56-13.51-3.946c-4.856,2.63-6.661,8.699-4.03,13.555c0.014,0.026,0.067,0.122,0.082,0.148c1.824,3.299,5.238,5.161,8.759,5.161c1.638,0,3.298-0.403,4.832-1.251C499.828,219.037,501.579,212.952,498.905,208.119z"/>
+      <path d="M349.398,439.813c-4.486-3.213-10.768-2.123-13.988,2.352c-0.017,0.024-0.034,0.047-0.051,0.071c-3.182,4.503-2.165,10.799,2.332,13.991c1.739,1.234,3.744,1.825,5.735,1.825c3.157,0,6.278-1.485,8.242-4.238C354.87,449.325,353.881,443.025,349.398,439.813z"/>
+      <path d="M326.516,227.193c-0.17-14.063-11.712-25.504-25.729-25.504h-35.271v-26.376c0-3.102,2.523-5.625,5.625-5.625h28.995c5.522,0,10-4.477,10-10s-4.478-10-10-10h-28.995c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.646c14.017,0,25.559-11.441,25.729-25.504c0.001-0.041,0.001-0.081,0.001-0.121v-28.728C326.517,227.273,326.517,227.233,326.516,227.193z M306.515,255.966c-0.063,3.147-2.623,5.7-5.729,5.7H271.14c-3.102,0-5.625-2.523-5.625-5.625v-34.353h35.271v0.001c3.106,0,5.667,2.553,5.729,5.7V255.966z"/>
+      <path d="M392.891,149.688h-29.75c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.75c14.13,0,25.625-11.495,25.625-25.625v-80.729C418.516,161.183,407.021,149.688,392.891,149.688z M398.516,256.042c0,3.102-2.523,5.625-5.625,5.625h-29.75c-3.102,0-5.625-2.523-5.625-5.625v-80.729c0-3.102,2.523-5.625,5.625-5.625h29.75c3.102,0,5.625,2.523,5.625,5.625V256.042z"/>
+      <path d="M208.875,149.688h-25.531c-14.13,0-25.625,11.495-25.625,25.625v0.353c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-0.353c0-3.102,2.523-5.625,5.625-5.625h25.531c3.102,0,5.625,2.523,5.625,5.625v30.365h-25.65c-5.522,0-10,4.477-10,10s4.478,10,10,10h25.65v30.364c0,3.102-2.523,5.625-5.625,5.625h-25.531c-3.102,0-5.625-2.523-5.625-5.625v-1.384c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v1.384c0,14.13,11.495,25.625,25.625,25.625h25.531c14.13,0,25.625-11.495,25.625-25.625v-80.729C234.5,161.183,223.005,149.688,208.875,149.688z"/>
+      <path d="M458.949,133.163c-14.626,0-26.525,11.899-26.525,26.525s11.899,26.525,26.525,26.525c14.626,0,26.525-11.899,26.525-26.525S473.575,133.163,458.949,133.163z M458.949,166.212c-3.597,0-6.525-2.927-6.525-6.525c0-3.598,2.928-6.525,6.525-6.525c3.598,0,6.525,2.927,6.525,6.525C465.474,163.285,462.546,166.212,458.949,166.212z"/>
+    </svg>
+  </div>
+</div>
+<div class="sidebar">
+  <div class="sidebar-controls-label">controls</div>
+  <div class="panel">
+    <div class="panel-title">Quantum Numbers</div>
+    <div class="formula-display">
+      <div class="ql">Y<sub id="fmtL">2</sub><sup id="fmtM">0</sup>(θ, φ)</div>
+      <div class="type-label" id="typeLabel">Real Spherical Harmonic</div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="control-row"><label>ℓ</label><input type="range" id="lSlider" min="0" max="6" value="2" step="1" style="flex:1;margin:0 10px;"><span class="val" id="lVal">2</span></div>
+      <div class="control-row"><label>m</label><input type="range" id="mSlider" min="-2" max="2" value="0" step="1" style="flex:1;margin:0 10px;"><span class="val" id="mVal">0</span></div>
+    </div>
+  </div>
+  <div class="panel" id="harmonicTypePanel">
+    <div class="panel-title">Harmonic Type</div>
+    <div class="toggle-group">
+      <button class="toggle-btn active" id="btnReal">Real</button>
+      <button class="toggle-btn" id="btnComplex">Complex</button>
+    </div>
+  </div>
+  <div class="panel" id="dynamicInfoPanel">
+    <div class="dynamic-info-wrap">
+      <div class="dynamic-info-note" id="dynamicInfoNote"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Visualization Mode</div>
+    <div class="mode-group">
+      <button class="mode-btn" id="modeCloud"><span class="mode-icon">◌</span> Point Cloud</button>
+      <button class="mode-btn active" id="modeSurface"><span class="mode-icon">◎</span> Polar Surface</button>
+      <button class="mode-btn" id="modeProjection"><span class="mode-icon">◉</span> Projection</button>
+    </div>
+  </div>
+  <div class="panel" id="pointCountPanel" style="display:none;">
+    <div class="panel-title">Point Count</div>
+    <div class="control-row"><label style="min-width:0">Few</label><input type="range" id="pointCountSlider" min="2000" max="60000" value="15000" step="1000" style="flex:1;margin:0 8px;"><label style="min-width:0">Many</label></div>
+    <div class="point-count-footer"><span id="pointCountVal">15,000</span> points</div>
+  </div>
+  <div class="panel" id="thresholdPanel">
+    <div class="panel-title">Surface Cutoff</div>
+    <div class="control-row"><label style="min-width:0">Low</label><input type="range" id="threshSlider" min="0.05" max="0.90" value="0.10" step="0.05" style="flex:1;margin:0 8px;"><label style="min-width:0">High</label></div>
+    <span id="threshVal" style="display:none;">0.10</span>
+  </div>
+  <div class="panel" id="nodalStructurePanel">
+    <div class="panel-title">Nodal Structure</div>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-label">Angular Nodes (ℓ)</div><div class="stat-value" id="statAngularNodes">2</div></div>
+      <div class="stat-box"><div class="stat-label" id="statLongLabel">Nodal planes (|m|)</div><div class="stat-value" id="statLongNodes">0</div></div>
+      <div class="stat-box"><div class="stat-label" id="statLatLabel">Latitudinal (ℓ−|m|)</div><div class="stat-value" id="statLatNodes">2</div></div>
+      <div class="stat-box" id="statPointsBox"><div class="stat-label">Points</div><div class="stat-value" id="statPoints">—</div></div>
+    </div>
+  </div>
+</div>
+<script>
+function initApp(){
+  if(typeof THREE==='undefined'){setTimeout(initApp,50);return;}
+
+  // ===== MATH =====
+  const facCache=[1,1];
+  function factorial(n){if(n<0)return 1;if(facCache[n]!==undefined)return facCache[n];let r=facCache[facCache.length-1];for(let i=facCache.length;i<=n;i++){r*=i;facCache[i]=r;}return r;}
+
+  function assocLegendre(l,m,x){
+    if(Math.abs(m)>l)return 0;
+    if(m<0)return assocLegendre(l,-m,x)*Math.pow(-1,-m)*factorial(l+m)/factorial(l-m);
+    let pmm=1;
+    if(m>0){const s=Math.sqrt(Math.max(0,(1-x)*(1+x)));let f=1;for(let i=1;i<=m;i++){pmm*=-f*s;f+=2;}}
+    if(l===m)return pmm;
+    let pmmp1=x*(2*m+1)*pmm;
+    if(l===m+1)return pmmp1;
+    let pll=0;
+    for(let ll=m+2;ll<=l;ll++){pll=(x*(2*ll-1)*pmmp1-(ll+m-1)*pmm)/(ll-m);pmm=pmmp1;pmmp1=pll;}
+    return pll;
+  }
+
+  function normFactor(l,m){const am=Math.abs(m);return Math.sqrt((2*l+1)/(4*Math.PI)*factorial(l-am)/factorial(l+am));}
+
+  function computeRealY(l,m,theta,phi){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    const N=normFactor(l,m);
+    if(m>0)return Math.SQRT2*N*P*Math.cos(m*phi);
+    if(m<0)return Math.SQRT2*N*P*Math.sin(am*phi);
+    return N*P;
+  }
+
+  function computeComplexYMagSq(l,m,theta){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    const N=normFactor(l,m);
+    return N*N*P*P;
+  }
+
+  // Phase of complex Y_l^m:
+  // For m>=0: Y_l^m = N * P_l^m(cos θ) * e^{imφ}, so arg(Y) = mφ + π when P<0.
+  // For m<0:  Y_l^{-|m|} = (-1)^|m| [Y_l^|m|]*, introducing an extra factor of
+  //           (-1)^|m| that shifts the phase by π when |m| is odd.
+  function computeComplexYPhase(l,m,theta,phi){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    let phase=m*phi+(P<0?Math.PI:0);
+    if(m<0&&am%2===1) phase+=Math.PI;
+    return phase;
+  }
+
+  // ===== STATE =====
+  let state={l:2,m:0,isReal:true,mode:'surface',threshold:0.1,showAxes:true,pointCount:15000};
+  let vertexCount=0,maxYSq=0;
+  let needsRender=true; // render-on-demand flag
+
+  // ===== THREE.JS SETUP =====
+  const container=document.getElementById('canvas-container');
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x060e11);
+  const camera=new THREE.PerspectiveCamera(52,1,0.01,100);
+  // Default camera: farther than before so axes + labels stay in comfortable view (all modes)
+  let camSph={r:5.6,theta:Math.PI/3,phi:Math.PI/4};
+  let panOffset={x:0,y:0,z:0};
+  function updateCamera(){
+    camera.position.set(
+      camSph.r*Math.sin(camSph.theta)*Math.sin(camSph.phi)+panOffset.x,
+      camSph.r*Math.cos(camSph.theta)+panOffset.y,
+      camSph.r*Math.sin(camSph.theta)*Math.cos(camSph.phi)+panOffset.z
+    );
+    camera.lookAt(panOffset.x,panOffset.y,panOffset.z);
+    needsRender=true;
+  }
+  updateCamera();
+
+  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  container.appendChild(renderer.domElement);
+
+  const ambLight=new THREE.AmbientLight(0x8899bb,0.5);
+  scene.add(ambLight);
+  const dirLight1=new THREE.DirectionalLight(0xffffff,0.8);dirLight1.position.set(3,5,4);scene.add(dirLight1);
+  const dirLight2=new THREE.DirectionalLight(0x6688cc,0.4);dirLight2.position.set(-3,-2,-4);scene.add(dirLight2);
+  const hemiLight=new THREE.HemisphereLight(0x4466aa,0x223344,0.3);scene.add(hemiLight);
+
+  // Axes — right-handed coordinate system with z (polar axis) along Three.js Y (up)
+  const axesGroup=new THREE.Group();
+  function makeAxis(dir,color){
+    // Use cylinder for thicker axes (WebGL linewidth is limited to 1 in most browsers)
+    const len=2.0;
+    const radius=0.012;
+    const geom=new THREE.CylinderGeometry(radius,radius,len,8);
+    geom.translate(0,len/2,0);
+    geom.rotateX(Math.PI/2);
+    const mat=new THREE.MeshBasicMaterial({color:color,transparent:true,opacity:0.5});
+    const mesh=new THREE.Mesh(geom,mat);
+    // Rotate cylinder to align with direction
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),dir.clone().normalize());
+    return mesh;
+  }
+  axesGroup.add(makeAxis(new THREE.Vector3(0,0,1),0xffffff));
+  axesGroup.add(makeAxis(new THREE.Vector3(1,0,0),0xffffff));
+  axesGroup.add(makeAxis(new THREE.Vector3(0,1,0),0xffffff));
+
+  function makeAxisLabel(text, position, hexColor){
+    const canvas=document.createElement('canvas');
+    const size=128;
+    canvas.width=size;canvas.height=size;
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,size,size);
+    ctx.font='bold 80px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    const r=(hexColor>>16)&255,g=(hexColor>>8)&255,b=hexColor&255;
+    ctx.fillStyle='rgb('+r+','+g+','+b+')';
+    ctx.fillText(text,size/2,size/2);
+    const texture=new THREE.CanvasTexture(canvas);
+    texture.needsUpdate=true;
+    const material=new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false});
+    const sprite=new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(0.38,0.38,1);
+    return sprite;
+  }
+  axesGroup.add(makeAxisLabel('x',new THREE.Vector3(0,0,2.05),0xffffff));
+  axesGroup.add(makeAxisLabel('y',new THREE.Vector3(2.05,0,0),0xffffff));
+  axesGroup.add(makeAxisLabel('z',new THREE.Vector3(0,2.05,0),0xffffff));
+
+  scene.add(axesGroup);
+
+  let meshGroup=new THREE.Group();
+  scene.add(meshGroup);
+
+  // ===== MOUSE CONTROLS =====
+  let isDragging=false,isPanning=false,prevMouse={x:0,y:0};
+
+  renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();});
+
+  renderer.domElement.addEventListener('mousedown',e=>{
+    if(e.button===2){
+      isPanning=true;
+      prevMouse={x:e.clientX,y:e.clientY};
+    } else if(e.button===0){
+      isDragging=true;
+      prevMouse={x:e.clientX,y:e.clientY};
+    }
+  });
+  window.addEventListener('mouseup',e=>{
+    if(e.button===2) isPanning=false;
+    if(e.button===0) isDragging=false;
+  });
+  window.addEventListener('mousemove',e=>{
+    const dx=e.clientX-prevMouse.x,dy=e.clientY-prevMouse.y;
+    if(isDragging){
+      camSph.phi-=dx*0.008;
+      camSph.theta=Math.max(0.05,Math.min(Math.PI-0.05,camSph.theta+dy*0.008));
+      updateCamera();
+    }
+    if(isPanning){
+      const panSpeed=0.004*camSph.r;
+      const camDir=new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      const worldUp=new THREE.Vector3(0,1,0);
+      const camRight=new THREE.Vector3();
+      camRight.crossVectors(camDir,worldUp);
+      if(camRight.lengthSq()<1e-10){camRight.crossVectors(camDir,new THREE.Vector3(1,0,0));}
+      camRight.normalize();
+      const camUp=new THREE.Vector3();
+      camUp.crossVectors(camRight,camDir).normalize();
+      // Pan so the *diagram follows the cursor*:
+      // - Drag right  => objects move right on screen (camera translates left)
+      // - Drag down   => objects move down on screen (camera translates up)
+      panOffset.x+=(-dx*camRight.x+dy*camUp.x)*panSpeed;
+      panOffset.y+=(-dx*camRight.y+dy*camUp.y)*panSpeed;
+      panOffset.z+=(-dx*camRight.z+dy*camUp.z)*panSpeed;
+      updateCamera();
+    }
+    prevMouse={x:e.clientX,y:e.clientY};
+  });
+  renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camSph.r=Math.max(2.6,Math.min(12,camSph.r+e.deltaY*0.005));updateCamera();},{passive:false});
+
+  // Touch controls (1-finger rotate, 2-finger pinch-zoom + pan)
+  let lastTouchDist=null;
+  let lastTouchCenter=null;
+  renderer.domElement.addEventListener('touchstart',e=>{
+    if(e.touches.length===1){
+      isDragging=true;
+      prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    } else if(e.touches.length===2){
+      isDragging=false;
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      lastTouchDist=Math.sqrt(dx*dx+dy*dy);
+      lastTouchCenter={x:(e.touches[0].clientX+e.touches[1].clientX)/2,y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+    }
+  },{passive:false});
+  renderer.domElement.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(e.touches.length===1&&isDragging){
+      const t=e.touches[0];
+      const dx=t.clientX-prevMouse.x,dy=t.clientY-prevMouse.y;
+      camSph.phi-=dx*0.008;
+      camSph.theta=Math.max(0.05,Math.min(Math.PI-0.05,camSph.theta+dy*0.008));
+      prevMouse={x:t.clientX,y:t.clientY};
+      updateCamera();
+    } else if(e.touches.length===2&&lastTouchDist!==null&&lastTouchCenter!==null){
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const delta=lastTouchDist-dist;
+      camSph.r=Math.max(2.6,Math.min(12,camSph.r+delta*0.01));
+      lastTouchDist=dist;
+      // Two-finger pan: track centroid movement
+      const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+      const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+      const panDx=cx-lastTouchCenter.x;
+      const panDy=cy-lastTouchCenter.y;
+      const panSpeed=0.004*camSph.r;
+      const camDir=new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      const worldUp=new THREE.Vector3(0,1,0);
+      const camRight=new THREE.Vector3();
+      camRight.crossVectors(camDir,worldUp);
+      if(camRight.lengthSq()<1e-10){camRight.crossVectors(camDir,new THREE.Vector3(1,0,0));}
+      camRight.normalize();
+      const camUp=new THREE.Vector3();
+      camUp.crossVectors(camRight,camDir).normalize();
+      panOffset.x+=(-panDx*camRight.x+panDy*camUp.x)*panSpeed;
+      panOffset.y+=(-panDx*camRight.y+panDy*camUp.y)*panSpeed;
+      panOffset.z+=(-panDx*camRight.z+panDy*camUp.z)*panSpeed;
+      lastTouchCenter={x:cx,y:cy};
+      updateCamera();
+    }
+  },{passive:false});
+  renderer.domElement.addEventListener('touchend',e=>{
+    if(e.touches.length===1){
+      isDragging=true;
+      prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    } else {
+      isDragging=false;
+    }
+    if(e.touches.length!==2){lastTouchDist=null;lastTouchCenter=null;}
+  });
+  renderer.domElement.addEventListener('touchcancel',e=>{
+    isDragging=false;
+    lastTouchDist=null;
+    lastTouchCenter=null;
+  });
+
+  // ===== COLOR FUNCTIONS =====
+  const LEGEND_PHASE_FOR_MAG=3.8;
+  function hslToRgb(h,s,l){let r,g,b;if(s===0){r=g=b=l;}else{const hue2rgb=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};const q=l<0.5?l*(1+s):l+s-l*s;const p=2*l-q;r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3);}return[r,g,b];}
+  function divergingColor(t){
+    const pos=[0.15,0.45,1.0],neg=[0.95,0.22,0.27],mid=[0.92,0.92,0.94];
+    if(t>=0){return[mid[0]+(pos[0]-mid[0])*t,mid[1]+(pos[1]-mid[1])*t,mid[2]+(pos[2]-mid[2])*t];}
+    else{const s=-t;return[mid[0]+(neg[0]-mid[0])*s,mid[1]+(neg[1]-mid[1])*s,mid[2]+(neg[2]-mid[2])*s];}}
+  function phaseColor(phase,mag){
+    const h=((phase%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)/(2*Math.PI);
+    // Fade saturation and lightness toward dark gray at zero magnitude (phase undefined at nodes)
+    const sat=0.1+0.75*mag;
+    const light=0.08+0.52*mag;
+    const c=hslToRgb(h,sat,light);return c;}
+  function magColor(v){const c1=[0.08,0.1,0.18],c2=[0.23,0.51,0.96],c3=[0.38,0.83,0.62],c4=[0.98,0.95,0.85];if(v<0.33){const t=v/0.33;return[c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];}else if(v<0.66){const t=(v-0.33)/0.33;return[c2[0]+(c3[0]-c2[0])*t,c2[1]+(c3[1]-c2[1])*t,c2[2]+(c3[2]-c2[2])*t];}else{const t=(v-0.66)/0.34;return[c3[0]+(c4[0]-c3[0])*t,c3[1]+(c4[1]-c3[1])*t,c3[2]+(c4[2]-c3[2])*t];}}
+
+  // ===== GRID RESOLUTION =====
+  function getRes(l,m){const am=Math.abs(m);const nT=Math.max(64,32+12*l);const nP=Math.max(128,64+16*am);return{nT,nP};}
+
+  // Shared max values so both plot modes use the same scale and strictly follow the legends.
+  const REF_NT=256,REF_NP=256;
+  const MAX_ABS_ENVELOPE=1.001;
+  const maxCache={real:{},complex:{}};
+  function getMaxRealY(l,m){
+    const key=l+'_'+m;
+    if(maxCache.real[key]!==undefined)return maxCache.real[key];
+    let mx=0;
+    for(let i=0;i<=REF_NT;i++){const th=Math.PI*i/REF_NT;for(let j=0;j<=REF_NP;j++){const ph=2*Math.PI*j/REF_NP;const yv=computeRealY(l,m,th,ph);const av=Math.abs(yv);if(av>mx)mx=av;}}
+    const result=mx<1e-15?1:mx*MAX_ABS_ENVELOPE;
+    maxCache.real[key]=result;
+    return result;
+  }
+  function getMaxComplexMag(l,m){
+    const key=l+'_'+m;
+    if(maxCache.complex[key]!==undefined)return maxCache.complex[key];
+    let mx=0;
+    for(let i=0;i<=REF_NT;i++){const th=Math.PI*i/REF_NT;const magSq=computeComplexYMagSq(l,m,th);const mag=Math.sqrt(magSq);if(mag>mx)mx=mag;}
+    const result=mx<1e-15?1:mx*MAX_ABS_ENVELOPE;
+    maxCache.complex[key]=result;
+    return result;
+  }
+
+  // ===== DISPOSE =====
+  function clearGroup(){meshGroup.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material){if(Array.isArray(c.material))c.material.forEach(m=>m.dispose());else c.material.dispose();}});scene.remove(meshGroup);meshGroup=new THREE.Group();scene.add(meshGroup);}
+
+  // ===== POINT CLOUD =====
+  function buildPointCloud(){
+    const {l,m,isReal,pointCount}=state;
+    const numTarget=pointCount;
+    const maxAbs=isReal?getMaxRealY(l,m):getMaxComplexMag(l,m);
+    const mx=maxAbs*maxAbs;
+    maxYSq=mx;
+    const positions=[],colors=[];
+    let count=0,attempts=0;
+    const maxAttempts=numTarget*15;
+    while(count<numTarget&&attempts<maxAttempts){
+      attempts++;
+      const u=Math.random(),v=Math.random();
+      const th=Math.acos(1-2*u);
+      const ph=2*Math.PI*v;
+      let y2;
+      if(isReal){const yv=computeRealY(l,m,th,ph);y2=yv*yv;}else{y2=computeComplexYMagSq(l,m,th);}
+      if(Math.random()<y2/mx){
+        const r=Math.sqrt(y2/mx)*1.2;
+        const jitter=0.97+Math.random()*0.06;
+        const rr=r*jitter;
+        const px=rr*Math.sin(th)*Math.sin(ph);
+        const py=rr*Math.cos(th);
+        const pz=rr*Math.sin(th)*Math.cos(ph);
+        positions.push(px,py,pz);
+        if(isReal){
+          // Real: color = sign & magnitude, same scale as legend [-1,+1]
+          const yv=computeRealY(l,m,th,ph);
+          const c=divergingColor(yv/maxAbs);
+          colors.push(c[0],c[1],c[2]);
+        }else{
+          // Complex: hue = phase arg(Y), brightness = |Y|/max|Y|, same as legend
+          const phase=computeComplexYPhase(l,m,th,ph);
+          const c=phaseColor(phase,Math.sqrt(y2)/maxAbs);
+          colors.push(c[0],c[1],c[2]);
+        }
+        count++;
+      }
+    }
+    vertexCount=count;
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geom.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    const mat=new THREE.PointsMaterial({size:0.012,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.85});
+    const pts=new THREE.Points(geom,mat);
+    meshGroup.add(pts);
+  }
+
+  // ===== POLAR SURFACE =====
+  function buildPolarSurface(){
+    const {l,m,isReal,threshold}=state;
+    const {nT,nP}=getRes(l,m);
+    const maxAbs=isReal?getMaxRealY(l,m):getMaxComplexMag(l,m);
+    maxYSq=maxAbs*maxAbs;
+    // For real harmonics, store the signed Y value.
+    // For complex harmonics, store the signed N*P value (sign needed for correct phase).
+    const vals=[];
+    for(let i=0;i<=nT;i++){const row=[];const th=Math.PI*i/nT;for(let j=0;j<=nP;j++){const ph=2*Math.PI*j/nP;let v;if(isReal){v=computeRealY(l,m,th,ph);}else{// Store signed N*P so we can recover the phase from the sign
+          const am=Math.abs(m);
+          const ct=Math.cos(th);
+          const P=assocLegendre(l,am,ct);
+          const N=normFactor(l,m);
+          v=N*P; // signed: |v| = |Y|, sign(v) = sign(P)
+        }row.push(v);}vals.push(row);}
+    const positions=new Float32Array((nT+1)*(nP+1)*3);
+    const colorsArr=new Float32Array((nT+1)*(nP+1)*3);
+    const alphaArr=new Float32Array((nT+1)*(nP+1));
+    let vi=0;
+    const cutoff=Math.max(threshold,1e-6);
+    for(let i=0;i<=nT;i++){const th=Math.PI*i/nT;for(let j=0;j<=nP;j++){const ph=2*Math.PI*j/nP;const v=vals[i][j];const av=Math.abs(v);
+      // Keep geometry physically linear: r ∝ |Y|
+      const r=av/maxAbs;
+      const scale=1.2;
+      const rr=r*scale;
+      positions[vi*3]=rr*Math.sin(th)*Math.sin(ph);
+      positions[vi*3+1]=rr*Math.cos(th);
+      positions[vi*3+2]=rr*Math.sin(th)*Math.cos(ph);
+      // Apply cutoff visually via alpha, not geometry
+      const alpha=r<cutoff?Math.max(0,(r/cutoff)*(r/cutoff)):1.0;
+      alphaArr[vi]=alpha;
+      let c;
+      if(isReal){
+        // Real: same scale as legend — signed value in [-1,+1]
+        c=divergingColor(v/maxAbs);
+      }else{
+        // Complex: hue = phase arg(Y), brightness = |Y|/max|Y|, same as legend
+        const phase=computeComplexYPhase(l,m,th,ph);
+        c=phaseColor(phase,av/maxAbs);
+      }
+      // Blend color toward background for low-alpha regions
+      const bg=[0.059,0.09,0.165];
+      colorsArr[vi*3]=c[0]*alpha+bg[0]*(1-alpha);
+      colorsArr[vi*3+1]=c[1]*alpha+bg[1]*(1-alpha);
+      colorsArr[vi*3+2]=c[2]*alpha+bg[2]*(1-alpha);
+      vi++;
+    }}
+    const indices=[];
+    for(let i=0;i<nT;i++){for(let j=0;j<nP;j++){const a=i*(nP+1)+j;const b=a+nP+1;indices.push(a,b,a+1);indices.push(b,b+1,a+1);}}
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geom.setAttribute('color',new THREE.Float32BufferAttribute(colorsArr,3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+    vertexCount=(nT+1)*(nP+1);
+    const mat=new THREE.MeshPhongMaterial({vertexColors:true,side:THREE.DoubleSide,shininess:40,specular:0x222244,transparent:false});
+    const mesh=new THREE.Mesh(geom,mat);
+    meshGroup.add(mesh);
+    const wmat=new THREE.MeshBasicMaterial({color:0x000000,wireframe:true,transparent:true,opacity:0.04});
+    const wireGeom=geom.clone();
+    const wmesh=new THREE.Mesh(wireGeom,wmat);
+    meshGroup.add(wmesh);
+  }
+
+  function buildProjectionSurface(){
+    const { l, m, isReal } = state;
+    const maxAbs = isReal ? getMaxRealY(l, m) : getMaxComplexMag(l, m);
+    maxYSq = maxAbs * maxAbs;
+    const projR = 1.5;
+    const geom = new THREE.SphereGeometry(projR, 96, 96);
+    const pos = geom.attributes.position.array;
+    const colors = new Float32Array(pos.length);
+    for (let i = 0, j = 0; i < pos.length; i += 3, j += 3) {
+      const x = pos[i], y = pos[i+1], z = pos[i+2];
+      const r = Math.sqrt(x*x + y*y + z*z) || projR;
+      const theta = Math.acos(THREE.MathUtils.clamp(y / r, -1, 1));
+      const phi = Math.abs(Math.sin(theta)) < 1e-10 ? 0 : Math.atan2(x, z);
+      pos[i]   = projR * Math.sin(theta) * Math.sin(phi);
+      pos[i+1] = projR * Math.cos(theta);
+      pos[i+2] = projR * Math.sin(theta) * Math.cos(phi);
+      let c;
+      if (isReal) {
+        const yv = computeRealY(l, m, theta, phi);
+        c = divergingColor(yv / maxAbs);
+      } else {
+        const phase = computeComplexYPhase(l, m, theta, phi);
+        const mag = Math.sqrt(computeComplexYMagSq(l, m, theta));
+        c = phaseColor(phase, mag / maxAbs);
+      }
+      colors[j] = c[0]; colors[j+1] = c[1]; colors[j+2] = c[2];
+    }
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geom.attributes.position.needsUpdate = true;
+    geom.computeVertexNormals();
+    vertexCount = pos.length / 3;
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95
+    });
+    meshGroup.add(new THREE.Mesh(geom, mat));
+  }
+
+  // ===== LEGEND DRAWING =====
+  function drawLegends(){
+    const legendReal=document.getElementById('legend-real');
+    const legendComplex=document.getElementById('legend-complex');
+
+    if(state.isReal){
+      legendReal.style.display='block';
+      legendComplex.style.display='none';
+
+      const isProjReal=state.mode==='projection';
+      legendReal.classList.toggle('legend-projection-real',isProjReal);
+
+      // Draw diverging color bar for real harmonics
+      const canvas=document.getElementById('legendRealCanvas');
+      const ctx=canvas.getContext('2d');
+      const w=canvas.width,h=canvas.height;
+      function legendRealRoundedPath(){
+        const rr=Math.min(h*0.5,10);
+        ctx.beginPath();
+        ctx.moveTo(rr,0); ctx.lineTo(w-rr,0);
+        ctx.quadraticCurveTo(w,0,w,rr); ctx.lineTo(w,h-rr);
+        ctx.quadraticCurveTo(w,h,w-rr,h); ctx.lineTo(rr,h);
+        ctx.quadraticCurveTo(0,h,0,h-rr); ctx.lineTo(0,rr);
+        ctx.quadraticCurveTo(0,0,rr,0);
+        ctx.closePath();
+      }
+      ctx.clearRect(0,0,w,h);
+      if(isProjReal){
+        ctx.save();
+        legendRealRoundedPath();
+        ctx.clip();
+      }
+      for(let x=0;x<w;x++){
+        const t=(x/(w-1))*2-1; // -1 to +1
+        const c=divergingColor(t);
+        ctx.fillStyle='rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+        ctx.fillRect(x,0,1,h);
+      }
+      if(isProjReal){ctx.restore();}
+      ctx.strokeStyle='rgba(148,163,184,0.25)';
+      ctx.lineWidth=1;
+      if(isProjReal){
+        legendRealRoundedPath();
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(0.5,0.5,w-1,h-1);
+      }
+
+      var note=document.getElementById('legendRealNote');
+      note.classList.toggle('legend-note-projection',isProjReal);
+      if(state.mode==='projection'){
+        note.innerHTML='<div class="legend-proj-line"><b class="legend-proj-key">Color</b><span class="legend-proj-val"> encodes sign &amp; magnitude of Y</span></div>';
+      } else if(state.mode==='cloud'){
+        note.innerHTML='<b style="color:#94a3b8">Color</b> encodes sign &amp; magnitude of Y<br><b style="color:#94a3b8">Angular acceptance</b> \u221d |Y|\u00b2, <b style="color:#94a3b8">radius</b> \u221d |Y|';
+      } else if(state.mode==='surface'){
+        note.innerHTML='<b style="color:#94a3b8">Radial distance</b> encodes |Y|<br><b style="color:#94a3b8">Color</b> encodes sign &amp; magnitude';
+      }
+    } else {
+      legendReal.classList.remove('legend-projection-real');
+      const lrNote=document.getElementById('legendRealNote');
+      if(lrNote) lrNote.classList.remove('legend-note-projection');
+      legendReal.style.display='none';
+      legendComplex.style.display='block';
+
+      // Draw phase color bar
+      var phaseCanvas=document.getElementById('legendPhaseCanvas');
+      var pctx=phaseCanvas.getContext('2d');
+      var pw=phaseCanvas.width,ph2=phaseCanvas.height;
+      pctx.clearRect(0,0,pw,ph2);
+      for(var x=0;x<pw;x++){
+        var phase=(x/(pw-1))*2*Math.PI;
+        var c=phaseColor(phase,0.85);
+        pctx.fillStyle='rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+        pctx.fillRect(x,0,1,ph2);
+      }
+      pctx.strokeStyle='rgba(148,163,184,0.25)';
+      pctx.lineWidth=1;
+      pctx.strokeRect(0.5,0.5,pw-1,ph2-1);
+
+      // Draw magnitude bar
+      var magCanvas=document.getElementById('legendMagCanvas');
+      var mctx=magCanvas.getContext('2d');
+      var mw=magCanvas.width,mh=magCanvas.height;
+      mctx.clearRect(0,0,mw,mh);
+      // Show magnitude gradient at a representative hue (blue, phase~LEGEND_PHASE_FOR_MAG)
+      for(var x2=0;x2<mw;x2++){
+        var mag=x2/(mw-1);
+        var c2=phaseColor(LEGEND_PHASE_FOR_MAG,mag);
+        mctx.fillStyle='rgb('+Math.round(c2[0]*255)+','+Math.round(c2[1]*255)+','+Math.round(c2[2]*255)+')';
+        mctx.fillRect(x2,0,1,mh);
+      }
+      mctx.strokeStyle='rgba(148,163,184,0.25)';
+      mctx.lineWidth=1;
+      mctx.strokeRect(0.5,0.5,mw-1,mh-1);
+
+      // Update note based on mode
+      var cnote=document.getElementById('legendComplexNote');
+      if(state.mode==='cloud'){
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> \u221d |Y|<br><b style="color:#94a3b8">Angular acceptance</b> \u221d |Y|\u00b2, <b style="color:#94a3b8">radius</b> \u221d |Y|';
+      } else if(state.mode==='surface'){
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> \u221d |Y|<br><b style="color:#94a3b8">Radial distance</b> encodes |Y|';
+      } else {
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> encodes |Y|';
+      }
+    }
+  }
+
+  // ===== UPDATE =====
+  function updateVisualization(){
+    clearGroup();
+    switch(state.mode){
+      case 'cloud':buildPointCloud();break;
+      case 'surface':buildPolarSurface();break;
+      case 'projection':buildProjectionSurface();break;
+    }
+    updateUI();
+    drawLegends();
+    needsRender=true;
+  }
+
+  // ===== UI =====
+  const lSlider=document.getElementById('lSlider'),mSlider=document.getElementById('mSlider');
+  const lVal=document.getElementById('lVal'),mVal=document.getElementById('mVal');
+  const fmtL=document.getElementById('fmtL'),fmtM=document.getElementById('fmtM');
+  const typeLabel=document.getElementById('typeLabel');
+  const dynamicInfoNote=document.getElementById('dynamicInfoNote');
+  const threshSlider=document.getElementById('threshSlider'),threshVal=document.getElementById('threshVal');
+  const thresholdPanel=document.getElementById('thresholdPanel');
+  const pointCountPanel=document.getElementById('pointCountPanel');
+  const dynamicInfoPanel=document.getElementById('dynamicInfoPanel');
+  const nodalStructurePanel=document.getElementById('nodalStructurePanel');
+  const pointCountSlider=document.getElementById('pointCountSlider');
+  const pointCountValEl=document.getElementById('pointCountVal');
+
+  function lobesText(n){
+    if(n===1) return '1 lobe';
+    return n+' lobes';
+  }
+
+  function updateDynamicInfoNote(){
+    if(!dynamicInfoNote) return;
+    const am=Math.abs(state.m);
+    const lobesLongitudinal=2*am;
+    const lobesVisibleReal=lobesLongitudinal*Math.max(0,(state.l-am+1));
+    if(state.m===0){
+      dynamicInfoNote.innerHTML='When <b style="color:#e2e8f0">m = 0</b>, Real and Complex harmonics are identical — there is no <span style="font-style:italic;color:#e2e8f0">e</span><sup style="color:#e2e8f0">imφ</sup> phase factor. Try increasing <b style="color:#e2e8f0">|m|</b> to see how they differ.';
+      return;
+    }
+    if(state.isReal){
+      dynamicInfoNote.innerHTML='Real <span style="font-style:italic;color:#e2e8f0">Y</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">m</sup> ∝ <span style="font-style:italic;color:#e2e8f0">P</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">|m|</sup>(cosθ) · (cos(mφ) for m&gt;0, sin(|m|φ) for m&lt;0) — a standing wave from combining <span style="font-style:italic;color:#e2e8f0">Y</span><sup style="color:#e2e8f0">+m</sup> and <span style="font-style:italic;color:#e2e8f0">Y</span><sup style="color:#e2e8f0">−m</sup>. Sector/lobe layout yields <b style="color:#e2e8f0">'+lobesText(lobesVisibleReal)+'</b> <span style="color:#94a3b8">(illustrative; not the same as the <b style="color:#94a3b8">Nodal planes</b> count above)</span>. <a href="#" data-switch="complex">Switch to Complex</a> to see the rotating wave this is built from.';
+    }else{
+      dynamicInfoNote.innerHTML='Complex <span style="font-style:italic;color:#e2e8f0">Y</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">m</sup> ∝ <span style="font-style:italic;color:#e2e8f0">P</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">|m|</sup>(cosθ) · <span style="font-style:italic;color:#e2e8f0">e</span><sup style="color:#e2e8f0">imφ</sup> (with this code\u2019s Legendre sign convention, equivalent to a Condon–Shortley overall phase choice) — a pure <span style="font-style:italic;color:#e2e8f0">L</span><sub style="color:#e2e8f0">z</sub> eigenstate. The magnitude <span style="color:#e2e8f0">|Y|</span> is axially symmetric (no φ-dependence); the φ-structure lives in the phase (hue). <a href="#" data-switch="real">Switch to Real</a> to see the standing-wave analogue with <b style="color:#e2e8f0">'+lobesText(lobesVisibleReal)+'</b> <span style="color:#94a3b8">(illustrative lobe count)</span>.';
+    }
+  }
+
+  function updateUI(){
+    lVal.textContent=state.l;mVal.textContent=state.m;
+    fmtL.textContent=state.l;fmtM.textContent=state.m;
+    if(typeLabel){
+      typeLabel.textContent=(state.isReal?'Real':'Complex')+' Spherical Harmonic';
+      typeLabel.style.display='';
+    }
+    mSlider.min=-state.l;mSlider.max=state.l;
+    if(dynamicInfoPanel) dynamicInfoPanel.style.display='';
+    if(nodalStructurePanel) nodalStructurePanel.style.display='';
+    const harmonicTypePanel=document.getElementById('harmonicTypePanel');
+    if(harmonicTypePanel) harmonicTypePanel.style.display='';
+    thresholdPanel.style.display=state.mode==='surface'?'block':'none';
+    if(pointCountPanel){
+      pointCountPanel.style.display=state.mode==='cloud'?'block':'none';
+    }
+    const am=Math.abs(state.m);
+    document.getElementById('statAngularNodes').textContent=state.l;
+    const statLongLabel=document.getElementById('statLongLabel');
+    const statLatLabel=document.getElementById('statLatLabel');
+    const statLongNodes=document.getElementById('statLongNodes');
+    const statLatNodes=document.getElementById('statLatNodes');
+    if(state.isReal){
+      statLongLabel.textContent='Nodal planes (|m|)';
+      statLatLabel.textContent='Latitudinal (ℓ−|m|)';
+      statLongNodes.textContent=am;
+      statLatNodes.textContent=state.l-am;
+    } else {
+      statLongLabel.textContent='Phase winding (|m|)';
+      statLatLabel.textContent='Latitudinal zeros (ℓ−|m|)';
+      statLongNodes.textContent=am;
+      statLatNodes.textContent=state.l-am;
+    }
+    const statPointsBox=document.getElementById('statPointsBox');
+    const statPoints=document.getElementById('statPoints');
+    if(state.mode==='cloud'){
+      statPoints.textContent=vertexCount.toLocaleString();
+      // Point Count panel shows the total; hide duplicate in Nodal Structure grid.
+      statPointsBox.style.display='none';
+    } else {
+      statPointsBox.style.display='none';
+    }
+    updateDynamicInfoNote();
+  }
+
+  // Debounced update to coalesce rapid slider changes into one rebuild per frame
+  let pendingUpdate=false;
+  function scheduleUpdate(){
+    if(!pendingUpdate){
+      pendingUpdate=true;
+      requestAnimationFrame(()=>{pendingUpdate=false;updateVisualization();});
+    }
+  }
+
+  lSlider.addEventListener('input',function(){state.l=parseInt(this.value);mSlider.min=-state.l;mSlider.max=state.l;if(state.m>state.l){state.m=state.l;mSlider.value=state.l;}if(state.m<-state.l){state.m=-state.l;mSlider.value=-state.l;}mVal.textContent=state.m;lVal.textContent=state.l;scheduleUpdate();});
+  mSlider.addEventListener('input',function(){let v=parseInt(this.value);v=Math.max(-state.l,Math.min(state.l,v));state.m=v;this.value=v;mVal.textContent=state.m;scheduleUpdate();});
+  threshSlider.addEventListener('input',function(){state.threshold=parseFloat(this.value);threshVal.textContent=state.threshold.toFixed(2);scheduleUpdate();});
+  pointCountSlider.addEventListener('input',function(){state.pointCount=parseInt(this.value);pointCountValEl.textContent=state.pointCount.toLocaleString();scheduleUpdate();});
+
+  document.getElementById('btnReal').addEventListener('click',function(){state.isReal=true;this.classList.add('active');document.getElementById('btnComplex').classList.remove('active');updateVisualization();});
+  document.getElementById('btnComplex').addEventListener('click',function(){state.isReal=false;this.classList.add('active');document.getElementById('btnReal').classList.remove('active');updateVisualization();});
+
+  if(dynamicInfoNote){
+    dynamicInfoNote.addEventListener('click',function(e){
+      const a=e.target&&e.target.closest?e.target.closest('a[data-switch]'):null;
+      if(!a) return;
+      e.preventDefault();
+      const to=a.getAttribute('data-switch');
+      if(to==='complex') document.getElementById('btnComplex').click();
+      if(to==='real') document.getElementById('btnReal').click();
+    });
+  }
+
+  const modeButtons={cloud:document.getElementById('modeCloud'),surface:document.getElementById('modeSurface'),projection:document.getElementById('modeProjection')};
+  Object.keys(modeButtons).forEach(k=>{modeButtons[k].addEventListener('click',function(){state.mode=k;Object.values(modeButtons).forEach(b=>b.classList.remove('active'));this.classList.add('active');updateVisualization();});});
+
+  document.getElementById('btnResetDefault').addEventListener('click',function(){
+    state.l=2;
+    state.m=0;
+    state.isReal=true;
+    state.mode='surface';
+    state.threshold=0.1;
+    state.pointCount=15000;
+    state.showAxes=true;
+    camSph.r=5.6;
+    camSph.theta=Math.PI/3;
+    camSph.phi=Math.PI/4;
+    panOffset.x=0;
+    panOffset.y=0;
+    panOffset.z=0;
+    lSlider.value=String(state.l);
+    mSlider.min=-state.l;
+    mSlider.max=state.l;
+    mSlider.value=String(state.m);
+    threshSlider.value='0.10';
+    if(threshVal) threshVal.textContent='0.10';
+    pointCountSlider.value=String(state.pointCount);
+    if(pointCountValEl) pointCountValEl.textContent=state.pointCount.toLocaleString();
+    document.getElementById('btnReal').classList.add('active');
+    document.getElementById('btnComplex').classList.remove('active');
+    Object.values(modeButtons).forEach(function(b){b.classList.remove('active');});
+    modeButtons.surface.classList.add('active');
+    updateCamera();
+    updateVisualization();
+  });
+
+  // ===== RESIZE =====
+  function onResize(){
+    const w=container.clientWidth,h=container.clientHeight;
+    camera.aspect=w/h;camera.updateProjectionMatrix();
+    renderer.setSize(w,h);
+    needsRender=true;
+  }
+  window.addEventListener('resize',onResize);
+  onResize();
+
+  // ===== ANIMATION =====
+  function animate(){
+    requestAnimationFrame(animate);
+    if(needsRender){
+      renderer.render(scene,camera);
+      needsRender=false;
+    }
+  }
+
+  // ===== INIT =====
+  updateVisualization();
+  requestAnimationFrame(animate);
+}
+
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
+</script>
+</body>
+</html>
