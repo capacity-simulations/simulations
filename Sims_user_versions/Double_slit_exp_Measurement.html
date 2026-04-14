@@ -115,6 +115,32 @@
             white-space: normal;
             text-align: center;
         }
+
+        /* Reset + Play/Pause: same footprint as other sims (e.g. Time_evolution_Gaussian_wavepacket .sim-playback-btn-group) */
+        .top-bar-actions .sim-playback-btn-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 192px;
+            height: 36px;
+            flex-shrink: 0;
+            box-sizing: border-box;
+        }
+        .top-bar-actions .sim-playback-btn-group > .btn-topbar {
+            flex: 1 1 0;
+            min-width: 0;
+            height: 36px;
+            padding: 0 8px;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            text-align: center;
+        }
         .btn-topbar-toggle {
             background-color: rgba(30, 77, 58, 0.15);
             color: #1e293b;
@@ -128,11 +154,35 @@
         }
         .btn-topbar-toggle.active:hover { background-color: #d97706; }
         .btn-topbar-reset {
-            background-color: #1E4D3A;
-            color: #ffffff;
-            border-color: #163d30;
+            background-color: #dfe3de;
+            color: #1d2939;
+            border-color: #7a8b89;
         }
-        .btn-topbar-reset:hover { background-color: #163d30; border-color: #143528; }
+        .btn-topbar-reset:hover {
+            background-color: #d2d8d1;
+            border-color: #6d7e7c;
+            color: #1d2939;
+        }
+        .btn-topbar-playpause {
+            background-color: #2d4a3e;
+            color: #ffffff;
+            border-color: #2d4a3e;
+        }
+        .btn-topbar-playpause:hover {
+            background-color: #264232;
+            border-color: #264232;
+            color: #ffffff;
+        }
+        .btn-topbar-playpause.is-paused {
+            background-color: #dfe3de;
+            color: #1d2939;
+            border-color: #7a8b89;
+        }
+        .btn-topbar-playpause.is-paused:hover {
+            background-color: #d2d8d1;
+            border-color: #6d7e7c;
+            color: #1d2939;
+        }
 
         /* Info Icon and Tooltip */
         .info-container {
@@ -853,7 +903,10 @@
         </div>
         <div class="top-bar-actions">
             <button type="button" class="btn-topbar btn-topbar-toggle" id="classical-btn" data-explore="Enable which-path detectors at each slit. When on, the interference pattern is replaced by a sum of single-slit–like distributions (decoherence / loss of coherence between paths).">Enable Detectors</button>
-            <button type="button" class="btn-topbar btn-topbar-reset" id="reset-btn" data-explore="Clears hit counts on the screen texture and rebuilds wavefronts; slider settings are kept.">Reset Simulation</button>
+            <div class="sim-playback-btn-group">
+                <button type="button" class="btn-topbar btn-topbar-reset" id="reset-btn" data-explore="Clears hit counts on the screen texture and rebuilds wavefronts; slider settings are kept.">Reset</button>
+                <button type="button" class="btn-topbar btn-topbar-playpause" id="sim-play-pause-btn" aria-label="Pause simulation" data-explore="Pause or resume the 3D wave animation and particle hits on the screen.">Pause</button>
+            </div>
         </div>
     </div>
 
@@ -1020,6 +1073,7 @@
         let sourceMarker;
         let slitLabels = [];
         let controls;
+        let simPaused = false;
 
         // Detector 3D objects
         let detectorGroup;
@@ -2433,6 +2487,30 @@
             };
             document.getElementById('reset-btn').onclick = resetSim;
 
+            const playPauseBtn = document.getElementById('sim-play-pause-btn');
+            function updateSimPlayPauseButton() {
+                if (!playPauseBtn) return;
+                if (simPaused) {
+                    playPauseBtn.textContent = 'Play';
+                    playPauseBtn.classList.add('is-paused');
+                    playPauseBtn.setAttribute('aria-label', 'Play simulation');
+                } else {
+                    playPauseBtn.textContent = 'Pause';
+                    playPauseBtn.classList.remove('is-paused');
+                    playPauseBtn.setAttribute('aria-label', 'Pause simulation');
+                }
+            }
+            if (playPauseBtn) {
+                playPauseBtn.onclick = () => {
+                    simPaused = !simPaused;
+                    if (!simPaused) {
+                        animate.lastTime = undefined;
+                    }
+                    updateSimPlayPauseButton();
+                };
+                updateSimPlayPauseButton();
+            }
+
             setupExploreTooltip();
 
             window.addEventListener('resize', () => {
@@ -2462,14 +2540,16 @@
 
         function animate(time) {
             requestAnimationFrame(animate);
-            const dt = (typeof time === 'number' && typeof animate.lastTime === 'number')
+            const dt = (!simPaused && typeof time === 'number' && typeof animate.lastTime === 'number')
                 ? Math.min((time - animate.lastTime) / 1000, 0.1)
                 : 0;
             animate.lastTime = (typeof time === 'number') ? time : (animate.lastTime || 0);
 
             controls.update();
 
-            updatePhysics(dt, time);
+            if (!simPaused) {
+                updatePhysics(dt, time);
+            }
             renderer.render(scene, camera);
 
             if (typeof time === 'number' && (time - (animate.lastFps || 0)) > 250) {
