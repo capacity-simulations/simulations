@@ -174,8 +174,8 @@
             right: 320px;
             bottom: 0;
             /* Defaults match draw(); updated each frame from JS */
-            --plot-ml: 70px;
-            --plot-mr: 30px;
+            --plot-ml: 62px;
+            --plot-mr: 38px;
             --plot-mt: 30px;
             --plot-mb: 60px;
         }
@@ -205,6 +205,18 @@
         .right-panel::-webkit-scrollbar-thumb {
             background: rgba(148,163,184,0.2);
             border-radius: 2px;
+        }
+
+        .panel-controls-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 18px 18px 10px;
+            margin: 0;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.4);
+            line-height: 1.2;
         }
 
         /* Panel Sections */
@@ -362,9 +374,11 @@
 
     <!-- Right Sidebar Panel -->
     <div class="right-panel">
+        <h2 class="panel-controls-title">Controls</h2>
 
         <!-- Formula Section -->
         <div class="panel-section">
+            <h3>Formula window</h3>
             <div class="formula-display" id="liveFormulaEl" aria-hidden="true"></div>
         </div>
 
@@ -599,21 +613,49 @@
             }
         }
 
+        /** Filled arrowhead: tip at (tipX, tipY), pointing along unit vector (dirX, dirY). */
+        function drawArrowHead(tipX, tipY, dirX, dirY, len, halfWidth) {
+            const bx = tipX - dirX * len;
+            const by = tipY - dirY * len;
+            const px = -dirY * halfWidth;
+            const py = dirX * halfWidth;
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(bx + px, by + py);
+            ctx.lineTo(bx - px, by - py);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(203, 213, 225, 0.75)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
         function drawAxes() {
             ctx.strokeStyle = 'rgba(203, 213, 225, 0.65)';
             ctx.lineWidth = 1.5;
 
-            // k-axis
+            const kAxisY = plotBottom;
+            // +k arrow tip slightly past k = kMax (e.g. past the k = 20 edge when kMax = 20)
+            const kArrowPast = 1;
+            const kArrowTipX = kToX(kMax + kArrowPast);
+            const kArrowLen = 10;
+            const kArrowHalfW = 4;
+
+            // k-axis (line meets back of arrowhead)
             ctx.beginPath();
-            ctx.moveTo(plotLeft, plotBottom);
-            ctx.lineTo(plotLeft + plotWidth, plotBottom);
+            ctx.moveTo(plotLeft, kAxisY);
+            ctx.lineTo(kArrowTipX - kArrowLen, kAxisY);
             ctx.stroke();
+            drawArrowHead(kArrowTipX, kAxisY, 1, 0, kArrowLen, kArrowHalfW);
 
             // A(k)-axis
             ctx.beginPath();
             ctx.moveTo(plotLeft, plotBottom);
             ctx.lineTo(plotLeft, plotTop);
             ctx.stroke();
+            // Arrow at +A(k) end (top of plot; screen direction is upward = (0,-1))
+            drawArrowHead(plotLeft, plotTop, 0, -1, 10, 4);
 
             // Tick labels
             ctx.fillStyle = '#e5e7eb';
@@ -661,6 +703,22 @@
             ctx.textBaseline = 'middle';
             ctx.fillText('A(k)', 0, 0);
             ctx.restore();
+        }
+
+        /** Full area under A(k) from k-axis to the curve (k_min … k_max). */
+        function drawAreaUnderCurve() {
+            const steps = 600;
+            ctx.beginPath();
+            ctx.moveTo(kToX(kMin), plotBottom);
+            for (let i = 0; i <= steps; i++) {
+                const k = kMin + (kMax - kMin) * i / steps;
+                const a = gaussian(k, k0, sigma);
+                ctx.lineTo(kToX(k), aToY(a));
+            }
+            ctx.lineTo(kToX(kMax), plotBottom);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.16)';
+            ctx.fill();
         }
 
         function drawShadedRegions() {
@@ -784,8 +842,8 @@
             ctx.fillRect(0, 0, w, h);
 
             // Plot margins
-            const marginLeft = 70;
-            const marginRight = 30;
+            const marginLeft = 62;
+            const marginRight = 38;
             const marginTop = 30;
             const marginBottom = 60;
 
@@ -807,7 +865,8 @@
             kMax = K_MAX;
             aMax = Math.max(1, gaussian(k0, k0, sigma) * 1.1);
 
-            // Draw elements in order
+            // Draw elements in order (area first so grid lines stay visible through the fill)
+            drawAreaUnderCurve();
             drawGrid();
             drawShadedRegions();
             drawGaussianCurve();
