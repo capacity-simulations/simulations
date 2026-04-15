@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A(k) Plot</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #060E11;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            color: #e2e8f0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Top Title Bar */
+        .title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 62px;
+            min-height: 62px;
+            background: #FAF8F4;
+            backdrop-filter: none;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.25);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            z-index: 1002;
+            gap: 12px;
+        }
+        .title-bar .title-text {
+            font-size: 17px;
+            font-weight: 700;
+            color: #0f172a;
+            letter-spacing: 0.3px;
+        }
+        .info-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(100, 116, 139, 0.3);
+            background: rgba(100, 116, 139, 0.12);
+            color: #64748b;
+            font-size: 14px;
+            font-weight: 700;
+            font-style: italic;
+            font-family: Georgia, 'Times New Roman', serif;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .info-btn:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            color: #2563eb;
+            background: rgba(59, 130, 246, 0.12);
+        }
+        .title-bar-spacer {
+            flex: 1;
+            min-width: 0;
+        }
+        .sim-playback-btn-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 96px;
+            height: 36px;
+            flex-shrink: 0;
+        }
+        .sim-playback-btn-group > button {
+            flex: 1 1 0;
+            min-width: 0;
+            height: 36px;
+            padding: 0 8px;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        .title-bar-reset {
+            padding: 4.5px 24px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            background: rgba(30, 77, 58, 0.22);
+            color: #1B263B;
+            border: 1px solid rgba(19, 49, 49, 0.5);
+            flex-shrink: 0;
+        }
+        .title-bar-reset:hover {
+            background: rgba(59, 155, 143, 0.25);
+            border-color: rgba(19, 49, 49, 0.55);
+            color: #111827;
+        }
+
+        /* About Modal Overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-box {
+            background: #060E11;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 14px;
+            padding: 28px 32px;
+            max-width: 560px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .modal-box h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 14px;
+        }
+        .modal-box p {
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        .modal-box .equation-block {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 16px 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .modal-close {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 8px 22px;
+            background: rgba(96, 165, 250, 0.15);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            border-radius: 8px;
+            color: #60a5fa;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-close:hover {
+            background: rgba(96, 165, 250, 0.25);
+        }
+
+        /* Main canvas */
+        #canvas-container {
+            position: fixed;
+            top: 62px;
+            left: 0;
+            right: 320px;
+            bottom: 0;
+            /* Defaults match draw(); updated each frame from JS */
+            --plot-ml: 62px;
+            --plot-mr: 38px;
+            --plot-mt: 30px;
+            --plot-mb: 60px;
+        }
+        canvas#mainCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Right Sidebar Panel */
+        .right-panel {
+            position: fixed;
+            top: 62px;
+            right: 0;
+            width: 320px;
+            bottom: 0;
+            background: rgba(6, 14, 17, 0.95);
+            backdrop-filter: blur(14px);
+            border-left: 1px solid rgba(148, 163, 184, 0.35);
+            z-index: 1001;
+            overflow-y: auto;
+            padding: 0;
+        }
+        .right-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        .right-panel::-webkit-scrollbar-thumb {
+            background: rgba(148,163,184,0.2);
+            border-radius: 2px;
+        }
+
+        .panel-controls-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 18px 18px 10px;
+            margin: 0;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.4);
+            line-height: 1.2;
+        }
+
+        /* Panel Sections */
+        .panel-section {
+            padding: 16px 18px;
+            border-bottom: 1px solid rgba(19, 49, 49, 0.4);
+        }
+        .panel-section:last-child {
+            border-bottom: none;
+        }
+        .panel-section h3 {
+            font-size: 11px;
+            font-weight: 700;
+            color: #e5e7eb;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 14px;
+        }
+
+        /* Formula display in panel */
+        .formula-display {
+            background: rgba(30, 77, 58, 0.12);
+            border: 1px solid rgba(19, 49, 49, 0.4);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 0;
+            font-size: 13px;
+            color: #cbd5e1;
+            text-align: center;
+        }
+        .formula-display .math {
+            font-style: italic;
+            color: #f1f5f9;
+        }
+
+        /* Controls */
+        .control-group {
+            margin-bottom: 14px;
+        }
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+        .control-group label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            color: #cbd5e1;
+            font-size: 13px;
+        }
+        .control-group .val {
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #3b9b8f;
+            min-width: 55px;
+            text-align: right;
+        }
+        .slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(30, 77, 58, 0.35);
+            border-radius: 3px;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.2);
+            transition: box-shadow 0.2s;
+        }
+        .slider::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 8px rgba(59,155,143,0.5);
+        }
+        .slider.k0-slider::-webkit-slider-thumb {
+            background: #3b9b8f;
+        }
+        .slider.sigma-slider::-webkit-slider-thumb {
+            background: #34d399;
+        }
+        .slider.marker-slider::-webkit-slider-thumb {
+            background: #3b9b8f;
+        }
+
+        /* Toggle rows */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .toggle-row input[type="checkbox"] {
+            accent-color: #3b9b8f;
+            width: 14px;
+            height: 14px;
+        }
+        .toggle-row label {
+            cursor: pointer;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        .divider {
+            height: 1px;
+            background: rgba(19, 49, 49, 0.4);
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Title Bar -->
+    <div class="title-bar">
+        <div class="title-text">A(k) vs k Plot
+        </div>
+        <button class="info-btn" id="infoBtn" title="About this simulation" aria-label="About this simulation">i</button>
+        <div class="title-bar-spacer" aria-hidden="true"></div>
+        <div class="sim-playback-btn-group">
+            <button type="button" class="title-bar-reset" id="btnResetDefault" title="Reset to default parameters and view" aria-label="Reset to default parameters and view">Reset</button>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box">
+            <h2>About This Simulation</h2>
+            <p>
+                This interactive simulation visualizes the <strong>Gaussian momentum amplitude distribution A(k)</strong> 
+                commonly encountered in quantum mechanics when describing wavepackets. The amplitude function governs 
+                how momentum components are distributed around a central wavenumber k₀.
+            </p>
+            <p>
+                Students can drag <strong>k₀</strong> to shift the peak (changing the particle's central momentum) and 
+                adjust <strong>σ</strong> to widen or narrow the distribution. Shaded regions show the amplitude A(k) over 
+                the note-defined intervals k₀ ± σ and k₀ ± 2σ, making it easier to see how the width parameter changes the profile. 
+                Click or drag on the plot to move the marker and read A(k) at that k.
+            </p>
+            <div class="equation-block" id="katexEquation"></div>
+            <p style="font-size:12px; color:#64748b; margin-bottom:0;">
+                where k₀ is the central wavenumber and σ characterizes the width of the distribution in k-space.
+            </p>
+            <button class="modal-close" id="modalClose">Close</button>
+        </div>
+    </div>
+
+    <!-- Main Canvas -->
+    <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <!-- Right Sidebar Panel -->
+    <div class="right-panel">
+        <h2 class="panel-controls-title">Controls</h2>
+
+        <!-- Formula Section -->
+        <div class="panel-section">
+            <h3>Formula window</h3>
+            <div class="formula-display" id="liveFormulaEl" aria-hidden="true"></div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="panel-section">
+            <h3>Parameters</h3>
+            <div class="control-group">
+                <label>Central Momentum k₀ <span class="val" id="k0Val">0.00</span></label>
+                <input type="range" class="slider k0-slider" id="k0Slider" min="-5" max="5" step="0.01" value="0">
+            </div>
+            <div class="control-group">
+                <label>Width σ <span class="val" id="sigmaVal">1.00</span></label>
+                <input type="range" class="slider sigma-slider" id="sigmaSlider" min="1.0" max="4" step="0.01" value="1">
+            </div>
+            <div class="divider"></div>
+            <div class="toggle-row">
+                <input type="checkbox" id="markerToggle" checked>
+                <label for="markerToggle" style="color:#f472b6;">Show marker</label>
+            </div>
+            <div class="control-group" id="markerSliderGroup">
+                <label>Marker position k <span class="val" id="markerVal">0.00</span></label>
+                <input type="range" class="slider marker-slider" id="markerSlider" min="-20" max="20" step="0.01" value="0">
+            </div>
+            <div class="divider"></div>
+            <div class="toggle-row" style="display: none;">
+                <input type="checkbox" id="shadingToggle">
+                <label for="shadingToggle">Show ±σ / ±2σ Shading</label>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    // Render KaTeX equations (modal and live formula panel) in standard LaTeX
+    const latexFormula = 'A(k) = \\exp\\!\\left(-\\frac{(k-k_0)^2}{2\\sigma^2} + \\frac{k_0^2}{2\\sigma^2}\\right)';
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof katex === 'undefined') return;
+        const opts = { displayMode: true, throwOnError: false };
+        const eqEl = document.getElementById('katexEquation');
+        if (eqEl) katex.render(latexFormula, eqEl, opts);
+        const liveEl = document.getElementById('liveFormulaEl');
+        if (liveEl) katex.render(latexFormula, liveEl, opts);
+    });
+
+    // Modal logic
+    document.getElementById('infoBtn').addEventListener('click', function() {
+        document.getElementById('modalOverlay').classList.add('active');
+    });
+    document.getElementById('modalClose').addEventListener('click', function() {
+        document.getElementById('modalOverlay').classList.remove('active');
+    });
+    document.getElementById('modalOverlay').addEventListener('click', function(e) {
+        if (e.target === this) this.classList.remove('active');
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('active')) {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+    });
+
+    (function() {
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Parameters
+        let k0 = 0.0;
+        let sigma = 1.0;
+        let markerK = 0.0;
+        let showMarker = true;
+        let showShading = false;
+
+        // DOM elements
+        const k0Slider = document.getElementById('k0Slider');
+        const sigmaSlider = document.getElementById('sigmaSlider');
+        const markerSlider = document.getElementById('markerSlider');
+        const k0ValEl = document.getElementById('k0Val');
+        const sigmaValEl = document.getElementById('sigmaVal');
+        const markerValEl = document.getElementById('markerVal');
+        const markerToggle = document.getElementById('markerToggle');
+        const shadingToggle = document.getElementById('shadingToggle');
+
+        // Event listeners
+        k0Slider.addEventListener('input', e => {
+            k0 = parseFloat(e.target.value);
+            k0ValEl.textContent = k0.toFixed(2);
+        });
+        sigmaSlider.addEventListener('input', e => {
+            sigma = parseFloat(e.target.value);
+            sigmaValEl.textContent = sigma.toFixed(2);
+        });
+        markerSlider.addEventListener('input', e => {
+            markerK = parseFloat(e.target.value);
+            markerValEl.textContent = markerK.toFixed(2);
+        });
+        const markerSliderGroup = document.getElementById('markerSliderGroup');
+        function updateMarkerSliderVisibility() {
+            if (markerSliderGroup) markerSliderGroup.style.display = showMarker ? '' : 'none';
+        }
+        markerToggle.addEventListener('change', e => {
+            showMarker = e.target.checked;
+            updateMarkerSliderVisibility();
+        });
+        updateMarkerSliderVisibility();
+        shadingToggle.addEventListener('change', e => { showShading = e.target.checked; });
+
+        document.getElementById('btnResetDefault').addEventListener('click', function() {
+            k0 = 0;
+            sigma = 1;
+            markerK = 0;
+            showMarker = true;
+            showShading = false;
+            k0Slider.value = String(k0);
+            sigmaSlider.value = String(sigma);
+            markerSlider.value = String(markerK);
+            k0ValEl.textContent = k0.toFixed(2);
+            sigmaValEl.textContent = sigma.toFixed(2);
+            markerValEl.textContent = markerK.toFixed(2);
+            markerToggle.checked = true;
+            shadingToggle.checked = false;
+            updateMarkerSliderVisibility();
+        });
+
+        // Lecture-note definition of A(k)
+        function gaussian(k, k0, sigma) {
+            const exponent = (k0 * k0 - (k - k0) * (k - k0)) / (2 * sigma * sigma);
+            return Math.exp(exponent);
+        }
+
+        // Coordinate transforms — fixed k range, dynamic A(k) scaling
+        const K_MIN = -20, K_MAX = 20;   // k span so curve is visible moving when k₀ ∈ [-5, 5]
+        let plotLeft, plotRight, plotTop, plotBottom, plotWidth, plotHeight;
+        let kMin, kMax, aMax;
+
+        function getYAxisStep(maxValue) {
+            const roughStep = maxValue / 5;
+            const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+            const residual = roughStep / magnitude;
+
+            if (residual <= 1) return magnitude;
+            if (residual <= 2) return 2 * magnitude;
+            if (residual <= 5) return 5 * magnitude;
+            return 10 * magnitude;
+        }
+
+        function formatValue(value) {
+            if (value === 0) return '0';
+            if (Math.abs(value) >= 1000 || Math.abs(value) < 0.01) {
+                return value.toExponential(2).replace('+', '');
+            }
+            if (Math.abs(value) >= 10) return value.toFixed(1);
+            return value.toFixed(2);
+        }
+
+        function resize() {
+            const container = document.getElementById('canvas-container');
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = container.clientWidth * dpr;
+            canvas.height = container.clientHeight * dpr;
+            canvas.style.width = container.clientWidth + 'px';
+            canvas.style.height = container.clientHeight + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function kToX(k) {
+            return plotLeft + (k - kMin) / (kMax - kMin) * plotWidth;
+        }
+        function aToY(a) {
+            return plotBottom - (a / aMax) * plotHeight;
+        }
+        function xToK(x) {
+            return kMin + (x - plotLeft) / plotWidth * (kMax - kMin);
+        }
+
+        // Mouse/touch interaction for marker
+        let draggingMarker = false;
+        canvas.addEventListener('mousedown', e => {
+            if (!showMarker) return;
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const markerX = kToX(markerK);
+            if (Math.abs(mx - markerX) < 12) {
+                draggingMarker = true;
+            }
+        });
+        canvas.addEventListener('mousemove', e => {
+            if (!draggingMarker) return;
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            markerK = Math.max(kMin, Math.min(kMax, xToK(mx)));
+            markerSlider.value = markerK;
+            markerValEl.textContent = markerK.toFixed(2);
+        });
+        canvas.addEventListener('mouseup', () => { draggingMarker = false; });
+        canvas.addEventListener('mouseleave', () => { draggingMarker = false; });
+
+        canvas.addEventListener('click', e => {
+            if (!showMarker) return;
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            if (mx >= plotLeft && mx <= plotLeft + plotWidth && my >= plotTop && my <= plotBottom) {
+                markerK = Math.max(kMin, Math.min(kMax, xToK(mx)));
+                markerSlider.value = markerK;
+                markerValEl.textContent = markerK.toFixed(2);
+            }
+        });
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+            ctx.lineWidth = 1;
+
+            const kStep = kMax - kMin > 20 ? 5 : (kMax - kMin > 10 ? 2 : 1);
+            for (let k = Math.ceil(kMin / kStep) * kStep; k <= kMax; k += kStep) {
+                const x = kToX(k);
+                ctx.beginPath();
+                ctx.moveTo(x, plotTop);
+                ctx.lineTo(x, plotBottom);
+                ctx.stroke();
+            }
+
+            const aStep = getYAxisStep(aMax);
+            const yTickCount = Math.floor(aMax / aStep);
+            for (let i = 0; i <= yTickCount; i++) {
+                const a = i * aStep;
+                const y = aToY(a);
+                ctx.beginPath();
+                ctx.moveTo(plotLeft, y);
+                ctx.lineTo(plotLeft + plotWidth, y);
+                ctx.stroke();
+            }
+        }
+
+        /** Filled arrowhead: tip at (tipX, tipY), pointing along unit vector (dirX, dirY). */
+        function drawArrowHead(tipX, tipY, dirX, dirY, len, halfWidth) {
+            const bx = tipX - dirX * len;
+            const by = tipY - dirY * len;
+            const px = -dirY * halfWidth;
+            const py = dirX * halfWidth;
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(bx + px, by + py);
+            ctx.lineTo(bx - px, by - py);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(203, 213, 225, 0.75)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function drawAxes() {
+            ctx.strokeStyle = 'rgba(203, 213, 225, 0.65)';
+            ctx.lineWidth = 1.5;
+
+            const kAxisY = plotBottom;
+            // +k arrow tip slightly past k = kMax (e.g. past the k = 20 edge when kMax = 20)
+            const kArrowPast = 1;
+            const kArrowTipX = kToX(kMax + kArrowPast);
+            const kArrowLen = 10;
+            const kArrowHalfW = 4;
+
+            // k-axis (line meets back of arrowhead)
+            ctx.beginPath();
+            ctx.moveTo(plotLeft, kAxisY);
+            ctx.lineTo(kArrowTipX - kArrowLen, kAxisY);
+            ctx.stroke();
+            drawArrowHead(kArrowTipX, kAxisY, 1, 0, kArrowLen, kArrowHalfW);
+
+            // A(k)-axis
+            ctx.beginPath();
+            ctx.moveTo(plotLeft, plotBottom);
+            ctx.lineTo(plotLeft, plotTop);
+            ctx.stroke();
+            // Arrow at +A(k) end (top of plot; screen direction is upward = (0,-1))
+            drawArrowHead(plotLeft, plotTop, 0, -1, 10, 4);
+
+            // Tick labels
+            ctx.fillStyle = '#e5e7eb';
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const kStep = kMax - kMin > 20 ? 5 : (kMax - kMin > 10 ? 2 : 1);
+            for (let k = Math.ceil(kMin / kStep) * kStep; k <= kMax; k += kStep) {
+                const x = kToX(k);
+                ctx.fillText(k.toFixed(0), x, plotBottom + 6);
+                ctx.beginPath();
+                ctx.moveTo(x, plotBottom);
+                ctx.lineTo(x, plotBottom + 4);
+                ctx.strokeStyle = 'rgba(203, 213, 225, 0.6)';
+                ctx.stroke();
+            }
+
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            const aStep = getYAxisStep(aMax);
+            const yTickCount = Math.floor(aMax / aStep);
+            for (let i = 1; i <= yTickCount; i++) {
+                const a = i * aStep;
+                const y = aToY(a);
+                ctx.fillText(formatValue(a), plotLeft - 8, y);
+                ctx.beginPath();
+                ctx.moveTo(plotLeft - 4, y);
+                ctx.lineTo(plotLeft, y);
+                ctx.strokeStyle = 'rgba(203, 213, 225, 0.6)';
+                ctx.stroke();
+            }
+
+            // Axis labels
+            ctx.fillStyle = '#f1f5f9';
+            ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('k (wavenumber)', plotLeft + plotWidth / 2, plotBottom + 28);
+
+            ctx.save();
+            ctx.translate(plotLeft - 46, plotTop + plotHeight / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('A(k)', 0, 0);
+            ctx.restore();
+        }
+
+        /** Full area under A(k) from k-axis to the curve (k_min … k_max). */
+        function drawAreaUnderCurve() {
+            const steps = 600;
+            ctx.beginPath();
+            ctx.moveTo(kToX(kMin), plotBottom);
+            for (let i = 0; i <= steps; i++) {
+                const k = kMin + (kMax - kMin) * i / steps;
+                const a = gaussian(k, k0, sigma);
+                ctx.lineTo(kToX(k), aToY(a));
+            }
+            ctx.lineTo(kToX(kMax), plotBottom);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.16)';
+            ctx.fill();
+        }
+
+        function drawShadedRegions() {
+            if (!showShading) return;
+
+            // ±2σ region
+            ctx.beginPath();
+            const k2Low = k0 - 2 * sigma;
+            const k2High = k0 + 2 * sigma;
+            const steps = 300;
+            for (let i = 0; i <= steps; i++) {
+                const k = k2Low + (k2High - k2Low) * i / steps;
+                const a = gaussian(k, k0, sigma);
+                const x = kToX(k);
+                const y = aToY(a);
+                if (i === 0) ctx.moveTo(x, plotBottom);
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(kToX(k2High), plotBottom);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.12)';
+            ctx.fill();
+
+            // ±σ region
+            ctx.beginPath();
+            const k1Low = k0 - sigma;
+            const k1High = k0 + sigma;
+            for (let i = 0; i <= steps; i++) {
+                const k = k1Low + (k1High - k1Low) * i / steps;
+                const a = gaussian(k, k0, sigma);
+                const x = kToX(k);
+                const y = aToY(a);
+                if (i === 0) ctx.moveTo(x, plotBottom);
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(kToX(k1High), plotBottom);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.18)';
+            ctx.fill();
+        }
+
+        function drawGaussianCurve() {
+            const steps = 600;
+            ctx.beginPath();
+            ctx.strokeStyle = '#f1f5f9';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = 'rgba(96, 165, 250, 0.4)';
+            ctx.shadowBlur = 8;
+
+            for (let i = 0; i <= steps; i++) {
+                const k = kMin + (kMax - kMin) * i / steps;
+                const a = gaussian(k, k0, sigma);
+                const x = kToX(k);
+                const y = aToY(a);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawMarker() {
+            if (!showMarker) return;
+
+            const markerPx = kToX(markerK);
+            const markerA = gaussian(markerK, k0, sigma);
+            const markerPy = Math.min(plotBottom, Math.max(plotTop, aToY(markerA)));
+
+            ctx.beginPath();
+            ctx.arc(markerPx, markerPy, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#f472b6';
+            ctx.globalAlpha = 0.3;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.beginPath();
+            ctx.arc(markerPx, markerPy, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#f472b6';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            const tooltipX = markerPx + 12;
+            const tooltipBoxH = 22;
+            const tooltipBoxTopOffset = 14;
+            let tooltipY = markerPy - 10;
+            if (tooltipY - tooltipBoxTopOffset < plotTop) tooltipY = plotTop + tooltipBoxTopOffset;
+            else if (tooltipY + tooltipBoxH - tooltipBoxTopOffset > plotBottom) tooltipY = plotBottom - (tooltipBoxH - tooltipBoxTopOffset);
+            const text = 'A(' + markerK.toFixed(2) + ') = ' + formatValue(markerA);
+            ctx.font = 'bold 11px -apple-system, sans-serif';
+            const tw = ctx.measureText(text).width;
+
+            const tx = tooltipX + tw + 12 > plotLeft + plotWidth ? markerPx - tw - 20 : tooltipX;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.strokeStyle = 'rgba(244, 114, 182, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(tx - 6, tooltipY - 14, tw + 12, 22, 4);
+            } else {
+                ctx.rect(tx - 6, tooltipY - 14, tw + 12, 22);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f472b6';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, tx, tooltipY - 3);
+        }
+
+        function draw() {
+            const container = document.getElementById('canvas-container');
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = '#060E11';
+            ctx.fillRect(0, 0, w, h);
+
+            // Plot margins
+            const marginLeft = 62;
+            const marginRight = 38;
+            const marginTop = 30;
+            const marginBottom = 60;
+
+            container.style.setProperty('--plot-ml', marginLeft + 'px');
+            container.style.setProperty('--plot-mr', marginRight + 'px');
+            container.style.setProperty('--plot-mt', marginTop + 'px');
+            container.style.setProperty('--plot-mb', marginBottom + 'px');
+
+            plotLeft = marginLeft;
+            plotRight = w - marginRight;
+            plotTop = marginTop;
+            plotBottom = h - marginBottom;
+            plotWidth = plotRight - plotLeft;
+            plotHeight = plotBottom - plotTop;
+
+            if (plotWidth < 100 || plotHeight < 100) return;
+
+            kMin = K_MIN;
+            kMax = K_MAX;
+            aMax = Math.max(1, gaussian(k0, k0, sigma) * 1.1);
+
+            // Draw elements in order (area first so grid lines stay visible through the fill)
+            drawAreaUnderCurve();
+            drawGrid();
+            drawShadedRegions();
+            drawGaussianCurve();
+            drawMarker();
+            drawAxes();
+        }
+
+        function animate() {
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+    })();
+    </script>
+</body>
+</html>
