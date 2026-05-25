@@ -4,8 +4,851 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Polar vs Cartesian — Uniform Circular Motion</title>
-<link rel="stylesheet" href="../simulation-design-system.css">
 <style>
+/* Shared simulation design system inlined so this HTML file works when downloaded standalone. */
+/* ==========================================================================
+   SIMULATION DESIGN SYSTEM
+   --------------------------------------------------------------------------
+   A reusable stylesheet extracted from the Quantum Harmonic Oscillator and
+   Double-Slit Experiment simulations. Drop this file into any new simulation
+   and follow the layout template (template.html) to get a consistent look.
+
+   STRUCTURE OF THIS FILE
+   1.  Font faces (DM Sans + JetBrains Mono numerals)
+   2.  Theme tokens (CSS variables) - dark theme defaults
+   3.  Light theme overrides
+   4.  Global resets
+   5.  Outer layout containers
+   6.  Top bar (title + info icon + theme toggle + Reset / Play-Pause)
+   7.  Info icon and hover tooltip
+   8.  Theme toggle (two supported variants)
+   9.  Plot area and plot box (with maximize-btn and legend)
+   10. Sidebar control panel (CONTROLS heading, ctrl-box, sliders, stat rows)
+   11. Helper utilities (divider, note text, KaTeX overrides)
+   12. Responsive tweaks
+   ========================================================================== */
+
+
+/* --------------------------------------------------------------------------
+   2. THEME TOKENS - DARK THEME (default)
+   Every colour used by the UI is exposed as a CSS variable so the light
+   theme can override them in one place.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg:           #060E11;                 /* page background (near-black teal) */
+  --surface:      rgba(6, 14, 17, 0.95);   /* plot box background */
+  --surface-soft: rgba(6, 14, 17, 0.92);   /* sidebar background */
+  --panel-bg:     #060E11;                 /* solid panel background (tooltips, etc.) */
+
+  /* Text */
+  --text:       #e2e8f0;                   /* primary text */
+  --muted:      #cbd5e1;                   /* secondary / labels */
+  --text-muted: #9ca3af;                   /* tertiary / hints */
+
+  /* Borders & dividers */
+  --border: rgba(19, 49, 49, 0.45);        /* default border colour (dark teal) */
+
+  /* Accent (used for slider thumbs, value readouts, info-tooltip headings) */
+  --accent:      #3b9b8f;                  /* dark-theme accent (teal) */
+  --accent-soft: rgba(59, 155, 143, 0.35); /* glow under slider thumbs */
+
+  /* Control-box colours (Figma green: #1E4D3A) */
+  --ctrl-bg:     rgba(30, 77, 58, 0.15);   /* control box fill */
+  --ctrl-border: rgba(30, 77, 58, 0.50);   /* control box border */
+  --track-bg:    rgba(30, 77, 58, 0.35);   /* slider track */
+
+  /* Top-bar button palette (theme-INDEPENDENT - stays the same in light/dark) */
+  --topbar-bg:        #FAF8F4;             /* cream/parchment top bar */
+  --topbar-text:      #0f172a;             /* near-black title text */
+  --topbar-border:    rgba(19, 49, 49, 0.25);
+
+  --btn-play-bg:      #1E4D3A;             /* dark green when "Playing" */
+  --btn-play-hover:   #2D6E52;             /* lighter green on hover */
+  --btn-play-text:    #ffffff;
+
+  --btn-paused-bg:    #ffffff;             /* white when "Paused" */
+  --btn-paused-text:  #1E4D3A;
+  --btn-paused-border:#1E4D3A;
+
+  --btn-reset-bg:     #FAF8F4;             /* matches top-bar cream */
+  --btn-reset-hover:  #F5EAC4;             /* pale gold on hover */
+  --btn-reset-text:   #B6820C;             /* dark gold */
+  --btn-reset-border: #B6820C;
+
+  /* Fonts */
+  --font-sans: 'DMSansUser', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-nums: 'JetBrainsMonoNums', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+
+/* --------------------------------------------------------------------------
+   3. LIGHT THEME OVERRIDES
+   Triggered by adding `class="light-theme"` to <body> OR
+   `data-theme="light"` on <html>. Both selectors are supported so this CSS
+   works with either toggle style used across the simulations.
+   -------------------------------------------------------------------------- */
+body.light-theme,
+html[data-theme="light"] {
+  --bg:           #e2e8f0;
+  --surface:      rgba(248, 250, 252, 0.96);
+  --surface-soft: rgba(241, 245, 249, 0.96);
+  --panel-bg:     #e5e7eb;
+
+  --text:       #0f172a;
+  --muted:      #334155;
+  --text-muted: #6b7280;
+
+  --border: rgba(51, 65, 85, 0.18);
+
+  --accent:      #2a8a7e;
+  --accent-soft: rgba(42, 138, 126, 0.35);
+
+  --ctrl-bg:     rgba(30, 77, 58, 0.08);
+  --ctrl-border: rgba(30, 77, 58, 0.35);
+  --track-bg:    rgba(30, 77, 58, 0.20);
+
+  /* Top bar keeps the same cream palette in both themes */
+  --topbar-border: rgba(19, 49, 49, 0.20);
+}
+
+
+/* --------------------------------------------------------------------------
+   4. GLOBAL RESETS
+   -------------------------------------------------------------------------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  background: var(--bg);
+  font-family: var(--font-sans);
+  color: var(--text);
+  overflow: hidden; /* full-viewport simulation, no body scroll */
+}
+
+
+/* --------------------------------------------------------------------------
+   5. OUTER LAYOUT
+   <body>
+     <div class="outer-container">
+       <div class="top-bar"> ... </div>
+       <div class="main-container">
+         <div class="plot-area"> ...plots... </div>
+         <div class="sidebar"> ...controls... </div>
+       </div>
+     </div>
+   </body>
+   -------------------------------------------------------------------------- */
+.outer-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 0;
+}
+
+
+/* --------------------------------------------------------------------------
+   6. TOP BAR
+   Fixed-height cream bar with title on the left, info-icon + theme toggle
+   in the middle, and the Reset / Play-Pause button group on the right.
+   -------------------------------------------------------------------------- */
+.top-bar {
+  width: 100%;
+  height: 62px;
+  min-height: 62px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3000;
+  overflow: visible;
+}
+.top-bar h1,
+.top-bar h2 {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--topbar-text);
+  margin: 0;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+/* spacer that pushes the right-hand group to the far right */
+.top-bar-spacer { flex: 1; }
+
+/* Right-hand action area */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The Reset + Play/Pause button group is a fixed 192x36 group on the right */
+.top-actions.sim-playback-btn-group {
+  width: 192px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.top-actions.sim-playback-btn-group .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-family: var(--font-sans);
+  line-height: 1;
+  border-radius: 6px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Play / Pause button colour states
+   - Default (Playing): green fill, white text
+   - .paused state    : white fill, green outline, green text     */
+.top-actions #btnPlayPause:not(.paused),
+.top-actions .btn-topbar-playpause:not(.paused) {
+  background: var(--btn-play-bg);
+  border: 1px solid var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+.top-actions #btnPlayPause:not(.paused):hover,
+.top-actions .btn-topbar-playpause:not(.paused):hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+}
+.top-actions #btnPlayPause.paused {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions #btnPlayPause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+
+/* Reset button: cream fill, gold border + gold text */
+.top-actions #btnReset,
+.top-actions .btn-topbar-reset {
+  background: var(--btn-reset-bg);
+  border: 1px solid var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+.top-actions #btnReset:hover,
+.top-actions .btn-topbar-reset:hover {
+  background: var(--btn-reset-hover);
+  border-color: var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+
+
+/* --------------------------------------------------------------------------
+   7. INFO ICON + HOVER TOOLTIP
+   Small circular "i" next to the title that reveals an "About the
+   Simulation" tooltip on hover.
+   -------------------------------------------------------------------------- */
+.info-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.info-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(100, 116, 139, 0.35);
+  background: rgba(100, 116, 139, 0.10);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.info-icon:hover {
+  border-color: rgba(59, 130, 246, 0.40);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.info-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  background: rgba(6, 14, 17, 0.98);
+  border: 1px solid rgba(19, 49, 49, 0.50);
+  border-radius: 8px;
+  padding: 14px;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.info-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  background: rgba(6, 14, 17, 0.98);
+  border-left: 1px solid rgba(19, 49, 49, 0.50);
+  border-top: 1px solid rgba(19, 49, 49, 0.50);
+  transform: rotate(45deg);
+}
+.info-icon-wrapper:hover .info-tooltip { display: block; }
+
+.info-tooltip h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.info-tooltip p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin: 0;
+}
+.info-tooltip .info-section { margin-bottom: 10px; }
+.info-tooltip .info-section:last-child { margin-bottom: 0; }
+.info-tooltip code {
+  color: var(--accent);
+  font-family: var(--font-nums);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.info-tooltip strong { color: #e2e8f0; }
+.info-tooltip em { color: #cbd5e1; font-style: italic; }
+
+/* Light theme: tooltip becomes light too */
+body.light-theme .info-tooltip,
+html[data-theme="light"] .info-tooltip {
+  background: rgba(248, 250, 252, 0.98);
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+body.light-theme .info-tooltip::before,
+html[data-theme="light"] .info-tooltip::before {
+  background: rgba(248, 250, 252, 0.98);
+  border-left-color: rgba(37, 99, 235, 0.35);
+  border-top-color: rgba(37, 99, 235, 0.35);
+}
+body.light-theme .info-tooltip h4,
+html[data-theme="light"] .info-tooltip h4 { color: #1d4ed8; }
+body.light-theme .info-tooltip p,
+html[data-theme="light"] .info-tooltip p { color: #334155; }
+body.light-theme .info-tooltip strong,
+html[data-theme="light"] .info-tooltip strong { color: #0f172a; }
+body.light-theme .info-tooltip code,
+html[data-theme="light"] .info-tooltip code { color: #1d4ed8; }
+
+
+/* --------------------------------------------------------------------------
+   8. THEME TOGGLE
+   Two supported shapes:
+   A) Simple pill button         <button class="theme-toggle">☀︎</button>
+   B) iOS-style sliding switch   <label class="theme-toggle">
+                                   <input type="checkbox">
+                                   <span class="theme-track">
+                                     <span class="theme-thumb"></span>
+                                   </span>
+                                 </label>
+   -------------------------------------------------------------------------- */
+
+/* A) Pill button variant */
+button.theme-toggle {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #cbd5e1;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.theme-toggle:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* B) Sliding-switch variant */
+label.theme-toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+label.theme-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.theme-track {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 13px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: 2px solid #f3f4f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.theme-toggle input:checked + .theme-track .theme-thumb     { transform: translate(0,    -50%); }
+.theme-toggle input:not(:checked) + .theme-track .theme-thumb { transform: translate(22px, -50%); }
+
+
+/* --------------------------------------------------------------------------
+   9. PLOT AREA + PLOT BOXES
+   .plot-area is the flexible left side that holds one or more .plot-box
+   panels. Each plot box has an absolutely positioned title (top-left),
+   controls (top-right, e.g. maximize button), an optional legend pill, and
+   a fullscreen-on-click "maximized" state.
+   -------------------------------------------------------------------------- */
+.plot-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 14px;
+  min-width: 0;
+  position: relative;
+}
+
+.plot-box {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+  /* Avoid transition:all — it can delay flex reflow after maximize/restore */
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.plot-box canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Plot title sits at the top-left of every plot box */
+.plot-title {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Inline non-uppercase text inside the plot title (e.g. ψₙ(x,t)) */
+.plot-title .plot-inline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* Right-aligned controls (maximize, etc.) */
+.plot-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.maximize-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(6, 14, 17, 0.85);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+  padding: 0;
+}
+.maximize-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #e2e8f0;
+}
+.maximize-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+body.light-theme .maximize-btn,
+html[data-theme="light"] .maximize-btn {
+  background: rgba(226, 232, 240, 0.9);
+  color: #64748b;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+body.light-theme .maximize-btn:hover,
+html[data-theme="light"] .maximize-btn:hover {
+  background: rgba(203, 213, 225, 0.95);
+  color: #334155;
+}
+
+/* Maximized state — fills the plot-area with an opaque background so
+   other canvases don't show through. */
+.plot-box.maximized {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1000 !important;
+  border-radius: 0 !important;
+  flex: none !important;
+  background: #060E11 !important;
+  box-shadow: none;
+}
+body.light-theme .plot-box.maximized,
+html[data-theme="light"] .plot-box.maximized {
+  background: #e2e8f0 !important;
+}
+
+/* Floating legend in the top-right of a plot box */
+.legend {
+  position: absolute;
+  top: 42px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(6, 14, 17, 0.72);
+  border: 1px solid rgba(19, 49, 49, 0.45);
+  border-radius: 999px;
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot  { width: 10px; height: 10px; border-radius: 999px; }
+.legend-dot.dashed {
+  width: 16px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2.5px dashed #ff9f43;
+}
+body.light-theme .legend,
+html[data-theme="light"] .legend {
+  background: rgba(248, 250, 252, 0.86);
+  color: #0f172a;
+  border-color: rgba(51, 65, 85, 0.18);
+}
+
+
+/* --------------------------------------------------------------------------
+   10. SIDEBAR CONTROL PANEL
+   Fixed-width column on the right with a "CONTROLS" heading followed by
+   section headings (h3) and groups of .ctrl-box cards. Sliders and stat
+   rows live inside .ctrl-box.
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--surface-soft);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 24px;
+  overflow-y: auto;
+  z-index: 1001;
+}
+
+/* Section headings inside the sidebar */
+.sidebar h3 {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #b7c2d2;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
+}
+body.light-theme .sidebar h3,
+html[data-theme="light"] .sidebar h3 { color: #475569; }
+
+/* Main "CONTROLS" title at the very top of the sidebar */
+.panel-controls-title {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+  padding: 0 0 10px 0;
+  line-height: 1.2;
+  border-bottom: 1px solid rgba(19, 49, 49, 0.40);
+}
+/* Pull the first control box up so it sits directly under the heading */
+.panel-controls-title + .ctrl-box { margin-top: -24px; }
+body.light-theme .panel-controls-title,
+html[data-theme="light"] .panel-controls-title {
+  color: #475569;
+  border-bottom-color: rgba(51, 65, 85, 0.25);
+}
+
+/* Figma-style control box: tinted green fill with thin green border */
+.ctrl-box {
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  padding: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.ctrl-box:last-child { margin-bottom: 0; }
+
+/* Slider-sized control box has a minimum height for visual consistency */
+.ctrl-box--slider {
+  min-height: 73px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Label inside a control box */
+.ctrl-box-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
+/* Header row inside a control box: label on the left, value on the right */
+.ctrl-box-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ctrl-box-head .ctrl-box-label {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Row that holds the actual <input type="range"> */
+.ctrl-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.ctrl-slider-row input[type=range] {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--track-bg);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Slider thumb (WebKit) — teal circle with soft glow */
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent-soft);
+  border: none;
+}
+/* Slider thumb (Firefox) */
+.ctrl-slider-row input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+
+/* Right-aligned numeric value beside a slider (mono-numeral font) */
+.slider-val,
+.control-value {
+  min-width: 30px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 15px;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+body.light-theme .slider-val,
+body.light-theme .control-value,
+html[data-theme="light"] .slider-val,
+html[data-theme="light"] .control-value { color: #2a8a7e; }
+
+/* Range labels under a slider, e.g.  "400 nm        1600 nm" */
+.control-range {
+  font-size: 0.75rem;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Stat rows (label : value pairs inside a ctrl-box) */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  padding: 6px 0;
+}
+.ctrl-box .stat-row:first-child { padding-top: 0; }
+.ctrl-box .stat-row:last-child  { padding-bottom: 0; }
+
+.stat-label {
+  color: #d7dee9;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+.stat-value {
+  color: #f8fafc;
+  font-weight: 600;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.highlight {
+  font-size: 18px;
+}
+body.light-theme .stat-label,
+html[data-theme="light"] .stat-label { color: #0f172a; }
+body.light-theme .stat-value,
+html[data-theme="light"] .stat-value { color: #0f172a; }
+
+
+/* --------------------------------------------------------------------------
+   11. UTILITIES
+   -------------------------------------------------------------------------- */
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.note-text {
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* KaTeX colour overrides so equation labels inherit text colour cleanly */
+.sidebar .katex,
+.sidebar .katex .mord,
+.sidebar .katex .mbin,
+.sidebar .katex .mrel,
+.sidebar .katex .mopen,
+.sidebar .katex .mclose,
+.sidebar .katex .mpunct,
+.sidebar .katex .mop,
+.sidebar .katex .minner,
+.sidebar .katex .mfrac,
+.sidebar .katex .msupsub {
+  color: inherit;
+}
+.sidebar .katex {
+  font-weight: 600;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-shadow: none;
+}
+
+
+/* --------------------------------------------------------------------------
+   12. RESPONSIVE
+   On narrow viewports tighten the sidebar so the plot area keeps as much
+   room as possible.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .sidebar     { width: 240px; padding: 14px; }
+  .info-tooltip { width: 260px; }
+}
+
+/* End shared simulation design system. */
+
 /* Simulation-specific layout: radar + two time plots + sidebar */
 
 .sim-main-layout {
