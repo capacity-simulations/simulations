@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotational Symmetry Explorer</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Rotational symmetry-specific design-system overrides */
+.symmetry-plot-area {
+  padding: 14px;
+  gap: 12px;
+}
+.symmetry-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  width: 100%;
+}
+.top-row,
+.bottom-row {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.top-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bottom-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 66.666%;
+  max-width: 66.666%;
+  margin: 0 auto;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.panel.symmetric {
+  border-color: rgba(244, 114, 182, 0.65);
+  box-shadow: 0 0 24px rgba(244, 114, 182, 0.25), inset 0 0 16px rgba(244, 114, 182, 0.08);
+}
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6, 14, 17, 0.55);
+}
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.flash-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(244, 114, 182, 0.3) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.panel.symmetric .flash-overlay { opacity: 1; }
+.symmetry-sidebar { gap: 18px; }
+.symmetry-sidebar::-webkit-scrollbar { width: 4px; }
+.symmetry-sidebar::-webkit-scrollbar-track { background: transparent; }
+.symmetry-sidebar::-webkit-scrollbar-thumb { background: rgba(59, 155, 143, 0.3); border-radius: 2px; }
+.symmetry-angle-value {
+  font-size: 24px;
+  line-height: 1;
+  min-width: 78px;
+}
+.symmetry-angle-value .deg {
+  font-size: 14px;
+  color: var(--accent);
+}
+.symmetry-sidebar .ctrl-slider-row { margin-top: 10px; }
+.symmetry-sidebar .control-range { margin-top: 10px; }
+.symmetry-scroll-group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+.symmetry-angles-box {
+  flex: 0 0 auto;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.angles-found-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.angles-found-section:last-child { border-bottom: none; }
+.af-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.af-shape-name {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+.af-count {
+  font-size: 11px;
+  font-family: var(--font-nums);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.angles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.angle-chip {
+  font-size: 11px;
+  font-family: var(--font-nums);
+  background: rgba(244, 114, 182, 0.14);
+  color: #f9a8d4;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(244, 114, 182, 0.28);
+  animation: chipPop 0.3s ease-out;
+}
+.continuous-badge {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6ee7b7;
+  font-style: italic;
+}
+.symmetry-formula {
+  font-family: var(--font-nums);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+@keyframes chipPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.info-tooltip { width: 380px; }
+.info-tooltip .highlight { color: #f9a8d4; font-weight: 600; }
+.top-actions.sim-playback-btn-group { width: 236px; }
+.top-actions.sim-playback-btn-group .btn { font-size: 14px; }
+.top-actions .btn-topbar-playpause.paused {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions .btn-topbar-playpause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+@media (max-width: 1100px) {
+  .sidebar { width: 280px; }
+  .top-actions.sim-playback-btn-group { width: 214px; }
+}
+@media (max-width: 800px) {
+  .main-container { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    min-height: 260px;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid rgba(148, 163, 184, 0.35);
+  }
+  .bottom-row { max-width: 100%; width: 100%; }
+  .info-tooltip { width: 300px; }
+}
+</style>
+</head>
+<body>
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Rotational Symmetry Explorer</h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" title="About this simulation">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <div class="info-section">
+          <p>This interactive simulation demonstrates <strong>rotational symmetry</strong> across different regular polygons. Use the shared rotation slider to rotate all shapes simultaneously and discover the angles at which each shape maps back onto itself.</p>
+        </div>
+        <div class="info-section">
+          <p>A shape has rotational symmetry at angle <code>θ</code> if rotating it by <code>θ</code> around its center produces an identical configuration. The <strong>circle</strong> has <span class="highlight">continuous symmetry</span>, while regular polygons with <em>n</em> sides return to their starting configuration at multiples of <code>360°/n</code>.</p>
+        </div>
+        <div class="info-section">
+          <p><strong>Symmetry groups:</strong> each shape belongs to a cyclic group <code>Cn</code>. The circle belongs to <strong>SO(2)</strong>, which contains all planar rotations.</p>
+        </div>
+        <div class="info-section">
+          <p>The <span class="highlight">pink glow</span> indicates when a shape is at a symmetric angle. Discovered angles are recorded in the control panel on the right.</p>
+        </div>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button id="resetBtn" class="btn btn-topbar-reset">Reset</button>
+      <button id="animateBtn" class="btn btn-topbar-playpause">Auto-Rotate</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area symmetry-plot-area">
+      <div class="symmetry-board" id="main">
+        <div class="top-row" id="topRow"></div>
+        <div class="bottom-row" id="bottomRow"></div>
+      </div>
+    </div>
+
+    <div class="sidebar symmetry-sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div class="ctrl-box ctrl-box--slider">
+        <div class="ctrl-box-head">
+          <span class="ctrl-box-label">Rotation Angle</span>
+          <span class="control-value symmetry-angle-value" id="angleValue">0.0<span class="deg">°</span></span>
+        </div>
+        <div class="ctrl-slider-row">
+          <input type="range" id="angleSlider" min="0" max="360" step="0.5" value="0">
+        </div>
+        <div class="control-range"><span>0°</span><span>90°</span><span>180°</span><span>270°</span><span>360°</span></div>
+      </div>
+
+      <div class="symmetry-scroll-group">
+        <h3>Discovered Symmetry Angles</h3>
+        <div class="ctrl-box symmetry-angles-box" id="anglesContainer"></div>
+      </div>
+
+      <div class="ctrl-box symmetry-formula">
+        Symmetry group C<sub>n</sub> where n = sides<br>
+        Shape returns to start at θ = k·(360°/n)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const shapes = [
+  { name: 'Circle', sides: 72, group: 'SO(2)', isCircle: true },
+  { name: 'Triangle', sides: 3, group: 'C₃' },
+  { name: 'Square', sides: 4, group: 'C₄' },
+  { name: 'Pentagon', sides: 5, group: 'C₅' },
+  { name: 'Hexagon', sides: 6, group: 'C₆' }
+];
+
+const topRow = document.getElementById('topRow');
+const bottomRow = document.getElementById('bottomRow');
+const anglesContainer = document.getElementById('anglesContainer');
+const panels = [];
+
+shapes.forEach((shape, i) => {
+  // Create panel
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="flash-overlay"></div>
+    <div class="panel-header">
+      <div class="panel-title">${shape.name}</div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas></canvas>
+    </div>
+  `;
+  
+  // First 3 shapes go in top row, last 2 in bottom row (centered)
+  if (i < 3) {
+    topRow.appendChild(panel);
+  } else {
+    bottomRow.appendChild(panel);
+  }
+
+  // Create angles-found section in control panel
+  const afSection = document.createElement('div');
+  afSection.className = 'angles-found-section';
+  afSection.innerHTML = `
+    <div class="af-header">
+      <div class="af-shape-name">${shape.name}</div>
+      <div class="af-count" id="af-count-${i}">${shape.isCircle ? '∞' : '0 found'}</div>
+    </div>
+    <div class="angles-list" id="angles-${i}">
+      ${shape.isCircle ? '<div class="continuous-badge">Continuous — every θ ∈ [0°, 360°)</div>' : ''}
+    </div>
+  `;
+  anglesContainer.appendChild(afSection);
+
+  const canvas = panel.querySelector('canvas');
+  panels.push({
+    el: panel,
+    canvas,
+    ctx: canvas.getContext('2d'),
+    shape,
+    foundAngles: new Set(),
+    anglesEl: document.getElementById(`angles-${i}`),
+    countEl: afSection.querySelector(`#af-count-${i}`),
+    symmetric: false,
+    glowIntensity: 0
+  });
+});
+
+function resizeCanvases() {
+  panels.forEach(p => {
+    const rect = p.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    p.canvas.width = rect.width * dpr;
+    p.canvas.height = rect.height * dpr;
+    p.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    p.w = rect.width;
+    p.h = rect.height;
+  });
+}
+let resizePending = false;
+function scheduleResizeCanvases() {
+  if (resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(() => {
+    resizePending = false;
+    resizeCanvases();
+  });
+}
+window.addEventListener('resize', scheduleResizeCanvases);
+if ('ResizeObserver' in window) {
+  const resizeObserver = new ResizeObserver(scheduleResizeCanvases);
+  panels.forEach(p => resizeObserver.observe(p.canvas.parentElement));
+}
+scheduleResizeCanvases();
+
+function generateVertices(n) {
+  const verts = [];
+  const phi0 = Math.PI / 2;
+  for (let k = 0; k < n; k++) {
+    const a = 2 * Math.PI * k / n + phi0;
+    verts.push([Math.cos(a), Math.sin(a)]);
+  }
+  return verts;
+}
+
+panels.forEach(p => { p.vertices = generateVertices(p.shape.sides); });
+
+function rotate(v, theta) {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return [v[0]*c - v[1]*s, v[0]*s + v[1]*c];
+}
+
+const AUTO_ROTATION_DEG_PER_SEC = 30;
+const MAX_FRAME_DT = 1 / 30;
+const SYMMETRY_TOLERANCE_DEG = 1.25;
+
+function normalizeDegrees(deg) {
+  return ((deg % 360) + 360) % 360;
+}
+
+function angleDistanceDegrees(a, b) {
+  const diff = Math.abs(normalizeDegrees(a) - normalizeDegrees(b));
+  return Math.min(diff, 360 - diff);
+}
+
+function snapSymmetryAngle(p, deg) {
+  const step = 360 / p.shape.sides;
+  return normalizeDegrees(Math.round(normalizeDegrees(deg) / step) * step);
+}
+
+function formatAngle(deg) {
+  const rounded = Math.round(deg);
+  if (Math.abs(deg - rounded) < 1e-6) return String(rounded);
+  return deg.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function checkSymmetry(p, deg) {
+  if (p.shape.isCircle) return true;
+  return angleDistanceDegrees(deg, snapSymmetryAngle(p, deg)) <= SYMMETRY_TOLERANCE_DEG;
+}
+
+function drawShape(p, theta) {
+  const { ctx, w, h, vertices, shape } = p;
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.36;
+
+  // Background reference grid
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - r*1.2, cy); ctx.lineTo(cx + r*1.2, cy);
+  ctx.moveTo(cx, cy - r*1.2); ctx.lineTo(cx, cy + r*1.2);
+  ctx.stroke();
+
+  // Reference circle
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ghost of original (faint)
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (shape.isCircle) {
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  } else {
+    vertices.forEach((v, i) => {
+      const x = cx + v[0]*r, y = cy - v[1]*r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.stroke();
+
+  // Original vertex markers
+  if (!shape.isCircle) {
+    vertices.forEach(v => {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.beginPath();
+      ctx.arc(cx + v[0]*r, cy - v[1]*r, 2.5, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  // Rotated shape
+  const glow = p.glowIntensity;
+  const baseColor = p.symmetric ? '#f472b6' : '#60a5fa';
+  const fillColor = p.symmetric ? 'rgba(244, 114, 182, ' + (0.18 + glow*0.15) + ')' : 'rgba(96, 165, 250, 0.12)';
+
+  if (p.symmetric && glow > 0) {
+    ctx.shadowColor = baseColor;
+    ctx.shadowBlur = 18 * glow;
+  }
+
+  ctx.strokeStyle = baseColor;
+  ctx.fillStyle = fillColor;
+  ctx.lineWidth = p.symmetric ? 2.5 : 2;
+  ctx.beginPath();
+  if (shape.isCircle) {
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  } else {
+    vertices.forEach((v, i) => {
+      const rv = rotate(v, theta);
+      const x = cx + rv[0]*r, y = cy - rv[1]*r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Rotated vertex markers (highlight first vertex differently)
+  if (!shape.isCircle) {
+    vertices.forEach((v, i) => {
+      const rv = rotate(v, theta);
+      const x = cx + rv[0]*r, y = cy - rv[1]*r;
+      ctx.fillStyle = i === 0 ? '#fbbf24' : baseColor;
+      ctx.beginPath();
+      ctx.arc(x, y, i === 0 ? 4.5 : 3.5, 0, Math.PI*2);
+      ctx.fill();
+    });
+  } else {
+    // Single marker showing rotation phase on circle
+    const rv = rotate([0, 1], theta);
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(cx + rv[0]*r, cy - rv[1]*r, 5, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Center dot
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.5)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function addSymmetryAngle(p, deg) {
+  if (p.shape.isCircle) return;
+  const label = formatAngle(snapSymmetryAngle(p, deg));
+  if (p.foundAngles.has(label)) return;
+  p.foundAngles.add(label);
+  const sorted = [...p.foundAngles].sort((a,b) => parseFloat(a) - parseFloat(b));
+  p.anglesEl.innerHTML = sorted.map(a => `<div class="angle-chip">${a}°</div>`).join('');
+  p.countEl.textContent = sorted.length + ' found';
+}
+
+const slider = document.getElementById('angleSlider');
+const angleValue = document.getElementById('angleValue');
+const animateBtn = document.getElementById('animateBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+let currentAngle = 0;
+let autoRotate = false;
+let lastTime = performance.now();
+let suppressSymmetryRecordUntilAngleChange = false;
+
+function setAutoRotateButton() {
+  animateBtn.textContent = autoRotate ? 'Pause' : 'Auto-Rotate';
+}
+setAutoRotateButton();
+
+slider.addEventListener('input', e => {
+  currentAngle = parseFloat(e.target.value);
+  if (autoRotate) { autoRotate = false; setAutoRotateButton(); }
+});
+
+animateBtn.addEventListener('click', () => {
+  autoRotate = !autoRotate;
+  setAutoRotateButton();
+});
+
+resetBtn.addEventListener('click', () => {
+  currentAngle = 0;
+  slider.value = 0;
+  autoRotate = false;
+  setAutoRotateButton();
+  suppressSymmetryRecordUntilAngleChange = true;
+  panels.forEach((p, i) => {
+    if (!p.shape.isCircle) {
+      p.symmetric = false;
+      p.glowIntensity = 0;
+      p.el.classList.remove('symmetric');
+      p.foundAngles.clear();
+      p.anglesEl.innerHTML = '';
+      p.countEl.textContent = '0 found';
+    }
+  });
+});
+
+function animate(now) {
+  const dt = Math.min((now - lastTime) / 1000, MAX_FRAME_DT);
+  lastTime = now;
+
+  if (autoRotate) {
+    currentAngle = (currentAngle + dt * AUTO_ROTATION_DEG_PER_SEC) % 360;
+    slider.value = currentAngle;
+  }
+
+  // Keep reset-cleared angle lists empty at 0° until the user changes angle.
+  if (suppressSymmetryRecordUntilAngleChange && currentAngle > 0.001) {
+    suppressSymmetryRecordUntilAngleChange = false;
+  }
+
+  angleValue.innerHTML = currentAngle.toFixed(1) + '<span class="deg">°</span>';
+  const theta = currentAngle * Math.PI / 180;
+
+  panels.forEach(p => {
+    const isSym = checkSymmetry(p, currentAngle);
+    const shouldRecordSymmetry = !suppressSymmetryRecordUntilAngleChange;
+    if (isSym && !p.symmetric) {
+      p.symmetric = true;
+      p.glowIntensity = 1;
+      p.el.classList.add('symmetric');
+      if (shouldRecordSymmetry) addSymmetryAngle(p, currentAngle);
+    } else if (!isSym && p.symmetric) {
+      p.symmetric = false;
+      p.el.classList.remove('symmetric');
+    }
+    if (p.symmetric) {
+      p.glowIntensity = Math.min(1, p.glowIntensity + dt * 2);
+    } else {
+      p.glowIntensity = Math.max(0, p.glowIntensity - dt * 3);
+    }
+    if (p.shape.isCircle) {
+      p.glowIntensity = 0.6 + 0.4 * Math.sin(now * 0.002);
+    }
+    drawShape(p, theta);
+  });
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame((t) => {
+  lastTime = t;
+  panels.forEach(p => {
+    if (p.shape.isCircle) {
+      p.symmetric = true;
+      p.el.classList.add('symmetric');
+    }
+  });
+  animate(t);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotational Symmetry Explorer</title>
+<style>
+/* Shared simulation design system inlined so this HTML file works when downloaded standalone. */
+/* ==========================================================================
+   SIMULATION DESIGN SYSTEM
+   --------------------------------------------------------------------------
+   A reusable stylesheet extracted from the Quantum Harmonic Oscillator and
+   Double-Slit Experiment simulations. Drop this file into any new simulation
+   and follow the layout template (template.html) to get a consistent look.
+
+   STRUCTURE OF THIS FILE
+   1.  Font faces (DM Sans + JetBrains Mono numerals)
+   2.  Theme tokens (CSS variables) - dark theme defaults
+   3.  Light theme overrides
+   4.  Global resets
+   5.  Outer layout containers
+   6.  Top bar (title + info icon + theme toggle + Reset / Play-Pause)
+   7.  Info icon and hover tooltip
+   8.  Theme toggle (two supported variants)
+   9.  Plot area and plot box (with maximize-btn and legend)
+   10. Sidebar control panel (CONTROLS heading, ctrl-box, sliders, stat rows)
+   11. Helper utilities (divider, note text, KaTeX overrides)
+   12. Responsive tweaks
+   ========================================================================== */
+
+
+
+/* --------------------------------------------------------------------------
+   2. THEME TOKENS - DARK THEME (default)
+   Every colour used by the UI is exposed as a CSS variable so the light
+   theme can override them in one place.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg:           #060E11;                 /* page background (near-black teal) */
+  --surface:      rgba(6, 14, 17, 0.95);   /* plot box background */
+  --surface-soft: rgba(6, 14, 17, 0.92);   /* sidebar background */
+  --panel-bg:     #060E11;                 /* solid panel background (tooltips, etc.) */
+
+  /* Text */
+  --text:       #e2e8f0;                   /* primary text */
+  --muted:      #cbd5e1;                   /* secondary / labels */
+  --text-muted: #9ca3af;                   /* tertiary / hints */
+
+  /* Borders & dividers */
+  --border: rgba(19, 49, 49, 0.45);        /* default border colour (dark teal) */
+
+  /* Accent (used for slider thumbs, value readouts, info-tooltip headings) */
+  --accent:      #3b9b8f;                  /* dark-theme accent (teal) */
+  --accent-soft: rgba(59, 155, 143, 0.35); /* glow under slider thumbs */
+
+  /* Control-box colours (Figma green: #1E4D3A) */
+  --ctrl-bg:     rgba(30, 77, 58, 0.15);   /* control box fill */
+  --ctrl-border: rgba(30, 77, 58, 0.50);   /* control box border */
+  --track-bg:    rgba(30, 77, 58, 0.35);   /* slider track */
+
+  /* Top-bar button palette (theme-INDEPENDENT - stays the same in light/dark) */
+  --topbar-bg:        #FAF8F4;             /* cream/parchment top bar */
+  --topbar-text:      #0f172a;             /* near-black title text */
+  --topbar-border:    rgba(19, 49, 49, 0.25);
+
+  --btn-play-bg:      #1E4D3A;             /* dark green when "Playing" */
+  --btn-play-hover:   #2D6E52;             /* lighter green on hover */
+  --btn-play-text:    #ffffff;
+
+  --btn-paused-bg:    #ffffff;             /* white when "Paused" */
+  --btn-paused-text:  #1E4D3A;
+  --btn-paused-border:#1E4D3A;
+
+  --btn-reset-bg:     #FAF8F4;             /* matches top-bar cream */
+  --btn-reset-hover:  #F5EAC4;             /* pale gold on hover */
+  --btn-reset-text:   #B6820C;             /* dark gold */
+  --btn-reset-border: #B6820C;
+
+  /* Fonts */
+  --font-sans: 'DMSansUser', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-nums: 'JetBrainsMonoNums', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+
+/* --------------------------------------------------------------------------
+   3. LIGHT THEME OVERRIDES
+   Triggered by adding `class="light-theme"` to <body> OR
+   `data-theme="light"` on <html>. Both selectors are supported so this CSS
+   works with either toggle style used across the simulations.
+   -------------------------------------------------------------------------- */
+body.light-theme,
+html[data-theme="light"] {
+  --bg:           #e2e8f0;
+  --surface:      rgba(248, 250, 252, 0.96);
+  --surface-soft: rgba(241, 245, 249, 0.96);
+  --panel-bg:     #e5e7eb;
+
+  --text:       #0f172a;
+  --muted:      #334155;
+  --text-muted: #6b7280;
+
+  --border: rgba(51, 65, 85, 0.18);
+
+  --accent:      #2a8a7e;
+  --accent-soft: rgba(42, 138, 126, 0.35);
+
+  --ctrl-bg:     rgba(30, 77, 58, 0.08);
+  --ctrl-border: rgba(30, 77, 58, 0.35);
+  --track-bg:    rgba(30, 77, 58, 0.20);
+
+  /* Top bar keeps the same cream palette in both themes */
+  --topbar-border: rgba(19, 49, 49, 0.20);
+}
+
+
+/* --------------------------------------------------------------------------
+   4. GLOBAL RESETS
+   -------------------------------------------------------------------------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  background: var(--bg);
+  font-family: var(--font-sans);
+  color: var(--text);
+  overflow: hidden; /* full-viewport simulation, no body scroll */
+}
+
+
+/* --------------------------------------------------------------------------
+   5. OUTER LAYOUT
+   <body>
+     <div class="outer-container">
+       <div class="top-bar"> ... </div>
+       <div class="main-container">
+         <div class="plot-area"> ...plots... </div>
+         <div class="sidebar"> ...controls... </div>
+       </div>
+     </div>
+   </body>
+   -------------------------------------------------------------------------- */
+.outer-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 0;
+}
+
+
+/* --------------------------------------------------------------------------
+   6. TOP BAR
+   Fixed-height cream bar with title on the left, info-icon + theme toggle
+   in the middle, and the Reset / Play-Pause button group on the right.
+   -------------------------------------------------------------------------- */
+.top-bar {
+  width: 100%;
+  height: 62px;
+  min-height: 62px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3000;
+  overflow: visible;
+}
+.top-bar h1,
+.top-bar h2 {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--topbar-text);
+  margin: 0;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+/* spacer that pushes the right-hand group to the far right */
+.top-bar-spacer { flex: 1; }
+
+/* Right-hand action area */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The Reset + Play/Pause button group is a fixed 192x36 group on the right */
+.top-actions.sim-playback-btn-group {
+  width: 192px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.top-actions.sim-playback-btn-group .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-family: var(--font-sans);
+  line-height: 1;
+  border-radius: 6px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Play / Pause button colour states
+   - Default (Playing): green fill, white text
+   - .paused state    : white fill, green outline, green text     */
+.top-actions #btnPlayPause:not(.paused),
+.top-actions .btn-topbar-playpause:not(.paused) {
+  background: var(--btn-play-bg);
+  border: 1px solid var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+.top-actions #btnPlayPause:not(.paused):hover,
+.top-actions .btn-topbar-playpause:not(.paused):hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+}
+.top-actions #btnPlayPause.paused {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions #btnPlayPause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+
+/* Reset button: cream fill, gold border + gold text */
+.top-actions #btnReset,
+.top-actions .btn-topbar-reset {
+  background: var(--btn-reset-bg);
+  border: 1px solid var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+.top-actions #btnReset:hover,
+.top-actions .btn-topbar-reset:hover {
+  background: var(--btn-reset-hover);
+  border-color: var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+
+
+/* --------------------------------------------------------------------------
+   7. INFO ICON + HOVER TOOLTIP
+   Small circular "i" next to the title that reveals an "About the
+   Simulation" tooltip on hover.
+   -------------------------------------------------------------------------- */
+.info-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.info-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(100, 116, 139, 0.35);
+  background: rgba(100, 116, 139, 0.10);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.info-icon:hover {
+  border-color: rgba(59, 130, 246, 0.40);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.info-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  background: rgba(6, 14, 17, 0.98);
+  border: 1px solid rgba(19, 49, 49, 0.50);
+  border-radius: 8px;
+  padding: 14px;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.info-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  background: rgba(6, 14, 17, 0.98);
+  border-left: 1px solid rgba(19, 49, 49, 0.50);
+  border-top: 1px solid rgba(19, 49, 49, 0.50);
+  transform: rotate(45deg);
+}
+.info-icon-wrapper:hover .info-tooltip { display: block; }
+
+.info-tooltip h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.info-tooltip p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin: 0;
+}
+.info-tooltip .info-section { margin-bottom: 10px; }
+.info-tooltip .info-section:last-child { margin-bottom: 0; }
+.info-tooltip code {
+  color: var(--accent);
+  font-family: var(--font-nums);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.info-tooltip strong { color: #e2e8f0; }
+.info-tooltip em { color: #cbd5e1; font-style: italic; }
+
+/* Light theme: tooltip becomes light too */
+body.light-theme .info-tooltip,
+html[data-theme="light"] .info-tooltip {
+  background: rgba(248, 250, 252, 0.98);
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+body.light-theme .info-tooltip::before,
+html[data-theme="light"] .info-tooltip::before {
+  background: rgba(248, 250, 252, 0.98);
+  border-left-color: rgba(37, 99, 235, 0.35);
+  border-top-color: rgba(37, 99, 235, 0.35);
+}
+body.light-theme .info-tooltip h4,
+html[data-theme="light"] .info-tooltip h4 { color: #1d4ed8; }
+body.light-theme .info-tooltip p,
+html[data-theme="light"] .info-tooltip p { color: #334155; }
+body.light-theme .info-tooltip strong,
+html[data-theme="light"] .info-tooltip strong { color: #0f172a; }
+body.light-theme .info-tooltip code,
+html[data-theme="light"] .info-tooltip code { color: #1d4ed8; }
+
+
+/* --------------------------------------------------------------------------
+   8. THEME TOGGLE
+   Two supported shapes:
+   A) Simple pill button         <button class="theme-toggle">☀︎</button>
+   B) iOS-style sliding switch   <label class="theme-toggle">
+                                   <input type="checkbox">
+                                   <span class="theme-track">
+                                     <span class="theme-thumb"></span>
+                                   </span>
+                                 </label>
+   -------------------------------------------------------------------------- */
+
+/* A) Pill button variant */
+button.theme-toggle {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #cbd5e1;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.theme-toggle:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* B) Sliding-switch variant */
+label.theme-toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+label.theme-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.theme-track {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 13px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: 2px solid #f3f4f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.theme-toggle input:checked + .theme-track .theme-thumb     { transform: translate(0,    -50%); }
+.theme-toggle input:not(:checked) + .theme-track .theme-thumb { transform: translate(22px, -50%); }
+
+
+/* --------------------------------------------------------------------------
+   9. PLOT AREA + PLOT BOXES
+   .plot-area is the flexible left side that holds one or more .plot-box
+   panels. Each plot box has an absolutely positioned title (top-left),
+   controls (top-right, e.g. maximize button), an optional legend pill, and
+   a fullscreen-on-click "maximized" state.
+   -------------------------------------------------------------------------- */
+.plot-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 14px;
+  min-width: 0;
+  position: relative;
+}
+
+.plot-box {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+  /* Avoid transition:all — it can delay flex reflow after maximize/restore */
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.plot-box canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Plot title sits at the top-left of every plot box */
+.plot-title {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Inline non-uppercase text inside the plot title (e.g. ψₙ(x,t)) */
+.plot-title .plot-inline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* Right-aligned controls (maximize, etc.) */
+.plot-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.maximize-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(6, 14, 17, 0.85);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+  padding: 0;
+}
+.maximize-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #e2e8f0;
+}
+.maximize-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+body.light-theme .maximize-btn,
+html[data-theme="light"] .maximize-btn {
+  background: rgba(226, 232, 240, 0.9);
+  color: #64748b;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+body.light-theme .maximize-btn:hover,
+html[data-theme="light"] .maximize-btn:hover {
+  background: rgba(203, 213, 225, 0.95);
+  color: #334155;
+}
+
+/* Maximized state — fills the plot-area with an opaque background so
+   other canvases don't show through. */
+.plot-box.maximized {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1000 !important;
+  border-radius: 0 !important;
+  flex: none !important;
+  background: #060E11 !important;
+  box-shadow: none;
+}
+body.light-theme .plot-box.maximized,
+html[data-theme="light"] .plot-box.maximized {
+  background: #e2e8f0 !important;
+}
+
+/* Floating legend in the top-right of a plot box */
+.legend {
+  position: absolute;
+  top: 42px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(6, 14, 17, 0.72);
+  border: 1px solid rgba(19, 49, 49, 0.45);
+  border-radius: 999px;
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot  { width: 10px; height: 10px; border-radius: 999px; }
+.legend-dot.dashed {
+  width: 16px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2.5px dashed #ff9f43;
+}
+body.light-theme .legend,
+html[data-theme="light"] .legend {
+  background: rgba(248, 250, 252, 0.86);
+  color: #0f172a;
+  border-color: rgba(51, 65, 85, 0.18);
+}
+
+
+/* --------------------------------------------------------------------------
+   10. SIDEBAR CONTROL PANEL
+   Fixed-width column on the right with a "CONTROLS" heading followed by
+   section headings (h3) and groups of .ctrl-box cards. Sliders and stat
+   rows live inside .ctrl-box.
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--surface-soft);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 24px;
+  overflow-y: auto;
+  z-index: 1001;
+}
+
+/* Section headings inside the sidebar */
+.sidebar h3 {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #b7c2d2;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
+}
+body.light-theme .sidebar h3,
+html[data-theme="light"] .sidebar h3 { color: #475569; }
+
+/* Main "CONTROLS" title at the very top of the sidebar */
+.panel-controls-title {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+  padding: 0 0 10px 0;
+  line-height: 1.2;
+  border-bottom: 1px solid rgba(19, 49, 49, 0.40);
+}
+/* Pull the first control box up so it sits directly under the heading */
+.panel-controls-title + .ctrl-box { margin-top: -24px; }
+body.light-theme .panel-controls-title,
+html[data-theme="light"] .panel-controls-title {
+  color: #475569;
+  border-bottom-color: rgba(51, 65, 85, 0.25);
+}
+
+/* Figma-style control box: tinted green fill with thin green border */
+.ctrl-box {
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  padding: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.ctrl-box:last-child { margin-bottom: 0; }
+
+/* Slider-sized control box has a minimum height for visual consistency */
+.ctrl-box--slider {
+  min-height: 73px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Label inside a control box */
+.ctrl-box-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
+/* Header row inside a control box: label on the left, value on the right */
+.ctrl-box-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ctrl-box-head .ctrl-box-label {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Row that holds the actual <input type="range"> */
+.ctrl-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.ctrl-slider-row input[type=range] {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--track-bg);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Slider thumb (WebKit) — teal circle with soft glow */
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent-soft);
+  border: none;
+}
+/* Slider thumb (Firefox) */
+.ctrl-slider-row input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+
+/* Right-aligned numeric value beside a slider (mono-numeral font) */
+.slider-val,
+.control-value {
+  min-width: 30px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 15px;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+body.light-theme .slider-val,
+body.light-theme .control-value,
+html[data-theme="light"] .slider-val,
+html[data-theme="light"] .control-value { color: #2a8a7e; }
+
+/* Range labels under a slider, e.g.  "400 nm        1600 nm" */
+.control-range {
+  font-size: 0.75rem;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Stat rows (label : value pairs inside a ctrl-box) */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  padding: 6px 0;
+}
+.ctrl-box .stat-row:first-child { padding-top: 0; }
+.ctrl-box .stat-row:last-child  { padding-bottom: 0; }
+
+.stat-label {
+  color: #d7dee9;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+.stat-value {
+  color: #f8fafc;
+  font-weight: 600;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.highlight {
+  font-size: 18px;
+}
+body.light-theme .stat-label,
+html[data-theme="light"] .stat-label { color: #0f172a; }
+body.light-theme .stat-value,
+html[data-theme="light"] .stat-value { color: #0f172a; }
+
+
+/* --------------------------------------------------------------------------
+   11. UTILITIES
+   -------------------------------------------------------------------------- */
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.note-text {
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* KaTeX colour overrides so equation labels inherit text colour cleanly */
+.sidebar .katex,
+.sidebar .katex .mord,
+.sidebar .katex .mbin,
+.sidebar .katex .mrel,
+.sidebar .katex .mopen,
+.sidebar .katex .mclose,
+.sidebar .katex .mpunct,
+.sidebar .katex .mop,
+.sidebar .katex .minner,
+.sidebar .katex .mfrac,
+.sidebar .katex .msupsub {
+  color: inherit;
+}
+.sidebar .katex {
+  font-weight: 600;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-shadow: none;
+}
+
+
+/* --------------------------------------------------------------------------
+   12. RESPONSIVE
+   On narrow viewports tighten the sidebar so the plot area keeps as much
+   room as possible.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .sidebar     { width: 240px; padding: 14px; }
+  .info-tooltip { width: 260px; }
+}
+
+/* End shared simulation design system. */
+
+/* Rotational symmetry-specific design-system overrides */
+.symmetry-plot-area {
+  padding: 14px;
+  gap: 12px;
+}
+.symmetry-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  width: 100%;
+}
+.top-row,
+.bottom-row {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.top-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bottom-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 66.666%;
+  max-width: 66.666%;
+  margin: 0 auto;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.panel.symmetric {
+  border-color: rgba(244, 114, 182, 0.65);
+  box-shadow: 0 0 24px rgba(244, 114, 182, 0.25), inset 0 0 16px rgba(244, 114, 182, 0.08);
+}
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6, 14, 17, 0.55);
+}
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.flash-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(244, 114, 182, 0.3) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.panel.symmetric .flash-overlay { opacity: 1; }
+.symmetry-sidebar { gap: 18px; }
+.symmetry-sidebar::-webkit-scrollbar { width: 4px; }
+.symmetry-sidebar::-webkit-scrollbar-track { background: transparent; }
+.symmetry-sidebar::-webkit-scrollbar-thumb { background: rgba(59, 155, 143, 0.3); border-radius: 2px; }
+.symmetry-angle-value {
+  font-size: 24px;
+  line-height: 1;
+  min-width: 78px;
+}
+.symmetry-angle-value .deg {
+  font-size: 14px;
+  color: var(--accent);
+}
+.symmetry-sidebar .ctrl-slider-row { margin-top: 10px; }
+.symmetry-sidebar .control-range { margin-top: 10px; }
+.symmetry-scroll-group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+.symmetry-angles-box {
+  flex: 0 0 auto;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.angles-found-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.angles-found-section:last-child { border-bottom: none; }
+.af-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.af-shape-name {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+.af-count {
+  font-size: 11px;
+  font-family: var(--font-nums);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.angles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.angle-chip {
+  font-size: 11px;
+  font-family: var(--font-nums);
+  background: rgba(244, 114, 182, 0.14);
+  color: #f9a8d4;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(244, 114, 182, 0.28);
+  animation: chipPop 0.3s ease-out;
+}
+.continuous-badge {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6ee7b7;
+  font-style: italic;
+}
+.symmetry-formula {
+  font-family: var(--font-nums);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+@keyframes chipPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.info-tooltip { width: 380px; }
+.info-tooltip .highlight { color: #f9a8d4; font-weight: 600; }
+.top-actions.sim-playback-btn-group { width: 236px; }
+.top-actions.sim-playback-btn-group .btn { font-size: 14px; }
+.top-actions .btn-topbar-playpause.paused {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions .btn-topbar-playpause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+@media (max-width: 1100px) {
+  .sidebar { width: 280px; }
+  .top-actions.sim-playback-btn-group { width: 214px; }
+}
+@media (max-width: 800px) {
+  .main-container { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    min-height: 260px;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid rgba(148, 163, 184, 0.35);
+  }
+  .bottom-row { max-width: 100%; width: 100%; }
+  .info-tooltip { width: 300px; }
+}
+</style>
+</head>
+<body>
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Rotational Symmetry Explorer</h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" title="About this simulation">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <div class="info-section">
+          <p>This interactive simulation demonstrates <strong>rotational symmetry</strong> across different regular polygons. Use the shared rotation slider to rotate all shapes simultaneously and discover the angles at which each shape maps back onto itself.</p>
+        </div>
+        <div class="info-section">
+          <p>A shape has rotational symmetry at angle <code>θ</code> if rotating it by <code>θ</code> around its center produces an identical configuration. The <strong>circle</strong> has <span class="highlight">continuous symmetry</span>, while regular polygons with <em>n</em> sides return to their starting configuration at multiples of <code>360°/n</code>.</p>
+        </div>
+        <div class="info-section">
+          <p><strong>Symmetry groups:</strong> each shape belongs to a cyclic group <code>Cn</code>. The circle belongs to <strong>SO(2)</strong>, which contains all planar rotations.</p>
+        </div>
+        <div class="info-section">
+          <p>The <span class="highlight">pink glow</span> indicates when a shape is at a symmetric angle. Discovered angles are recorded in the control panel on the right.</p>
+        </div>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button id="resetBtn" class="btn btn-topbar-reset">Reset</button>
+      <button id="animateBtn" class="btn btn-topbar-playpause">Auto-Rotate</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area symmetry-plot-area">
+      <div class="symmetry-board" id="main">
+        <div class="top-row" id="topRow"></div>
+        <div class="bottom-row" id="bottomRow"></div>
+      </div>
+    </div>
+
+    <div class="sidebar symmetry-sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div class="ctrl-box ctrl-box--slider">
+        <div class="ctrl-box-head">
+          <span class="ctrl-box-label">Rotation Angle</span>
+          <span class="control-value symmetry-angle-value" id="angleValue">0.0<span class="deg">°</span></span>
+        </div>
+        <div class="ctrl-slider-row">
+          <input type="range" id="angleSlider" min="0" max="360" step="0.5" value="0">
+        </div>
+        <div class="control-range"><span>0°</span><span>90°</span><span>180°</span><span>270°</span><span>360°</span></div>
+      </div>
+
+      <div class="symmetry-scroll-group">
+        <h3>Discovered Symmetry Angles</h3>
+        <div class="ctrl-box symmetry-angles-box" id="anglesContainer"></div>
+      </div>
+
+      <div class="ctrl-box symmetry-formula">
+        Symmetry group C<sub>n</sub> where n = sides<br>
+        Shape returns to start at θ = k·(360°/n)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const shapes = [
+  { name: 'Circle', sides: 72, group: 'SO(2)', isCircle: true },
+  { name: 'Triangle', sides: 3, group: 'C₃' },
+  { name: 'Square', sides: 4, group: 'C₄' },
+  { name: 'Pentagon', sides: 5, group: 'C₅' },
+  { name: 'Hexagon', sides: 6, group: 'C₆' }
+];
+
+const topRow = document.getElementById('topRow');
+const bottomRow = document.getElementById('bottomRow');
+const anglesContainer = document.getElementById('anglesContainer');
+const panels = [];
+
+shapes.forEach((shape, i) => {
+  // Create panel
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="flash-overlay"></div>
+    <div class="panel-header">
+      <div class="panel-title">${shape.name}</div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas></canvas>
+    </div>
+  `;
+  
+  // First 3 shapes go in top row, last 2 in bottom row (centered)
+  if (i < 3) {
+    topRow.appendChild(panel);
+  } else {
+    bottomRow.appendChild(panel);
+  }
+
+  // Create angles-found section in control panel
+  const afSection = document.createElement('div');
+  afSection.className = 'angles-found-section';
+  afSection.innerHTML = `
+    <div class="af-header">
+      <div class="af-shape-name">${shape.name}</div>
+      <div class="af-count" id="af-count-${i}">${shape.isCircle ? '∞' : '0 found'}</div>
+    </div>
+    <div class="angles-list" id="angles-${i}">
+      ${shape.isCircle ? '<div class="continuous-badge">Continuous — every θ ∈ [0°, 360°)</div>' : ''}
+    </div>
+  `;
+  anglesContainer.appendChild(afSection);
+
+  const canvas = panel.querySelector('canvas');
+  panels.push({
+    el: panel,
+    canvas,
+    ctx: canvas.getContext('2d'),
+    shape,
+    foundAngles: new Set(),
+    anglesEl: document.getElementById(`angles-${i}`),
+    countEl: afSection.querySelector(`#af-count-${i}`),
+    symmetric: false,
+    glowIntensity: 0
+  });
+});
+
+function resizeCanvases() {
+  panels.forEach(p => {
+    const rect = p.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    p.canvas.width = rect.width * dpr;
+    p.canvas.height = rect.height * dpr;
+    p.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    p.w = rect.width;
+    p.h = rect.height;
+  });
+}
+let resizePending = false;
+function scheduleResizeCanvases() {
+  if (resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(() => {
+    resizePending = false;
+    resizeCanvases();
+  });
+}
+window.addEventListener('resize', scheduleResizeCanvases);
+if ('ResizeObserver' in window) {
+  const resizeObserver = new ResizeObserver(scheduleResizeCanvases);
+  panels.forEach(p => resizeObserver.observe(p.canvas.parentElement));
+}
+scheduleResizeCanvases();
+
+function generateVertices(n) {
+  const verts = [];
+  const phi0 = Math.PI / 2;
+  for (let k = 0; k < n; k++) {
+    const a = 2 * Math.PI * k / n + phi0;
+    verts.push([Math.cos(a), Math.sin(a)]);
+  }
+  return verts;
+}
+
+panels.forEach(p => { p.vertices = generateVertices(p.shape.sides); });
+
+function rotate(v, theta) {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return [v[0]*c - v[1]*s, v[0]*s + v[1]*c];
+}
+
+const AUTO_ROTATION_DEG_PER_SEC = 30;
+const MAX_FRAME_DT = 1 / 30;
+const SYMMETRY_TOLERANCE_DEG = 1.25;
+
+function normalizeDegrees(deg) {
+  return ((deg % 360) + 360) % 360;
+}
+
+function angleDistanceDegrees(a, b) {
+  const diff = Math.abs(normalizeDegrees(a) - normalizeDegrees(b));
+  return Math.min(diff, 360 - diff);
+}
+
+function snapSymmetryAngle(p, deg) {
+  const step = 360 / p.shape.sides;
+  return normalizeDegrees(Math.round(normalizeDegrees(deg) / step) * step);
+}
+
+function formatAngle(deg) {
+  const rounded = Math.round(deg);
+  if (Math.abs(deg - rounded) < 1e-6) return String(rounded);
+  return deg.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function checkSymmetry(p, deg) {
+  if (p.shape.isCircle) return true;
+  return angleDistanceDegrees(deg, snapSymmetryAngle(p, deg)) <= SYMMETRY_TOLERANCE_DEG;
+}
+
+function drawShape(p, theta) {
+  const { ctx, w, h, vertices, shape } = p;
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.36;
+
+  // Background reference grid
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - r*1.2, cy); ctx.lineTo(cx + r*1.2, cy);
+  ctx.moveTo(cx, cy - r*1.2); ctx.lineTo(cx, cy + r*1.2);
+  ctx.stroke();
+
+  // Reference circle
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ghost of original (faint)
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (shape.isCircle) {
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  } else {
+    vertices.forEach((v, i) => {
+      const x = cx + v[0]*r, y = cy - v[1]*r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.stroke();
+
+  // Original vertex markers
+  if (!shape.isCircle) {
+    vertices.forEach(v => {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.beginPath();
+      ctx.arc(cx + v[0]*r, cy - v[1]*r, 2.5, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  // Rotated shape
+  const glow = p.glowIntensity;
+  const baseColor = p.symmetric ? '#f472b6' : '#60a5fa';
+  const fillColor = p.symmetric ? 'rgba(244, 114, 182, ' + (0.18 + glow*0.15) + ')' : 'rgba(96, 165, 250, 0.12)';
+
+  if (p.symmetric && glow > 0) {
+    ctx.shadowColor = baseColor;
+    ctx.shadowBlur = 18 * glow;
+  }
+
+  ctx.strokeStyle = baseColor;
+  ctx.fillStyle = fillColor;
+  ctx.lineWidth = p.symmetric ? 2.5 : 2;
+  ctx.beginPath();
+  if (shape.isCircle) {
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  } else {
+    vertices.forEach((v, i) => {
+      const rv = rotate(v, theta);
+      const x = cx + rv[0]*r, y = cy - rv[1]*r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Rotated vertex markers (highlight first vertex differently)
+  if (!shape.isCircle) {
+    vertices.forEach((v, i) => {
+      const rv = rotate(v, theta);
+      const x = cx + rv[0]*r, y = cy - rv[1]*r;
+      ctx.fillStyle = i === 0 ? '#fbbf24' : baseColor;
+      ctx.beginPath();
+      ctx.arc(x, y, i === 0 ? 4.5 : 3.5, 0, Math.PI*2);
+      ctx.fill();
+    });
+  } else {
+    // Single marker showing rotation phase on circle
+    const rv = rotate([0, 1], theta);
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(cx + rv[0]*r, cy - rv[1]*r, 5, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Center dot
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.5)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function addSymmetryAngle(p, deg) {
+  if (p.shape.isCircle) return;
+  const label = formatAngle(snapSymmetryAngle(p, deg));
+  if (p.foundAngles.has(label)) return;
+  p.foundAngles.add(label);
+  const sorted = [...p.foundAngles].sort((a,b) => parseFloat(a) - parseFloat(b));
+  p.anglesEl.innerHTML = sorted.map(a => `<div class="angle-chip">${a}°</div>`).join('');
+  p.countEl.textContent = sorted.length + ' found';
+}
+
+const slider = document.getElementById('angleSlider');
+const angleValue = document.getElementById('angleValue');
+const animateBtn = document.getElementById('animateBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+let currentAngle = 0;
+let autoRotate = false;
+let lastTime = performance.now();
+let suppressSymmetryRecordUntilAngleChange = false;
+
+function setAutoRotateButton() {
+  animateBtn.textContent = autoRotate ? 'Pause' : 'Auto-Rotate';
+}
+setAutoRotateButton();
+
+slider.addEventListener('input', e => {
+  currentAngle = parseFloat(e.target.value);
+  if (autoRotate) { autoRotate = false; setAutoRotateButton(); }
+});
+
+animateBtn.addEventListener('click', () => {
+  autoRotate = !autoRotate;
+  setAutoRotateButton();
+});
+
+resetBtn.addEventListener('click', () => {
+  currentAngle = 0;
+  slider.value = 0;
+  autoRotate = false;
+  setAutoRotateButton();
+  suppressSymmetryRecordUntilAngleChange = true;
+  panels.forEach((p, i) => {
+    if (!p.shape.isCircle) {
+      p.symmetric = false;
+      p.glowIntensity = 0;
+      p.el.classList.remove('symmetric');
+      p.foundAngles.clear();
+      p.anglesEl.innerHTML = '';
+      p.countEl.textContent = '0 found';
+    }
+  });
+});
+
+function animate(now) {
+  const dt = Math.min((now - lastTime) / 1000, MAX_FRAME_DT);
+  lastTime = now;
+
+  if (autoRotate) {
+    currentAngle = (currentAngle + dt * AUTO_ROTATION_DEG_PER_SEC) % 360;
+    slider.value = currentAngle;
+  }
+
+  // Keep reset-cleared angle lists empty at 0° until the user changes angle.
+  if (suppressSymmetryRecordUntilAngleChange && currentAngle > 0.001) {
+    suppressSymmetryRecordUntilAngleChange = false;
+  }
+
+  angleValue.innerHTML = currentAngle.toFixed(1) + '<span class="deg">°</span>';
+  const theta = currentAngle * Math.PI / 180;
+
+  panels.forEach(p => {
+    const isSym = checkSymmetry(p, currentAngle);
+    const shouldRecordSymmetry = !suppressSymmetryRecordUntilAngleChange;
+    if (isSym && !p.symmetric) {
+      p.symmetric = true;
+      p.glowIntensity = 1;
+      p.el.classList.add('symmetric');
+      if (shouldRecordSymmetry) addSymmetryAngle(p, currentAngle);
+    } else if (!isSym && p.symmetric) {
+      p.symmetric = false;
+      p.el.classList.remove('symmetric');
+    }
+    if (p.symmetric) {
+      p.glowIntensity = Math.min(1, p.glowIntensity + dt * 2);
+    } else {
+      p.glowIntensity = Math.max(0, p.glowIntensity - dt * 3);
+    }
+    if (p.shape.isCircle) {
+      p.glowIntensity = 0.6 + 0.4 * Math.sin(now * 0.002);
+    }
+    drawShape(p, theta);
+  });
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame((t) => {
+  lastTime = t;
+  panels.forEach(p => {
+    if (p.shape.isCircle) {
+      p.symmetric = true;
+      p.el.classList.add('symmetric');
+    }
+  });
+  animate(t);
+});
+</script>
+</body>
+</html>
