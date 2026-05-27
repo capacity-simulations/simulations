@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polar vs Cartesian — Uniform Circular Motion</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Simulation-specific layout: radar + two time plots + sidebar */
+
+.sim-main-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 320px;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.sim-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.panel-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.panel-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+    min-height: 22px;
+}
+.panel-header-text {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    color: var(--muted);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.panel-subtitle {
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.3;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.plot-panel {
+    padding: 8px 10px 10px;
+    border-left: none;
+}
+.plot-panel .panel-subtitle {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.radar-panel {
+    grid-row: span 2;
+    border-right: none;
+}
+.radar-panel .panel-title { color: var(--accent); }
+.radar-panel .panel-subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.sim-right-col {
+    grid-column: 2;
+    grid-row: span 2;
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+    min-height: 0;
+    border-left: 1px solid var(--border);
+}
+.sim-right-col .sim-panel {
+    border-left: none;
+    border-right: none;
+}
+.sim-right-col .sim-panel:first-child {
+    border-bottom: 1px solid var(--border);
+}
+
+canvas.plot {
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    display: block;
+}
+
+.legend {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-sans);
+    margin: 0;
+    flex-shrink: 0;
+}
+.plot-panel .legend { margin-left: auto; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 14px; height: 2px; border-radius: 1px; }
+
+.sidebar.sim-sidebar {
+  grid-column: 3;
+  grid-row: span 2;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.plot-toggle {
+  display: flex;
+  width: 100%;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.plot-toggle-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.plot-toggle-btn:hover:not(.active) {
+  color: var(--text);
+  background: rgba(59, 155, 143, 0.15);
+}
+.plot-toggle-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+.plot-toggle-btn[data-mode="x"].active,
+.plot-toggle-btn[data-mode="y"].active,
+.plot-toggle-btn[data-mode="r"].active,
+.plot-toggle-btn[data-mode="theta"].active {
+  color: #ffffff;
+}
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 5000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal-overlay .modal {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+.modal .close-btn {
+  position: absolute;
+  top: 14px; right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal .close-btn:hover { color: var(--text); }
+.modal h2 {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  margin-bottom: 14px;
+  padding-right: 24px;
+}
+.modal p {
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+.modal p strong { color: var(--text); }
+.modal p em { color: var(--muted); }
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(59, 155, 143, 0.3); border-radius: 2px; }
+
+.ctrl-box--slider-brg {
+  min-height: auto;
+  padding-bottom: 10px;
+}
+.ctrl-slider-row + .ctrl-hint {
+  display: block;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 10px 0 0 0;
+  padding: 0;
+  line-height: 1.35;
+}
+.brg-theta-dropdown {
+  margin-top: 10px;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  background: var(--ctrl-bg);
+  overflow: hidden;
+}
+.brg-theta-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.brg-theta-dropdown-trigger::-webkit-details-marker {
+  display: none;
+}
+.brg-theta-dropdown-trigger::marker {
+  content: '';
+}
+.brg-theta-dropdown-arrow {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--accent);
+  transition: transform 0.2s ease;
+}
+.brg-theta-dropdown[open] .brg-theta-dropdown-arrow {
+  transform: rotate(90deg);
+}
+.brg-theta-dropdown[open] .brg-theta-dropdown-trigger {
+  color: var(--text);
+  border-bottom: 1px solid var(--ctrl-border);
+}
+.brg-theta-note {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  line-height: 1.55;
+}
+.brg-theta-note p {
+  margin: 0 0 8px 0;
+}
+.brg-theta-note p:last-child {
+  margin-bottom: 0;
+}
+.brg-theta-note strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.brg-theta-note code {
+  font-family: var(--font-nums);
+  font-size: 11px;
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Polar vs Cartesian — Uniform Circular Motion</h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" id="info-btn" title="About this simulation">i</div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button class="btn" id="btnReset">Reset</button>
+      <button class="btn" id="btnPlayPause">Pause</button>
+    </div>
+  </div>
+
+<!-- Info Modal -->
+<div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+        <button class="close-btn" id="modal-close">&times;</button>
+        <h2>About This Simulation</h2>
+        <p>
+            This interactive visualization demonstrates <strong>uniform circular motion</strong> — a fundamental concept in physics where an object moves along a circular path at constant speed.
+        </p>
+        <p>
+            The <strong>radar screen</strong> (left) shows a blip orbiting the origin at constant radius <em>R</em> and constant angular speed <em>ω</em>. A sweeping radar arm follows the blip's angular position.
+        </p>
+        <p>
+            The <strong>Cartesian plot</strong> decomposes this motion into <strong>x(t) = R·cos(ωt + θ₀)</strong> and <strong>y(t) = R·sin(ωt + θ₀)</strong> — two sinusoids 90° out of phase. This reveals how circular motion is really two coupled oscillations.
+        </p>
+        <p>
+            The <strong>Polar plot</strong> shows the same motion in polar coordinates: <strong>r(t)</strong> is a flat horizontal line (constant radius) and <strong>θ(t)</strong> is a linear ramp (angle grows steadily). What looks complex in Cartesian coordinates becomes elegantly simple in polar form.
+        </p>
+        <p>
+            This contrast illustrates a key insight from physics: <strong>choosing the right coordinate system can transform a complex problem into a trivial one</strong>. The motion resets after one full period <em>T = 2π/ω</em>.
+        </p>
+    </div>
+</div>
+
+  <div class="main-container">
+    <div class="sim-main-layout">
+    <div class="sim-panel radar-panel">
+        <div class="panel-header">
+            <div class="panel-title">Radar Screen</div>
+            <div class="panel-subtitle">x = R·cos(ωt + θ₀),&ensp;y = R·sin(ωt + θ₀)</div>
+        </div>
+        <canvas class="plot" id="radar"></canvas>
+    </div>
+
+    <div class="sim-right-col">
+        <div class="sim-panel plot-panel">
+            <div class="panel-header-row">
+                <div class="panel-header-text">
+                    <span class="panel-title" id="cart-plot-title">Cartesian — x(t)</span>
+                    <span class="panel-subtitle" id="cart-plot-subtitle">x = R·cos(ωt + θ₀)</span>
+                </div>
+                <div class="legend" id="cart-plot-legend">
+                    <div class="legend-item"><div class="legend-swatch" style="background:#60a5fa"></div>x(t)</div>
+                </div>
+            </div>
+            <canvas class="plot" id="cartesian"></canvas>
+        </div>
+        <div class="sim-panel plot-panel">
+            <div class="panel-header-row">
+                <div class="panel-header-text">
+                    <span class="panel-title" id="polar-plot-title">Polar — r(t)</span>
+                    <span class="panel-subtitle" id="polar-plot-subtitle">constant radius</span>
+                </div>
+                <div class="legend" id="polar-plot-legend">
+                    <div class="legend-item"><div class="legend-swatch" style="background:#34d399"></div>r(t)</div>
+                </div>
+            </div>
+            <canvas class="plot" id="polar"></canvas>
+        </div>
+    </div>
+
+    <div class="sidebar sim-sidebar">
+        <h2 class="panel-controls-title">CONTROLS</h2>
+
+        <div>
+          <h3>Parameters</h3>
+          <div class="ctrl-box ctrl-box--slider">
+            <div class="ctrl-box-head">
+              <span class="ctrl-box-label">Radius (R)</span>
+              <span class="slider-val" id="val-R">1.00</span>
+            </div>
+            <div class="ctrl-slider-row">
+              <input type="range" id="slider-R" min="0.2" max="2.0" step="0.01" value="1.0">
+            </div>
+          </div>
+          <div class="ctrl-box ctrl-box--slider">
+            <div class="ctrl-box-head">
+              <span class="ctrl-box-label">Speed (ω)</span>
+              <span class="slider-val" id="val-w">1.05 rad/s</span>
+            </div>
+            <div class="ctrl-slider-row">
+              <input type="range" id="slider-w" min="0.5236" max="6.2832" step="0.01" value="1.0472">
+            </div>
+          </div>
+          <div class="ctrl-box ctrl-box--slider ctrl-box--slider-brg">
+            <div class="ctrl-box-head">
+              <span class="ctrl-box-label">Init bearing (BRG)</span>
+              <span class="slider-val" id="val-t0">0°</span>
+            </div>
+            <div class="ctrl-slider-row">
+              <input type="range" id="slider-t0" min="0" max="360" step="0.1" value="0">
+            </div>
+            <p class="ctrl-hint" id="val-theta0-hint">(θ₀ = 0.00 rad)</p>
+            <details class="brg-theta-dropdown">
+              <summary class="brg-theta-dropdown-trigger">
+                <span class="brg-theta-dropdown-arrow" aria-hidden="true"></span>
+                <span>BRG vs θ notes</span>
+              </summary>
+              <div class="brg-theta-note">
+                <p><strong>BRG vs θ (polar plot):</strong> The radar uses <strong>compass bearing</strong> — 0° at the top, increasing clockwise. The polar and Cartesian plots use the standard <strong>math angle θ</strong>, measured counterclockwise from the +x axis.</p>
+                <p>Initial values are linked by <code>θ₀ = 90° − BRG</code> (then θ₀ is stored in radians). At runtime, <code>θ(t) = ωt + θ₀</code> is what appears on the θ(t) plot.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div>
+          <h3>Cartesian plot</h3>
+          <div class="plot-toggle" id="cart-plot-toggle" role="group" aria-label="Cartesian plot selection">
+            <button type="button" class="plot-toggle-btn active" data-mode="x">x(t)</button>
+            <button type="button" class="plot-toggle-btn" data-mode="y">y(t)</button>
+          </div>
+        </div>
+
+        <div>
+          <h3>Polar plot</h3>
+          <div class="plot-toggle" id="polar-plot-toggle" role="group" aria-label="Polar plot selection">
+            <button type="button" class="plot-toggle-btn active" data-mode="r">r(t)</button>
+            <button type="button" class="plot-toggle-btn" data-mode="theta">θ(t)</button>
+          </div>
+        </div>
+
+        <div>
+          <h3>Live Stats</h3>
+          <div class="ctrl-box">
+            <div class="stat-row"><span class="stat-label">Phase time (t mod T)</span><span class="stat-value" id="stat-t">0.00s</span></div>
+            <div class="stat-row"><span class="stat-label">R</span><span class="stat-value" id="stat-R">1.00</span></div>
+            <div class="stat-row"><span class="stat-label">θ</span><span class="stat-value" id="stat-theta-math">0.00 rad</span></div>
+            <div class="stat-row"><span class="stat-label">x</span><span class="stat-value" id="stat-x">+1.00</span></div>
+            <div class="stat-row"><span class="stat-label">y</span><span class="stat-value" id="stat-y">+0.00</span></div>
+            <div class="stat-row"><span class="stat-label">BRG</span><span class="stat-value" id="stat-theta">0°</span></div>
+          </div>
+        </div>
+
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+    // Modal logic
+    var infoBtn = document.getElementById('info-btn');
+    var modalOverlay = document.getElementById('modal-overlay');
+    var modalClose = document.getElementById('modal-close');
+    infoBtn.addEventListener('click', function() {
+        modalOverlay.classList.add('active');
+    });
+    modalClose.addEventListener('click', function() {
+        modalOverlay.classList.remove('active');
+    });
+    modalOverlay.addEventListener('click', function(e) {
+        if (e.target === modalOverlay) {
+            modalOverlay.classList.remove('active');
+        }
+    });
+
+    var radarCanvas = document.getElementById('radar');
+    var cartCanvas = document.getElementById('cartesian');
+    var polarCanvas = document.getElementById('polar');
+    var rctx = radarCanvas.getContext('2d');
+    var cctx = cartCanvas.getContext('2d');
+    var pctx = polarCanvas.getContext('2d');
+
+    var CANVAS_BG = '#060E11';
+
+    var params = {
+        R: 1.0,
+        omega: Math.PI / 3,
+        theta0: Math.PI / 2
+    };
+    var t = 0;
+    var paused = false;
+    var lastTime = -1;
+    var cartPlotMode = 'x';
+    var polarPlotMode = 'r';
+
+    var cartPlotTitle = document.getElementById('cart-plot-title');
+    var cartPlotSubtitle = document.getElementById('cart-plot-subtitle');
+    var cartPlotLegend = document.getElementById('cart-plot-legend');
+    var polarPlotTitle = document.getElementById('polar-plot-title');
+    var polarPlotSubtitle = document.getElementById('polar-plot-subtitle');
+    var polarPlotLegend = document.getElementById('polar-plot-legend');
+    var cartPlotToggle = document.getElementById('cart-plot-toggle');
+    var polarPlotToggle = document.getElementById('polar-plot-toggle');
+
+    function updateCartPlotUI() {
+        if (cartPlotMode === 'x') {
+            cartPlotTitle.textContent = 'Cartesian — x(t)';
+            cartPlotSubtitle.textContent = 'x = R·cos(ωt + θ₀)';
+            cartPlotLegend.innerHTML = '<div class="legend-item"><div class="legend-swatch" style="background:#60a5fa"></div>x(t)</div>';
+        } else {
+            cartPlotTitle.textContent = 'Cartesian — y(t)';
+            cartPlotSubtitle.textContent = 'y = R·sin(ωt + θ₀)';
+            cartPlotLegend.innerHTML = '<div class="legend-item"><div class="legend-swatch" style="background:#f472b6"></div>y(t)</div>';
+        }
+        var btns = cartPlotToggle.querySelectorAll('.plot-toggle-btn');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle('active', btns[i].getAttribute('data-mode') === cartPlotMode);
+        }
+    }
+
+    function updatePolarPlotUI() {
+        if (polarPlotMode === 'r') {
+            polarPlotTitle.textContent = 'Polar — r(t)';
+            polarPlotSubtitle.textContent = 'constant radius';
+            polarPlotLegend.innerHTML = '<div class="legend-item"><div class="legend-swatch" style="background:#34d399"></div>r(t)</div>';
+        } else {
+            polarPlotTitle.textContent = 'Polar — θ(t)';
+            polarPlotSubtitle.textContent = 'linear ramp (mod 2π)';
+            polarPlotLegend.innerHTML = '<div class="legend-item"><div class="legend-swatch" style="background:#fbbf24"></div>θ(t)</div>';
+        }
+        var btns = polarPlotToggle.querySelectorAll('.plot-toggle-btn');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle('active', btns[i].getAttribute('data-mode') === polarPlotMode);
+        }
+    }
+
+    cartPlotToggle.addEventListener('click', function(e) {
+        var btn = e.target.closest('.plot-toggle-btn');
+        if (!btn) return;
+        var mode = btn.getAttribute('data-mode');
+        if (mode === cartPlotMode) return;
+        cartPlotMode = mode;
+        updateCartPlotUI();
+    });
+
+    polarPlotToggle.addEventListener('click', function(e) {
+        var btn = e.target.closest('.plot-toggle-btn');
+        if (!btn) return;
+        var mode = btn.getAttribute('data-mode');
+        if (mode === polarPlotMode) return;
+        polarPlotMode = mode;
+        updatePolarPlotUI();
+    });
+
+    updateCartPlotUI();
+    updatePolarPlotUI();
+
+    // trail for radar
+    var trail = [];
+    var MAX_TRAIL = 120;
+
+    // Compass bearing (0° = top, clockwise) ↔ math angle for cos/sin
+    function bearingToAngle(deg) {
+        return (90 - deg) * Math.PI / 180;
+    }
+    function angleToBearing(rad) {
+        return ((90 - rad * 180 / Math.PI) % 360 + 360) % 360;
+    }
+    /** Same wrapped θ as the polar θ(t) plot: (ω·t + θ₀) mod 2π in [0, 2π). */
+    function getWrappedPlotTheta(time) {
+        var raw = (params.omega * time + params.theta0) % (2 * Math.PI);
+        return raw < 0 ? raw + 2 * Math.PI : raw;
+    }
+    function resize() {
+        var canvases = [radarCanvas, cartCanvas, polarCanvas];
+        for (var ci = 0; ci < canvases.length; ci++) {
+            var c = canvases[ci];
+            var rect = c.getBoundingClientRect();
+            var dpr = window.devicePixelRatio || 1;
+            c.width = Math.floor(rect.width * dpr);
+            c.height = Math.floor(rect.height * dpr);
+            c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+    }
+    window.addEventListener('resize', resize);
+
+    // -------- Sliders ----------
+    var slR = document.getElementById('slider-R');
+    var slW = document.getElementById('slider-w');
+    var slT0 = document.getElementById('slider-t0');
+    var valR = document.getElementById('val-R');
+    var valW = document.getElementById('val-w');
+    var valT0 = document.getElementById('val-t0');
+    var valTheta0Hint = document.getElementById('val-theta0-hint');
+
+    function syncTheta0FromSlider() {
+        var bearingDeg = parseFloat(slT0.value);
+        params.theta0 = bearingToAngle(bearingDeg);
+        valT0.textContent = bearingDeg.toFixed(1) + '\u00B0';
+        valTheta0Hint.textContent = '(\u03B8\u2080 = ' + params.theta0.toFixed(2) + ' rad)';
+    }
+
+    function resetMotion() {
+        t = 0;
+        trail.length = 0;
+        lastTime = -1;
+    }
+
+    slR.addEventListener('input', function() {
+        params.R = parseFloat(slR.value);
+        valR.textContent = params.R.toFixed(2);
+        resetMotion();
+    });
+    slW.addEventListener('input', function() {
+        params.omega = parseFloat(slW.value);
+        valW.textContent = params.omega.toFixed(2) + ' rad/s';
+        resetMotion();
+    });
+    slT0.addEventListener('input', function() {
+        syncTheta0FromSlider();
+        resetMotion();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', resetMotion);
+    var btnPlayPause = document.getElementById('btnPlayPause');
+    btnPlayPause.addEventListener('click', function() {
+        paused = !paused;
+        btnPlayPause.textContent = paused ? 'Play' : 'Pause';
+        btnPlayPause.classList.toggle('paused', paused);
+        if (!paused) lastTime = -1;
+    });
+
+    // -------- Radar drawing (PPI-style scope) ----------
+    function drawRadar() {
+        var w = radarCanvas.clientWidth;
+        var h = radarCanvas.clientHeight;
+        if (w === 0 || h === 0) return { x: 0, y: 0, theta: 0 };
+        var cx = w / 2;
+        var cy = h / 2;
+        var margin = 36;
+        var maxR = Math.min(w, h) / 2 - margin;
+        var RANGE_MAX = 2.0;
+        // Inset plot radius so blip + glow at R=RANGE_MAX stays inside circular clip
+        var BLIP_VISUAL_R = 12;
+        var plotR = Math.max(8, maxR - BLIP_VISUAL_R);
+        var scale = plotR / RANGE_MAX;
+        var theta = params.omega * t + params.theta0;
+        var x = params.R * Math.cos(theta);
+        var y = params.R * Math.sin(theta);
+        var bx = cx + x * scale;
+        var by = cy - y * scale;
+        var sweepAngle = theta;
+
+        rctx.clearRect(0, 0, w, h);
+
+        // CRT bezel / outer frame
+        var bezelGrad = rctx.createRadialGradient(cx, cy, maxR * 0.2, cx, cy, maxR + 28);
+        bezelGrad.addColorStop(0, '#0c1814');
+        bezelGrad.addColorStop(0.85, '#081210');
+        bezelGrad.addColorStop(1, '#060E11');
+        rctx.fillStyle = bezelGrad;
+        rctx.fillRect(0, 0, w, h);
+
+        // Scope face (phosphor screen)
+        var faceGrad = rctx.createRadialGradient(cx, cy - maxR * 0.15, 0, cx, cy, maxR);
+        faceGrad.addColorStop(0, 'rgba(20, 80, 45, 0.55)');
+        faceGrad.addColorStop(0.55, 'rgba(8, 35, 20, 0.92)');
+        faceGrad.addColorStop(1, 'rgba(4, 18, 10, 0.98)');
+        rctx.beginPath();
+        rctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+        rctx.fillStyle = faceGrad;
+        rctx.fill();
+
+        rctx.save();
+        rctx.beginPath();
+        rctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+        rctx.clip();
+
+        // Subtle scanlines
+        rctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+        for (var sy = cy - maxR; sy < cy + maxR; sy += 3) {
+            rctx.fillRect(cx - maxR, sy, maxR * 2, 1);
+        }
+
+        // Range rings (outer ring = RANGE_MAX at plotR, inset from bezel)
+        rctx.lineWidth = 1;
+        for (var ri = 1; ri <= 4; ri++) {
+            var ringR = (plotR / 4) * ri;
+            rctx.strokeStyle = ri === 4
+                ? 'rgba(74, 222, 128, 0.45)'
+                : 'rgba(52, 211, 153, 0.22)';
+            rctx.beginPath();
+            rctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+            rctx.stroke();
+        }
+
+        // Bearing spokes (every 30°)
+        for (var bi = 0; bi < 12; bi++) {
+            var bDeg = bi * 30;
+            var ba = bearingToAngle(bDeg);
+            var isMajor = bi % 3 === 0;
+            rctx.strokeStyle = isMajor
+                ? 'rgba(110, 231, 183, 0.35)'
+                : 'rgba(52, 211, 153, 0.12)';
+            rctx.lineWidth = isMajor ? 1 : 0.5;
+            rctx.beginPath();
+            rctx.moveTo(cx, cy);
+            rctx.lineTo(cx + Math.cos(ba) * plotR, cy - Math.sin(ba) * plotR);
+            rctx.stroke();
+        }
+
+        // Target orbit (range circle)
+        rctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
+        rctx.lineWidth = 1;
+        rctx.setLineDash([5, 5]);
+        rctx.beginPath();
+        rctx.arc(cx, cy, params.R * scale, 0, Math.PI * 2);
+        rctx.stroke();
+        rctx.setLineDash([]);
+
+        // Phosphor trail (target history)
+        for (var ti = 0; ti < trail.length; ti++) {
+            var pt = trail[ti];
+            var alpha = (ti + 1) / trail.length;
+            var tpx = cx + pt.x * scale;
+            var tpy = cy - pt.y * scale;
+            var trailGlow = rctx.createRadialGradient(tpx, tpy, 0, tpx, tpy, 6 + alpha * 4);
+            trailGlow.addColorStop(0, 'rgba(134, 239, 172, ' + (alpha * 0.55).toFixed(3) + ')');
+            trailGlow.addColorStop(1, 'rgba(34, 197, 94, 0)');
+            rctx.fillStyle = trailGlow;
+            rctx.beginPath();
+            rctx.arc(tpx, tpy, 2 + alpha * 2, 0, Math.PI * 2);
+            rctx.fill();
+        }
+
+        // Rotating sweep wedge (leading the contact)
+        var sweepWidth = Math.PI / 5;
+        rctx.beginPath();
+        rctx.moveTo(cx, cy);
+        rctx.arc(cx, cy, maxR, sweepAngle - sweepWidth, sweepAngle, false);
+        rctx.closePath();
+        var wedgeGrad = rctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+        wedgeGrad.addColorStop(0, 'rgba(34, 197, 94, 0.06)');
+        wedgeGrad.addColorStop(0.5, 'rgba(74, 222, 128, 0.14)');
+        wedgeGrad.addColorStop(1, 'rgba(134, 239, 172, 0.02)');
+        rctx.fillStyle = wedgeGrad;
+        rctx.fill();
+
+        // Bright sweep line
+        var armX = cx + Math.cos(sweepAngle) * maxR;
+        var armY = cy - Math.sin(sweepAngle) * maxR;
+        var armGrad = rctx.createLinearGradient(cx, cy, armX, armY);
+        armGrad.addColorStop(0, 'rgba(187, 247, 208, 0.95)');
+        armGrad.addColorStop(0.4, 'rgba(74, 222, 128, 0.7)');
+        armGrad.addColorStop(1, 'rgba(34, 197, 94, 0)');
+        rctx.strokeStyle = armGrad;
+        rctx.lineWidth = 2.5;
+        rctx.shadowColor = 'rgba(74, 222, 128, 0.9)';
+        rctx.shadowBlur = 12;
+        rctx.beginPath();
+        rctx.moveTo(cx, cy);
+        rctx.lineTo(armX, armY);
+        rctx.stroke();
+        rctx.shadowBlur = 0;
+
+        // Faint range/bearing guides to target
+        rctx.setLineDash([2, 4]);
+        rctx.lineWidth = 1;
+        rctx.strokeStyle = 'rgba(134, 239, 172, 0.2)';
+        rctx.beginPath();
+        rctx.moveTo(bx, by);
+        rctx.lineTo(bx, cy);
+        rctx.stroke();
+        rctx.beginPath();
+        rctx.moveTo(bx, by);
+        rctx.lineTo(cx, by);
+        rctx.stroke();
+        rctx.setLineDash([]);
+
+        // Target blip (glow sized to fit inside clip at max range)
+        var blipGlowR = Math.min(BLIP_VISUAL_R, plotR * 0.45);
+        var blipGlow = rctx.createRadialGradient(bx, by, 0, bx, by, blipGlowR);
+        blipGlow.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+        blipGlow.addColorStop(0.25, 'rgba(250, 204, 21, 0.55)');
+        blipGlow.addColorStop(0.6, 'rgba(74, 222, 128, 0.2)');
+        blipGlow.addColorStop(1, 'rgba(34, 197, 94, 0)');
+        rctx.fillStyle = blipGlow;
+        rctx.beginPath();
+        rctx.arc(bx, by, blipGlowR, 0, Math.PI * 2);
+        rctx.fill();
+
+        rctx.fillStyle = '#fef08a';
+        rctx.shadowColor = 'rgba(250, 204, 21, 0.95)';
+        rctx.shadowBlur = 6;
+        rctx.beginPath();
+        rctx.arc(bx, by, 4, 0, Math.PI * 2);
+        rctx.fill();
+        rctx.shadowBlur = 0;
+        rctx.strokeStyle = '#fffbeb';
+        rctx.lineWidth = 1;
+        rctx.stroke();
+
+        // Center reticle
+        rctx.strokeStyle = 'rgba(110, 231, 183, 0.5)';
+        rctx.lineWidth = 1;
+        var ret = 6;
+        rctx.beginPath();
+        rctx.moveTo(cx - ret, cy);
+        rctx.lineTo(cx + ret, cy);
+        rctx.moveTo(cx, cy - ret);
+        rctx.lineTo(cx, cy + ret);
+        rctx.stroke();
+
+        rctx.restore();
+
+        // Scope ring bezel
+        rctx.strokeStyle = 'rgba(52, 211, 153, 0.55)';
+        rctx.lineWidth = 2;
+        rctx.beginPath();
+        rctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+        rctx.stroke();
+        rctx.strokeStyle = 'rgba(4, 47, 26, 0.9)';
+        rctx.lineWidth = 4;
+        rctx.beginPath();
+        rctx.arc(cx, cy, maxR + 2, 0, Math.PI * 2);
+        rctx.stroke();
+
+        // Bearing labels (compass: 0° top, clockwise)
+        rctx.font = '600 11px system-ui, -apple-system, sans-serif';
+        rctx.fillStyle = 'rgba(187, 247, 208, 0.9)';
+        rctx.textAlign = 'center';
+        rctx.textBaseline = 'middle';
+        var bearings = [
+            { deg: 0,   lx: 0,  ly: -1 },
+            { deg: 90,  lx: 1,  ly: 0 },
+            { deg: 180, lx: 0,  ly: 1 },
+            { deg: 270, lx: -1, ly: 0 }
+        ];
+        for (var lb = 0; lb < bearings.length; lb++) {
+            var b = bearings[lb];
+            rctx.fillText(
+                b.deg + '\u00B0',
+                cx + b.lx * (maxR + 16),
+                cy + b.ly * (maxR + 16)
+            );
+        }
+
+        // Range labels at mid-radius inside each ring band (avoids bearing labels on rim)
+        rctx.textAlign = 'left';
+        rctx.textBaseline = 'middle';
+        rctx.font = '11px system-ui, -apple-system, sans-serif';
+        rctx.fillStyle = 'rgba(187, 247, 208, 0.9)';
+        for (var li = 1; li <= 4; li++) {
+            var ringMid = (plotR / 4) * (li - 0.5);
+            rctx.fillText((0.5 * li).toFixed(1), cx + ringMid + 5, cy);
+        }
+
+        // HUD readout
+        var range = Math.sqrt(x * x + y * y);
+        var bearingDeg = angleToBearing(theta);
+        rctx.font = '500 11px system-ui, -apple-system, sans-serif';
+        rctx.fillStyle = 'rgba(226, 252, 232, 0.95)';
+        rctx.textAlign = 'left';
+        rctx.fillText('RNG ' + range.toFixed(2), cx - maxR + 8, cy + maxR - 22);
+        rctx.fillText('BRG ' + bearingDeg.toFixed(0) + '\u00B0', cx - maxR + 8, cy + maxR - 8);
+
+        return { x: x, y: y, theta: theta };
+    }
+
+    // -------- Cartesian Plot ----------
+    function drawCartesian() {
+        var w = cartCanvas.clientWidth;
+        var h = cartCanvas.clientHeight;
+        if (w === 0 || h === 0) return;
+        var padL = 32, padR = 12, padT = 8, padB = 18;
+        var plotW = w - padL - padR;
+        var plotH = h - padT - padB;
+
+        cctx.clearRect(0, 0, w, h);
+        cctx.fillStyle = CANVAS_BG;
+        cctx.fillRect(0, 0, w, h);
+
+        var T = 2 * Math.PI / params.omega;
+        var tWindow = T;
+        var tStart = 0;
+        var yMax = 2;
+
+        function xToPx(tt) { return padL + ((tt - tStart) / tWindow) * plotW; }
+        function yToPx(val) { return padT + (1 - (val + yMax) / (2 * yMax)) * plotH; }
+
+        // grid
+        cctx.strokeStyle = 'rgba(19, 49, 49, 0.45)';
+        cctx.lineWidth = 1;
+        for (var i = 0; i <= 4; i++) {
+            var yv = -yMax + (i / 4) * 2 * yMax;
+            var py = yToPx(yv);
+            cctx.beginPath();
+            cctx.moveTo(padL, py);
+            cctx.lineTo(padL + plotW, py);
+            cctx.stroke();
+        }
+        for (var i = 0; i <= 4; i++) {
+            var px = padL + (i / 4) * plotW;
+            cctx.beginPath();
+            cctx.moveTo(px, padT);
+            cctx.lineTo(px, padT + plotH);
+            cctx.stroke();
+        }
+
+        // zero line
+        cctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+        cctx.beginPath();
+        cctx.moveTo(padL, yToPx(0));
+        cctx.lineTo(padL + plotW, yToPx(0));
+        cctx.stroke();
+
+        // labels
+        cctx.fillStyle = '#f1f5f9';
+        cctx.font = '11px system-ui, -apple-system, sans-serif';
+        cctx.textAlign = 'right';
+        for (var i = 0; i <= 4; i++) {
+            var yv = yMax - (i / 4) * 2 * yMax;
+            cctx.fillText(yv.toFixed(1), padL - 6, padT + (i / 4) * plotH + 3);
+        }
+        cctx.textAlign = 'center';
+        for (var i = 0; i <= 4; i++) {
+            var tt = tStart + (i / 4) * tWindow;
+            cctx.fillText(tt.toFixed(1) + 's', padL + (i / 4) * plotW, padT + plotH + 14);
+        }
+
+        // ±R reference lines
+        cctx.strokeStyle = 'rgba(96, 165, 250, 0.18)';
+        cctx.setLineDash([2, 4]);
+        cctx.beginPath();
+        cctx.moveTo(padL, yToPx(params.R));
+        cctx.lineTo(padL + plotW, yToPx(params.R));
+        cctx.moveTo(padL, yToPx(-params.R));
+        cctx.lineTo(padL + plotW, yToPx(-params.R));
+        cctx.stroke();
+        cctx.setLineDash([]);
+
+        var steps = 240;
+        var tMod = t % T;
+        var nowPx = xToPx(tMod);
+
+        if (cartPlotMode === 'x') {
+            cctx.strokeStyle = '#60a5fa';
+            cctx.lineWidth = 2;
+            cctx.beginPath();
+            for (var i = 0; i <= steps; i++) {
+                var tt = tStart + (i / steps) * tWindow;
+                var v = params.R * Math.cos(params.omega * tt + params.theta0);
+                var px = xToPx(tt);
+                var py = yToPx(v);
+                if (i === 0) cctx.moveTo(px, py);
+                else cctx.lineTo(px, py);
+            }
+            cctx.stroke();
+        } else {
+            cctx.strokeStyle = '#f472b6';
+            cctx.lineWidth = 2;
+            cctx.beginPath();
+            for (var i = 0; i <= steps; i++) {
+                var tt = tStart + (i / steps) * tWindow;
+                var v = params.R * Math.sin(params.omega * tt + params.theta0);
+                var px = xToPx(tt);
+                var py = yToPx(v);
+                if (i === 0) cctx.moveTo(px, py);
+                else cctx.lineTo(px, py);
+            }
+            cctx.stroke();
+        }
+
+        // now-line
+        cctx.strokeStyle = 'rgba(248, 250, 252, 0.85)';
+        cctx.lineWidth = 1.5;
+        cctx.setLineDash([4, 3]);
+        cctx.beginPath();
+        cctx.moveTo(nowPx, padT);
+        cctx.lineTo(nowPx, padT + plotH);
+        cctx.stroke();
+        cctx.setLineDash([]);
+
+        // dot at current value
+        if (cartPlotMode === 'x') {
+            var curX = params.R * Math.cos(params.omega * tMod + params.theta0);
+            cctx.fillStyle = '#60a5fa';
+            cctx.beginPath();
+            cctx.arc(nowPx, yToPx(curX), 4, 0, Math.PI * 2);
+            cctx.fill();
+        } else {
+            var curY = params.R * Math.sin(params.omega * tMod + params.theta0);
+            cctx.fillStyle = '#f472b6';
+            cctx.beginPath();
+            cctx.arc(nowPx, yToPx(curY), 4, 0, Math.PI * 2);
+            cctx.fill();
+        }
+    }
+
+    // -------- Polar Plot ----------
+    function drawPolar() {
+        var w = polarCanvas.clientWidth;
+        var h = polarCanvas.clientHeight;
+        if (w === 0 || h === 0) return;
+        var padL = 36, padR = 12, padT = 8, padB = 18;
+        var plotW = w - padL - padR;
+        var plotH = h - padT - padB;
+
+        pctx.clearRect(0, 0, w, h);
+        pctx.fillStyle = CANVAS_BG;
+        pctx.fillRect(0, 0, w, h);
+
+        var T = 2 * Math.PI / params.omega;
+        var tWindow = T;
+        var tStart = 0;
+        var rMax = 2;
+        var thetaMax = 2 * Math.PI;
+
+        function xToPx(tt) { return padL + ((tt - tStart) / tWindow) * plotW; }
+        function rToPx(val) { return padT + (1 - val / rMax) * plotH; }
+        function thetaToPx(val) { return padT + (1 - val / thetaMax) * plotH; }
+
+        // grid
+        pctx.strokeStyle = 'rgba(19, 49, 49, 0.45)';
+        pctx.lineWidth = 1;
+        for (var i = 0; i <= 4; i++) {
+            var py = padT + (i / 4) * plotH;
+            pctx.beginPath();
+            pctx.moveTo(padL, py);
+            pctx.lineTo(padL + plotW, py);
+            pctx.stroke();
+        }
+        for (var i = 0; i <= 4; i++) {
+            var px = padL + (i / 4) * plotW;
+            pctx.beginPath();
+            pctx.moveTo(px, padT);
+            pctx.lineTo(px, padT + plotH);
+            pctx.stroke();
+        }
+
+        // y-axis labels (single plot)
+        pctx.font = '600 11px system-ui, -apple-system, sans-serif';
+        pctx.textAlign = 'right';
+        if (polarPlotMode === 'r') {
+            pctx.fillStyle = '#6ee7b7';
+            for (var i = 0; i <= 4; i++) {
+                var v = rMax - (i / 4) * rMax;
+                pctx.fillText(v.toFixed(1), padL - 6, padT + (i / 4) * plotH + 3);
+            }
+        } else {
+            pctx.fillStyle = '#fde047';
+            var thetaLabels = ['2\u03C0', '3\u03C0/2', '\u03C0', '\u03C0/2', '0'];
+            for (var i = 0; i <= 4; i++) {
+                pctx.fillText(thetaLabels[i], padL - 6, padT + (i / 4) * plotH + 3);
+            }
+        }
+
+        // bottom axis (time)
+        pctx.textAlign = 'center';
+        pctx.fillStyle = '#f1f5f9';
+        pctx.font = '11px system-ui, -apple-system, sans-serif';
+        for (var i = 0; i <= 4; i++) {
+            var tt = tStart + (i / 4) * tWindow;
+            pctx.fillText(tt.toFixed(1) + 's', padL + (i / 4) * plotW, padT + plotH + 14);
+        }
+
+        var steps = 240;
+        var tMod = t % T;
+        var nowPx = xToPx(tMod);
+
+        if (polarPlotMode === 'r') {
+            pctx.strokeStyle = '#34d399';
+            pctx.lineWidth = 2.5;
+            pctx.beginPath();
+            var rY = rToPx(params.R);
+            pctx.moveTo(padL, rY);
+            pctx.lineTo(padL + plotW, rY);
+            pctx.stroke();
+
+            pctx.fillStyle = '#6ee7b7';
+            pctx.beginPath();
+            pctx.arc(nowPx, rToPx(params.R), 4, 0, Math.PI * 2);
+            pctx.fill();
+        } else {
+            pctx.strokeStyle = '#fbbf24';
+            pctx.lineWidth = 2.5;
+            pctx.beginPath();
+            var prevWrapped = null;
+            for (var i = 0; i <= steps; i++) {
+                var tt = tStart + (i / steps) * tWindow;
+                var thetaVal = getWrappedPlotTheta(tt);
+                var px = xToPx(tt);
+                var py = thetaToPx(thetaVal);
+                if (i === 0 || (prevWrapped !== null && thetaVal < prevWrapped)) {
+                    pctx.moveTo(px, py);
+                } else {
+                    pctx.lineTo(px, py);
+                }
+                prevWrapped = thetaVal;
+            }
+            pctx.stroke();
+
+            var curTheta = getWrappedPlotTheta(tMod);
+            pctx.fillStyle = '#fde047';
+            pctx.beginPath();
+            pctx.arc(nowPx, thetaToPx(curTheta), 4, 0, Math.PI * 2);
+            pctx.fill();
+        }
+
+        // now-line
+        pctx.strokeStyle = 'rgba(248, 250, 252, 0.85)';
+        pctx.lineWidth = 1.5;
+        pctx.setLineDash([4, 3]);
+        pctx.beginPath();
+        pctx.moveTo(nowPx, padT);
+        pctx.lineTo(nowPx, padT + plotH);
+        pctx.stroke();
+        pctx.setLineDash([]);
+    }
+
+    // -------- Main loop ----------
+    function frame(now) {
+        if (lastTime < 0) {
+            lastTime = now;
+        }
+        var dt = (now - lastTime) / 1000;
+        if (dt > 0.05) dt = 0.05;
+        if (dt < 0) dt = 0;
+        lastTime = now;
+
+        if (!paused) {
+            t += dt;
+            var T = 2 * Math.PI / params.omega;
+            var theta = params.omega * t + params.theta0;
+            trail.push({
+                x: params.R * Math.cos(theta),
+                y: params.R * Math.sin(theta)
+            });
+            if (trail.length > MAX_TRAIL) trail.shift();
+        }
+
+        var radarInfo = drawRadar();
+        drawCartesian();
+        drawPolar();
+
+        // stats
+        var T = 2 * Math.PI / params.omega;
+        document.getElementById('stat-t').textContent = (t % T).toFixed(2) + 's';
+        document.getElementById('stat-R').textContent = params.R.toFixed(2);
+        var tPhase = t % T;
+        document.getElementById('stat-theta-math').textContent = getWrappedPlotTheta(tPhase).toFixed(2) + ' rad';
+        document.getElementById('stat-x').textContent = (radarInfo.x >= 0 ? '+' : '') + radarInfo.x.toFixed(2);
+        document.getElementById('stat-y').textContent = (radarInfo.y >= 0 ? '+' : '') + radarInfo.y.toFixed(2);
+        var bearingDeg = angleToBearing(radarInfo.theta);
+        document.getElementById('stat-theta').textContent = bearingDeg.toFixed(0) + '\u00B0';
+
+        requestAnimationFrame(frame);
+    }
+
+    function init() {
+        resize();
+        syncTheta0FromSlider();
+        valW.textContent = params.omega.toFixed(2) + ' rad/s';
+        setTimeout(function() {
+            resize();
+            syncTheta0FromSlider();
+            lastTime = -1;
+            requestAnimationFrame(frame);
+        }, 100);
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        init();
+    } else {
+        window.addEventListener('DOMContentLoaded', init);
+    }
+})();
+</script>
+</body>
+</html>
