@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Minkowski Space Visualizer</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Simulation-specific styles */
+.plot-area {
+  padding: 0;
+  gap: 0;
+}
+.plot-box {
+  border-radius: 0;
+  border: none;
+  background: var(--bg);
+  cursor: crosshair;
+}
+.plot-box canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.legend {
+  top: 12px;
+  right: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  border-radius: 10px;
+  gap: 8px;
+}
+.legend-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.canvas-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  padding: 8px 12px;
+  background: rgba(6, 14, 17, 0.72);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
+body.light-theme .canvas-hint,
+html[data-theme="light"] .canvas-hint {
+  background: rgba(248, 250, 252, 0.86);
+  color: var(--text-muted);
+}
+
+.view-toggle {
+  display: flex;
+  background: var(--track-bg);
+  border-radius: 6px;
+  padding: 3px;
+  border: 1px solid var(--ctrl-border);
+  width: 100%;
+}
+.view-toggle button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+.view-toggle button.active {
+  background: var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preset-btn {
+  width: 100%;
+  background: rgba(6, 14, 17, 0.45);
+  border: 1px solid var(--ctrl-border);
+  color: var(--muted);
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: all 0.2s;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+.preset-btn:hover { background: rgba(59, 155, 143, 0.15); border-color: var(--accent); }
+.preset-btn.timelike:hover { border-color: #60a5fa; color: #93c5fd; }
+.preset-btn.spacelike:hover { border-color: #f472b6; color: #f9a8d4; }
+.preset-btn.lightlike:hover { border-color: #fbbf24; color: #fde047; }
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.input-row label {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 30px;
+  font-family: var(--font-nums);
+  font-weight: 600;
+}
+.input-row input[type="number"] {
+  flex: 1;
+  background: rgba(6, 14, 17, 0.5);
+  border: 1px solid var(--ctrl-border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: var(--font-nums);
+}
+.input-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.btn-apply {
+  width: 100%;
+  background: var(--btn-play-bg);
+  border: none;
+  color: var(--btn-play-text);
+  padding: 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  margin-top: 6px;
+}
+.btn-apply:hover { background: var(--btn-play-hover); }
+
+.metric-display {
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  background: rgba(6, 14, 17, 0.45);
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  border: 1px solid var(--ctrl-border);
+}
+
+.result-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 12px;
+}
+.result-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 8px 0;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+}
+
+.classification {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.classification.timelike { background: rgba(96, 165, 250, 0.2); color: #93c5fd; border: 1px solid #60a5fa; }
+.classification.spacelike { background: rgba(244, 114, 182, 0.2); color: #f9a8d4; border: 1px solid #f472b6; }
+.classification.lightlike { background: rgba(251, 191, 36, 0.2); color: #fde047; border: 1px solid #fbbf24; }
+
+.proper-time {
+  margin-top: 10px;
+  padding: 10px 12px 10px 16px;
+  background: rgba(96, 165, 250, 0.08);
+  border-left: 3px solid #60a5fa;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-nums);
+  color: var(--muted);
+  line-height: 1.55;
+}
+.proper-time-label {
+  display: block;
+  margin-bottom: 5px;
+}
+.proper-time-eq {
+  display: block;
+}
+.proper-time-eq strong {
+  font-weight: 700;
+  color: var(--text);
+}
+
+#result-panel.zoomed-in .metric-display,
+#result-panel.zoomed-in .proper-time,
+#result-panel.zoomed-in .result-value {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-variant-numeric: lining-nums;
+}
+#result-panel.zoomed-in .metric-display {
+  font-size: 13px;
+  line-height: 1.75;
+  padding-left: 16px;
+}
+#result-panel.zoomed-in .matrix {
+  padding: 0 10px;
+}
+#result-panel.zoomed-in .matrix-grid {
+  padding: 4px 8px;
+}
+#result-panel.zoomed-in .proper-time {
+  padding: 11px 14px 11px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+#result-panel.zoomed-in .proper-time-label {
+  margin-bottom: 6px;
+}
+#result-panel.zoomed-in .result-value {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hidden { display: none !important; }
+
+.info-tooltip { width: 420px; }
+.info-tooltip p { margin-bottom: 8px; }
+.info-tooltip p:last-child { margin-bottom: 0; }
+.info-tooltip .formula-highlight {
+  font-family: var(--font-nums);
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.info-tooltip ul {
+  margin: 8px 0 4px 16px;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.8;
+}
+.info-tooltip ul li span.tl { color: #93c5fd; font-weight: 600; }
+.info-tooltip ul li span.sl { color: #f9a8d4; font-weight: 600; }
+.info-tooltip ul li span.ll { color: #fde047; font-weight: 600; }
+
+.matrix {
+  display: inline-block;
+  position: relative;
+  padding: 0 8px;
+  margin: 0 4px;
+}
+.matrix::before, .matrix::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 6px;
+  border: 1px solid var(--muted);
+}
+.matrix::before { left: 0; border-right: none; }
+.matrix::after { right: 0; border-left: none; }
+.matrix-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 14px;
+  padding: 4px 4px;
+}
+.metric-interval-line {
+  margin-top: 8px;
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(59, 155, 143, 0.3); border-radius: 2px; }
+
+@media (max-width: 900px) {
+  .info-tooltip { width: 300px; }
+}
+
+.top-actions .btn-topbar-playpause:disabled {
+  opacity: 0.45;
+}
+.playpause-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.playpause-wrap .btn {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+.playpause-wrap .btn:disabled {
+  pointer-events: none;
+}
+.playpause-wrap--inactive {
+  cursor: not-allowed;
+}
+.playpause-hint {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #e2e8f0;
+  background: rgba(6, 14, 17, 0.98);
+  border: 1px solid rgba(19, 49, 49, 0.50);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  text-align: left;
+}
+.playpause-wrap--inactive:hover .playpause-hint {
+  display: block;
+}
+</style>
+</head>
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Minkowski Space</h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <p>This interactive visualizer demonstrates <strong>Minkowski spacetime</strong> — the geometric framework of Einstein's Special Relativity. In Minkowski space, the "distance" between two events is measured using the <strong>spacetime interval</strong>:</p>
+        <p style="text-align:center;"><span class="formula-highlight">ds² = −dt² + dx²</span></p>
+        <p>Unlike Euclidean geometry, this metric has a <em>minus sign</em> in front of the time component, giving rise to three types of separations:</p>
+        <ul>
+          <li><span class="tl">Timelike</span> (ds² &lt; 0): Events that can be causally connected; a massive particle can travel between them.</li>
+          <li><span class="sl">Spacelike</span> (ds² &gt; 0): Events that are too far apart in space for any signal to connect them.</li>
+          <li><span class="ll">Lightlike</span> (ds² = 0): Events connected by a light ray, lying on the light cone.</li>
+        </ul>
+        <p style="margin-top:10px; font-size:11.5px; color:#64748b;"><strong>Zoomed In:</strong> See the infinitesimal displacement ds as a right triangle with legs dt and dx, alongside the metric tensor η.<br><strong>Zoomed Out:</strong> Drag the two events P₁ and P₂ around the grid to see whether their separation is timelike, spacelike, or lightlike. The light cone stays fixed at the origin as a reference.</p>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button class="btn btn-topbar-reset" id="btnReset">Reset</button>
+      <span class="playpause-wrap playpause-wrap--inactive" id="btnPlayPauseWrap">
+        <button class="btn btn-topbar-playpause" id="btnPlayPause">Pause</button>
+        <span class="playpause-hint" role="tooltip">This button only works in the zoomed-in view.</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area">
+      <div class="plot-box" id="plotBox">
+        <canvas id="canvas"></canvas>
+        <div class="legend" id="legend">
+          <div class="legend-title">Legend</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Light cone (ds²=0)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Timelike region</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div>Spacelike region</div>
+        </div>
+        <div class="canvas-hint" id="canvas-hint">Drag points P₁ and P₂</div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div>
+        <h3>View</h3>
+        <div class="ctrl-box">
+          <div class="view-toggle">
+            <button id="btn-zoom-in">Zoomed In</button>
+            <button id="btn-zoom-out" class="active">Zoomed Out</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="presets-panel">
+        <h3>Presets</h3>
+        <div class="ctrl-box">
+          <div class="presets" id="presets">
+            <button class="preset-btn timelike" data-dt="5" data-dx="3">Timelike (Δt=5, Δx=3)</button>
+            <button class="preset-btn spacelike" data-dt="3" data-dx="5">Spacelike (Δt=3, Δx=5)</button>
+            <button class="preset-btn lightlike" data-dt="4" data-dx="4">Lightlike (Δt=4, Δx=4)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interval Inputs panel (disabled — uncomment block + matching JS to restore)
+      <div id="input-panel">
+        <h3>Interval Inputs</h3>
+        <div class="ctrl-box">
+          <div class="input-row">
+            <label>Δt</label>
+            <input type="number" id="input-dt" value="5" step="0.5" min="-50" max="50">
+          </div>
+          <div class="input-row">
+            <label>Δx</label>
+            <input type="number" id="input-dx" value="3" step="0.5" min="-50" max="50">
+          </div>
+          <button class="btn-apply" id="btn-apply">Apply Values</button>
+          <p class="note-text" style="margin-top:12px;">Or drag P₁ and P₂ directly on the diagram.</p>
+        </div>
+      </div>
+      -->
+
+      <div id="result-panel">
+        <h3>Metric & Result</h3>
+        <div class="ctrl-box">
+          <div class="metric-display" id="metric-eq">
+            <div class="metric-matrix-line">
+              η<sub>μν</sub> =
+              <span class="matrix"><span class="matrix-grid">
+                <span>−1</span><span>0</span>
+                <span>0</span><span>1</span>
+              </span></span>
+            </div>
+            <div class="metric-interval-line">
+              ds² = (dt dx)·η·(dt dx)ᵀ<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;= −dt² + dx²
+            </div>
+          </div>
+          <div id="result-content">
+            <div class="result-label">Δs² =</div>
+            <div class="result-value" id="result-value">—</div>
+            <span class="classification" id="result-class">—</span>
+            <div class="proper-time hidden" id="proper-time"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let view = 'out';
+let time = 0;
+let paused = false;
+let dragging = null;
+
+// Zoomed-out state: P1, P2 in (t, x) coordinates
+let P1 = { t: 0, x: 0 };
+let P2 = { t: 5, x: 3 };
+let axisRange = 10;
+
+// Zoomed-in state: a small displacement dt, dx (animated)
+let zin_dt = 0.6, zin_dx = 0.4;
+
+const INTERVAL_EPS = 0.001;
+const INTERVAL_COLORS = {
+  lightlike: '#fbbf24',
+  timelike: '#60a5fa',
+  spacelike: '#f472b6',
+};
+
+function classifyInterval(ds2) {
+  if (Math.abs(ds2) < INTERVAL_EPS) return 'lightlike';
+  return ds2 < 0 ? 'timelike' : 'spacelike';
+}
+
+function resize() {
+  const container = document.getElementById('plotBox');
+  W = container.clientWidth;
+  H = container.clientHeight;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Coordinate transforms for zoomed-out view
+function getPlotBounds() {
+  const margin = 20;
+  const size = Math.min(W, H) - margin * 2;
+  const cx = W / 2;
+  const cy = H / 2;
+  return { cx, cy, size, scale: size / (2 * axisRange) };
+}
+
+function toScreen(t, x) {
+  const { cx, cy, scale } = getPlotBounds();
+  return { sx: cx + x * scale, sy: cy - t * scale };
+}
+
+function toWorld(sx, sy) {
+  const { cx, cy, scale } = getPlotBounds();
+  return { t: (cy - sy) / scale, x: (sx - cx) / scale };
+}
+
+// Drawing helpers
+function drawGrid() {
+  const { cx, cy, scale } = getPlotBounds();
+  const gridMax = Math.ceil(Math.max(cx, W - cx, cy, H - cy) / scale);
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = -gridMax; i <= gridMax; i++) {
+    if (i === 0) continue;
+    const sx = cx + i * scale;
+    const sy = cy - i * scale;
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx, H);
+    ctx.moveTo(0, sy);
+    ctx.lineTo(W, sy);
+  }
+  ctx.stroke();
+}
+
+function drawAxes() {
+  const { cx, cy, scale } = getPlotBounds();
+  const tickMax = Math.ceil(Math.max(cx, W - cx, cy, H - cy) / scale);
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, cy);
+  ctx.lineTo(W, cy);
+  ctx.moveTo(cx, 0);
+  ctx.lineTo(cx, H);
+  ctx.stroke();
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = 'italic 14px Georgia';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('x', W - 24, cy + 5);
+  ctx.textAlign = 'right';
+  ctx.fillText('t', cx - 8, 18);
+
+  ctx.font = '10px Menlo';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  for (let i = -tickMax; i <= tickMax; i += 2) {
+    if (i === 0) continue;
+    const sx = cx + i * scale;
+    const sy = cy - i * scale;
+    if (sx >= 0 && sx <= W) ctx.fillText(i, sx, cy + 14);
+    if (sy >= 0 && sy <= H) {
+      ctx.textAlign = 'left';
+      ctx.fillText(i, cx + 6, sy + 4);
+      ctx.textAlign = 'center';
+    }
+  }
+}
+
+function drawLightCone() {
+  // Light cone is fixed at the origin (0, 0) — it represents the causal
+  // structure of spacetime itself and does not move with P1 or P2.
+  const { cx, cy, scale } = getPlotBounds();
+  const worldMax = Math.ceil(Math.max(cx, W - cx, cy, H - cy) / scale);
+  const O = toScreen(0, 0);
+
+  // Timelike regions (blue): future cone and past cone, |x| < |t|
+  function fillCone(direction) {
+    ctx.beginPath();
+    ctx.moveTo(O.sx, O.sy);
+    const tEnd = direction > 0 ? worldMax : -worldMax;
+    const a = toScreen(tEnd, tEnd);    // null ray x = t
+    const b = toScreen(tEnd, -tEnd);   // null ray x = -t
+    ctx.lineTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.08)';
+    ctx.fill();
+  }
+  fillCone(1);
+  fillCone(-1);
+
+  // Spacelike regions (pink): left and right wedges, |x| > |t|
+  function fillSpacelike(side) {
+    ctx.beginPath();
+    ctx.moveTo(O.sx, O.sy);
+    const xEnd = side > 0 ? worldMax : -worldMax;
+    const a = toScreen(xEnd, xEnd);    // line t = x
+    const b = toScreen(-xEnd, xEnd);   // line t = -x
+    ctx.lineTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(244, 114, 182, 0.06)';
+    ctx.fill();
+  }
+  fillSpacelike(1);
+  fillSpacelike(-1);
+
+  // Null rays (yellow, ±45° through the origin)
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 5]);
+
+  ctx.beginPath();
+  const p_a1 = toScreen(worldMax, worldMax);
+  const p_a2 = toScreen(-worldMax, -worldMax);
+  ctx.moveTo(p_a1.sx, p_a1.sy);
+  ctx.lineTo(p_a2.sx, p_a2.sy);
+  const p_b1 = toScreen(worldMax, -worldMax);
+  const p_b2 = toScreen(-worldMax, worldMax);
+  ctx.moveTo(p_b1.sx, p_b1.sy);
+  ctx.lineTo(p_b2.sx, p_b2.sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawTriangleAndPoints() {
+  const p1s = toScreen(P1.t, P1.x);
+  const p2s = toScreen(P2.t, P2.x);
+  const corner = toScreen(P1.t, P2.x);
+
+  const dt = P2.t - P1.t;
+  const dx = P2.x - P1.x;
+  const ds2 = -dt * dt + dx * dx;
+  const color = INTERVAL_COLORS[classifyInterval(ds2)];
+
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(p1s.sx, p1s.sy);
+  ctx.lineTo(corner.sx, corner.sy);
+  ctx.lineTo(p2s.sx, p2s.sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const pulse = 0.7 + 0.3 * Math.sin(time * 0.05);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12 * pulse;
+  ctx.beginPath();
+  ctx.moveTo(p1s.sx, p1s.sy);
+  ctx.lineTo(p2s.sx, p2s.sy);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '13px Georgia';
+  ctx.fillStyle = '#93c5fd';
+  ctx.fillText('Δx = ' + dx.toFixed(2), (p1s.sx + corner.sx) / 2 - 25, (p1s.sy + corner.sy) / 2 + 18);
+  ctx.fillStyle = '#fda4af';
+  ctx.fillText('Δt = ' + dt.toFixed(2), (corner.sx + p2s.sx) / 2 + 10, (corner.sy + p2s.sy) / 2);
+  ctx.fillStyle = color;
+  ctx.font = 'bold 14px Georgia';
+  ctx.fillText('Δs', (p1s.sx + p2s.sx) / 2 - 20, (p1s.sy + p2s.sy) / 2 - 8);
+
+  drawPoint(p1s.sx, p1s.sy, '#60a5fa', 'P₁');
+  drawPoint(p2s.sx, p2s.sy, color, 'P₂');
+}
+
+function drawPoint(sx, sy, color, label) {
+  const pulse = 1 + 0.2 * Math.sin(time * 0.08);
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(sx, sy, 6 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#060E11';
+  ctx.beginPath();
+  ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = 'bold 13px Georgia';
+  ctx.fillText(label, sx + 12, sy - 10);
+}
+
+function drawZoomedOut() {
+  ctx.fillStyle = '#060E11';
+  ctx.fillRect(0, 0, W, H);
+  drawGrid();
+  drawLightCone();
+  drawAxes();
+  drawTriangleAndPoints();
+}
+
+function getZoomedInBounds() {
+  const margin = 20;
+  const cx = W / 2;
+  const cy = H / 2;
+  const xHalf = cx - margin;
+  const tHalfUp = cy - margin;
+  const tHalfDown = H - cy - margin;
+  const scale = Math.min(xHalf, tHalfUp, tHalfDown);
+  return {
+    cx,
+    cy,
+    scale,
+    xMin: -xHalf / scale,
+    xMax: (W - cx - margin) / scale,
+    tMin: -tHalfDown / scale,
+    tMax: tHalfUp / scale,
+  };
+}
+
+function drawZoomedInAxes(bounds) {
+  const { cx, cy, scale, xMin, xMax, tMin, tMax } = bounds;
+  const tickStep = 0.2;
+  const xEnd = cx + xMax * scale + 36;
+  const tEnd = cy - tMax * scale - 36;
+
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(cx + xMin * scale, cy);
+  ctx.lineTo(xEnd, cy);
+  ctx.moveTo(cx, cy - tMin * scale);
+  ctx.lineTo(cx, tEnd);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let v = xMin; v <= xMax + 0.001; v += tickStep) {
+    if (Math.abs(v) < 0.001) continue;
+    const sx = cx + v * scale;
+    ctx.moveTo(sx, cy - tMin * scale);
+    ctx.lineTo(sx, cy - tMax * scale);
+  }
+  for (let v = tMin; v <= tMax + 0.001; v += tickStep) {
+    if (Math.abs(v) < 0.001) continue;
+    const sy = cy - v * scale;
+    ctx.moveTo(cx + xMin * scale, sy);
+    ctx.lineTo(cx + xMax * scale, sy);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.75)';
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px Menlo';
+
+  for (let v = xMin; v <= xMax + 0.001; v += tickStep) {
+    const sx = cx + v * scale;
+    ctx.beginPath();
+    ctx.moveTo(sx, cy - 6);
+    ctx.lineTo(sx, cy + 6);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(v.toFixed(1), sx, cy + 20);
+  }
+
+  for (let v = tMin; v <= tMax + 0.001; v += tickStep) {
+    const sy = cy - v * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, sy);
+    ctx.lineTo(cx + 6, sy);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(v.toFixed(1), cx - 12, sy);
+  }
+
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = 'italic bold 16px Georgia';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('x', xEnd + 6, cy + 5);
+  ctx.textAlign = 'right';
+  ctx.fillText('t', cx - 14, tEnd - 8);
+}
+
+function drawZoomedIn() {
+  ctx.fillStyle = '#060E11';
+  ctx.fillRect(0, 0, W, H);
+
+  const bounds = getZoomedInBounds();
+  const { cx, cy, scale } = bounds;
+
+  // Animate dt, dx slowly
+  zin_dt = 0.5 + 0.3 * Math.sin(time * 0.015);
+  zin_dx = 0.5 + 0.3 * Math.cos(time * 0.012);
+
+  const p_origin = { sx: cx, sy: cy };
+  const p_corner = { sx: cx + zin_dx * scale, sy: cy };
+  const p_end = { sx: cx + zin_dx * scale, sy: cy - zin_dt * scale };
+
+  drawZoomedInAxes(bounds);
+
+  // Triangle legs
+  ctx.strokeStyle = '#93c5fd';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(p_origin.sx, p_origin.sy);
+  ctx.lineTo(p_corner.sx, p_corner.sy);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#fda4af';
+  ctx.beginPath();
+  ctx.moveTo(p_corner.sx, p_corner.sy);
+  ctx.lineTo(p_end.sx, p_end.sy);
+  ctx.stroke();
+
+  // Hypotenuse ds - pulsing
+  const ds2 = -zin_dt * zin_dt + zin_dx * zin_dx;
+  const color = INTERVAL_COLORS[classifyInterval(ds2)];
+
+  const pulse = 0.7 + 0.3 * Math.sin(time * 0.05);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3.5;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15 * pulse;
+  ctx.beginPath();
+  ctx.moveTo(p_origin.sx, p_origin.sy);
+  ctx.lineTo(p_end.sx, p_end.sy);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Right angle marker
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.6)';
+  ctx.lineWidth = 1.5;
+  const rsize = 12;
+  ctx.beginPath();
+  ctx.moveTo(p_corner.sx - rsize, p_corner.sy);
+  ctx.lineTo(p_corner.sx - rsize, p_corner.sy - rsize);
+  ctx.lineTo(p_corner.sx, p_corner.sy - rsize);
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#93c5fd';
+  ctx.font = 'italic bold 18px Georgia';
+  ctx.fillText('dx = ' + zin_dx.toFixed(3), (p_origin.sx + p_corner.sx) / 2 - 40, p_corner.sy + 28);
+  ctx.fillStyle = '#fda4af';
+  ctx.fillText('dt = ' + zin_dt.toFixed(3), p_corner.sx + 16, (p_corner.sy + p_end.sy) / 2 + 5);
+  ctx.fillStyle = color;
+  ctx.font = 'italic bold 20px Georgia';
+  const midx = (p_origin.sx + p_end.sx) / 2;
+  const midy = (p_origin.sy + p_end.sy) / 2;
+  ctx.fillText('ds', midx - 40, midy - 12);
+
+  // Points
+  ctx.fillStyle = '#60a5fa';
+  ctx.shadowColor = '#60a5fa';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(p_origin.sx, p_origin.sy, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.beginPath();
+  ctx.arc(p_end.sx, p_end.sy, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function updateResultPanel() {
+  let dt, dx;
+  if (view === 'in') {
+    dt = zin_dt;
+    dx = zin_dx;
+  } else {
+    dt = P2.t - P1.t;
+    dx = P2.x - P1.x;
+  }
+  const ds2 = -dt * dt + dx * dx;
+  
+  const valEl = document.getElementById('result-value');
+  const classEl = document.getElementById('result-class');
+  const ptEl = document.getElementById('proper-time');
+
+  valEl.textContent = ds2.toFixed(3);
+
+  const kind = classifyInterval(ds2);
+  classEl.classList.remove('timelike', 'spacelike', 'lightlike');
+  classEl.classList.add(kind);
+  valEl.style.color = INTERVAL_COLORS[kind];
+
+  if (kind === 'lightlike') {
+    classEl.textContent = '◆ Lightlike';
+    ptEl.classList.add('hidden');
+  } else if (kind === 'timelike') {
+    classEl.textContent = '▲ Timelike';
+    const tau = Math.sqrt(dt * dt - dx * dx);
+    ptEl.innerHTML =
+      '<span class="proper-time-label">Proper time:</span>' +
+      '<span class="proper-time-eq">Δτ = √(Δt² − Δx²) = <strong>' + tau.toFixed(3) + '</strong></span>';
+    ptEl.classList.remove('hidden');
+  } else {
+    classEl.textContent = '■ Spacelike';
+    ptEl.classList.add('hidden');
+  }
+}
+
+function animate() {
+  if (view === 'in' && !paused) {
+    time += 1;
+  }
+  if (view === 'in') {
+    drawZoomedIn();
+  } else {
+    drawZoomedOut();
+  }
+  updateResultPanel();
+  requestAnimationFrame(animate);
+}
+
+function updatePlayPauseUI() {
+  const btn = document.getElementById('btnPlayPause');
+  const wrap = document.getElementById('btnPlayPauseWrap');
+  btn.textContent = paused ? 'Play' : 'Pause';
+  btn.classList.toggle('paused', paused);
+  btn.disabled = view !== 'in';
+  wrap.classList.toggle('playpause-wrap--inactive', view !== 'in');
+}
+
+function resetSimulation() {
+  view = 'out';
+  P1 = { t: 0, x: 0 };
+  P2 = { t: 5, x: 3 };
+  zin_dt = 0.6;
+  zin_dx = 0.4;
+  time = 0;
+  dragging = null;
+  paused = false;
+  setViewUI();
+  updatePlayPauseUI();
+}
+
+// View toggle
+function setViewUI() {
+  const zoomIn = view === 'in';
+  document.getElementById('btn-zoom-in').classList.toggle('active', zoomIn);
+  document.getElementById('btn-zoom-out').classList.toggle('active', !zoomIn);
+  document.getElementById('presets-panel').classList.toggle('hidden', zoomIn);
+  document.getElementById('legend').classList.toggle('hidden', zoomIn);
+  document.getElementById('canvas-hint').classList.toggle('hidden', zoomIn);
+  document.getElementById('result-panel').classList.toggle('zoomed-in', zoomIn);
+  updatePlayPauseUI();
+  // document.getElementById('input-panel').classList.toggle('hidden', zoomIn); // restore with Interval Inputs panel
+}
+
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  view = 'in';
+  setViewUI();
+});
+
+document.getElementById('btn-zoom-out').addEventListener('click', () => {
+  view = 'out';
+  setViewUI();
+});
+
+setViewUI();
+
+document.getElementById('btnReset').addEventListener('click', resetSimulation);
+document.getElementById('btnPlayPause').addEventListener('click', () => {
+  if (view !== 'in') return;
+  paused = !paused;
+  updatePlayPauseUI();
+});
+
+// Drag P1 / P2 across the grid
+const HIT_RADIUS = 18;
+
+function getPointerPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const src = (e.touches && e.touches[0]) ? e.touches[0] : e;
+  return { sx: src.clientX - rect.left, sy: src.clientY - rect.top };
+}
+
+function hitTest(sx, sy) {
+  const p1s = toScreen(P1.t, P1.x);
+  const p2s = toScreen(P2.t, P2.x);
+  const d1 = Math.hypot(sx - p1s.sx, sy - p1s.sy);
+  const d2 = Math.hypot(sx - p2s.sx, sy - p2s.sy);
+  // If both are in range, grab the nearer one.
+  if (d1 <= HIT_RADIUS || d2 <= HIT_RADIUS) {
+    return d1 <= d2 ? 'P1' : 'P2';
+  }
+  return null;
+}
+
+/* Interval Inputs (disabled — restore with HTML panel)
+function syncInputs() {
+  document.getElementById('input-dt').value = (P2.t - P1.t).toFixed(2);
+  document.getElementById('input-dx').value = (P2.x - P1.x).toFixed(2);
+}
+*/
+
+function pointerDown(e) {
+  if (view !== 'out') return;
+  const { sx, sy } = getPointerPos(e);
+  const hit = hitTest(sx, sy);
+  if (hit) {
+    dragging = hit;
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  }
+}
+
+function pointerMove(e) {
+  if (view !== 'out') return;
+  const { sx, sy } = getPointerPos(e);
+  if (dragging) {
+    const w = toWorld(sx, sy);
+    w.t = Math.max(-axisRange, Math.min(axisRange, w.t));
+    w.x = Math.max(-axisRange, Math.min(axisRange, w.x));
+    if (dragging === 'P1') P1 = w;
+    else P2 = w;
+    // syncInputs(); // restore with Interval Inputs panel
+    e.preventDefault();
+  } else {
+    canvas.style.cursor = hitTest(sx, sy) ? 'grab' : 'crosshair';
+  }
+}
+
+function pointerUp() {
+  if (dragging) {
+    dragging = null;
+    canvas.style.cursor = 'grab';
+  }
+}
+
+canvas.addEventListener('mousedown', pointerDown);
+window.addEventListener('mousemove', pointerMove);
+window.addEventListener('mouseup', pointerUp);
+canvas.addEventListener('touchstart', pointerDown, { passive: false });
+canvas.addEventListener('touchmove', pointerMove, { passive: false });
+window.addEventListener('touchend', pointerUp);
+
+/* Interval Inputs (disabled — restore with HTML panel)
+document.getElementById('btn-apply').addEventListener('click', () => {
+  const dt = parseFloat(document.getElementById('input-dt').value) || 0;
+  const dx = parseFloat(document.getElementById('input-dx').value) || 0;
+  P1 = { t: 0, x: 0 };
+  P2 = { t: dt, x: dx };
+  if (view !== 'out') {
+    view = 'out';
+    setViewUI();
+  }
+});
+*/
+
+// Preset buttons
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const dt = parseFloat(btn.dataset.dt);
+    const dx = parseFloat(btn.dataset.dx);
+    // document.getElementById('input-dt').value = dt; // restore with Interval Inputs panel
+    // document.getElementById('input-dx').value = dx;
+    P1 = { t: 0, x: 0 };
+    P2 = { t: dt, x: dx };
+    if (view !== 'out') {
+      view = 'out';
+      setViewUI();
+    }
+  });
+});
+
+animate();
+</script>
+</body>
+</html>

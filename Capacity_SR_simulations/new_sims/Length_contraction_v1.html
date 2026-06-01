@@ -631,6 +631,10 @@ html[data-theme="light"] .legend {
   letter-spacing: 1.4px;
   margin-bottom: 12px;
 }
+.sidebar h3.sidebar-h3-greek {
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
 body.light-theme .sidebar h3,
 html[data-theme="light"] .sidebar h3 { color: #475569; }
 
@@ -921,15 +925,61 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
 .stat-value.amber { color: #fbbf24; }
 .stat-value.green { color: #34d399; }
 
-/* Gamma graph canvas */
+/* γ vs β curve — collapsible sidebar plot */
+.gamma-curve-dropdown {
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  background: var(--ctrl-bg);
+}
+.gamma-curve-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #a5f3fc;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
+.gamma-curve-dropdown-trigger::-webkit-details-marker {
+  display: none;
+}
+.gamma-curve-dropdown-trigger::marker {
+  content: '';
+}
+.gamma-curve-dropdown-arrow {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid #67e8f9;
+  transition: transform 0.2s ease;
+}
+.gamma-curve-dropdown[open] .gamma-curve-dropdown-arrow {
+  transform: rotate(90deg);
+}
+.gamma-curve-dropdown[open] .gamma-curve-dropdown-trigger {
+  color: #e0f2fe;
+  border-bottom: 1px solid var(--ctrl-border);
+}
+.gamma-graph-box {
+  padding: 10px 10px 12px;
+  margin-top: 0;
+  height: 194px;
+  box-sizing: border-box;
+}
 #gammaGraph {
   width: 100%;
-  height: 80px;
+  height: 172px;
   display: block;
-  border-radius: 6px;
-  margin-top: 4px;
-  background: rgba(6, 14, 17, 0.5);
-  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(6, 14, 17, 0.65);
 }
 
 /* Modal overlay */
@@ -1140,11 +1190,16 @@ html[data-theme="light"] #gammaGraph {
         </div>
       </div>
 
-      <!-- Gamma Graph -->
-      <div>
-        <h3>γ vs β Curve</h3>
-        <canvas id="gammaGraph"></canvas>
-      </div>
+      <!-- Gamma Graph (collapsed until opened) -->
+      <details class="gamma-curve-dropdown" id="gammaCurveDropdown">
+        <summary class="gamma-curve-dropdown-trigger">
+          <span class="gamma-curve-dropdown-arrow" aria-hidden="true"></span>
+          <span>γ vs β curve</span>
+        </summary>
+        <div class="gamma-graph-box">
+          <canvas id="gammaGraph"></canvas>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -1186,6 +1241,10 @@ let currentFrame = 'planet';
 const MOTION_PX_PER_SEC_AT_BETA_1 = 350;
 /** Below this β, treat as “no contraction” for labels and ghost/reference lines. */
 const BETA_EPS = 0.01;
+
+function isSceneAtRest(){
+ return beta <= BETA_EPS;
+}
 
 function getSceneTravelPx(){
  return motionTravelPx;
@@ -1414,20 +1473,39 @@ const nebulae=Array.from({length:7},()=>{
  };
 });
 
+const GAMMA_GRAPH_HEIGHT = 172;
+const gammaCurveDropdown = document.getElementById('gammaCurveDropdown');
+
+function resizeGammaGraph(){
+ if(!GC) return;
+ GC.width = Math.max(200, GC.parentElement.clientWidth - 20);
+ GC.height = GAMMA_GRAPH_HEIGHT;
+}
+
 function resize(){
  const mp=document.getElementById('mainPanel');
  if(!mp||!MC) return;
  MC.width=Math.max(100,mp.clientWidth);
  MC.height=Math.max(100,mp.clientHeight);
- const gcParent=GC.parentElement;
- if(gcParent){
-  GC.width=Math.max(60,gcParent.clientWidth-36);
-  GC.height=80;
+ if(GC && gammaCurveDropdown && gammaCurveDropdown.open){
+  resizeGammaGraph();
  }
 }
 window.addEventListener('resize',resize);
 setTimeout(resize, 50);
 resize();
+
+function onGammaCurveDropdownToggle(){
+ if(!gammaCurveDropdown || !gammaCurveDropdown.open) return;
+ setTimeout(() => {
+  GC.width = Math.max(200, GC.parentElement.clientWidth - 20);
+  GC.height = GAMMA_GRAPH_HEIGHT;
+  drawGammaGraph();
+ }, 50);
+}
+if (gammaCurveDropdown) {
+  gammaCurveDropdown.addEventListener('toggle', onGammaCurveDropdownToggle);
+}
 
 // Sliders
 const bSlider=document.getElementById('betaSlider');
@@ -2319,7 +2397,9 @@ function renderPlanetFrame(dt){
  
  const travel=getSceneTravelPx();
  const cycleLen=w+ghostW+200;
- const rocketX=(travel%cycleLen)-ghostW*0.3-100;
+ const rocketX=isSceneAtRest()
+  ? centerX-rocketW/2
+  : (travel%cycleLen)-ghostW*0.3-100;
  
  if(beta>BETA_EPS){
   ctx.save();
@@ -2338,7 +2418,10 @@ function renderPlanetFrame(dt){
  
  drawRocket(ctx,rocketX,rocketY,rocketW,rocketH,1);
  
- drawDimLine(ctx,rocketX,rocketX+rocketW,rocketY+rocketH/2+18,'L='+fmtContractedM(L0R,beta)+'m','#f472b6',false);
+ const rocketLenLabel=isSceneAtRest()
+  ? 'L₀='+fmt(L0R,0)+' m'
+  : 'L='+fmtContractedM(L0R,beta)+'m';
+ drawDimLine(ctx,rocketX,rocketX+rocketW,rocketY+rocketH/2+18,rocketLenLabel,'#f472b6',false);
  drawPlanetDimWitness(ctx,planetPts,'h','#34d399');
  drawDimLine(ctx,planetPts.left,planetPts.right,planetHorizDimY(planetPts),'D₀='+fmt(D0P,0)+' km','#34d399',false,true);
  drawPlanetDimWitness(ctx,planetPts,'v','#34d399');
@@ -2397,7 +2480,9 @@ function renderRocketFrame(dt){
 
  const travel=getSceneTravelPx();
  const cycleLen=w+planetDiamVis+200;
- const planetCx=(w-(travel%cycleLen)+100)+planetR;
+ const planetCx=isSceneAtRest()
+  ? centerX
+  : (w-(travel%cycleLen)+100)+planetR;
  const planetProperPts=planetDimPoints(planetCx,planetCy,planetR,planetR);
 
  const hasContraction=beta>BETA_EPS;
@@ -2421,7 +2506,10 @@ function renderRocketFrame(dt){
  drawPlanetDimWitness(ctx,planetPts,'v','#34d399');
  drawDimLineVertical(ctx,planetPts.top,planetPts.bottom,planetVertDimX(planetPts),'D⊥='+fmt(D0P,0)+' km','#34d399',false);
 
- drawLabel(ctx,rocketX+rocketW/2,rocketY+rocketH/2+12,'Rocket (proper length L₀, thrusting)','#34d399');
+ const rocketFrameCaption=isSceneAtRest()
+  ? 'Rocket at rest (proper length L₀)'
+  : 'Rocket (proper length L₀, thrusting)';
+ drawLabel(ctx,rocketX+rocketW/2,rocketY+rocketH/2+12,rocketFrameCaption,'#34d399');
  const planetCaptionY=hasContraction
   ?planetHorizDimYProper(planetProperPts)+22
   :planetHorizDimY(planetPts)+22;
@@ -2444,27 +2532,33 @@ function renderRocketFrame(dt){
 }
 
 function drawGammaGraph(){
+ if (!gammaCurveDropdown || !gammaCurveDropdown.open) return;
  const w=GC.width,h=GC.height;
  const ctx=gctx;
  ctx.fillStyle='#060E11';
  ctx.fillRect(0,0,w,h);
  
- const padL=30,padR=10,padT=8,padB=18;
+ const padL=40,padR=14,padT=14,padB=28;
  const gw=w-padL-padR, gh=h-padT-padB;
+ const tickFont="11px 'DM Sans', -apple-system, sans-serif";
+ const labelFont="12px 'DM Sans', -apple-system, sans-serif";
  
- ctx.strokeStyle='rgba(59,155,143,0.3)';
- ctx.lineWidth=1;
+ ctx.strokeStyle='rgba(59,155,143,0.45)';
+ ctx.lineWidth=1.25;
  ctx.beginPath();
  ctx.moveTo(padL,padT);ctx.lineTo(padL,padT+gh);ctx.lineTo(padL+gw,padT+gh);
  ctx.stroke();
  
- ctx.font="9px 'DM Sans', -apple-system, sans-serif";
- ctx.fillStyle='#9ca3af';
+ ctx.font=labelFont;
+ ctx.fillStyle='#cbd5e1';
  ctx.textAlign='center';
- ctx.fillText('β',padL+gw/2,h-2);
+ ctx.textBaseline='alphabetic';
+ ctx.fillText('β',padL+gw/2,h-4);
  ctx.save();
- ctx.translate(8,padT+gh/2);
+ ctx.translate(16,padT+gh/2);
  ctx.rotate(-Math.PI/2);
+ ctx.textAlign='center';
+ ctx.textBaseline='middle';
  ctx.fillText('γ',0,0);
  ctx.restore();
  
@@ -2512,37 +2606,41 @@ function drawGammaGraph(){
  ctx.beginPath();ctx.moveTo(cx,padT+gh);ctx.lineTo(cx,clampY);ctx.stroke();
  ctx.setLineDash([]);
  
- const dotGlow=ctx.createRadialGradient(cx,clampY,0,cx,clampY,8);
- dotGlow.addColorStop(0,'rgba(244,114,182,0.4)');
+ const dotR=5;
+ const dotGlow=ctx.createRadialGradient(cx,clampY,0,cx,clampY,dotR*2.2);
+ dotGlow.addColorStop(0,'rgba(244,114,182,0.45)');
  dotGlow.addColorStop(1,'rgba(244,114,182,0)');
  ctx.fillStyle=dotGlow;
- ctx.beginPath();ctx.arc(cx,clampY,8,0,6.283);ctx.fill();
+ ctx.beginPath();ctx.arc(cx,clampY,dotR*2.2,0,6.283);ctx.fill();
  
  ctx.fillStyle='#f472b6';
- ctx.beginPath();ctx.arc(cx,clampY,4,0,6.283);ctx.fill();
+ ctx.beginPath();ctx.arc(cx,clampY,dotR,0,6.283);ctx.fill();
  ctx.strokeStyle='#fce7f3';
  ctx.lineWidth=1.5;
  ctx.stroke();
  
- ctx.fillStyle='#e2e8f0';
- ctx.font="bold 9px 'DM Sans', -apple-system, sans-serif";
+ ctx.fillStyle='#f1f5f9';
+ ctx.font="bold 11px 'DM Sans', -apple-system, sans-serif";
  ctx.textAlign=cx>w/2?'right':'left';
- ctx.fillText('γ='+fmt(gam(beta),2),cx+(cx>w/2?-8:8),clampY-2);
+ ctx.textBaseline='bottom';
+ ctx.fillText('γ='+fmt(gam(beta),2),cx+(cx>w/2?-10:10),clampY-4);
  
- ctx.fillStyle='#64748b';
- ctx.font='8px -apple-system,sans-serif';
+ ctx.fillStyle='#94a3b8';
+ ctx.font=tickFont;
  ctx.textAlign='right';
+ ctx.textBaseline='middle';
  for(let g=1;g<=maxGamma;g+=Math.ceil(maxGamma/5)){
   const ty=padT+gh-(g/maxGamma)*gh;
-  ctx.fillText(g,padL-4,ty+3);
-  ctx.strokeStyle='rgba(148,163,184,0.08)';
+  ctx.fillText(String(g),padL-6,ty);
+  ctx.strokeStyle='rgba(148,163,184,0.14)';
+  ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(padL,ty);ctx.lineTo(padL+gw,ty);ctx.stroke();
  }
  ctx.textAlign='center';
  ctx.textBaseline='top';
  for(let b=0;b<=1;b+=0.2){
   const tx=padL+b/0.995*gw;
-  ctx.fillText(b.toFixed(1),tx,padT+gh+3);
+  ctx.fillText(b.toFixed(1),tx,padT+gh+5);
  }
 }
 

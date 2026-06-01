@@ -939,7 +939,11 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
   color: var(--accent);
 }
 .symmetry-sidebar .ctrl-slider-row { margin-top: 10px; }
-.symmetry-sidebar .control-range { margin-top: 10px; }
+.symmetry-sidebar .control-range {
+  margin-top: 10px;
+  /* Align labels with slider thumb positions (thumb is 16px, so 8px offset each side) */
+  padding: 0 8px;
+}
 .symmetry-scroll-group {
   display: flex;
   flex-direction: column;
@@ -1088,7 +1092,7 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
         <div class="ctrl-slider-row">
           <input type="range" id="angleSlider" min="0" max="360" step="0.5" value="0">
         </div>
-        <div class="control-range"><span>0°</span><span>90°</span><span>180°</span><span>270°</span><span>360°</span></div>
+        <div class="control-range"><span>0°</span><span>180°</span><span>360°</span></div>
       </div>
 
       <div class="symmetry-scroll-group">
@@ -1213,11 +1217,26 @@ function rotate(v, theta) {
 
 const AUTO_ROTATION_DEG_PER_SEC = 30;
 const MAX_FRAME_DT = 1 / 30;
-const SYMMETRY_TOLERANCE_DEG = 1.25;
+// Highlight only when the slider is essentially on an exact symmetry angle (not ~91°).
+const SYMMETRY_TOLERANCE_DEG = 0.1;
+// Magnetically pull the slider toward nearby symmetry angles while dragging.
+// With 5° threshold, dragging to 93° will snap to 90° for easier targeting.
+const SLIDER_SNAP_THRESHOLD_DEG = 5;
 
 function normalizeDegrees(deg) {
   return ((deg % 360) + 360) % 360;
 }
+
+const SYMMETRY_SNAP_POINTS = (() => {
+  const points = new Set([0]);
+  shapes.forEach(s => {
+    if (s.isCircle) return;
+    for (let k = 0; k < s.sides; k++) {
+      points.add(normalizeDegrees(k * 360 / s.sides));
+    }
+  });
+  return [...points].sort((a, b) => a - b);
+})();
 
 function angleDistanceDegrees(a, b) {
   const diff = Math.abs(normalizeDegrees(a) - normalizeDegrees(b));
@@ -1227,6 +1246,24 @@ function angleDistanceDegrees(a, b) {
 function snapSymmetryAngle(p, deg) {
   const step = 360 / p.shape.sides;
   return normalizeDegrees(Math.round(normalizeDegrees(deg) / step) * step);
+}
+
+function snapSliderToSpecialAngles(deg) {
+  const norm = normalizeDegrees(deg);
+  let snapped = norm;
+  let nearestDist = SLIDER_SNAP_THRESHOLD_DEG;
+  for (const pt of SYMMETRY_SNAP_POINTS) {
+    const d = angleDistanceDegrees(norm, pt);
+    if (d < nearestDist) {
+      nearestDist = d;
+      snapped = pt;
+    }
+  }
+  // Preserve 360° at the end of the slider (don't wrap to 0°)
+  if (snapped === 0 && deg > 180) {
+    return 360;
+  }
+  return snapped;
 }
 
 function formatAngle(deg) {
@@ -1368,7 +1405,9 @@ function setAutoRotateButton() {
 setAutoRotateButton();
 
 slider.addEventListener('input', e => {
-  currentAngle = parseFloat(e.target.value);
+  const snapped = snapSliderToSpecialAngles(parseFloat(e.target.value));
+  currentAngle = snapped;
+  slider.value = snapped;
   if (autoRotate) { autoRotate = false; setAutoRotateButton(); }
 });
 

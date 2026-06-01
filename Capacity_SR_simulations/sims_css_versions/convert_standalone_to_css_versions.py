@@ -27,6 +27,38 @@ START_MARKER = (
     "downloaded standalone. */\n"
 )
 END_MARKER = "/* End shared simulation design system. */\n\n"
+MICHELSON_SHARED_START = "/* Shared simulation design system inlined"
+MICHELSON_ROOT_END = "}\n\nbody {"
+
+
+def insert_stylesheet_link(text: str, link_href: str) -> str:
+    """Insert a stylesheet link after </title> when it is not already present."""
+    if link_href in text:
+        return text
+    title_end = text.find("</title>")
+    if title_end == -1:
+        raise ValueError("</title> was not found")
+    insert_at = title_end + len("</title>")
+    return text[:insert_at] + f'\n<link rel="stylesheet" href="{link_href}">' + text[insert_at:]
+
+
+def convert_michelson_layout(text: str, link_href: str) -> str:
+    """
+    Michelson-Morley inlines only :root tokens before page overrides (not the full
+    design system at the top of <style>). Strip that :root block and link the
+    shared stylesheet instead.
+    """
+    shared_start = text.find(MICHELSON_SHARED_START)
+    if shared_start == -1:
+        raise ValueError("Michelson shared CSS comment was not found")
+
+    root_end = text.find(MICHELSON_ROOT_END, shared_start)
+    if root_end == -1:
+        raise ValueError("Michelson :root block end was not found")
+
+    keep_from = root_end + len("}\n\n")
+    text = text[:shared_start] + text[keep_from:]
+    return insert_stylesheet_link(text, link_href)
 
 
 def convert_html(text: str, link_href: str) -> str:
@@ -42,6 +74,18 @@ def convert_html(text: str, link_href: str) -> str:
 
     replacement = f'<link rel="stylesheet" href="{link_href}">\n<style>\n'
     return text[:start] + replacement + text[end + len(END_MARKER) :]
+
+
+def convert_file(text: str, link_href: str) -> str:
+    """Convert using the standard or Michelson-specific layout."""
+    if START_MARKER in text and END_MARKER in text:
+        return convert_html(text, link_href)
+    if MICHELSON_SHARED_START in text:
+        return convert_michelson_layout(text, link_href)
+    raise ValueError(
+        "no supported inlined shared CSS markers were found "
+        "(expected standard markers or Michelson layout)"
+    )
 
 
 def collect_sources(source_dir: Path, files: list[str]) -> list[Path]:
@@ -101,7 +145,7 @@ def main() -> int:
             print(f"skip existing: {destination}")
             continue
 
-        converted_html = convert_html(source.read_text(), args.link_href)
+        converted_html = convert_file(source.read_text(), args.link_href)
         destination.write_text(converted_html)
         print(f"wrote: {destination}")
         converted += 1
