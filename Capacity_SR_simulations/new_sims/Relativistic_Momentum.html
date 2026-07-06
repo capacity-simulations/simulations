@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Relativistic Momentum Simulator</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Simulation-specific overrides */
+.top-bar h1 span { color: var(--accent); }
+
+.plot-area { padding: 0; gap: 0; }
+.plot-box {
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+}
+#plotBox { position: relative; }
+.plot-box canvas { display: block; }
+
+/* Legend: positioned inside plot grid by positionLegend() */
+#legend {
+  position: absolute;
+  margin: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  border-radius: 10px;
+  gap: 0;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  backdrop-filter: none;
+  padding: 10px 14px;
+  pointer-events: none;
+  z-index: 500;
+}
+#legend .legend-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+#legend .legend-item { padding: 4px 0; font-size: 12px; font-weight: 500; }
+#legend .legend-swatch {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.stat-value.stat-accent { color: var(--accent); }
+.stat-value.stat-good { color: #34d399; }
+.stat-value.stat-warn { color: #f472b6; }
+
+.info-tooltip { width: 380px; }
+.info-tooltip p { margin-bottom: 8px; }
+.info-tooltip p:last-child { margin-bottom: 0; }
+.info-tooltip .formula-block {
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.top-actions.sim-playback-btn-group { width: 260px; }
+.top-actions .btn-topbar-playpause.paused {
+  background: var(--btn-play-bg);
+  border: 1px solid var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+.top-actions .btn-topbar-playpause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: var(--btn-play-text);
+}
+.top-actions .btn-topbar-playpause:not(.paused) {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions .btn-topbar-playpause:not(.paused):hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(59, 155, 143, 0.3);
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .info-tooltip { width: 300px; }
+}
+</style>
+</head>
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Relativistic <span>Momentum</span></h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <p>This interactive simulator visualizes how momentum behaves differently in Einstein's Special Relativity compared to classical (Newtonian) mechanics.</p>
+        <p>In classical physics, momentum is simply <strong>p = mv</strong>. However, as an object's velocity approaches the speed of light <strong>c</strong>, relativistic effects become significant, and the true momentum diverges toward infinity.</p>
+        <p>The green curve shows the relativistic momentum, which grows without bound as v → c, while the blue line shows the classical approximation, which remains linear. The pink marker highlights the deviation between the two at your selected β.</p>
+        <div class="formula-block">
+          <em>p</em> = γm₀v &nbsp;where&nbsp; γ = 1 / √(1 − v²/c²)<br>
+          As <em>v → c</em>, γ → ∞, so <em>p → ∞</em><br>
+          Units normalized: <em>c = 1</em>
+        </div>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button type="button" class="btn btn-topbar-reset" id="resetBtn">Reset</button>
+      <button type="button" class="btn btn-topbar-playpause paused" id="sweep">▶ Auto Sweep</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area">
+      <div class="plot-box" id="plotBox">
+        <canvas id="plot"></canvas>
+        <div class="legend" id="legend">
+          <div class="legend-title">Legend</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#34d399"></span>Relativistic: p = γm₀v</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#60a5fa"></span>Classical: p = m₀v</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#f472b6"></span>Current velocity marker</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div>
+        <h3>Parameters</h3>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">Rest mass m₀</span>
+            <span class="slider-val" id="massVal">10.50</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="mass" min="0.1" max="13" step="0.1" value="10.5">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">β = v / c</span>
+            <span class="slider-val" id="velVal">0.500</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="vel" min="0" max="0.995" step="0.0001" value="0.5">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Current State</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <span class="stat-label">β = v/c</span>
+            <span class="stat-value" id="sBeta">0.5000</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Lorentz γ</span>
+            <span class="stat-value stat-accent" id="sGamma">1.1547</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">p (relativistic)</span>
+            <span class="stat-value stat-good" id="sPrel">6.0622</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">p (classical)</span>
+            <span class="stat-value" id="sPcl">5.2500</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Deviation Δ%</span>
+            <span class="stat-value stat-warn" id="sDev">15.47%</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="note-text sidebar-footer">Drag on plot to scrub velocity · Adjust sliders to explore the relativistic regime</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('plot');
+const ctx = canvas.getContext('2d');
+
+const massSlider = document.getElementById('mass');
+const velSlider = document.getElementById('vel');
+const massVal = document.getElementById('massVal');
+const velVal = document.getElementById('velVal');
+const sweepBtn = document.getElementById('sweep');
+const resetBtn = document.getElementById('resetBtn');
+
+const DEFAULTS = { mass: 10.5, vel: 0.5 };
+
+let mass = DEFAULTS.mass;
+let vel = DEFAULTS.vel;
+let sweeping = false;
+let sweepT = 0;
+let animTime = 0;
+let lastTime = performance.now();
+
+function velSliderMax() {
+  return parseFloat(velSlider.max);
+}
+
+function velSliderStep() {
+  return parseFloat(velSlider.step) || 0.0001;
+}
+
+// Keep vel, slider, and readout in sync; never let v/c exceed the slider maximum.
+function setVelocity(v) {
+  const vmax = velSliderMax();
+  const step = velSliderStep();
+  v = Math.min(vmax, Math.max(0, v));
+  v = Math.round(v / step) * step;
+  v = Math.min(vmax, Math.max(0, v));
+  vel = v;
+  velSlider.value = String(v);
+  velVal.textContent = v.toFixed(3);
+  return vel;
+}
+
+let W = 0, H = 0, DPR = window.devicePixelRatio || 1;
+
+// Natural units c = 1. Plot x-axis, slider, drag, and sweep share the same β range.
+const V_PLOT_MAX = 0.995;
+velSlider.max = String(V_PLOT_MAX);
+
+function massSliderMax() {
+  return parseFloat(massSlider.max);
+}
+
+function betaPlotMax() {
+  return parseFloat(velSlider.max) || V_PLOT_MAX;
+}
+
+function lorentzGamma(beta) {
+  const b2 = beta * beta;
+  if (b2 >= 1) return Infinity;
+  return 1 / Math.sqrt(1 - b2);
+}
+
+/** Classical (Newtonian) momentum: p = m₀ v  with c = 1  →  p = m₀ β */
+function classicalMomentum(m0, beta) {
+  return m0 * beta;
+}
+
+/** Relativistic momentum: p = γ m₀ v  with c = 1  →  p = γ m₀ β */
+function relativisticMomentum(m0, beta) {
+  return lorentzGamma(beta) * m0 * beta;
+}
+
+// Y-axis top matches peak relativistic momentum at max m₀ and max plotted β.
+const FIXED_Y_MAX = (() => {
+  const pPeak = relativisticMomentum(massSliderMax(), betaPlotMax());
+  return Math.ceil(pPeak / 10) * 10;
+})();
+
+const PLOT_MARGIN = { left: 68, right: 22, top: 20, bottom: 66 };
+
+function getPlotArea() {
+  return {
+    x0: PLOT_MARGIN.left,
+    y0: PLOT_MARGIN.top,
+    w: W - PLOT_MARGIN.left - PLOT_MARGIN.right,
+    h: H - PLOT_MARGIN.top - PLOT_MARGIN.bottom
+  };
+}
+
+const legendEl = document.getElementById('legend');
+const LEGEND_INSET = 10;
+
+function positionLegend() {
+  if (!legendEl || W <= 0 || H <= 0) return;
+  const { x0, y0, w, h } = getPlotArea();
+  const inset = LEGEND_INSET;
+  legendEl.style.maxWidth = Math.max(120, w - inset * 2) + 'px';
+  const boxW = legendEl.offsetWidth;
+  const boxH = legendEl.offsetHeight;
+  let left = x0 + w - boxW - inset;
+  let top = y0 + inset;
+  left = Math.max(x0 + inset, Math.min(left, x0 + w - boxW - inset));
+  top = Math.max(y0 + inset, Math.min(top, y0 + h - boxH - inset));
+  legendEl.style.left = left + 'px';
+  legendEl.style.top = top + 'px';
+  legendEl.style.right = 'auto';
+}
+
+function resize() {
+  const c = document.getElementById('plotBox');
+  W = c.clientWidth;
+  H = c.clientHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  positionLegend();
+  requestAnimationFrame(positionLegend);
+}
+window.addEventListener('resize', resize);
+
+function generatePoints(m0, betaMax) {
+  const N = 800;
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const beta = (i / N) * betaMax;
+    const gamma = lorentzGamma(beta);
+    pts.push({
+      beta,
+      pRel: relativisticMomentum(m0, beta),
+      pCl: classicalMomentum(m0, beta),
+      gamma
+    });
+  }
+  return pts;
+}
+
+function drawGrid(plotArea, yMax, vMax) {
+  const { x0, y0, w, h } = plotArea;
+  const gridMinor = 'rgba(203, 213, 225, 0.22)';
+  const gridMajor = 'rgba(203, 213, 225, 0.38)';
+  const axisColor = '#e2e8f0';
+  const tickColor = '#f1f5f9';
+  const labelColor = '#f8fafc';
+
+  ctx.fillStyle = '#060E11';
+  ctx.fillRect(x0, y0, w, h);
+
+  ctx.lineWidth = 1;
+  ctx.font = '500 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = tickColor;
+
+  const xTicks = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99];
+  xTicks.forEach(t => {
+    if (t > vMax) return;
+    const x = x0 + (t / vMax) * w;
+    const major = t === 0 || t === 0.5 || t === 0.99;
+    ctx.strokeStyle = major ? gridMajor : gridMinor;
+    ctx.beginPath();
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x, y0 + h);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillText(t.toString(), x, y0 + h + 18);
+  });
+
+  const numY = 10;
+  for (let i = 0; i <= numY; i++) {
+    const yv = (i / numY) * yMax;
+    const y = y0 + h - (i / numY) * h;
+    const major = i % 5 === 0;
+    ctx.strokeStyle = major ? gridMajor : gridMinor;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + w, y);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.fillText(yv.toFixed(0), x0 - 10, y + 4);
+  }
+
+  ctx.strokeStyle = axisColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x0, y0 + h);
+  ctx.lineTo(x0 + w, y0 + h);
+  ctx.stroke();
+
+  ctx.fillStyle = labelColor;
+  ctx.font = '600 14px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('β = v / c', x0 + w / 2, y0 + h + 40);
+
+  ctx.save();
+  ctx.translate(x0 - 50, y0 + h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('momentum  p  (units of m₀c)', 0, 0);
+  ctx.restore();
+
+  if (vMax >= 0.99) {
+    const xAsym = x0 + w;
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.25)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xAsym, y0);
+    ctx.lineTo(xAsym, y0 + h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function plotMomentumY(p, yMax, y0, h) {
+  return y0 + h - (p / yMax) * h;
+}
+
+function drawCurve(pts, plotArea, yMax, vMax, key, color, glow) {
+  const { x0, y0, w, h } = plotArea;
+
+  if (glow) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (p.beta > vMax) break;
+    const momentum = p[key];
+    if (momentum > yMax) break;
+    const px = x0 + (p.beta / vMax) * w;
+    const py = plotMomentumY(momentum, yMax, y0, h);
+    if (!started) { ctx.moveTo(px, py); started = true; }
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function withPlotClip(plotArea, drawFn) {
+  const { x0, y0, w, h } = plotArea;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, y0, w, h);
+  ctx.clip();
+  drawFn();
+  ctx.restore();
+}
+
+function markerGeometry(plotArea, yMax, betaMax, m0, beta) {
+  const { x0, y0, w, h } = plotArea;
+  const px = x0 + (beta / betaMax) * w;
+  const pRel = relativisticMomentum(m0, beta);
+  const pCl = classicalMomentum(m0, beta);
+  const pyRel = plotMomentumY(pRel, yMax, y0, h);
+  const pyCl = plotMomentumY(pCl, yMax, y0, h);
+  return { x0, y0, w, h, px, pyRel, pyCl, pRel, pCl, gamma: lorentzGamma(beta), beta };
+}
+
+function drawMarker(plotArea, yMax, betaMax, m0, beta) {
+  const { x0, y0, w, h, px, pyRel, pyCl } = markerGeometry(plotArea, yMax, betaMax, m0, beta);
+
+  ctx.strokeStyle = 'rgba(244, 114, 182, 0.5)';
+  ctx.setLineDash([5, 4]);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(px, y0);
+  ctx.lineTo(px, y0 + h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const pulse = 1 + 0.3 * Math.sin(animTime * 4);
+
+  ctx.fillStyle = '#60a5fa';
+  ctx.shadowColor = '#60a5fa';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(px, pyCl, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#34d399';
+  ctx.shadowColor = '#34d399';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(px, pyRel, 5 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+/** Δ bracket and labels — drawn outside the plot clip so they stay visible at grid edges. */
+function drawMarkerAnnotations(plotArea, yMax, betaMax, m0, beta) {
+  const { x0, y0, w, h, px, pyRel, pyCl, pRel, pCl, gamma } = markerGeometry(plotArea, yMax, betaMax, m0, beta);
+  const flipLeft = px > x0 + w - 58;
+  const bracketOffset = 12;
+
+  ctx.fillStyle = '#f472b6';
+  ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = flipLeft ? 'right' : 'center';
+  ctx.fillText('β = ' + beta.toFixed(3), flipLeft ? px - 10 : px, y0 - 6);
+
+  if (pCl <= 0 || (pRel - pCl) / pCl < 0.005) return;
+
+  const yTop = Math.max(y0 + 4, Math.min(pyCl, pyRel));
+  const yBot = Math.min(y0 + h - 4, Math.max(pyCl, pyRel));
+  const midY = Math.max(y0 + 14, Math.min(y0 + h - 14, (pyRel + pyCl) / 2));
+  const bracketX = flipLeft ? px - bracketOffset : px + bracketOffset;
+  const dev = ((gamma - 1) * 100).toFixed(1);
+  const label = 'Δ ' + dev + '%';
+
+  ctx.strokeStyle = 'rgba(244, 114, 182, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(bracketX, yTop);
+  ctx.lineTo(bracketX, yBot);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(244, 114, 182, 0.8)';
+  ctx.beginPath();
+  if (flipLeft) {
+    ctx.moveTo(bracketX, pyRel);
+    ctx.lineTo(bracketX - 4, pyRel + 6);
+    ctx.lineTo(bracketX + 4, pyRel + 6);
+  } else {
+    ctx.moveTo(bracketX, pyRel);
+    ctx.lineTo(bracketX - 4, pyRel + 6);
+    ctx.lineTo(bracketX + 4, pyRel + 6);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#f472b6';
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = flipLeft ? 'right' : 'left';
+  const labelX = flipLeft ? bracketX - 8 : bracketX + 8;
+  ctx.fillText(label, labelX, midY + 3);
+}
+
+function render() {
+  ctx.fillStyle = '#060E11';
+  ctx.fillRect(0, 0, W, H);
+
+  const vMax = betaPlotMax();
+  const yMax = FIXED_Y_MAX;
+  
+  const plotArea = getPlotArea();
+
+  drawGrid(plotArea, yMax, vMax);
+
+  const pts = generatePoints(mass, vMax);
+
+  withPlotClip(plotArea, () => {
+    drawCurve(pts, plotArea, yMax, vMax, 'pCl', '#60a5fa', false);
+    drawCurve(pts, plotArea, yMax, vMax, 'pRel', '#34d399', true);
+    drawMarker(plotArea, yMax, vMax, mass, vel);
+  });
+  drawMarkerAnnotations(plotArea, yMax, vMax, mass, vel);
+
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('m₀ = ' + mass.toFixed(2), plotArea.x0 + 10, plotArea.y0 + 18);
+
+  const gamma = lorentzGamma(vel);
+  const pRel = relativisticMomentum(mass, vel);
+  const pCl = classicalMomentum(mass, vel);
+  const dev = (gamma - 1) * 100;
+  document.getElementById('sBeta').textContent = vel.toFixed(4);
+  document.getElementById('sGamma').textContent = gamma.toFixed(4);
+  document.getElementById('sPrel').textContent = pRel.toFixed(4);
+  document.getElementById('sPcl').textContent = pCl.toFixed(4);
+  document.getElementById('sDev').textContent = dev.toFixed(2) + '%';
+}
+
+function animate(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  animTime += dt;
+
+  if (sweeping) {
+    sweepT += dt * 0.15;
+    // Linear sin sweep over the full plotted v/c range (0 → V_PLOT_MAX) so the
+    // marker travels left–right across the graph without dwelling at the edge.
+    const phase = (Math.sin(sweepT) + 1) / 2;
+    setVelocity(phase * betaPlotMax());
+  }
+
+  render();
+  requestAnimationFrame(animate);
+}
+
+massSlider.addEventListener('input', e => {
+  mass = parseFloat(e.target.value);
+  massVal.textContent = mass.toFixed(2);
+});
+function stopSweep() {
+  sweeping = false;
+  sweepBtn.textContent = '▶ Auto Sweep';
+  sweepBtn.classList.add('paused');
+}
+
+function resetSimulation() {
+  stopSweep();
+  mass = DEFAULTS.mass;
+  vel = DEFAULTS.vel;
+  massSlider.value = mass;
+  massVal.textContent = mass.toFixed(2);
+  setVelocity(vel);
+  sweepT = 0;
+}
+
+velSlider.addEventListener('input', e => {
+  setVelocity(parseFloat(e.target.value));
+  if (sweeping) stopSweep();
+});
+sweepBtn.addEventListener('click', () => {
+  sweeping = !sweeping;
+  if (sweeping) {
+    sweepBtn.textContent = '⏸ Pause';
+    sweepBtn.classList.remove('paused');
+    const ratio = Math.min(1, Math.max(-1, (vel / betaPlotMax()) * 2 - 1));
+    sweepT = Math.asin(ratio);
+  } else {
+    stopSweep();
+  }
+});
+resetBtn.addEventListener('click', resetSimulation);
+
+let dragging = false;
+function setVelFromX(clientX) {
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const { x0: plotX0, w: plotW } = getPlotArea();
+  const vMax = betaPlotMax();
+  let t = (x - plotX0) / plotW;
+  t = Math.max(0, Math.min(1, t));
+  setVelocity(t * vMax);
+  if (sweeping) stopSweep();
+}
+canvas.addEventListener('mousedown', e => { dragging = true; setVelFromX(e.clientX); });
+window.addEventListener('mousemove', e => { if (dragging) setVelFromX(e.clientX); });
+window.addEventListener('mouseup', () => dragging = false);
+canvas.addEventListener('touchstart', e => { dragging = true; setVelFromX(e.touches[0].clientX); e.preventDefault(); });
+canvas.addEventListener('touchmove', e => { if (dragging) { setVelFromX(e.touches[0].clientX); e.preventDefault(); } });
+canvas.addEventListener('touchend', () => dragging = false);
+
+resize();
+setVelocity(vel);
+positionLegend();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

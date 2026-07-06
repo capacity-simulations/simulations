@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Galilean Relativity: Ball in Moving Train</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Simulation-specific overrides */
+.top-bar h1 span { color: var(--accent); }
+
+.top-actions.sim-playback-btn-group {
+  width: 192px;
+  height: 36px;
+}
+.top-actions.sim-playback-btn-group .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.plot-area { padding: 0; gap: 0; }
+.plot-box {
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+}
+#plotBox { position: relative; }
+.plot-box canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mode-btn {
+  padding: 8px 12px;
+  background: rgba(6, 14, 17, 0.45);
+  border: 1px solid var(--ctrl-border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border-radius: 5px;
+  transition: all 0.2s;
+  text-align: left;
+}
+.mode-btn.active {
+  background: var(--btn-play-bg);
+  border-color: var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+.mode-btn:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.stat-frame-note {
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 4px 0 0;
+  padding: 0;
+  line-height: 1.3;
+}
+
+.info-tooltip { width: 380px; }
+.info-tooltip p { margin-bottom: 8px; }
+.info-tooltip p:last-child { margin-bottom: 0; }
+.info-tooltip .info-section { margin-bottom: 10px; }
+.info-tooltip .info-section:last-child { margin-bottom: 0; }
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(59, 155, 143, 0.3);
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .info-tooltip { width: 300px; }
+}
+</style>
+</head>
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Galilean Relativity <span>Train &amp; Ball</span></h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" title="About this simulation">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <div class="info-section">
+          <p>This simulation demonstrates <strong>Galilean relativity</strong> — the principle that the laws of motion are the same in all inertial (non-accelerating) reference frames.</p>
+        </div>
+        <div class="info-section">
+          <p>A ball is thrown <strong>vertically upward</strong> inside a train carriage moving at velocity <code>v</code> relative to a platform. The throw speed is <code>u</code> relative to the carriage.</p>
+        </div>
+        <div class="info-section">
+          <p><strong>In the train frame (S'):</strong> The ball goes straight up and comes back down — a simple vertical trajectory with <code>x' = 0</code>.</p>
+        </div>
+        <div class="info-section">
+          <p><strong>In the platform frame (S):</strong> The ball has a horizontal component <code>vₓ = v</code> and traces a parabolic arc, since <code>x = vt</code>.</p>
+        </div>
+        <p>Switch between frames to see how the same physical event looks different to different observers. No relativistic effects are included — this is classical (Galilean) mechanics.</p>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button type="button" class="btn btn-topbar-reset" id="resetBtn">Reset</button>
+      <button type="button" class="btn btn-topbar-playpause" id="btnPlayPause">Pause</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area">
+      <div class="plot-box" id="plotBox">
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div>
+        <h3>Parameters</h3>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">Train velocity v</span>
+            <span class="slider-val" id="velocityVal">5.0 m/s</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="velocity" min="0" max="20" step="0.1" value="5">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">Throw speed u</span>
+            <span class="slider-val" id="throwVal">5.0 m/s</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="throw" min="1" max="6" step="0.1" value="5">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">Playback speed</span>
+            <span class="slider-val" id="animSpeedVal">1.00×</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="animSpeed" min="0.25" max="3" step="0.05" value="1">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Reference Frame</h3>
+        <div class="ctrl-box">
+          <div class="frame-toggle">
+            <button type="button" class="mode-btn active" data-frame="platform">Platform frame (S)</button>
+            <button type="button" class="mode-btn" data-frame="train">Train frame (S')</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Position</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <span class="stat-label" id="pxLabel">Δx</span>
+            <span class="stat-value" id="px">0.00 m</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">y</span>
+            <span class="stat-value" id="py">0.00 m</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">t</span>
+            <span class="stat-value" id="pt">0.00 s</span>
+          </div>
+          <p class="stat-frame-note" id="frameInd2">Platform frame</p>
+        </div>
+      </div>
+
+      <div>
+        <h3>Velocity</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <span class="stat-label">vₓ</span>
+            <span class="stat-value" id="vx">0.00 m/s</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">vᵧ</span>
+            <span class="stat-value" id="vy">0.00 m/s</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">|v|</span>
+            <span class="stat-value" id="vmag">0.00 m/s</span>
+          </div>
+          <p class="stat-frame-note" id="frameInd1">Platform frame</p>
+        </div>
+      </div>
+
+      <!-- Predictions (hidden for now)
+      <div>
+        <h3>Predictions</h3>
+        <div class="ctrl-box">
+          <p class="note-text"><strong>Time of flight:</strong> T = 2u/g = <span id="predT">2.04</span> s</p>
+          <p class="note-text"><strong>Max height:</strong> u²/(2g) = <span id="predH">5.10</span> m</p>
+          <p class="note-text"><strong>Range (platform):</strong> vT = <span id="predR">10.20</span> m</p>
+          <p class="note-text">Train frame: <code>x'=0</code>, ball goes straight up. Platform frame: <code>x=vt</code>, ball traces a parabola.</p>
+        </div>
+      </div>
+      -->
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Simulation state
+  let v = 5;       // train velocity (m/s)
+  let u = 5;       // throw speed (m/s)
+  let animSpeed = 1; // playback rate (does not affect physics)
+  let paused = false;
+  const g = 9.8;   // gravity (m/s^2) - hardcoded constant
+  let frame = 'platform'; // 'platform' or 'train'
+
+  // Ball state - tracked in PLATFORM frame as canonical
+  let ballActive = false;
+  let ballThrowTime = 0; // sim time when thrown
+  let ballX0 = 0;        // x position (platform) when thrown
+  // Parameters captured at throw time: a flight in progress is governed by the
+  // values that were set when the ball left the hand, NOT by live slider drags.
+  let vThrow = 5;
+  let uThrow = 5;
+
+  // Train position (platform frame)
+  let trainX = 0;
+
+  // Camera center for the platform frame (held fixed during a flight so the
+  // ground stays still and the ball + train translate across it).
+  let platformCamX = 0;
+
+  // Simulation time
+  let simTime = 0;
+  let lastT = performance.now();
+
+  // How long the ball is shown caught-in-hand after landing before retiring.
+  const HOLD = 0.4;
+
+  // Canvas dimensions
+  let W = 0, H = 0;
+  let scale = 40;
+
+  // Carriage dims (meters)
+  const CAR_LEN = 10;
+  const CAR_HEIGHT = 4;
+  const CAR_WHEEL_R = 0.4;
+  const BODY_BASE = 0.95;       // bottom of painted body above rails (m)
+  const CAR_FLOOR_Y = BODY_BASE - 0.07;  // interior plank floor
+  const THROW_HAND_Y = CAR_FLOOR_Y + 1.45; // release / catch height in carriage
+  const CEILING_MARGIN = 0.2; // clearance between ball apex and carriage roof (m)
+
+  // Max throw speed so the apex stays inside the carriage interior.
+  function maxHeightAboveHand() {
+    return Math.max(0, CAR_HEIGHT - CEILING_MARGIN - THROW_HAND_Y);
+  }
+
+  function maxThrowSpeed() {
+    return Math.sqrt(2 * g * maxHeightAboveHand());
+  }
+
+  function clampThrowSpeed(su) {
+    return Math.min(Math.max(1, su), maxThrowSpeed());
+  }
+
+  function syncThrowControl() {
+    const uMax = maxThrowSpeed();
+    const throwSlider = document.getElementById('throw');
+    throwSlider.max = uMax.toFixed(1);
+    u = clampThrowSpeed(u);
+    throwSlider.value = u;
+    document.getElementById('throwVal').textContent = u.toFixed(1) + ' m/s';
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  let sceneTime = 0;
+  let grassCanvas = null;
+  let grassH = 28;
+  let mtnProfiles = [];
+
+  function generateStaticGrass(totalW, grassRegionH) {
+    grassH = grassRegionH;
+    grassCanvas = document.createElement('canvas');
+    grassCanvas.width = totalW * dpr;
+    grassCanvas.height = grassRegionH * dpr;
+    const gc = grassCanvas.getContext('2d');
+    gc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bladeCount = Math.floor(totalW * 1.4);
+    for (let i = 0; i < bladeCount; i++) {
+      const bx = Math.random() * totalW;
+      const by = grassRegionH * 0.15 + Math.random() * grassRegionH * 0.85;
+      const bladeH = 3 + Math.random() * 9;
+      const lean = (Math.random() - 0.5) * 2.5;
+      const green = Math.floor(32 + Math.random() * 38);
+      const brightness = 0.35 + Math.random() * 0.45;
+      gc.strokeStyle = `rgba(${green}, ${52 + Math.floor(Math.random() * 35)}, ${18 + Math.floor(Math.random() * 12)}, ${brightness})`;
+      gc.lineWidth = 0.5 + Math.random() * 0.9;
+      gc.beginPath();
+      gc.moveTo(bx, by);
+      gc.quadraticCurveTo(bx + lean * 0.5, by - bladeH * 0.55, bx + lean, by - bladeH);
+      gc.stroke();
+    }
+  }
+
+  function fillMidpoint(arr, lo, hi, rough) {
+    if (hi - lo < 2) return;
+    const mid = Math.floor((lo + hi) / 2);
+    if (arr[mid] === undefined) {
+      arr[mid] = (arr[lo] + arr[hi]) / 2 + (Math.random() - 0.5) * rough * (hi - lo) / 30;
+    } else {
+      arr[mid] = arr[mid] * 0.8 + ((arr[lo] + arr[hi]) / 2) * 0.2 + (Math.random() - 0.5) * rough * 0.05;
+    }
+    arr[mid] = Math.max(0.04, Math.min(0.75, arr[mid]));
+    fillMidpoint(arr, lo, mid, rough * 0.68);
+    fillMidpoint(arr, mid, hi, rough * 0.68);
+  }
+
+  function generateMountainProfiles() {
+    mtnProfiles = [];
+    for (let layer = 0; layer < 3; layer++) {
+      const points = [];
+      const segments = 36 + layer * 12;
+      const roughness = layer === 0 ? 0.32 : layer === 1 ? 0.5 : 0.72;
+      const heights = new Array(segments + 1);
+      heights[0] = 0.12 + Math.random() * 0.08;
+      heights[segments] = 0.12 + Math.random() * 0.08;
+      const numPeaks = 2 + Math.floor(Math.random() * 2);
+      for (let p = 0; p < numPeaks; p++) {
+        const peakIdx = Math.floor(segments * 0.2 + Math.random() * segments * 0.6);
+        heights[peakIdx] = 0.42 + Math.random() * 0.22;
+      }
+      fillMidpoint(heights, 0, segments, roughness);
+      for (let i = 0; i <= segments; i++) {
+        points.push({ x: i / segments, y: heights[i] });
+      }
+      mtnProfiles.push({ points, layer });
+    }
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 8; i++) {
+    clouds.push({
+      x: Math.random(),
+      y: 0.08 + Math.random() * 0.28,
+      rx: 0.045 + Math.random() * 0.07,
+      ry: 0.018 + Math.random() * 0.028,
+      drift: 0.006 + Math.random() * 0.012,
+      a: 0.045 + Math.random() * 0.055
+    });
+  }
+
+  function generateSceneAssets() {
+    generateMountainProfiles();
+    if (W > 0) generateStaticGrass(W, grassH);
+  }
+
+  function resize() {
+    const container = document.getElementById('plotBox');
+    W = container.clientWidth;
+    H = container.clientHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scale = Math.min(W / 24, H / 10);
+    if (scale < 25) scale = 25;
+    generateSceneAssets();
+  }
+  window.addEventListener('resize', resize);
+
+  // Choose a metres->pixels scale so the full arc (apex height and horizontal
+  // range) always fits the viewport, for the given throw/train speeds.
+  function computeScale(su, sv) {
+    const T = 2 * su / g;
+    const apex = su * su / (2 * g);
+    const travel = sv * (T + HOLD);                    // flight range + caught drift
+    const worldW = Math.max(24, travel + CAR_LEN + 6); // arc + carriage + margin
+    const worldH = Math.max(6, THROW_HAND_Y + apex + 1.5); // apex + headroom
+    const scaleX = W / worldW;
+    const scaleY = (H * 0.72) / worldH;                // 0.72H usable above ground
+    return Math.max(8, Math.min(60, Math.min(scaleX, scaleY)));
+  }
+
+  function getCamera() {
+    if (frame === 'train') {
+      // Train frame: camera rides with the train, so the carriage stays
+      // centered and the ground/grid scrolls past underneath.
+      return trainX + CAR_LEN/2;
+    } else {
+      // Platform frame: camera is fixed to the ground. The train and ball
+      // visibly translate to the right; the ground does not move.
+      return platformCamX;
+    }
+  }
+
+  function worldToScreen(x, y) {
+    const camX = getCamera();
+    const sx = W/2 + (x - camX) * scale;
+    const groundY = H * 0.75;
+    const sy = groundY - y * scale;
+    return [sx, sy];
+  }
+
+  // ---- Single source of truth for the ball's motion ----
+  // Canonical state in the PLATFORM frame, using the parameters captured at
+  // throw time. Everything else (rendering, readouts, trace) derives from this.
+  function ballHeightAboveHand(tau) {
+    const hMax = maxHeightAboveHand();
+    const h = uThrow * tau - 0.5 * g * tau * tau;
+    if (h <= hMax) return h;
+    // Ceiling: ball reaches the roof and falls (piecewise parabola).
+    const disc = uThrow * uThrow - 2 * g * hMax;
+    if (disc <= 0) return Math.min(h, hMax);
+    const tHit = (uThrow - Math.sqrt(disc)) / g;
+    if (tau <= tHit) return h;
+    return hMax - 0.5 * g * (tau - tHit) * (tau - tHit);
+  }
+
+  function ballStatePlatform(tau) {
+    const h = ballHeightAboveHand(tau);
+    return {
+      x:  ballX0 + vThrow * tau,
+      y:  THROW_HAND_Y + h,
+      vx: vThrow,
+      vy: uThrow - g * tau
+    };
+  }
+
+  // Galilean transform of the kinematics into the active frame, for the readout
+  // panels and the velocity arrow. Position is reported relative to the throw
+  // point. After landing (caught) the ball rides with the train: in the platform
+  // frame it still moves at vThrow horizontally; in the train frame it is at rest.
+  function ballFrameKin(tauRaw) {
+    const T = 2 * uThrow / g;
+    const caught = tauRaw >= T;
+    const tauV = Math.min(tauRaw, T);   // vertical motion ends at landing
+    const h = ballHeightAboveHand(tauV);
+    if (frame === 'platform') {
+      // After the catch the ball rides with the train, so horizontal position
+      // keeps advancing at vThrow (consistent with vx = vThrow); vertical is at rest.
+      return { px: vThrow * tauRaw, py: caught ? 0 : h, vx: vThrow, vy: caught ? 0 : (uThrow - g * tauV) };
+    } else {
+      return { px: 0,               py: caught ? 0 : h, vx: 0,      vy: caught ? 0 : (uThrow - g * tauV) };
+    }
+  }
+
+  const THROW_POS_IN_CAR = CAR_LEN / 2;
+
+  function throwBall() {
+    ballActive = true;
+    ballThrowTime = simTime;
+    vThrow = v;            // freeze the scenario for this whole flight
+    uThrow = clampThrowSpeed(u);
+    ballX0 = trainX + THROW_POS_IN_CAR;
+    // Centre the platform-frame camera on the middle of the arc (range = v*T),
+    // and hold it fixed for the duration of this flight.
+    const T = 2 * uThrow / g;
+    platformCamX = ballX0 + 0.5 * vThrow * (T + HOLD);
+  }
+
+  function resetSimulation() {
+    simTime = 0;
+    lastT = performance.now();
+    trainX = -CAR_LEN / 2;
+    ballActive = false;
+    ballThrowTime = 0;
+    ballX0 = 0;
+    platformCamX = 0;
+    scale = computeScale(u, v);
+    throwBall();
+  }
+
+  function updatePositionLabels() {
+    document.getElementById('pxLabel').textContent =
+      frame === 'platform' ? 'Δx' : "x'";
+  }
+
+  function setFrame(f) {
+    frame = f;
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.frame === f);
+    });
+    document.getElementById('frameInd1').textContent = f === 'platform' ? 'Platform frame (S)' : "Train frame (S')";
+    document.getElementById('frameInd2').textContent = f === 'platform' ? 'Platform frame (S)' : "Train frame (S')";
+    updatePositionLabels();
+  }
+
+  function drawSkyBackground(groundY) {
+    const skyTop = H * 0.06;
+    const sky = ctx.createLinearGradient(0, skyTop, 0, groundY + 36);
+    sky.addColorStop(0, '#1a2838');
+    sky.addColorStop(0.12, '#1e3244');
+    sky.addColorStop(0.3, '#243848');
+    sky.addColorStop(0.5, '#2a4048');
+    sky.addColorStop(0.72, '#304848');
+    sky.addColorStop(0.88, '#364a44');
+    sky.addColorStop(1, '#3a5048');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const c of clouds) {
+      const cx = ((c.x + sceneTime * c.drift) % 1.15 - 0.075) * W;
+      const cy = skyTop + c.y * (groundY - skyTop);
+      const rx = c.rx * W;
+      const ry = c.ry * groundY;
+      const pulse = 0.85 + 0.15 * Math.sin(sceneTime * 0.25 + c.x * 12);
+      const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+      cg.addColorStop(0, `rgba(210, 225, 235, ${c.a * pulse})`);
+      cg.addColorStop(0.45, `rgba(180, 200, 215, ${c.a * 0.45 * pulse})`);
+      cg.addColorStop(1, 'rgba(160, 185, 200, 0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const horizonGlow = ctx.createLinearGradient(0, groundY - 90, 0, groundY + 14);
+    horizonGlow.addColorStop(0, 'rgba(55, 85, 70, 0)');
+    horizonGlow.addColorStop(0.45, 'rgba(65, 95, 75, 0.12)');
+    horizonGlow.addColorStop(0.75, 'rgba(75, 105, 80, 0.18)');
+    horizonGlow.addColorStop(1, 'rgba(60, 90, 70, 0.22)');
+    ctx.fillStyle = horizonGlow;
+    ctx.fillRect(0, groundY - 90, W, 104);
+  }
+
+  function drawHills(groundY) {
+    const topY = H * 0.06;
+    const trackH = groundY - topY;
+    const camX = getCamera();
+    const parallax = [0.05, 0.12, 0.22];
+    const layerConfigs = [
+      { yOffset: 0.2, heightScale: 0.62, opacity: 0.55 },
+      { yOffset: 0.1, heightScale: 0.8, opacity: 0.78 },
+      { yOffset: 0, heightScale: 1.0, opacity: 1.0 }
+    ];
+
+    for (let li = 0; li < 3; li++) {
+      const profile = mtnProfiles[li];
+      if (!profile) continue;
+      const cfg = layerConfigs[li];
+      const pts = profile.points;
+      const layerBaseY = groundY - 6;
+      const layerTopY = topY + trackH * (1 - cfg.heightScale) * 0.45 + cfg.yOffset * trackH;
+      const layerH = layerBaseY - layerTopY;
+      const offset = ((camX * scale * parallax[li]) % W + W) % W;
+
+      for (const tileX of [-offset, W - offset]) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(tileX, layerBaseY);
+        for (let i = 0; i < pts.length; i++) {
+          const px = tileX + pts[i].x * W;
+          const py = layerBaseY - pts[i].y * layerH;
+          if (i === 0) {
+            ctx.lineTo(px, py);
+          } else {
+            const prev = pts[i - 1];
+            const prevX = tileX + prev.x * W;
+            const prevY = layerBaseY - prev.y * layerH;
+            const cpx1 = prevX + (px - prevX) * 0.4;
+            const cpx2 = prevX + (px - prevX) * 0.6;
+            ctx.bezierCurveTo(cpx1, prevY, cpx2, py, px, py);
+          }
+        }
+        ctx.lineTo(tileX + W, layerBaseY);
+        ctx.closePath();
+
+        const mg = ctx.createLinearGradient(0, layerTopY, 0, layerBaseY);
+        if (li === 0) {
+          mg.addColorStop(0, '#1e3344');
+          mg.addColorStop(0.35, '#1a2c3a');
+          mg.addColorStop(0.7, '#162430');
+          mg.addColorStop(1, '#121e28');
+        } else if (li === 1) {
+          mg.addColorStop(0, '#2a4238');
+          mg.addColorStop(0.25, '#243a32');
+          mg.addColorStop(0.55, '#1e322c');
+          mg.addColorStop(1, '#182820');
+        } else {
+          mg.addColorStop(0, '#3d5648');
+          mg.addColorStop(0.2, '#344a3f');
+          mg.addColorStop(0.45, '#2c4036');
+          mg.addColorStop(0.7, '#24362e');
+          mg.addColorStop(1, '#1c2a24');
+        }
+        ctx.globalAlpha = cfg.opacity;
+        ctx.fillStyle = mg;
+        ctx.fill();
+
+        if (li === 2) {
+          ctx.save();
+          ctx.clip();
+          ctx.strokeStyle = 'rgba(100, 130, 105, 0.12)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            const px = tileX + pts[i].x * W;
+            const py = layerBaseY - pts[i].y * layerH;
+            if (i === 0) ctx.moveTo(px, py + 1);
+            else {
+              const prev = pts[i - 1];
+              const prevX = tileX + prev.x * W;
+              const prevY = layerBaseY - prev.y * layerH;
+              ctx.bezierCurveTo(
+                prevX + (px - prevX) * 0.4, prevY + 1,
+                prevX + (px - prevX) * 0.6, py + 1,
+                px, py + 1
+              );
+            }
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (li < 2) {
+          const hazeG = ctx.createLinearGradient(0, layerBaseY - layerH * 0.35, 0, layerBaseY);
+          hazeG.addColorStop(0, 'rgba(30, 45, 55, 0)');
+          hazeG.addColorStop(1, 'rgba(25, 38, 48, 0.2)');
+          ctx.fillStyle = hazeG;
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawBackground() {
+    const groundY = H * 0.75;
+    drawSkyBackground(groundY);
+    drawHills(groundY);
+  }
+
+  function drawGrid() {
+    const camX = getCamera();
+    const groundY = H * 0.75;
+    const left = camX - W/(2*scale) - 1;
+    const right = camX + W/(2*scale) + 1;
+    const leftI = Math.floor(left);
+    const rightI = Math.ceil(right);
+    ctx.lineWidth = 1;
+    for (let xi = leftI; xi <= rightI; xi++) {
+      const [sx] = worldToScreen(xi, 0);
+      ctx.strokeStyle = (xi % 5 === 0) ? 'rgba(71, 85, 105, 0.22)' : 'rgba(71, 85, 105, 0.1)';
+      ctx.beginPath();
+      ctx.moveTo(sx, groundY - 2);
+      ctx.lineTo(sx, H);
+      ctx.stroke();
+      ctx.strokeStyle = (xi % 5 === 0) ? 'rgba(71, 85, 105, 0.08)' : 'rgba(71, 85, 105, 0.04)';
+      ctx.beginPath();
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, groundY - 2);
+      ctx.stroke();
+    }
+    const topMeters = (groundY) / scale;
+    for (let yi = 0; yi <= topMeters + 1; yi++) {
+      const sy = groundY - yi * scale;
+      if (sy < 0) break;
+      ctx.strokeStyle = (yi % 5 === 0) ? 'rgba(71, 85, 105, 0.18)' : 'rgba(71, 85, 105, 0.07)';
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(W, sy);
+      ctx.stroke();
+    }
+  }
+
+  function drawGround() {
+    const groundY = H * 0.75;
+    const camX = getCamera();
+    const grassOffset = ((camX * scale) % W + W) % W;
+
+    // Ballast / embankment
+    const embank = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 34);
+    embank.addColorStop(0, '#3a4a3a');
+    embank.addColorStop(0.08, '#2d3d2d');
+    embank.addColorStop(0.25, '#283528');
+    embank.addColorStop(0.55, '#243020');
+    embank.addColorStop(0.8, '#1e2a1c');
+    embank.addColorStop(1, '#1a2418');
+    ctx.fillStyle = embank;
+    ctx.fillRect(0, groundY - 4, W, 38);
+
+    ctx.fillStyle = 'rgba(80, 110, 70, 0.35)';
+    ctx.fillRect(0, groundY - 1, W, 1);
+    ctx.fillStyle = 'rgba(60, 90, 55, 0.25)';
+    ctx.fillRect(0, groundY, W, 1);
+
+    if (grassCanvas) {
+      ctx.drawImage(grassCanvas, 0, 0, W * dpr, grassH * dpr, -grassOffset, groundY - 6, W, grassH);
+      ctx.drawImage(grassCanvas, 0, 0, W * dpr, grassH * dpr, W - grassOffset, groundY - 6, W, grassH);
+    }
+
+    // Wooden sleepers
+    const sleeperSpacing = 0.65;
+    const left = camX - W / (2 * scale) - 2;
+    const right = camX + W / (2 * scale) + 2;
+    const start = Math.floor(left / sleeperSpacing) * sleeperSpacing;
+    for (let xi = start; xi < right; xi += sleeperSpacing) {
+      const [sx] = worldToScreen(xi, 0);
+      const sw = Math.max(10, scale * sleeperSpacing * 0.82);
+      const sh = Math.max(3, scale * 0.07);
+      ctx.fillStyle = '#3d3028';
+      ctx.strokeStyle = 'rgba(90, 70, 55, 0.5)';
+      ctx.lineWidth = 0.8;
+      roundRect(ctx, sx - sw / 2, groundY + 3, sw, sh, 1, true, true);
+    }
+
+    // Steel rails
+    const railY1 = groundY + 1;
+    const railY2 = groundY + 7;
+    const railGrad = ctx.createLinearGradient(0, railY1 - 2, 0, railY2 + 2);
+    railGrad.addColorStop(0, '#8a9aaa');
+    railGrad.addColorStop(0.35, '#c8d2de');
+    railGrad.addColorStop(0.55, '#9aa8b8');
+    railGrad.addColorStop(1, '#5a6778');
+    ctx.strokeStyle = railGrad;
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, railY1);
+    ctx.lineTo(W, railY1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, railY2);
+    ctx.lineTo(W, railY2);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY - 2);
+    ctx.lineTo(W, groundY - 2);
+    ctx.stroke();
+  }
+
+  function drawTrainWheel(cx, cy, r, rotation) {
+    ctx.save();
+    ctx.fillStyle = '#14181f';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#3d4a5c';
+    ctx.lineWidth = Math.max(1.2, r * 0.14);
+    ctx.stroke();
+
+    const hubR = r * 0.38;
+    const hubGrad = ctx.createRadialGradient(cx - hubR * 0.25, cy - hubR * 0.3, 0, cx, cy, hubR);
+    hubGrad.addColorStop(0, '#c8d2de');
+    hubGrad.addColorStop(0.55, '#7a8796');
+    hubGrad.addColorStop(1, '#3d4a5c');
+    ctx.fillStyle = hubGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, hubR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#5a6778';
+    ctx.lineWidth = Math.max(0.8, r * 0.07);
+    for (let k = 0; k < 6; k++) {
+      const a = rotation + k * Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * hubR * 0.9, cy + Math.sin(a) * hubR * 0.9);
+      ctx.lineTo(cx + Math.cos(a) * r * 0.9, cy + Math.sin(a) * r * 0.9);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawBogie(worldX, groundY, wheelR, rotation) {
+    const [cx] = worldToScreen(worldX, 0);
+    const wheelY = groundY - wheelR;
+    const span = wheelR * 2.65;
+    const frameH = wheelR * 0.55;
+    const frameY = wheelY - wheelR * 0.35;
+
+    ctx.fillStyle = '#252f3d';
+    ctx.strokeStyle = '#3d4f63';
+    ctx.lineWidth = Math.max(1, wheelR * 0.12);
+    roundRect(ctx, cx - span - wheelR * 0.35, frameY, (span + wheelR * 0.35) * 2, frameH, 2, true, true);
+
+    ctx.strokeStyle = '#4a5d72';
+    ctx.lineWidth = Math.max(0.8, wheelR * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(cx - span * 0.5, frameY);
+    ctx.lineTo(cx - span * 0.5, wheelY - wheelR * 0.15);
+    ctx.moveTo(cx + span * 0.5, frameY);
+    ctx.lineTo(cx + span * 0.5, wheelY - wheelR * 0.15);
+    ctx.stroke();
+
+    drawTrainWheel(cx - span, wheelY, wheelR, rotation);
+    drawTrainWheel(cx + span, wheelY, wheelR, rotation);
+  }
+
+  function drawPassenger(worldX, floorSy, ceilSy) {
+    const [cx] = worldToScreen(worldX, 0);
+    const innerH = floorSy - ceilSy;
+    if (innerH < 22) return;
+
+    // Scale to fit inside the visible interior (feet on plank floor, head below ceiling)
+    const footSy = floorSy - innerH * 0.06;
+    const ph = innerH * 0.58;
+    const headSy = footSy - ph;
+    const headR = Math.min(ph * 0.1, innerH * 0.09);
+    const shoulderY = headSy + ph * 0.28;
+    const hipY = headSy + ph * 0.56;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+    ctx.lineWidth = 1.1;
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.arc(cx, headSy + headR, headR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.lineWidth = Math.max(1.8, ph * 0.065);
+    ctx.beginPath();
+    ctx.moveTo(cx, shoulderY);
+    ctx.lineTo(cx, hipY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx - ph * 0.2, shoulderY + ph * 0.05);
+    ctx.lineTo(cx + ph * 0.16, shoulderY + ph * 0.2);
+    ctx.moveTo(cx + ph * 0.2, shoulderY + ph * 0.05);
+    ctx.lineTo(cx - ph * 0.12, shoulderY + ph * 0.18);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx, hipY);
+    ctx.lineTo(cx - ph * 0.12, footSy);
+    ctx.moveTo(cx, hipY);
+    ctx.lineTo(cx + ph * 0.12, footSy);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCarriage() {
+    const groundY = H * 0.75;
+    const wheelR = CAR_WHEEL_R * scale;
+    const rotation = trainX / CAR_WHEEL_R;
+
+    const [x0, roofSy] = worldToScreen(trainX, CAR_HEIGHT);
+    const [x1, baseSy] = worldToScreen(trainX + CAR_LEN, BODY_BASE);
+    const w = x1 - x0;
+    const bodyH = baseSy - roofSy;
+    if (w < 20 || bodyH < 20) return;
+
+    const rTop = Math.min(10, bodyH * 0.06);
+    const rBot = Math.min(6, bodyH * 0.04);
+
+    // Ground shadow
+    ctx.save();
+    const shadowGrad = ctx.createRadialGradient(x0 + w / 2, groundY + 4, 0, x0 + w / 2, groundY + 4, w * 0.55);
+    shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.35)');
+    shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.beginPath();
+    ctx.ellipse(x0 + w / 2, groundY + 5, w * 0.48, wheelR * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Bogies (drawn before body so wheels tuck under the skirt)
+    drawBogie(trainX + CAR_LEN * 0.22, groundY, wheelR, rotation);
+    drawBogie(trainX + CAR_LEN * 0.78, groundY, wheelR, rotation);
+
+    // Underframe / chassis
+    const [, chassisTopSy] = worldToScreen(trainX, BODY_BASE);
+    const chassisH = Math.max(8, baseSy - chassisTopSy + wheelR * 0.15);
+    const chassisY = baseSy - chassisH * 0.15;
+    ctx.fillStyle = '#1e2632';
+    ctx.strokeStyle = '#364556';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x0 + 4, chassisY - chassisH, w - 8, chassisH, 3, true, true);
+
+    // Main body — steel gradient with subtle highlight band
+    const bodyGrad = ctx.createLinearGradient(x0, roofSy, x0, baseSy);
+    bodyGrad.addColorStop(0, '#6b7d8f');
+    bodyGrad.addColorStop(0.12, '#5a6c7d');
+    bodyGrad.addColorStop(0.45, '#4a5c6d');
+    bodyGrad.addColorStop(0.88, '#3d4d5c');
+    bodyGrad.addColorStop(1, '#2f3d4a');
+    ctx.fillStyle = bodyGrad;
+    ctx.strokeStyle = '#8fa3b5';
+    ctx.lineWidth = 1.8;
+    roundRect(ctx, x0, roofSy, w, bodyH, rTop, true, true);
+
+    // Roof cap
+    const roofH = Math.max(6, bodyH * 0.1);
+    const roofGrad = ctx.createLinearGradient(x0, roofSy, x0, roofSy + roofH);
+    roofGrad.addColorStop(0, '#8a9aab');
+    roofGrad.addColorStop(1, '#4f5f6f');
+    ctx.fillStyle = roofGrad;
+    ctx.strokeStyle = '#a8b8c8';
+    ctx.lineWidth = 1.2;
+    roundRect(ctx, x0 + 3, roofSy - roofH * 0.35, w - 6, roofH, 4, true, true);
+
+    // Livery stripe
+    const stripeY = roofSy + bodyH * 0.22;
+    const stripeH = Math.max(3, bodyH * 0.045);
+    ctx.fillStyle = 'rgba(185, 28, 28, 0.85)';
+    ctx.fillRect(x0 + 2, stripeY, w - 4, stripeH);
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.35)';
+    ctx.fillRect(x0 + 2, stripeY, w - 4, stripeH * 0.45);
+
+    // Interior (visible through windows)
+    const pad = Math.max(6, w * 0.025);
+    const innerX = x0 + pad;
+    const innerW = w - pad * 2;
+    const floorSy = baseSy - Math.max(4, bodyH * 0.06);
+    const ceilSy = roofSy + bodyH * 0.2;
+    const innerGrad = ctx.createLinearGradient(innerX, ceilSy, innerX, floorSy);
+    innerGrad.addColorStop(0, 'rgba(30, 41, 55, 0.92)');
+    innerGrad.addColorStop(1, 'rgba(45, 55, 72, 0.88)');
+    ctx.fillStyle = innerGrad;
+    roundRect(ctx, innerX, ceilSy, innerW, floorSy - ceilSy, 4, true, false);
+
+    const floorGrad = ctx.createLinearGradient(innerX, floorSy - 6, innerX, floorSy);
+    floorGrad.addColorStop(0, '#5c4a38');
+    floorGrad.addColorStop(1, '#3d3228');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(innerX, floorSy - Math.max(5, bodyH * 0.05), innerW, Math.max(5, bodyH * 0.05));
+    ctx.strokeStyle = 'rgba(90, 70, 50, 0.5)';
+    ctx.lineWidth = 0.8;
+    const plankN = Math.max(4, Math.floor(innerW / 18));
+    for (let p = 1; p < plankN; p++) {
+      const px = innerX + (innerW * p) / plankN;
+      ctx.beginPath();
+      ctx.moveTo(px, floorSy - Math.max(5, bodyH * 0.05));
+      ctx.lineTo(px, floorSy);
+      ctx.stroke();
+    }
+
+    drawPassenger(trainX + THROW_POS_IN_CAR, floorSy, ceilSy);
+
+    // Windows
+    const nWin = Math.max(4, Math.min(7, Math.floor(w / 55)));
+    const winMargin = w * 0.06;
+    const winBandW = w - winMargin * 2;
+    const winW = winBandW / nWin * 0.72;
+    const winH = bodyH * 0.38;
+    const winY = roofSy + bodyH * 0.28;
+    const winGap = winBandW / nWin;
+
+    for (let i = 0; i < nWin; i++) {
+      const wx = x0 + winMargin + i * winGap + (winGap - winW) / 2;
+      const glassGrad = ctx.createLinearGradient(wx, winY, wx + winW, winY + winH);
+      glassGrad.addColorStop(0, 'rgba(120, 155, 195, 0.55)');
+      glassGrad.addColorStop(0.35, 'rgba(45, 75, 115, 0.75)');
+      glassGrad.addColorStop(0.7, 'rgba(25, 45, 75, 0.82)');
+      glassGrad.addColorStop(1, 'rgba(55, 90, 130, 0.6)');
+      ctx.fillStyle = glassGrad;
+      ctx.strokeStyle = '#9fb0c0';
+      ctx.lineWidth = Math.max(1.2, winW * 0.04);
+      roundRect(ctx, wx, winY, winW, winH, Math.min(4, winW * 0.12), true, true);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(wx + winW * 0.22, winY + 3);
+      ctx.lineTo(wx + winW * 0.22, winY + winH * 0.45);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(70, 90, 115, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(wx + winW / 2, winY + 2);
+      ctx.lineTo(wx + winW / 2, winY + winH - 2);
+      ctx.stroke();
+    }
+
+    // End doors
+    const doorW = Math.max(8, w * 0.055);
+    const doorH = bodyH * 0.52;
+    const doorY = baseSy - doorH - bodyH * 0.04;
+    const drawDoor = (dx) => {
+      ctx.fillStyle = '#3a4a58';
+      ctx.strokeStyle = '#8fa3b5';
+      ctx.lineWidth = 1.3;
+      roundRect(ctx, dx, doorY, doorW, doorH, 2, true, true);
+      ctx.strokeStyle = 'rgba(160, 180, 200, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(dx + doorW * 0.72, doorY + doorH * 0.12);
+      ctx.lineTo(dx + doorW * 0.72, doorY + doorH * 0.88);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(100, 130, 160, 0.25)';
+      roundRect(ctx, dx + doorW * 0.12, doorY + doorH * 0.15, doorW * 0.52, doorH * 0.35, 2, true, false);
+    };
+    drawDoor(x0 + 5);
+    drawDoor(x1 - doorW - 5);
+
+    // Coupler / buffer hints
+    const bufW = Math.max(5, w * 0.025);
+    const bufH = Math.max(8, bodyH * 0.12);
+    const bufY = baseSy - bufH - bodyH * 0.08;
+    ctx.fillStyle = '#2a3440';
+    ctx.strokeStyle = '#5a6d7d';
+    ctx.lineWidth = 1;
+    roundRect(ctx, x0 - bufW * 0.6, bufY, bufW, bufH, 2, true, true);
+    roundRect(ctx, x1 - bufW * 0.4, bufY, bufW, bufH, 2, true, true);
+
+    // Skirt line at body base
+    ctx.strokeStyle = 'rgba(20, 28, 38, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 2, baseSy - 1);
+    ctx.lineTo(x1 - 2, baseSy - 1);
+    ctx.stroke();
+
+    if (frame === 'platform' && v > 0.1) {
+      const arrowY = roofSy - 22;
+      const arrowLen = Math.min(80, 6 + v * 5);
+      const ax0 = x0 + w / 2 - arrowLen / 2;
+      const ax1 = x0 + w / 2 + arrowLen / 2;
+      ctx.strokeStyle = '#34d399';
+      ctx.fillStyle = '#34d399';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(ax0, arrowY);
+      ctx.lineTo(ax1, arrowY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ax1, arrowY);
+      ctx.lineTo(ax1 - 8, arrowY - 5);
+      ctx.lineTo(ax1 - 8, arrowY + 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = '600 12px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('v = ' + v.toFixed(1) + ' m/s', x0 + w / 2, arrowY - 8);
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+    if (w < 2*r) r = w/2;
+    if (h < 2*r) r = h/2;
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+  }
+
+  function drawAxes() {
+    // Place axes a bit lower so they don't crowd the title area.
+    const ox = 30, oy = 54;
+    ctx.strokeStyle = '#94a3b8';
+    ctx.fillStyle = '#94a3b8';
+    ctx.lineWidth = 1.5;
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(ox+30, oy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ox+30, oy);
+    ctx.lineTo(ox+25, oy-3);
+    ctx.lineTo(ox+25, oy+3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(ox, oy-30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ox, oy-30);
+    ctx.lineTo(ox-3, oy-25);
+    ctx.lineTo(ox+3, oy-25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillText(frame === 'train' ? "x'" : 'x', ox+35, oy+4);
+    ctx.fillText(frame === 'train' ? "y'" : 'y', ox-4, oy-35);
+    ctx.fillStyle = '#60a5fa';
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(frame === 'train' ? "Train frame (S')" : 'Platform frame (S)', W - 16, oy - 12);
+    ctx.textAlign = 'left';
+  }
+
+  function drawTrace() {
+    const T = 2 * uThrow / g;
+    let tau;
+    if (ballActive) {
+      const tauRaw = simTime - ballThrowTime;
+      if (tauRaw < 0) return;
+      tau = Math.min(tauRaw, T);
+    } else if (ballThrowTime > 0) {
+      tau = T;
+    } else {
+      return;
+    }
+    if (tau <= 0) return;
+
+    // The path is recomputed from the analytic solution every frame, expressed
+    // in the ACTIVE frame's coordinates. This is what keeps each frame honest:
+    //   - platform frame: x = ballX0 + v*s  -> a parabola fixed in the ground.
+    //   - train frame:    x = trainX + d    -> a single vertical line (x' const),
+    //     evaluated at the CURRENT train position so it can never smear.
+    const N = 120;
+    const pathX = (s) => (frame === 'platform')
+      ? (ballX0 + vThrow * s)
+      : (trainX + THROW_POS_IN_CAR);
+    const pathY = (s) => THROW_HAND_Y + ballHeightAboveHand(s);
+
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const s = tau * i / N;
+      const [sx, sy] = worldToScreen(pathX(s), pathY(s));
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(244, 114, 182, 0.4)';
+    for (let i = 0; i <= N; i += 6) {
+      const s = tau * i / N;
+      const [sx, sy] = worldToScreen(pathX(s), pathY(s));
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function ballRenderPos(tau) {
+    // Horizontally the ball never moves relative to the train, so in BOTH frames
+    // it sits directly above the hand; the frames differ only by camera. After
+    // landing (tau >= T) the ball rests in the hand and rides along with it.
+    const T = 2 * uThrow / g;
+    const x = trainX + THROW_POS_IN_CAR;
+    const y = (tau >= T) ? THROW_HAND_Y : (THROW_HAND_Y + ballHeightAboveHand(Math.min(tau, T)));
+    return { x, y };
+  }
+
+  function drawBall() {
+    if (!ballActive) {
+      const x = trainX + THROW_POS_IN_CAR;
+      const [sx, sy] = worldToScreen(x, THROW_HAND_Y);
+      ctx.fillStyle = '#f472b6';
+      ctx.strokeStyle = '#fda4d4';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 7, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    const tau = simTime - ballThrowTime;
+    if (tau < 0) return;
+    const T = 2 * uThrow / g;
+    if (tau > T + HOLD) {            // brief caught-in-hand hold, then retire
+      ballActive = false;
+      return;
+    }
+    const pos = ballRenderPos(tau);
+    const [sx, sy] = worldToScreen(pos.x, pos.y);
+
+    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 18);
+    glow.addColorStop(0, 'rgba(244, 114, 182, 0.6)');
+    glow.addColorStop(1, 'rgba(244, 114, 182, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 18, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f472b6';
+    ctx.strokeStyle = '#fda4d4';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 7, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Velocity arrow uses the exact same kinematics as the readout panel.
+    const kin = ballFrameKin(tau);
+    const vxF = kin.vx, vyF = kin.vy;
+    const vmag = Math.hypot(vxF, vyF);
+    if (vmag > 0.1) {
+      const arrowScale = 6;
+      const ex = sx + vxF * arrowScale;
+      const ey = sy - vyF * arrowScale;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.fillStyle = '#fbbf24';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      const ang = Math.atan2(ey - sy, ex - sx);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - 8*Math.cos(ang - 0.4), ey - 8*Math.sin(ang - 0.4));
+      ctx.lineTo(ex - 8*Math.cos(ang + 0.4), ey - 8*Math.sin(ang + 0.4));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Trace is recomputed analytically in drawTrace() each frame, so there is
+    // nothing to accumulate here.
+  }
+
+  function updateReadouts() {
+    let px=0, py=0, vx=0, vy=0, t=0;
+    if (ballActive) {
+      const tauRaw = simTime - ballThrowTime;
+      t = Math.max(0, tauRaw);
+      const k = ballFrameKin(tauRaw);
+      px = k.px; py = k.py; vx = k.vx; vy = k.vy;
+    }
+    document.getElementById('px').textContent = px.toFixed(2) + ' m';
+    document.getElementById('py').textContent = py.toFixed(2) + ' m';
+    document.getElementById('pt').textContent = t.toFixed(2) + ' s';
+    document.getElementById('vx').textContent = vx.toFixed(2) + ' m/s';
+    document.getElementById('vy').textContent = vy.toFixed(2) + ' m/s';
+    document.getElementById('vmag').textContent = Math.hypot(vx, vy).toFixed(2) + ' m/s';
+  }
+
+  /*
+  function updatePredictions() {
+    const T = 2*u/g;
+    const H_max = u*u/(2*g);
+    const R = v*T;
+    document.getElementById('predT').textContent = T.toFixed(2);
+    document.getElementById('predH').textContent = H_max.toFixed(2);
+    document.getElementById('predR').textContent = R.toFixed(2);
+  }
+  */
+
+  function animate(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    if (!paused) {
+      const dtSim = dt * animSpeed;
+      simTime += dtSim;
+
+      // While a ball is airborne the train keeps the speed it had at release, so
+      // the ball always lands back in the hand. Otherwise it follows the live slider.
+      trainX += (ballActive ? vThrow : v) * dtSim;
+      sceneTime += dtSim;
+
+      // Adaptive zoom so the whole arc stays framed (uses the active flight's params).
+      scale = computeScale(ballActive ? uThrow : u, ballActive ? vThrow : v);
+    }
+
+    drawBackground();
+    drawGround();
+    drawGrid();
+    drawCarriage();
+    drawTrace();
+    drawBall();
+    drawAxes();
+
+    updateReadouts();
+
+    requestAnimationFrame(animate);
+  }
+
+  // Controls
+  document.getElementById('velocity').addEventListener('input', e => {
+    v = parseFloat(e.target.value);
+    document.getElementById('velocityVal').textContent = v.toFixed(1) + ' m/s';
+    resetSimulation();
+  });
+  document.getElementById('throw').addEventListener('input', e => {
+    u = clampThrowSpeed(parseFloat(e.target.value));
+    syncThrowControl();
+    resetSimulation();
+  });
+  document.getElementById('animSpeed').addEventListener('input', e => {
+    animSpeed = parseFloat(e.target.value);
+    if (!isFinite(animSpeed) || animSpeed <= 0) animSpeed = 1;
+    document.getElementById('animSpeedVal').textContent = animSpeed.toFixed(2) + '×';
+  });
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setFrame(btn.dataset.frame));
+  });
+  document.getElementById('resetBtn').addEventListener('click', resetSimulation);
+  document.getElementById('btnPlayPause').addEventListener('click', () => {
+    paused = !paused;
+    const btn = document.getElementById('btnPlayPause');
+    btn.textContent = paused ? 'Play' : 'Pause';
+    btn.classList.toggle('paused', paused);
+  });
+
+  // initial setup
+  generateMountainProfiles();
+  resize();
+  syncThrowControl();
+  resetSimulation();
+
+  setInterval(() => {
+    if (!paused && !ballActive) throwBall();
+  }, 500);
+
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

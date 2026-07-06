@@ -1,0 +1,2735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Dilation: Light Clock Paradox</title>
+<style>
+/* Shared simulation design system inlined so this HTML file works when downloaded standalone. */
+/* ==========================================================================
+   SIMULATION DESIGN SYSTEM
+   --------------------------------------------------------------------------
+   A reusable stylesheet extracted from the Quantum Harmonic Oscillator and
+   Double-Slit Experiment simulations. Drop this file into any new simulation
+   and follow the layout template (template.html) to get a consistent look.
+
+   STRUCTURE OF THIS FILE
+   1.  Font faces (DM Sans + JetBrains Mono numerals)
+   2.  Theme tokens (CSS variables) - dark theme defaults
+   3.  Light theme overrides
+   4.  Global resets
+   5.  Outer layout containers
+   6.  Top bar (title + info icon + theme toggle + Reset / Play-Pause)
+   7.  Info icon and hover tooltip
+   8.  Theme toggle (two supported variants)
+   9.  Plot area and plot box (with maximize-btn and legend)
+   10. Sidebar control panel (CONTROLS heading, ctrl-box, sliders, stat rows)
+   11. Helper utilities (divider, note text, KaTeX overrides)
+   12. Responsive tweaks
+   ========================================================================= */
+
+
+/* --------------------------------------------------------------------------
+   2. THEME TOKENS - DARK THEME (default)
+   Every colour used by the UI is exposed as a CSS variable so the light
+   theme can override them in one place. It also makes it easier to change the theme.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg:           #060E11;                 /* page background (near-black teal) */
+  --surface:      rgba(6, 14, 17, 0.95);   /* plot box background */
+  --surface-soft: rgba(6, 14, 17, 0.92);   /* sidebar background */
+  --panel-bg:     #060E11;                 /* solid panel background (tooltips, etc.) */
+
+  /* Text */
+  --text:       #e2e8f0;                   /* primary text */
+  --muted:      #cbd5e1;                   /* secondary / labels */
+  --text-muted: #9ca3af;                   /* tertiary / hints */
+
+  /* Borders & dividers */
+  --border: rgba(19, 49, 49, 0.45);        /* default border colour (dark teal) */
+
+  /* Accent (used for slider thumbs, value readouts, info-tooltip headings) */
+  --accent:      #3b9b8f;                  /* dark-theme accent (teal) */
+  --accent-soft: rgba(59, 155, 143, 0.35); /* glow under slider thumbs */
+
+  /* Control-box colours (Figma green: #1E4D3A) */
+  --ctrl-bg:     rgba(30, 77, 58, 0.15);   /* control box fill */
+  --ctrl-border: rgba(30, 77, 58, 0.50);   /* control box border */
+  --track-bg:    rgba(30, 77, 58, 0.35);   /* slider track */
+
+  /* Top-bar button palette (theme-INDEPENDENT - stays the same in light/dark) */
+  --topbar-bg:        #FAF8F4;             /* cream/parchment top bar */
+  --topbar-text:      #0f172a;             /* near-black title text */
+  --topbar-border:    rgba(19, 49, 49, 0.25);
+
+  --btn-play-bg:      #1E4D3A;             /* dark green when "Playing" */
+  --btn-play-hover:   #2D6E52;             /* lighter green on hover */
+  --btn-play-text:    #ffffff;
+
+  --btn-paused-bg:    #ffffff;             /* white when "Paused" */
+  --btn-paused-text:  #1E4D3A;
+  --btn-paused-border:#1E4D3A;
+
+  --btn-reset-bg:     #FAF8F4;             /* matches top-bar cream */
+  --btn-reset-hover:  #F5EAC4;             /* pale gold on hover */
+  --btn-reset-text:   #B6820C;             /* dark gold */
+  --btn-reset-border: #B6820C;
+
+  /* Fonts */
+  --font-sans: 'DMSansUser', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-nums: 'JetBrainsMonoNums', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+
+/* --------------------------------------------------------------------------
+   3. LIGHT THEME OVERRIDES
+   Triggered by adding `class="light-theme"` to <body> OR
+   `data-theme="light"` on <html>. Both selectors are supported so this CSS
+   works with either toggle style used across the simulations.
+   -------------------------------------------------------------------------- */
+body.light-theme,
+html[data-theme="light"] {
+  --bg:           #e2e8f0;
+  --surface:      rgba(248, 250, 252, 0.96);
+  --surface-soft: rgba(241, 245, 249, 0.96);
+  --panel-bg:     #e5e7eb;
+
+  --text:       #0f172a;
+  --muted:      #334155;
+  --text-muted: #6b7280;
+
+  --border: rgba(51, 65, 85, 0.18);
+
+  --accent:      #2a8a7e;
+  --accent-soft: rgba(42, 138, 126, 0.35);
+
+  --ctrl-bg:     rgba(30, 77, 58, 0.08);
+  --ctrl-border: rgba(30, 77, 58, 0.35);
+  --track-bg:    rgba(30, 77, 58, 0.20);
+
+  /* Top bar keeps the same cream palette in both themes */
+  --topbar-border: rgba(19, 49, 49, 0.20);
+}
+
+
+/* --------------------------------------------------------------------------
+   4. GLOBAL RESETS
+   -------------------------------------------------------------------------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  background: var(--bg);
+  font-family: var(--font-sans);
+  color: var(--text);
+  overflow: hidden; /* full-viewport simulation, no body scroll */
+}
+
+
+/* --------------------------------------------------------------------------
+   5. OUTER LAYOUT
+   <body>
+     <div class="outer-container">
+       <div class="top-bar"> ... </div>
+       <div class="main-container">
+         <div class="plot-area"> ...plots... </div>
+         <div class="sidebar"> ...controls... </div>
+       </div>
+     </div>
+   </body>
+   -------------------------------------------------------------------------- */
+.outer-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 0;
+}
+
+
+/* --------------------------------------------------------------------------
+   6. TOP BAR
+   Fixed-height cream bar with title on the left, info-icon + theme toggle
+   in the middle, and the Reset / Play-Pause button group on the right.
+   -------------------------------------------------------------------------- */
+.top-bar {
+  width: 100%;
+  height: 62px;
+  min-height: 62px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3000;
+  overflow: visible;
+}
+.top-bar h1,
+.top-bar h2 {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--topbar-text);
+  margin: 0;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+/* spacer that pushes the right-hand group to the far right */
+.top-bar-spacer { flex: 1; }
+
+/* Right-hand action area */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The Reset + Play/Pause button group is a fixed 192x36 group on the right */
+.top-actions.sim-playback-btn-group {
+  width: 192px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.top-actions.sim-playback-btn-group .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-family: var(--font-sans);
+  line-height: 1;
+  border-radius: 6px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Play / Pause button colour states
+   - Default (Playing): green fill, white text
+   - .paused state    : white fill, green outline, green text     */
+.top-actions #btnPlayPause:not(.paused),
+.top-actions .btn-topbar-playpause:not(.paused) {
+  background: var(--btn-play-bg);
+  border: 1px solid var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+.top-actions #btnPlayPause:not(.paused):hover,
+.top-actions .btn-topbar-playpause:not(.paused):hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+}
+.top-actions #btnPlayPause.paused {
+  background: var(--btn-paused-bg);
+  border: 1px solid var(--btn-paused-border);
+  color: var(--btn-paused-text);
+}
+.top-actions #btnPlayPause.paused:hover {
+  background: var(--btn-play-hover);
+  border-color: var(--btn-play-hover);
+  color: #fff;
+}
+
+/* Reset button: cream fill, gold border + gold text */
+.top-actions #btnReset,
+.top-actions .btn-topbar-reset {
+  background: var(--btn-reset-bg);
+  border: 1px solid var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+.top-actions #btnReset:hover,
+.top-actions .btn-topbar-reset:hover {
+  background: var(--btn-reset-hover);
+  border-color: var(--btn-reset-border);
+  color: var(--btn-reset-text);
+}
+
+
+/* --------------------------------------------------------------------------
+   7. INFO ICON + HOVER TOOLTIP
+   Small circular "i" next to the title that reveals an "About the
+   Simulation" tooltip on hover.
+   -------------------------------------------------------------------------- */
+.info-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.info-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(100, 116, 139, 0.35);
+  background: rgba(100, 116, 139, 0.10);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.info-icon:hover {
+  border-color: rgba(59, 130, 246, 0.40);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.info-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  background: rgba(6, 14, 17, 0.98);
+  border: 1px solid rgba(19, 49, 49, 0.50);
+  border-radius: 8px;
+  padding: 14px;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.info-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  background: rgba(6, 14, 17, 0.98);
+  border-left: 1px solid rgba(19, 49, 49, 0.50);
+  border-top: 1px solid rgba(19, 49, 49, 0.50);
+  transform: rotate(45deg);
+}
+.info-icon-wrapper:hover .info-tooltip { display: block; }
+
+.info-tooltip h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.info-tooltip p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin: 0;
+}
+.info-tooltip .info-section { margin-bottom: 10px; }
+.info-tooltip .info-section:last-child { margin-bottom: 0; }
+.info-tooltip code {
+  color: var(--accent);
+  font-family: var(--font-nums);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.info-tooltip strong { color: #e2e8f0; }
+.info-tooltip em { color: #cbd5e1; font-style: italic; }
+
+/* Light theme: tooltip becomes light too */
+body.light-theme .info-tooltip,
+html[data-theme="light"] .info-tooltip {
+  background: rgba(248, 250, 252, 0.98);
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+body.light-theme .info-tooltip::before,
+html[data-theme="light"] .info-tooltip::before {
+  background: rgba(248, 250, 252, 0.98);
+  border-left-color: rgba(37, 99, 235, 0.35);
+  border-top-color: rgba(37, 99, 235, 0.35);
+}
+body.light-theme .info-tooltip h4,
+html[data-theme="light"] .info-tooltip h4 { color: #1d4ed8; }
+body.light-theme .info-tooltip p,
+html[data-theme="light"] .info-tooltip p { color: #334155; }
+body.light-theme .info-tooltip strong,
+html[data-theme="light"] .info-tooltip strong { color: #0f172a; }
+body.light-theme .info-tooltip code,
+html[data-theme="light"] .info-tooltip code { color: #1d4ed8; }
+
+
+/* --------------------------------------------------------------------------
+   8. THEME TOGGLE
+   Two supported shapes:
+   A) Simple pill button         <button class="theme-toggle">☀︎</button>
+   B) iOS-style sliding switch   <label class="theme-toggle">
+                                   <input type="checkbox">
+                                   <span class="theme-track">
+                                     <span class="theme-thumb"></span>
+                                   </span>
+                                 </label>
+   -------------------------------------------------------------------------- */
+
+/* A) Pill button variant */
+button.theme-toggle {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #cbd5e1;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.theme-toggle:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* B) Sliding-switch variant */
+label.theme-toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+label.theme-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.theme-track {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 13px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: 2px solid #f3f4f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.theme-toggle input:checked + .theme-track .theme-thumb     { transform: translate(0,    -50%); }
+.theme-toggle input:not(:checked) + .theme-track .theme-thumb { transform: translate(22px, -50%); }
+
+
+/* --------------------------------------------------------------------------
+   9. PLOT AREA + PLOT BOXES
+   .plot-area is the flexible left side that holds one or more .plot-box
+   panels. Each plot box has an absolutely positioned title (top-left),
+   controls (top-right, e.g. maximize button), an optional legend pill, and
+   a fullscreen-on-click "maximized" state.
+   -------------------------------------------------------------------------- */
+.plot-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 14px;
+  min-width: 0;
+  position: relative;
+}
+
+.plot-box {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+  /* Avoid transition:all — it can delay flex reflow after maximize/restore */
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.plot-box canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Plot title sits at the top-left of every plot box */
+.plot-title {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Inline non-uppercase text inside the plot title (e.g. ψₙ(x,t)) */
+.plot-title .plot-inline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* Right-aligned controls (maximize, etc.) */
+.plot-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.maximize-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(6, 14, 17, 0.85);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+  padding: 0;
+}
+.maximize-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #e2e8f0;
+}
+.maximize-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+body.light-theme .maximize-btn,
+html[data-theme="light"] .maximize-btn {
+  background: rgba(226, 232, 240, 0.9);
+  color: #64748b;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+body.light-theme .maximize-btn:hover,
+html[data-theme="light"] .maximize-btn:hover {
+  background: rgba(203, 213, 225, 0.95);
+  color: #334155;
+}
+
+/* Maximized state — fills the plot-area with an opaque background so
+   other canvases don't show through. */
+.plot-box.maximized {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1000 !important;
+  border-radius: 0 !important;
+  flex: none !important;
+  background: #060E11 !important;
+  box-shadow: none;
+}
+body.light-theme .plot-box.maximized,
+html[data-theme="light"] .plot-box.maximized {
+  background: #e2e8f0 !important;
+}
+
+/* Floating legend in the top-right of a plot box */
+.legend {
+  position: absolute;
+  top: 42px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(6, 14, 17, 0.72);
+  border: 1px solid rgba(19, 49, 49, 0.45);
+  border-radius: 999px;
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot  { width: 10px; height: 10px; border-radius: 999px; }
+.legend-dot.dashed {
+  width: 16px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2.5px dashed #ff9f43;
+}
+body.light-theme .legend,
+html[data-theme="light"] .legend {
+  background: rgba(248, 250, 252, 0.86);
+  color: #0f172a;
+  border-color: rgba(51, 65, 85, 0.18);
+}
+
+
+/* --------------------------------------------------------------------------
+   10. SIDEBAR CONTROL PANEL
+   Fixed-width column on the right with a "CONTROLS" heading followed by
+   section headings (h3) and groups of .ctrl-box cards. Sliders and stat
+   rows live inside .ctrl-box.
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--surface-soft);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 24px;
+  overflow-y: auto;
+  z-index: 1001;
+}
+
+/* Section headings inside the sidebar */
+.sidebar h3 {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #b7c2d2;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
+}
+.sidebar h3.sidebar-h3-greek {
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
+body.light-theme .sidebar h3,
+html[data-theme="light"] .sidebar h3 { color: #475569; }
+
+/* Main "CONTROLS" title at the very top of the sidebar */
+.panel-controls-title {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+  padding: 0 0 10px 0;
+  line-height: 1.2;
+  border-bottom: 1px solid rgba(19, 49, 49, 0.40);
+}
+/* Pull the first control box up so it sits directly under the heading */
+.panel-controls-title + .ctrl-box { margin-top: -24px; }
+body.light-theme .panel-controls-title,
+html[data-theme="light"] .panel-controls-title {
+  color: #475569;
+  border-bottom-color: rgba(51, 65, 85, 0.25);
+}
+
+/* Figma-style control box: tinted green fill with thin green border */
+.ctrl-box {
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  padding: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.ctrl-box:last-child { margin-bottom: 0; }
+
+/* Slider-sized control box has a minimum height for visual consistency */
+.ctrl-box--slider {
+  min-height: 73px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Label inside a control box */
+.ctrl-box-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--text);
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
+/* Header row inside a control box: label on the left, value on the right */
+.ctrl-box-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ctrl-box-head .ctrl-box-label {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Row that holds the actual <input type="range"> */
+.ctrl-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.ctrl-slider-row input[type=range] {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--track-bg);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Slider thumb (WebKit) — teal circle with soft glow */
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent-soft);
+  border: none;
+}
+/* Slider thumb (Firefox) */
+.ctrl-slider-row input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+
+/* Right-aligned numeric value beside a slider (mono-numeral font) */
+.slider-val,
+.control-value {
+  min-width: 30px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 15px;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+body.light-theme .slider-val,
+body.light-theme .control-value,
+html[data-theme="light"] .slider-val,
+html[data-theme="light"] .control-value { color: #2a8a7e; }
+
+/* Range labels under a slider, e.g.  "400 nm        1600 nm" */
+.control-range {
+  font-size: 0.75rem;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Stat rows (label : value pairs inside a ctrl-box) */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  padding: 6px 0;
+}
+.ctrl-box .stat-row:first-child { padding-top: 0; }
+.ctrl-box .stat-row:last-child  { padding-bottom: 0; }
+
+.stat-label {
+  color: #d7dee9;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+.stat-value {
+  color: #f8fafc;
+  font-weight: 600;
+  font-family: var(--font-nums);
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.highlight {
+  font-size: 18px;
+}
+body.light-theme .stat-label,
+html[data-theme="light"] .stat-label { color: #0f172a; }
+body.light-theme .stat-value,
+html[data-theme="light"] .stat-value { color: #0f172a; }
+
+
+/* --------------------------------------------------------------------------
+   11. UTILITIES
+   -------------------------------------------------------------------------- */
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.note-text {
+  font-size: 13px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* KaTeX colour overrides so equation labels inherit text colour cleanly */
+.sidebar .katex,
+.sidebar .katex .mord,
+.sidebar .katex .mbin,
+.sidebar .katex .mrel,
+.sidebar .katex .mopen,
+.sidebar .katex .mclose,
+.sidebar .katex .mpunct,
+.sidebar .katex .mop,
+.sidebar .katex .minner,
+.sidebar .katex .mfrac,
+.sidebar .katex .msupsub {
+  color: inherit;
+}
+.sidebar .katex {
+  font-weight: 600;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-shadow: none;
+}
+
+
+/* --------------------------------------------------------------------------
+   12. RESPONSIVE
+   On narrow viewports tighten the sidebar so the plot area keeps as much
+   room as possible.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .sidebar     { width: 240px; padding: 14px; }
+  .info-tooltip { width: 260px; }
+}
+
+/* End shared simulation design system. */
+
+/* End shared simulation design system. */
+
+/* Simulation-specific overrides */
+.plot-area {
+  padding: 0;
+  gap: 0;
+}
+
+.plot-box {
+  border-radius: 0;
+  border: none;
+  background: var(--bg);
+}
+
+.legend {
+  top: 12px;
+  right: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border-radius: 8px;
+}
+
+.legend-item {
+  margin: 0;
+}
+
+.stat-value.blue { color: #60a5fa; }
+.stat-value.pink { color: #f472b6; }
+.stat-value.green { color: #34d399; }
+
+.graph-box {
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 5px;
+  padding: 10px;
+  box-sizing: border-box;
+  height: 200px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+#graph {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  border-radius: 4px;
+  background: rgba(6, 14, 17, 0.65);
+}
+
+body.light-theme #graph,
+html[data-theme="light"] #graph {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(59, 155, 143, 0.3); border-radius: 2px; }
+
+.info-tooltip .formula {
+  display: block;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 8px 0;
+  font-family: var(--font-nums);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.stat-label sub,
+.sidebar h3 sub,
+.info-tooltip .formula sub {
+  font-size: 0.7em;
+  vertical-align: sub;
+}
+</style>
+</head>
+
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Time Dilation: Light Clock Paradox</h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" id="infoBtn" title="About this simulation">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <div class="info-section">
+          <p>This animation demonstrates <strong>time dilation</strong> — one of the most striking predictions of Einstein's Special Theory of Relativity — through the classic <strong>light clock thought experiment</strong>.</p>
+        </div>
+        <div class="info-section">
+          <p>Two identical light clocks are compared <em>in the platform (lab) frame</em>: one at rest (top) and one carried by a train moving at speed <em>v</em> (bottom). A photon bounces between mirrors separated by height <em>h</em>.</p>
+        </div>
+        <span class="formula">Rest clock period: T<sub>A</sub> = 2h / c</span>
+        <span class="formula">Moving clock period: T<sub>B</sub> = 2hγ / c = γ · T<sub>A</sub></span>
+        <div class="info-section">
+          <p>Because the speed of light <em>c</em> is identical in both clocks, the moving clock's photon must cover a longer <strong>diagonal</strong> path per tick — so each tick takes <strong>longer</strong> and the moving clock visibly runs slow. Both photons move at the same on-screen speed; only the path length (and therefore the period) differs.</p>
+        </div>
+        <div class="info-section">
+          <p><em>Adjust β = v/c and mirror height h using the controls on the right panel.</em></p>
+        </div>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button class="btn" id="btnReset">Reset</button>
+      <button class="btn" id="btnPlayPause">Pause</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area">
+      <div class="plot-box">
+        <canvas id="canvas"></canvas>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Observer A — Train's rest frame</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div>Observer B — Platform frame</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <h2 class="panel-controls-title">CONTROLS</h2>
+
+      <div>
+        <h3>Parameters</h3>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">β = v/c</span>
+            <span class="slider-val" id="betaVal">0.50</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="beta" min="0" max="0.95" step="0.01" value="0.5">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">h (mirror height)</span>
+            <span class="slider-val" id="heightVal">1.00</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="height" min="0.5" max="3.0" step="0.05" value="1.0">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Statistics</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <span class="stat-label">β = v/c</span>
+            <span class="stat-value" id="statBeta">0.500</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">γ (Lorentz)</span>
+            <span class="stat-value green" id="statGamma">1.155</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">t<sub>A</sub> (stationary clock)</span>
+            <span class="stat-value blue" id="statTa">0.000</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">t<sub>B</sub> (moving clock)</span>
+            <span class="stat-value pink" id="statTb">0.000</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">θ (from vertical)</span>
+            <span class="stat-value" id="statTheta">30.0°</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Elapsed Time: t<sub>A</sub> vs t<sub>B</sub></h3>
+        <div class="graph-box">
+          <canvas id="graph"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+(function() {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const graph = document.getElementById('graph');
+  const gctx = graph.getContext('2d');
+
+  const betaSlider = document.getElementById('beta');
+  const heightSlider = document.getElementById('height');
+  const betaVal = document.getElementById('betaVal');
+  const heightVal = document.getElementById('heightVal');
+  const resetBtn = document.getElementById('btnReset');
+  const pauseBtn = document.getElementById('btnPlayPause');
+
+  const statBeta = document.getElementById('statBeta');
+  const statGamma = document.getElementById('statGamma');
+  const statTa = document.getElementById('statTa');
+  const statTb = document.getElementById('statTb');
+  const statTheta = document.getElementById('statTheta');
+
+  let beta = 0.5;
+  let h = 1.0;
+  let paused = false;
+
+  const REAL_SCALE = 1.4;
+  let simTime = 0;
+  let lastReal = performance.now();
+
+  // Trail history for pulse glow
+  let trailA = [];
+  let trailB = [];
+  const MAX_TRAIL = 12;
+  // Tracks the platform-frame train offset so we can detect a horizontal wrap
+  // (train exits right edge, re-enters left) and clear stale trail dots.
+  let lastTrainOffsetB = null;
+
+  function resetSimulation() {
+    simTime = 0;
+    graphData.length = 0;
+    trailA = [];
+    trailB = [];
+    lastTrainOffsetB = null;
+    lastReal = performance.now();
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+    pauseBtn.classList.remove('paused');
+  }
+
+  // Train width in rest frame; platform frame applies Lorentz contraction L = L₀/γ.
+  const TRAIN_W = 200;
+
+  function physicsParams() {
+    const gamma = 1 / Math.sqrt(1 - beta * beta);
+    const periodA = 2 * h;            // τ_A = 2h/c  (c = 1)
+    const periodB = 2 * h * gamma;    // τ_B = γ·τ_A
+    const halfB = periodB / 2;
+    const theta = Math.asin(Math.min(1, Math.max(0, beta)));
+    return { gamma, periodA, periodB, halfB, theta };
+  }
+
+  // Calculate how long the train takes to traverse the panel (from entering left to exiting right)
+  // effectiveScale = h_pix / h ensures consistent scaling with vertical motion
+  function traverseTime(panelW, effectiveScale, gamma) {
+    if (beta < 0.001) return Infinity; // stationary train never exits
+    const trainWContracted = TRAIN_W / gamma;
+    const margin = 12; // edge margin
+    const traverseDistance = panelW - 2 * margin; // distance for train center to travel
+    const speed = beta * effectiveScale; // pixels per unit time (at speed c=1)
+    return traverseDistance / speed;
+  }
+
+  // Platform-frame train position. Physically the train obeys x = β·c·t_B, so the
+  // on-screen pixel velocity is β·effectiveScale per unit sim-time — i.e. directly
+  // proportional to the chosen speed. Train enters from left and exits right.
+  // Returns offset from panel center.
+  // effectiveScale = h_pix / h ensures horizontal and vertical use the same scale
+  // (important when h_pix is clamped to fit the panel).
+  function trainOffsetAt(tB, panelW, effectiveScale, gamma) {
+    if (beta < 0.001) return 0;
+    const trainWContracted = TRAIN_W / gamma;
+    const margin = 12;
+    // Train center starts at left edge (margin + half train width)
+    const startX = margin + trainWContracted / 2;
+    // Current position = startX + distance traveled (using effective scale for c=1)
+    const currentX = startX + beta * tB * effectiveScale;
+    // Return offset from panel center
+    return currentX - panelW / 2;
+  }
+
+  // Lab-frame distance traveled (for scrolling background in the rest frame)
+  // Returns raw pixels traveled - no wrapping needed here; drawing functions handle wrap
+  function labTravelPx(tLab, effectiveScale) {
+    if (beta < 0.001) return 0;
+    return beta * tLab * effectiveScale;
+  }
+
+  function effectiveClockH(hVal, pxPerUnit, panelH) {
+    const maxTrainH = panelH * 0.82;
+    const maxClockH = Math.max(40, maxTrainH - 60);
+    return Math.min(hVal * pxPerUnit, maxClockH);
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    if (cw < 1 || ch < 1) return;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const gw = graph.clientWidth;
+    const gh = graph.clientHeight;
+    if (gw >= 1 && gh >= 1) {
+      graph.width = gw * dpr;
+      graph.height = gh * dpr;
+      gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }
+  window.addEventListener('resize', resize);
+  if ('ResizeObserver' in window) {
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement);
+    ro.observe(graph.parentElement);
+  }
+
+  betaSlider.addEventListener('input', e => {
+    beta = parseFloat(e.target.value);
+    betaVal.textContent = beta.toFixed(2);
+    resetSimulation();
+  });
+  heightSlider.addEventListener('input', e => {
+    h = parseFloat(e.target.value);
+    heightVal.textContent = h.toFixed(2);
+    resetSimulation();
+  });
+  resetBtn.addEventListener('click', resetSimulation);
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('paused', paused);
+  });
+
+  // ========== PLATFORM, TRACKS & SCENE ==========
+  function drawSkyAndGround(x0, y0, w, vh, groundY, accent, sceneOpts) {
+    const { parallax = 0, isStation = false } = sceneOpts || {};
+    const skyH = groundY - y0;
+
+    // Deep sky → horizon gradient (late-afternoon lab atmosphere)
+    const skyGrad = ctx.createLinearGradient(x0, y0, x0, groundY);
+    skyGrad.addColorStop(0, '#0c1929');
+    skyGrad.addColorStop(0.35, '#1a2d4a');
+    skyGrad.addColorStop(0.65, '#2d4a6f');
+    skyGrad.addColorStop(0.88, '#4a6a8f');
+    skyGrad.addColorStop(1, '#6b8aa8');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(x0, y0, w, skyH);
+
+    // Sun haze (soft, off-centre)
+    const sunX = x0 + w * 0.78 - parallax * 0.08;
+    const sunY = y0 + skyH * 0.22;
+    const sunR = Math.min(w, skyH) * 0.14;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
+    sunGlow.addColorStop(0, 'rgba(255, 220, 160, 0.35)');
+    sunGlow.addColorStop(0.4, 'rgba(255, 200, 120, 0.12)');
+    sunGlow.addColorStop(1, 'rgba(255, 180, 100, 0)');
+    ctx.fillStyle = sunGlow;
+    ctx.fillRect(x0, y0, w, skyH);
+    ctx.fillStyle = 'rgba(255, 235, 200, 0.55)';
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunR * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Layered clouds (deterministic, parallax-scrolled backward)
+    function drawCloudLayer(baseY, alpha, scale, speed) {
+      const scroll = parallax * speed;
+      const wrapW = w + 120;
+      for (let i = 0; i < Math.ceil(w / 90) + 3; i++) {
+        const rawX = i * 97 - scroll;
+        const cx = x0 + ((rawX % wrapW) + wrapW) % wrapW - 60;
+        const cy = baseY + Math.sin(i * 2.3) * 8;
+        const cw = (55 + (i % 4) * 18) * scale;
+        ctx.fillStyle = `rgba(220, 230, 245, ${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cw * 0.45, cw * 0.18, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx + cw * 0.28, cy - 2, cw * 0.38, cw * 0.22, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx - cw * 0.22, cy + 1, cw * 0.32, cw * 0.16, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    drawCloudLayer(y0 + skyH * 0.18, 0.14, 1.1, 0.15);
+    drawCloudLayer(y0 + skyH * 0.32, 0.22, 0.85, 0.35);
+    drawCloudLayer(y0 + skyH * 0.48, 0.18, 0.65, 0.55);
+
+    // Far mountain ridge (scrolls backward very slowly - distant parallax)
+    const ridgeScroll = parallax * 0.08;
+    ctx.fillStyle = 'rgba(25, 40, 62, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x0, groundY);
+    for (let i = 0; i <= 14; i++) {
+      const px = x0 + (w * i / 14);
+      const py = groundY - 22 - Math.abs(Math.sin((i * 0.9) - ridgeScroll * 0.01)) * 28
+        - (i % 3) * 5;
+      ctx.lineTo(px, py);
+    }
+    ctx.lineTo(x0 + w, groundY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Mid-ground tree line (scrolls backward at medium speed)
+    const treeScroll = parallax * 0.25;
+    ctx.fillStyle = 'rgba(20, 45, 38, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(x0, groundY);
+    for (let i = 0; i <= 20; i++) {
+      const px = x0 + (w * i / 20);
+      const baseH = 14 + (i % 4) * 4;
+      const py = groundY - baseH - Math.sin(i * 1.4 - treeScroll * 0.015) * 6;
+      ctx.lineTo(px, py);
+    }
+    ctx.lineTo(x0 + w, groundY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Individual tree silhouettes (scroll backward with wrap-around)
+    const treeWrap = w + 60;
+    for (let i = 0; i < Math.floor(w / 55) + 3; i++) {
+      const rawTx = i * 61 - treeScroll;
+      const tx = x0 + ((rawTx % treeWrap) + treeWrap) % treeWrap - 20;
+      const th = 18 + (i % 5) * 5;
+      const ty = groundY - th;
+      ctx.fillStyle = 'rgba(15, 38, 32, 0.65)';
+      ctx.beginPath();
+      ctx.moveTo(tx, groundY);
+      ctx.lineTo(tx - 6, ty + 8);
+      ctx.lineTo(tx, ty);
+      ctx.lineTo(tx + 6, ty + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(22, 55, 45, 0.5)';
+      ctx.beginPath();
+      ctx.ellipse(tx, ty + 2, 9 + (i % 3), 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Grass / meadow band above track bed
+    const grassGrad = ctx.createLinearGradient(0, groundY - 28, 0, groundY);
+    grassGrad.addColorStop(0, 'rgba(34, 68, 48, 0.15)');
+    grassGrad.addColorStop(0.5, 'rgba(42, 82, 55, 0.45)');
+    grassGrad.addColorStop(1, 'rgba(48, 90, 58, 0.7)');
+    ctx.fillStyle = grassGrad;
+    ctx.fillRect(x0, groundY - 28, w, 28);
+
+    // Horizon atmospheric glow (accent-tinted)
+    const horizonGrad = ctx.createLinearGradient(x0, groundY - 50, x0, groundY + 8);
+    horizonGrad.addColorStop(0, accent + '00');
+    horizonGrad.addColorStop(0.5, accent + '0c');
+    horizonGrad.addColorStop(1, accent + '18');
+    ctx.fillStyle = horizonGrad;
+    ctx.fillRect(x0, groundY - 50, w, 58);
+
+    // Station: distant building silhouettes (scroll backward with parallax)
+    if (isStation) {
+      const bScroll = parallax * 0.18;
+      const bWrap = w + 80;
+      for (let i = 0; i < 5; i++) {
+        const rawBx = w * (0.08 + i * 0.28) - bScroll;
+        const bx = x0 + ((rawBx % bWrap) + bWrap) % bWrap - 40;
+        const bw = 35 + (i % 3) * 18;
+        const bh = 35 + (i % 2) * 20;
+        const by = groundY - bh - 8;
+        ctx.fillStyle = 'rgba(18, 28, 42, 0.55)';
+        ctx.fillRect(bx, by, bw, bh);
+        // Lit windows
+        ctx.fillStyle = 'rgba(255, 210, 120, 0.25)';
+        for (let wy = by + 8; wy < by + bh - 6; wy += 10) {
+          for (let wx = bx + 6; wx < bx + bw - 8; wx += 12) {
+            if ((wx + wy + i) % 17 > 6) {
+              ctx.fillRect(wx, wy, 5, 6);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function drawPlatformAndTracks(x0, w, groundY, options) {
+    const { isPlatformFrame = false, trackScroll = 0, showPlatformLabel = false } = options;
+    const trackLeft = x0 + 10;
+    const trackRight = x0 + w - 10;
+    const trackWidth = trackRight - trackLeft;
+
+    // Embankment shoulders (grass on both sides)
+    const embankGrad = ctx.createLinearGradient(x0, groundY - 6, x0, groundY + 34);
+    embankGrad.addColorStop(0, 'rgba(52, 88, 62, 0.85)');
+    embankGrad.addColorStop(0.35, 'rgba(58, 72, 58, 0.9)');
+    embankGrad.addColorStop(1, 'rgba(42, 48, 52, 0.95)');
+    ctx.fillStyle = embankGrad;
+    ctx.fillRect(x0, groundY - 4, w, 38);
+
+    // Ballast bed (crushed stone)
+    const ballastGrad = ctx.createLinearGradient(0, groundY, 0, groundY + 32);
+    ballastGrad.addColorStop(0, 'rgba(90, 98, 108, 0.95)');
+    ballastGrad.addColorStop(0.25, 'rgba(72, 78, 88, 0.98)');
+    ballastGrad.addColorStop(0.7, 'rgba(55, 60, 68, 1)');
+    ballastGrad.addColorStop(1, 'rgba(38, 42, 48, 1)');
+    ctx.fillStyle = ballastGrad;
+    ctx.fillRect(trackLeft - 4, groundY, trackWidth + 8, 32);
+
+    // Ballast texture (varied stones - scroll backward with track)
+    for (let i = 0; i < Math.floor(trackWidth / 4); i++) {
+      const rawBx = i * 7.3 - trackScroll * 0.5;
+      const bx = trackLeft + ((rawBx % trackWidth) + trackWidth) % trackWidth;
+      const by = groundY + 2 + (i * 3.7) % 24;
+      const br = 0.8 + (i % 5) * 0.35;
+      ctx.fillStyle = `rgba(${110 + (i % 4) * 12}, ${115 + (i % 3) * 10}, ${120 + (i % 5) * 8}, 0.45)`;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, br, br * 0.7, (i % 7) * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Station platform slab (moving-clock / main platform frame)
+    if (isPlatformFrame) {
+      const platformH = 20;
+      const platformY = groundY - platformH;
+      const platFaceGrad = ctx.createLinearGradient(0, platformY, 0, groundY);
+      platFaceGrad.addColorStop(0, '#9aa8b8');
+      platFaceGrad.addColorStop(0.15, '#7d8a98');
+      platFaceGrad.addColorStop(0.55, '#6b7785');
+      platFaceGrad.addColorStop(1, '#525c68');
+      ctx.fillStyle = platFaceGrad;
+      ctx.fillRect(trackLeft - 6, platformY, trackWidth + 12, platformH);
+
+      // Platform front face (3D lip)
+      ctx.fillStyle = 'rgba(45, 52, 60, 0.95)';
+      ctx.fillRect(trackLeft - 6, groundY - 3, trackWidth + 12, 4);
+
+      // Concrete coping stone on top
+      const copeGrad = ctx.createLinearGradient(0, platformY, 0, platformY + 5);
+      copeGrad.addColorStop(0, '#d8e0e8');
+      copeGrad.addColorStop(1, '#a8b4c0');
+      ctx.fillStyle = copeGrad;
+      ctx.fillRect(trackLeft - 6, platformY, trackWidth + 12, 4);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(trackLeft - 5.5, platformY + 0.5, trackWidth + 11, 3);
+
+      // Tactile warning strip (yellow raised paving)
+      const tactGrad = ctx.createLinearGradient(0, platformY + platformH - 7, 0, platformY + platformH);
+      tactGrad.addColorStop(0, 'rgba(234, 179, 8, 0.95)');
+      tactGrad.addColorStop(1, 'rgba(180, 130, 20, 0.9)');
+      ctx.fillStyle = tactGrad;
+      ctx.fillRect(trackLeft, platformY + platformH - 6, trackWidth, 4);
+      // Tactile dots pattern
+      ctx.fillStyle = 'rgba(120, 90, 10, 0.35)';
+      for (let tx = trackLeft + 4; tx < trackRight - 4; tx += 8) {
+        for (let ty = platformY + platformH - 5; ty < platformY + platformH - 1; ty += 4) {
+          ctx.beginPath();
+          ctx.arc(tx + (ty % 2) * 2, ty, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Platform tile grid
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+      ctx.lineWidth = 0.5;
+      const tileW = 24;
+      for (let tx = trackLeft; tx < trackRight; tx += tileW) {
+        ctx.beginPath();
+        ctx.moveTo(tx, platformY + 4);
+        ctx.lineTo(tx, groundY - 4);
+        ctx.stroke();
+      }
+      for (let ty = platformY + 6; ty < groundY - 5; ty += 12) {
+        ctx.beginPath();
+        ctx.moveTo(trackLeft, ty);
+        ctx.lineTo(trackRight, ty);
+        ctx.stroke();
+      }
+
+      // Platform edge shadow under coping
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillRect(trackLeft - 6, platformY + 3, trackWidth + 12, 2);
+
+      // Canopy support posts (receding into distance - scroll backward)
+      const postSpacing = 85;
+      const postOffset = ((trackScroll * 0.8) % postSpacing + postSpacing) % postSpacing;
+      for (let px = trackLeft - postOffset; px < trackRight + postSpacing; px += postSpacing) {
+        if (px < trackLeft + 20 || px > trackRight - 20) continue;
+        const postH = 55;
+        const postTop = platformY - postH;
+        ctx.fillStyle = 'rgba(55, 65, 75, 0.85)';
+        ctx.fillRect(px - 3, postTop, 6, postH + platformH);
+        ctx.fillStyle = 'rgba(70, 80, 92, 0.7)';
+        ctx.fillRect(px - 4, postTop, 8, 5);
+        // Lamp head
+        ctx.fillStyle = 'rgba(200, 210, 220, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(px, postTop - 2, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        const lampGlow = ctx.createRadialGradient(px, postTop, 0, px, postTop, 18);
+        lampGlow.addColorStop(0, 'rgba(255, 230, 180, 0.2)');
+        lampGlow.addColorStop(1, 'rgba(255, 220, 150, 0)');
+        ctx.fillStyle = lampGlow;
+        ctx.beginPath();
+        ctx.arc(px, postTop, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Platform name board (only shown in platform frame)
+      if (showPlatformLabel) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+        ctx.fillRect(x0 + w / 2 - 52, platformY - 14, 104, 12);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0 + w / 2 - 52, platformY - 14, 104, 12);
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
+        ctx.font = '600 8px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('PLATFORM · LAB FRAME', x0 + w / 2, platformY - 5);
+      }
+    } else {
+      // Rural siding: low gravel path beside tracks (stationary clock panel)
+      const pathY = groundY - 8;
+      ctx.fillStyle = 'rgba(88, 98, 88, 0.55)';
+      ctx.fillRect(trackLeft - 8, pathY, 22, 8);
+      ctx.fillRect(trackRight - 14, pathY, 22, 8);
+      ctx.fillStyle = 'rgba(120, 130, 115, 0.35)';
+      for (let i = 0; i < 6; i++) {
+        ctx.fillRect(trackLeft - 6 + i * 3, pathY + 2, 2, 2);
+        ctx.fillRect(trackRight - 12 + i * 3, pathY + 2, 2, 2);
+      }
+    }
+
+    // Wooden sleepers / ties (scroll backward)
+    const tieSpacing = 22;
+    const tieOffset = ((trackScroll) % tieSpacing + tieSpacing) % tieSpacing;
+    for (let tx = trackLeft - tieOffset; tx < trackRight + tieSpacing; tx += tieSpacing) {
+      const tieW = 18;
+      const tieH = 6;
+      const tieGrad = ctx.createLinearGradient(0, groundY, 0, groundY + tieH);
+      tieGrad.addColorStop(0, '#5c4a38');
+      tieGrad.addColorStop(0.5, '#4a3c2c');
+      tieGrad.addColorStop(1, '#3a3024');
+      ctx.fillStyle = tieGrad;
+      ctx.fillRect(tx - tieW / 2, groundY + 1, tieW, tieH);
+      ctx.strokeStyle = 'rgba(30, 25, 18, 0.6)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(tx - tieW / 2 + 0.5, groundY + 1.5, tieW - 1, tieH - 1);
+      ctx.strokeStyle = 'rgba(90, 75, 55, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(tx - 6, groundY + 3);
+      ctx.lineTo(tx + 6, groundY + 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tx - 3, groundY + 5);
+      ctx.lineTo(tx + 4, groundY + 5.5);
+      ctx.stroke();
+    }
+
+    // Steel rails with specular highlight
+    function drawRail(railY) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(trackLeft, railY + 3, trackWidth, 2);
+
+      const railGrad = ctx.createLinearGradient(0, railY - 1, 0, railY + 5);
+      railGrad.addColorStop(0, '#c8d0d8');
+      railGrad.addColorStop(0.2, '#98a4b0');
+      railGrad.addColorStop(0.55, '#6a7580');
+      railGrad.addColorStop(0.85, '#4a525a');
+      railGrad.addColorStop(1, '#353b42');
+      ctx.fillStyle = railGrad;
+      ctx.fillRect(trackLeft, railY, trackWidth, 4);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillRect(trackLeft, railY, trackWidth, 1);
+
+      ctx.strokeStyle = 'rgba(180, 190, 200, 0.35)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(trackLeft, railY, trackWidth, 4);
+
+      // Rail fasteners (spikes) at tie positions
+      ctx.fillStyle = 'rgba(50, 55, 60, 0.7)';
+      for (let tx = trackLeft - tieOffset; tx < trackRight + tieSpacing; tx += tieSpacing) {
+        ctx.fillRect(tx - 1, railY + 1, 2, 3);
+      }
+    }
+
+    drawRail(groundY + 7);
+    drawRail(groundY + 15);
+  }
+
+  function computeSceneryArrowLayout(x0, w, groundY, backgroundScroll) {
+    if (beta <= 0.01) return null;
+
+    const trackLeft = x0 + 10;
+    const trackRight = x0 + w - 10;
+    const scrollRate = 0.8;
+    const platformH = 20;
+    const platformY = groundY - platformH;
+    const postTop = platformY - 55;
+    const arrowY = postTop - 20;
+    const aL = 40 * beta + 25;
+    const edgeMargin = 30;
+    const hGap = 18;
+    const loopSpan = Math.max(40, trackRight - trackLeft - edgeMargin * 2);
+    const phase = (backgroundScroll * scrollRate) % loopSpan;
+    const px = trackRight - edgeMargin - aL / 2 - phase - hGap;
+
+    return {
+      px,
+      arrowY,
+      aL,
+      xHead: px - aL / 2,
+      xTail: px + aL / 2
+    };
+  }
+
+  function drawSceneryVelocityArrow(layout, accent, alpha) {
+    if (!layout) return;
+
+    const { px, arrowY, aL, xHead, xTail } = layout;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xTail, arrowY);
+    ctx.lineTo(xHead, arrowY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(xHead, arrowY);
+    ctx.lineTo(xHead + 7, arrowY - 4);
+    ctx.lineTo(xHead + 7, arrowY + 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('v = ' + beta.toFixed(2) + 'c', px, arrowY + 8);
+    ctx.restore();
+  }
+
+  function sceneryArrowOverlapsTrain(layout, trainCenterX, trainW) {
+    if (!layout) return false;
+    const pad = 8;
+    const trainLeft = trainCenterX - trainW / 2 - pad;
+    const trainRight = trainCenterX + trainW / 2 + pad;
+    return layout.xTail > trainLeft && layout.xHead < trainRight;
+  }
+
+  function drawLightClockChamber(clockX, clockTopY, clockFloorY, accent) {
+    const chamberW = 32;
+    const padY = 6;
+    const chamberY = clockTopY - padY;
+    const chamberH = clockFloorY - clockTopY + padY * 2;
+
+    // Outer glow
+    const glowGrad = ctx.createLinearGradient(clockX - chamberW, chamberY, clockX + chamberW, chamberY + chamberH);
+    glowGrad.addColorStop(0, accent + '06');
+    glowGrad.addColorStop(0.5, accent + '12');
+    glowGrad.addColorStop(1, accent + '06');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.roundRect(clockX - chamberW / 2 - 2, chamberY - 2, chamberW + 4, chamberH + 4, 4);
+    ctx.fill();
+
+    // Glass panels
+    ctx.fillStyle = accent + '0a';
+    ctx.strokeStyle = accent + '55';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(clockX - chamberW / 2, chamberY, chamberW, chamberH, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    // Glass reflection highlights
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fillRect(clockX - chamberW / 2 + 3, chamberY + 2, 4, chamberH - 4);
+    ctx.fillRect(clockX + chamberW / 2 - 7, chamberY + 2, 4, chamberH - 4);
+
+    // Corner brackets
+    ctx.strokeStyle = accent + '77';
+    ctx.lineWidth = 2;
+    const corners = [
+      [clockX - chamberW / 2, chamberY],
+      [clockX + chamberW / 2, chamberY],
+      [clockX - chamberW / 2, chamberY + chamberH],
+      [clockX + chamberW / 2, chamberY + chamberH]
+    ];
+    corners.forEach(([cx, cy]) => {
+      const dx = cx < clockX ? 1 : -1;
+      const dy = cy < (chamberY + chamberH / 2) ? 1 : -1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + dy * 8);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + dx * 8, cy);
+      ctx.stroke();
+    });
+
+    // "Light Clock" label — sit above the chamber, clear of train windows
+    ctx.fillStyle = accent + 'aa';
+    ctx.font = '600 8px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('LIGHT CLOCK', clockX, chamberY - 8);
+  }
+
+  // ========== IMPROVED REALISTIC TRAIN DRAWING ==========
+  function drawTrain(cx, groundY, trainW, trainH, accent, moving, wheelSpeed, showVelocityArrow) {
+    const trainX = cx - trainW / 2;
+    const trainY = groundY - trainH;
+    const bodyRadius = 6;
+    const speed = wheelSpeed != null ? wheelSpeed : (moving ? beta : 0);
+
+    // Shadow under train
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(cx, groundY + 3, trainW / 2 + 5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- Undercarriage / chassis ----
+    const chassisH = 14;
+    const chassisY = groundY - chassisH;
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect(trainX + 6, chassisY, trainW - 12, chassisH, 3);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(71, 85, 105, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Chassis details - pipes/bars
+    ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(trainX + 45, chassisY + chassisH / 2);
+    ctx.lineTo(trainX + trainW - 45, chassisY + chassisH / 2);
+    ctx.stroke();
+    // Small equipment boxes under chassis
+    for (let bx = trainX + 55; bx < trainX + trainW - 55; bx += 40) {
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+      ctx.fillRect(bx, chassisY + 2, 18, 8);
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.4)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(bx, chassisY + 2, 18, 8);
+    }
+
+    // ---- Main body ----
+    const bodyY = trainY;
+    const bodyH = trainH - chassisH;
+
+    // Body gradient - metallic look
+    const bodyGrad = ctx.createLinearGradient(trainX, bodyY, trainX, bodyY + bodyH);
+    bodyGrad.addColorStop(0, 'rgba(100, 116, 139, 0.85)');
+    bodyGrad.addColorStop(0.08, 'rgba(148, 163, 184, 0.6)');
+    bodyGrad.addColorStop(0.15, 'rgba(71, 85, 105, 0.75)');
+    bodyGrad.addColorStop(0.5, 'rgba(51, 65, 85, 0.7)');
+    bodyGrad.addColorStop(0.85, 'rgba(40, 52, 74, 0.75)');
+    bodyGrad.addColorStop(1, 'rgba(30, 41, 59, 0.8)');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.roundRect(trainX, bodyY, trainW, bodyH, [bodyRadius, bodyRadius, 2, 2]);
+    ctx.fill();
+
+    // Body outline
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(trainX, bodyY, trainW, bodyH, [bodyRadius, bodyRadius, 2, 2]);
+    ctx.stroke();
+
+    // Roof highlight - curved shine
+    const roofGrad = ctx.createLinearGradient(trainX, bodyY, trainX, bodyY + 14);
+    roofGrad.addColorStop(0, 'rgba(203, 213, 225, 0.3)');
+    roofGrad.addColorStop(0.5, 'rgba(148, 163, 184, 0.1)');
+    roofGrad.addColorStop(1, 'rgba(148, 163, 184, 0)');
+    ctx.fillStyle = roofGrad;
+    ctx.beginPath();
+    ctx.roundRect(trainX + 2, bodyY + 1, trainW - 4, 14, [bodyRadius - 1, bodyRadius - 1, 0, 0]);
+    ctx.fill();
+
+    // ---- Horizontal accent stripes (like real passenger trains) ----
+    // Upper thin line
+    ctx.fillStyle = accent + '55';
+    ctx.fillRect(trainX + 3, bodyY + 12, trainW - 6, 2);
+    // Lower thick band
+    const bandY = bodyY + bodyH * 0.68;
+    const bandGrad = ctx.createLinearGradient(trainX, bandY, trainX, bandY + 6);
+    bandGrad.addColorStop(0, accent + '66');
+    bandGrad.addColorStop(0.5, accent + '44');
+    bandGrad.addColorStop(1, accent + '22');
+    ctx.fillStyle = bandGrad;
+    ctx.fillRect(trainX + 3, bandY, trainW - 6, 6);
+    // Pinstripe below band
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(trainX + 3, bandY + 7, trainW - 6, 1);
+
+    // ---- Windows with realistic depth ----
+    // Layout scales with train width so a Lorentz-contracted car never yields
+    // negative window dimensions (which would crash createRadialGradient).
+    const numWindows = 5;
+    const winMargin = Math.max(8, trainW * 0.11);
+    const winGap = Math.max(3, trainW * 0.05);
+    const totalWinSpace = trainW - winMargin * 2;
+    const winW = Math.max(4, (totalWinSpace - (numWindows - 1) * winGap) / numWindows);
+    const winH = Math.min(20, bodyH * 0.24);
+    const winY = bodyY + 16;
+    const winRadius = Math.min(4, winW / 2);
+
+    for (let i = 0; i < numWindows; i++) {
+      const wx = trainX + winMargin + i * (winW + winGap);
+
+      // Window recess / shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath();
+      ctx.roundRect(wx - 1, winY - 1, winW + 2, winH + 2, winRadius + 1);
+      ctx.fill();
+
+      // Window glass - gradient for depth
+      const glassGrad = ctx.createLinearGradient(wx, winY, wx, winY + winH);
+      glassGrad.addColorStop(0, 'rgba(30, 58, 95, 0.9)');
+      glassGrad.addColorStop(0.3, 'rgba(20, 45, 80, 0.85)');
+      glassGrad.addColorStop(0.7, 'rgba(15, 35, 65, 0.8)');
+      glassGrad.addColorStop(1, 'rgba(25, 50, 85, 0.85)');
+      ctx.fillStyle = glassGrad;
+      ctx.beginPath();
+      ctx.roundRect(wx, winY, winW, winH, winRadius);
+      ctx.fill();
+
+      // Window frame
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.roundRect(wx, winY, winW, winH, winRadius);
+      ctx.stroke();
+
+      // Interior warm glow (light inside train)
+      const interiorGlow = ctx.createRadialGradient(
+        wx + winW * 0.4, winY + winH * 0.6, 0,
+        wx + winW * 0.4, winY + winH * 0.6, Math.max(1, winW * 0.6)
+      );
+      interiorGlow.addColorStop(0, 'rgba(251, 191, 36, 0.12)');
+      interiorGlow.addColorStop(1, 'rgba(251, 191, 36, 0)');
+      ctx.fillStyle = interiorGlow;
+      ctx.beginPath();
+      ctx.roundRect(wx + 1, winY + 1, Math.max(1, winW - 2), winH - 2, Math.max(0, winRadius - 1));
+      ctx.fill();
+
+      // Reflection highlight - top-left corner shine
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(wx + 3, winY + 2);
+      ctx.lineTo(wx + winW * 0.45, winY + 2);
+      ctx.lineTo(wx + 3, winY + winH * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Second subtle reflection
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.beginPath();
+      ctx.roundRect(wx + winW * 0.55, winY + 3, winW * 0.3, winH * 0.3, 2);
+      ctx.fill();
+    }
+
+    // ---- Door (more detailed) ----
+    const doorW = 18;
+    const doorH = bodyH * 0.52;
+    const doorX = cx - doorW / 2;
+    const doorY = bodyY + bodyH - doorH - 4;
+
+    // Door recess
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.roundRect(doorX - 1, doorY - 1, doorW + 2, doorH + 2, [4, 4, 0, 0]);
+    ctx.fill();
+
+    // Door body
+    const doorGrad = ctx.createLinearGradient(doorX, doorY, doorX + doorW, doorY);
+    doorGrad.addColorStop(0, 'rgba(40, 52, 74, 0.9)');
+    doorGrad.addColorStop(0.5, 'rgba(51, 65, 85, 0.85)');
+    doorGrad.addColorStop(1, 'rgba(40, 52, 74, 0.9)');
+    ctx.fillStyle = doorGrad;
+    ctx.beginPath();
+    ctx.roundRect(doorX, doorY, doorW, doorH, [4, 4, 0, 0]);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Door window
+    const dwW = doorW - 6;
+    const dwH = doorH * 0.35;
+    const dwX = doorX + 3;
+    const dwY = doorY + 5;
+    ctx.fillStyle = 'rgba(20, 45, 80, 0.8)';
+    ctx.beginPath();
+    ctx.roundRect(dwX, dwY, dwW, dwH, 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Door center split line
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, doorY + 3);
+    ctx.lineTo(cx, doorY + doorH - 2);
+    ctx.stroke();
+
+    // Door handle
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.7)';
+    ctx.beginPath();
+    ctx.roundRect(doorX + doorW - 5, doorY + doorH * 0.45, 2.5, 8, 1);
+    ctx.fill();
+
+    // ---- Wheels (realistic bogies) ----
+    const wheelRadius = 13;
+    const bogiePositions = [trainX + 38, trainX + trainW - 38];
+    const spokeAngle = (simTime * speed * 10) % (Math.PI * 2);
+
+    bogiePositions.forEach(bx => {
+      // Bogie frame
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx - 22, groundY - wheelRadius - 8, 44, 10, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Spring/suspension detail
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+      ctx.lineWidth = 1;
+      for (let s = -12; s <= 12; s += 6) {
+        ctx.beginPath();
+        ctx.moveTo(bx + s, groundY - wheelRadius - 8);
+        ctx.lineTo(bx + s, groundY - wheelRadius - 3);
+        ctx.stroke();
+      }
+
+      // Two wheels per bogie
+      const wheelOffsets = [-14, 14];
+      wheelOffsets.forEach(wo => {
+        const wx = bx + wo;
+        const wy = groundY - 2;
+
+        // Wheel shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(wx + 1, wy + 2, wheelRadius + 1, wheelRadius * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Outer tire
+        ctx.fillStyle = '#1a1f2e';
+        ctx.strokeStyle = 'rgba(120, 130, 150, 0.7)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(wx, wy, wheelRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Tire tread ring
+        ctx.strokeStyle = 'rgba(80, 90, 110, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(wx, wy, wheelRadius - 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner wheel disc
+        const discGrad = ctx.createRadialGradient(wx - 2, wy - 2, 0, wx, wy, wheelRadius * 0.75);
+        discGrad.addColorStop(0, 'rgba(100, 116, 139, 0.6)');
+        discGrad.addColorStop(0.5, 'rgba(71, 85, 105, 0.5)');
+        discGrad.addColorStop(1, 'rgba(51, 65, 85, 0.4)');
+        ctx.fillStyle = discGrad;
+        ctx.beginPath();
+        ctx.arc(wx, wy, wheelRadius * 0.75, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner ring
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(wx, wy, wheelRadius * 0.55, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Spokes (8 spokes for realism)
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = 1.5;
+        for (let s = 0; s < 8; s++) {
+          const a = spokeAngle + s * Math.PI / 4;
+          ctx.beginPath();
+          ctx.moveTo(wx + Math.cos(a) * 4, wy + Math.sin(a) * 4);
+          ctx.lineTo(wx + Math.cos(a) * (wheelRadius * 0.7), wy + Math.sin(a) * (wheelRadius * 0.7));
+          ctx.stroke();
+        }
+
+        // Hub cap - 3D look
+        const hubGrad = ctx.createRadialGradient(wx - 1, wy - 1, 0, wx, wy, 5);
+        hubGrad.addColorStop(0, 'rgba(203, 213, 225, 0.8)');
+        hubGrad.addColorStop(0.5, 'rgba(148, 163, 184, 0.6)');
+        hubGrad.addColorStop(1, 'rgba(100, 116, 139, 0.4)');
+        ctx.fillStyle = hubGrad;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hub center dot
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+        ctx.beginPath();
+        ctx.arc(wx, wy, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Flange on wheel (the lip that keeps train on track)
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(wx, wy, wheelRadius + 1.5, Math.PI * 0.6, Math.PI * 0.4, true);
+        ctx.stroke();
+      });
+
+      // Axle between wheels
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(bx - 14, groundY - 2);
+      ctx.lineTo(bx + 14, groundY - 2);
+      ctx.stroke();
+    });
+
+    // ---- Coupler at front/back ----
+    [trainX - 2, trainX + trainW + 2].forEach((cpx, idx) => {
+      const dir = idx === 0 ? -1 : 1;
+      ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+      ctx.beginPath();
+      ctx.roundRect(cpx + (dir > 0 ? 0 : -8), groundY - 16, 8, 6, 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    });
+
+    // ---- Panel lines / rivets ----
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+    for (let rx = trainX + 20; rx < trainX + trainW - 15; rx += 30) {
+      // Subtle rivet dots along the band
+      ctx.beginPath();
+      ctx.arc(rx, bandY - 2, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(rx, bandY + 8, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Vertical panel seam lines
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+    ctx.lineWidth = 0.5;
+    for (let px = trainX + 50; px < trainX + trainW - 20; px += 50) {
+      ctx.beginPath();
+      ctx.moveTo(px, bodyY + 14);
+      ctx.lineTo(px, bodyY + bodyH - 4);
+      ctx.stroke();
+    }
+
+    // ---- Velocity arrow for moving train (platform frame only) ----
+    if (showVelocityArrow && beta > 0.01) {
+      const arrowY = trainY - 22;
+      const aL = 40 * beta + 25;
+      ctx.strokeStyle = accent;
+      ctx.fillStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - aL/2, arrowY);
+      ctx.lineTo(cx + aL/2, arrowY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + aL/2, arrowY);
+      ctx.lineTo(cx + aL/2 - 7, arrowY - 4);
+      ctx.lineTo(cx + aL/2 - 7, arrowY + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('v = ' + beta.toFixed(2) + 'c', cx + aL/2 + 8, arrowY + 4);
+    }
+  }
+
+  // Improved mirror and source drawing
+  function drawMirror(x, y, w) {
+    // Mirror glow
+    const mirGrad = ctx.createLinearGradient(x - w, y - 4, x + w, y + 4);
+    mirGrad.addColorStop(0, 'rgba(203, 213, 225, 0.1)');
+    mirGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.8)');
+    mirGrad.addColorStop(1, 'rgba(203, 213, 225, 0.1)');
+    ctx.strokeStyle = mirGrad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - w, y);
+    ctx.lineTo(x + w, y);
+    ctx.stroke();
+
+    // Mirror surface shine
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - w + 4, y - 1);
+    ctx.lineTo(x + w - 4, y - 1);
+    ctx.stroke();
+
+    // Hatching behind mirror
+    ctx.strokeStyle = 'rgba(203, 213, 225, 0.2)';
+    ctx.lineWidth = 1;
+    for (let i = -w + 2; i < w; i += 5) {
+      ctx.beginPath();
+      ctx.moveTo(x + i, y);
+      ctx.lineTo(x + i + 4, y - 4);
+      ctx.stroke();
+    }
+  }
+
+  function drawSource(x, y) {
+    // Outer glow
+    const srcGrad = ctx.createRadialGradient(x, y, 0, x, y, 12);
+    srcGrad.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
+    srcGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+    ctx.fillStyle = srcGrad;
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Source body
+    ctx.fillStyle = '#fbbf24';
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath();
+    ctx.arc(x - 1.5, y - 1.5, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Improved photon/pulse drawing with trail
+  function drawPulse(x, y, accent, trail) {
+    // Draw trail
+    if (trail && trail.length > 1) {
+      for (let i = 1; i < trail.length; i++) {
+        const alpha = (i / trail.length) * 0.4;
+        const radius = 3 + (i / trail.length) * 2;
+        ctx.fillStyle = accent + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+        ctx.beginPath();
+        ctx.arc(trail[i].x, trail[i].y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Outer glow - large
+    const grad1 = ctx.createRadialGradient(x, y, 0, x, y, 28);
+    grad1.addColorStop(0, accent + '55');
+    grad1.addColorStop(0.5, accent + '22');
+    grad1.addColorStop(1, accent + '00');
+    ctx.fillStyle = grad1;
+    ctx.beginPath();
+    ctx.arc(x, y, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner glow
+    const grad2 = ctx.createRadialGradient(x, y, 0, x, y, 12);
+    grad2.addColorStop(0, accent);
+    grad2.addColorStop(0.5, accent + 'aa');
+    grad2.addColorStop(1, accent + '00');
+    ctx.fillStyle = grad2;
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Bright center
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw text with optional subscript segments: [{ t: 'A', sub: true }, ...]
+  function fillTextWithSubscripts(ctx, x, y, segments, font, fillStyle) {
+    const sizeMatch = font.match(/(\d+(?:\.\d+)?)px/);
+    const mainSize = sizeMatch ? parseFloat(sizeMatch[1]) : 11;
+    const subSize = Math.round(mainSize * 0.72);
+    const subOffset = Math.round(mainSize * 0.28);
+    const subFont = font.replace(/(\d+(?:\.\d+)?)px/, subSize + 'px');
+
+    const prevFill = ctx.fillStyle;
+    if (fillStyle) ctx.fillStyle = fillStyle;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+
+    let cx = x;
+    for (const seg of segments) {
+      ctx.font = seg.sub ? subFont : font;
+      ctx.fillText(seg.t, cx, y + (seg.sub ? subOffset : 0));
+      cx += ctx.measureText(seg.t).width;
+    }
+    ctx.fillStyle = prevFill;
+    return cx - x;
+  }
+
+  function drawFrame(x0, y0, w, vh, options) {
+    const {
+      label, sublabelParts, tElapsed, period, clockH,
+      pulsePos, trainOffset, showDiagonal, accent, totalBounces, trail,
+      trainW = TRAIN_W, wheelSpeed = 0, backgroundScroll = 0
+    } = options;
+
+    // Clip all drawing to this panel so the moving train never bleeds into the other frame.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, w, vh);
+    ctx.clip();
+
+    // Panel background
+    ctx.fillStyle = 'rgba(20, 28, 45, 0.6)';
+    ctx.fillRect(x0, y0, w, vh);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, vh - 1);
+
+    // Position train at bottom of panel, leaving space for tracks
+    const trainH = clockH + 60;
+    const bottomMargin = 38; // space for tracks and ballast below ground level
+    const groundY = y0 + vh - bottomMargin;
+
+    // Rest frame: scenery scrolls backward past a fixed train; platform frame: scenery fixed
+    drawSkyAndGround(x0, y0, w, vh, groundY, accent, {
+      parallax: backgroundScroll,
+      isStation: true
+    });
+
+    drawPlatformAndTracks(x0, w, groundY, {
+      isPlatformFrame: true,
+      trackScroll: backgroundScroll,
+      showPlatformLabel: showDiagonal
+    });
+
+    const trainCenterX = x0 + w / 2 + trainOffset;
+    const arrowLayout = !showDiagonal
+      ? computeSceneryArrowLayout(x0, w, groundY, backgroundScroll)
+      : null;
+    const arrowBehindTrain = sceneryArrowOverlapsTrain(arrowLayout, trainCenterX, trainW);
+
+    // Behind train: draw dimmed arrow with scenery before the train body occludes it
+    if (arrowBehindTrain) {
+      drawSceneryVelocityArrow(arrowLayout, accent, 0.38);
+    }
+
+    // Rest-frame observer: train fixed, world streams past; platform frame: train moves over fixed world
+    const showTrainMotion = showDiagonal || beta > 0.001;
+    drawTrain(trainCenterX, groundY, trainW, trainH, accent, showTrainMotion, wheelSpeed, showDiagonal);
+
+    // In front of scenery: full-contrast arrow when clear of the train
+    if (arrowLayout && !arrowBehindTrain) {
+      drawSceneryVelocityArrow(arrowLayout, accent, 1);
+    }
+
+    // Light clock components
+    const clockFloorY = groundY - 18;
+    const clockTopY = clockFloorY - clockH;
+    const clockX = trainCenterX;
+
+    // Light clock glass chamber (drawn before mirrors so mirrors sit on top)
+    drawLightClockChamber(clockX, clockTopY, clockFloorY, accent);
+
+    // Draw mirror at top
+    drawMirror(clockX, clockTopY, 20);
+
+    // Draw source at bottom
+    drawSource(clockX, clockFloorY);
+
+    // Vertical guide line for clock
+    if (!showDiagonal) {
+      ctx.strokeStyle = accent + '33';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+      ctx.lineDashOffset = 0;
+      ctx.beginPath();
+      ctx.moveTo(clockX, clockFloorY - 8);
+      ctx.lineTo(clockX, clockTopY + 5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Diagonal path for Frame B
+    if (showDiagonal) {
+      const path = options.pathPoints;
+      if (path && path.length > 1) {
+        // Completed zigzag segments — static dashed trail (one segment per stroke)
+        ctx.strokeStyle = 'rgba(244, 114, 182, 0.82)';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]);
+        ctx.lineDashOffset = 0;
+        for (let i = 0; i < path.length - 2; i++) {
+          ctx.beginPath();
+          ctx.moveTo(path[i].x, path[i].y);
+          ctx.lineTo(path[i + 1].x, path[i + 1].y);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Current segment — solid highlight (avoids marching dashes while photon moves)
+        if (path.length >= 2) {
+          ctx.strokeStyle = '#f472b6';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(path[path.length - 2].x, path[path.length - 2].y);
+          ctx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw photon pulse
+    const px = pulsePos.x;
+    const py = pulsePos.y;
+    drawPulse(px, py, accent, trail);
+
+    // Height label
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.lineDashOffset = 0;
+    const hLabelX = trainCenterX - trainW / 2 - 20;
+    ctx.beginPath();
+    ctx.moveTo(hLabelX, clockFloorY);
+    ctx.lineTo(hLabelX, clockTopY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(hLabelX - 4, clockFloorY); ctx.lineTo(hLabelX + 4, clockFloorY);
+    ctx.moveTo(hLabelX - 4, clockTopY); ctx.lineTo(hLabelX + 4, clockTopY);
+    ctx.stroke();
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('h', hLabelX - 6, (clockFloorY + clockTopY)/2 + 4);
+
+    // Frame label
+    ctx.fillStyle = accent;
+    ctx.font = '600 14px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, x0 + 16, y0 + 22);
+    if (sublabelParts && sublabelParts.length) {
+      fillTextWithSubscripts(
+        ctx, x0 + 16, y0 + 38, sublabelParts,
+        '11px -apple-system, sans-serif', 'rgba(203, 213, 225, 0.7)'
+      );
+    }
+
+    // Live bounce overlay — moving clock panel only (top panel overlaps the legend)
+    if (showDiagonal) {
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
+      ctx.font = '600 12px "SF Mono", Menlo, monospace';
+      ctx.textAlign = 'right';
+      const maxB = options.maxBounces || 3;
+      ctx.fillText('bounces: ' + totalBounces.toFixed(2) + ' / ' + maxB.toFixed(1), x0 + w - 16, y0 + 22);
+    }
+
+    ctx.restore();
+  }
+
+  function computePulseA(tA, h_pix, clockX, clockFloorY) {
+    const periodA = 2 * h;
+    const phase = ((tA % periodA) + periodA) % periodA / periodA;
+    const frac = phase < 0.5 ? phase * 2 : 1 - (phase - 0.5) * 2;
+    return {
+      x: clockX,
+      y: clockFloorY - frac * h_pix
+    };
+  }
+
+  // Photon in the platform frame: it rides horizontally with the train (x = train
+  // center) while bouncing vertically with the dilated period τ_B.
+  // effectiveScale = h_pix / h ensures speed of light is constant (c=1) in both frames
+  function pulseBPosAt(tB, h_pix, clockXAtT0, clockFloorY, panelW, effectiveScale, gamma) {
+    const { periodB } = physicsParams();
+    const phase = ((tB % periodB) + periodB) % periodB / periodB;
+    const frac = phase < 0.5 ? phase * 2 : 1 - (phase - 0.5) * 2;
+    const offset = trainOffsetAt(tB, panelW, effectiveScale, gamma);
+    return {
+      x: clockXAtT0 + offset,
+      y: clockFloorY - frac * h_pix,
+      trainOffset: offset
+    };
+  }
+
+  function computePulseB(tB, h_pix, clockXAtT0, clockFloorY, panelW, effectiveScale, gamma) {
+    return pulseBPosAt(tB, h_pix, clockXAtT0, clockFloorY, panelW, effectiveScale, gamma);
+  }
+
+  // Build the zigzag path from t=0 to current time (train moves left to right, no wrapping)
+  function buildPathHistoryB(tB, h_pix, clockXAtT0, clockFloorY, panelW, effectiveScale, gamma) {
+    const { halfB } = physicsParams();
+
+    const points = [];
+    function push(t) {
+      const p = pulseBPosAt(t, h_pix, clockXAtT0, clockFloorY, panelW, effectiveScale, gamma);
+      const last = points[points.length - 1];
+      if (last && Math.abs(last.x - p.x) < 0.3 && Math.abs(last.y - p.y) < 0.3) return;
+      points.push({ x: p.x, y: p.y });
+    }
+
+    push(0);
+    for (let i = 1; i * halfB < tB; i++) {
+      push(i * halfB);
+    }
+    push(tB);
+
+    return points;
+  }
+
+  const graphData = [];
+
+  function drawGraph() {
+    const w = graph.clientWidth;
+    const vh = graph.clientHeight;
+    gctx.clearRect(0, 0, w, vh);
+
+    gctx.fillStyle = 'rgba(15, 23, 42, 0.5)';
+    gctx.fillRect(0, 0, w, vh);
+
+    const padL = 44, padR = 14, padT = 14, padB = 28;
+    const plotW = w - padL - padR;
+    const plotH = vh - padT - padB;
+
+    if (plotW < 10 || plotH < 10) return;
+
+    const { gamma, periodB } = physicsParams();
+    const totalDuration = traverseTime(cachedPanelW, cachedEffectiveScale, gamma);
+    const maxTB = isFinite(totalDuration) ? totalDuration : 10;
+
+    const maxY = Math.max(maxTB, 0.1);
+    const maxX = maxTB;
+
+    const numGridY = 5;
+    const numGridX = 6;
+
+    gctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+    gctx.lineWidth = 1;
+    for (let i = 0; i <= numGridY; i++) {
+      const y = padT + plotH - (plotH * i / numGridY);
+      gctx.beginPath();
+      gctx.moveTo(padL, y);
+      gctx.lineTo(padL + plotW, y);
+      gctx.stroke();
+    }
+
+    for (let i = 0; i <= numGridX; i++) {
+      const x = padL + (plotW * i / numGridX);
+      gctx.beginPath();
+      gctx.moveTo(x, padT);
+      gctx.lineTo(x, padT + plotH);
+      gctx.stroke();
+    }
+
+    const axisStroke = 'rgba(226, 232, 240, 0.92)';
+    const tickStroke = 'rgba(203, 213, 225, 0.78)';
+    const tickLabelFill = 'rgba(241, 245, 249, 0.95)';
+    const axisTitleFill = 'rgba(248, 250, 252, 0.98)';
+
+    gctx.strokeStyle = axisStroke;
+    gctx.lineWidth = 1.5;
+    gctx.beginPath();
+    gctx.moveTo(padL, padT);
+    gctx.lineTo(padL, padT + plotH);
+    gctx.lineTo(padL + plotW, padT + plotH);
+    gctx.stroke();
+
+    gctx.fillStyle = tickLabelFill;
+    gctx.font = '600 10px "JetBrains Mono", "SF Mono", Menlo, monospace';
+    gctx.textAlign = 'right';
+    for (let i = 0; i <= numGridY; i++) {
+      const val = (maxY * i / numGridY);
+      const y = padT + plotH - (plotH * i / numGridY);
+      gctx.fillText(val.toFixed(1), padL - 6, y + 4);
+      gctx.beginPath();
+      gctx.moveTo(padL - 3, y);
+      gctx.lineTo(padL, y);
+      gctx.strokeStyle = tickStroke;
+      gctx.lineWidth = 1;
+      gctx.stroke();
+    }
+
+    gctx.textAlign = 'center';
+    for (let i = 0; i <= numGridX; i++) {
+      const val = (maxX * i / numGridX);
+      const x = padL + (plotW * i / numGridX);
+      gctx.fillStyle = tickLabelFill;
+      gctx.fillText(val.toFixed(1), x, padT + plotH + 15);
+      gctx.beginPath();
+      gctx.moveTo(x, padT + plotH);
+      gctx.lineTo(x, padT + plotH + 3);
+      gctx.strokeStyle = tickStroke;
+      gctx.lineWidth = 1;
+      gctx.stroke();
+    }
+
+    gctx.fillStyle = axisTitleFill;
+    gctx.font = '600 10px "DMSansUser", "DM Sans", -apple-system, sans-serif';
+    gctx.textAlign = 'center';
+    gctx.fillText('sim time', padL + plotW / 2, vh - 3);
+
+    gctx.save();
+    gctx.translate(10, padT + plotH / 2);
+    gctx.rotate(-Math.PI / 2);
+    gctx.textAlign = 'center';
+    gctx.fillStyle = axisTitleFill;
+    gctx.fillText('elapsed', 0, 0);
+    gctx.restore();
+
+    if (graphData.length < 2) {
+      gctx.font = '10px -apple-system, sans-serif';
+      gctx.textAlign = 'left';
+      gctx.fillStyle = '#60a5fa';
+      fillTextWithSubscripts(gctx, padL + 8, padT + 12, [
+        { t: '● ', sub: false }, { t: 't', sub: false }, { t: 'A', sub: true }
+      ], '10px -apple-system, sans-serif', '#60a5fa');
+      gctx.fillStyle = '#f472b6';
+      fillTextWithSubscripts(gctx, padL + 50, padT + 12, [
+        { t: '● ', sub: false }, { t: 't', sub: false }, { t: 'B', sub: true }
+      ], '10px -apple-system, sans-serif', '#f472b6');
+      return;
+    }
+
+    gctx.strokeStyle = '#60a5fa';
+    gctx.lineWidth = 2;
+    gctx.beginPath();
+    graphData.forEach((d, i) => {
+      const x = padL + (d.simTime / maxX) * plotW;
+      const y = padT + plotH - (d.tA / maxY) * plotH;
+      if (i === 0) gctx.moveTo(x, y); else gctx.lineTo(x, y);
+    });
+    gctx.stroke();
+
+    gctx.strokeStyle = '#f472b6';
+    gctx.lineWidth = 2;
+    gctx.beginPath();
+    graphData.forEach((d, i) => {
+      const x = padL + (d.simTime / maxX) * plotW;
+      const y = padT + plotH - (d.tB / maxY) * plotH;
+      if (i === 0) gctx.moveTo(x, y); else gctx.lineTo(x, y);
+    });
+    gctx.stroke();
+
+    if (graphData.length > 0) {
+      const last = graphData[graphData.length - 1];
+      const cx = padL + (last.simTime / maxX) * plotW;
+
+      const cyA = padT + plotH - (last.tA / maxY) * plotH;
+      gctx.fillStyle = '#60a5fa';
+      gctx.beginPath();
+      gctx.arc(cx, cyA, 3, 0, Math.PI * 2);
+      gctx.fill();
+
+      const cyB = padT + plotH - (last.tB / maxY) * plotH;
+      gctx.fillStyle = '#f472b6';
+      gctx.beginPath();
+      gctx.arc(cx, cyB, 3, 0, Math.PI * 2);
+      gctx.fill();
+    }
+
+    gctx.textAlign = 'left';
+    gctx.fillStyle = '#60a5fa';
+    fillTextWithSubscripts(gctx, padL + 8, padT + 12, [
+      { t: '● ', sub: false }, { t: 't', sub: false }, { t: 'A', sub: true }
+    ], '10px -apple-system, sans-serif', '#60a5fa');
+    gctx.fillStyle = '#f472b6';
+    fillTextWithSubscripts(gctx, padL + 50, padT + 12, [
+      { t: '● ', sub: false }, { t: 't', sub: false }, { t: 'B', sub: true }
+    ], '10px -apple-system, sans-serif', '#f472b6');
+  }
+
+  // Store current panel dimensions for update checks
+  let cachedPanelW = 800;
+  let cachedEffectiveScale = 60; // h_pix / h — ensures c=1 in both frames
+
+  function update(dtReal) {
+    const { gamma, theta } = physicsParams();
+
+    if (!paused) {
+      // simTime IS the platform/lab coordinate time, advancing at a CONSTANT rate.
+      // (Previously this was multiplied by gamma, which forced both photons to tick
+      //  in lockstep and made the diagonal photon move faster than c.)
+      simTime += dtReal * REAL_SCALE;
+    }
+
+    // Check if train has exited the panel (right edge)
+    const duration = traverseTime(cachedPanelW, cachedEffectiveScale, gamma);
+    if (simTime >= duration) {
+      simTime = 0;
+      graphData.length = 0;
+      trailA = [];
+      trailB = [];
+      lastTrainOffsetB = null;
+    }
+
+    // Both clocks are compared in the same (platform) frame.
+    // Stationary reference clock reads the full lab time; the moving clock runs slow.
+    const tA = simTime;          // stationary clock reading  (= lab time)
+    const tB = simTime / gamma;  // moving clock proper time   (dilated → smaller)
+
+    statBeta.textContent = beta.toFixed(3);
+    statGamma.textContent = gamma.toFixed(4);
+    statTa.textContent = tA.toFixed(3);
+    statTb.textContent = tB.toFixed(3);
+    statTheta.textContent = (theta * 180 / Math.PI).toFixed(1) + '°';
+
+    if (graphData.length === 0 || simTime - graphData[graphData.length-1].simTime > 0.02) {
+      graphData.push({ simTime: simTime, tA: tA, tB: tB });
+    }
+  }
+
+  function render() {
+    resize();
+
+    const W = canvas.clientWidth;
+    const H = canvas.clientHeight;
+    if (W < 10 || H < 10) return;
+
+    ctx.fillStyle = '#060E11';
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle stars
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 137.5 + 23) % W;
+      const sy = (i * 71.3 + 17) % H;
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+
+    const { gamma, periodB } = physicsParams();
+    // simTime = lab/platform coordinate time → drives BOTH photons so light moves
+    // at the same on-screen speed (c) in each panel.
+    const tLab = simTime;
+    const tDispA = simTime;          // stationary clock reading
+    const tDispB = simTime / gamma;  // moving clock proper reading (dilated)
+
+    const panelW = W - 10;
+    const gap = 6;
+    const panelH = (H - gap) / 2;
+    const pxPerUnit = Math.min(80, panelH * 0.38);
+    const frameX = 5;
+    const frameAY = 5;
+    const frameBY = 5 + panelH + gap;
+
+    const clockH_pix = effectiveClockH(h, pxPerUnit, panelH);
+    const trainWContracted = TRAIN_W / gamma;
+
+    // effectiveScale ensures horizontal motion uses same scale as vertical (h_pix)
+    // This maintains c=1: photon speed is the same in both frames
+    const effectiveScale = clockH_pix / h;
+
+    // Cache these for update() to use for traverse time calculation
+    cachedPanelW = panelW;
+    cachedEffectiveScale = effectiveScale;
+
+    // Calculate total bounces possible during one traversal
+    const totalTraverseTime = traverseTime(panelW, effectiveScale, gamma);
+    const maxBouncesB = totalTraverseTime / periodB;
+
+    // --- Frame A (top: train at rest) ---
+    const bottomMargin = 38;
+    const groundYA = frameAY + panelH - bottomMargin;
+    const clockFloorYA = groundYA - 18;
+    const clockXA = frameX + panelW / 2;
+    const pulseA = computePulseA(tLab, clockH_pix, clockXA, clockFloorYA);
+    const bouncesA = tLab / (2 * h);
+
+    // Update trail A
+    if (!paused) {
+      trailA.push({ x: pulseA.x, y: pulseA.y });
+      if (trailA.length > MAX_TRAIL) trailA.shift();
+    }
+
+    // Stationary clock ticks every 2h of lab time
+    const maxBouncesA = totalTraverseTime / (2 * h);
+
+    drawFrame(frameX, frameAY, panelW, panelH, {
+      label: "Observer A — Train's Rest Frame",
+      sublabelParts: [
+        { t: 'Pulse travels straight up & down · Period ', sub: false },
+        { t: 'T', sub: false }, { t: 'A', sub: true },
+        { t: ' = 2h/c', sub: false }
+      ],
+      tElapsed: tDispA,
+      period: 2 * h,
+      clockH: clockH_pix,
+      pulsePos: pulseA,
+      trainOffset: 0,
+      backgroundScroll: labTravelPx(tLab, effectiveScale),
+      showDiagonal: false,
+      accent: '#60a5fa',
+      totalBounces: bouncesA,
+      maxBounces: maxBouncesA,
+      trail: trailA,
+      trainW: TRAIN_W,
+      wheelSpeed: beta
+    });
+
+    // --- Frame B (bottom: train moving on platform) ---
+    const groundYB = frameBY + panelH - bottomMargin;
+    const clockFloorYB = groundYB - 18;
+    const clockXB = frameX + panelW / 2;
+
+    const pulseB = computePulseB(tLab, clockH_pix, clockXB, clockFloorYB, panelW, effectiveScale, gamma);
+    const pathPts = buildPathHistoryB(tLab, clockH_pix, clockXB, clockFloorYB, panelW, effectiveScale, gamma);
+    const bouncesBcorrect = tLab / periodB;
+
+    lastTrainOffsetB = pulseB.trainOffset;
+
+    // Update trail B
+    if (!paused) {
+      trailB.push({ x: pulseB.x, y: pulseB.y });
+      if (trailB.length > MAX_TRAIL) trailB.shift();
+    }
+
+    drawFrame(frameX, frameBY, panelW, panelH, {
+      label: 'Observer B — Platform Frame',
+      sublabelParts: [
+        { t: 'Diagonal path · Period ', sub: false },
+        { t: 'T', sub: false }, { t: 'B', sub: true },
+        { t: ' = γ·', sub: false },
+        { t: 'T', sub: false }, { t: 'A', sub: true }
+      ],
+      tElapsed: tDispB,
+      period: periodB,
+      clockH: clockH_pix,
+      pulsePos: pulseB,
+      trainOffset: pulseB.trainOffset,
+      backgroundScroll: 0,
+      showDiagonal: true,
+      accent: '#f472b6',
+      pathPoints: pathPts,
+      totalBounces: bouncesBcorrect,
+      maxBounces: maxBouncesB,
+      trail: trailB,
+      trainW: trainWContracted,
+      wheelSpeed: beta
+    });
+
+    // Horizontal divider between frames
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(frameX + 5, frameBY - gap / 2);
+    ctx.lineTo(frameX + panelW - 5, frameBY - gap / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function loop() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastReal) / 1000);
+    lastReal = now;
+
+    update(dt);
+    render();
+    drawGraph();
+
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  lastReal = performance.now();
+  loop();
+})();
+</script>
+
+</body>
+</html>

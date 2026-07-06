@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Galilean Relativity Simulation</title>
+<link rel="stylesheet" href="../simulation-design-system.css">
+<style>
+/* Simulation-specific overrides (layout + small custom widgets) */
+.top-bar h1 span { color: var(--accent); }
+
+.plot-area { padding: 0; gap: 0; }
+.plot-box {
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+}
+#plotBox { position: relative; }
+
+/* Frame selection tabs live inside a ctrl-box */
+.frame-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(0,0,0,0.22);
+  padding: 4px;
+  border-radius: 8px;
+}
+.frame-tab {
+  flex: 1;
+  padding: 7px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  border: 1px solid rgba(19, 49, 49, 0.25);
+  background: rgba(6, 14, 17, 0.35);
+}
+.frame-tab:hover { border-color: rgba(59, 155, 143, 0.65); color: var(--text); }
+.frame-tab.active {
+  background: var(--btn-play-bg);
+  border-color: var(--btn-play-bg);
+  color: var(--btn-play-text);
+}
+
+/* Tiny colored dot used in stat labels */
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.dot.a { background: #60a5fa; }
+.dot.b { background: #f472b6; }
+.dot.ball { background: #fbbf24; }
+
+/* Scrollbar polish in the design-system sidebar */
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(59, 155, 143, 0.28);
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="outer-container">
+  <div class="top-bar">
+    <h1>Galilean Relativity <span>Relative Motion</span></h1>
+    <div class="info-icon-wrapper">
+      <div class="info-icon" title="About this simulation">i</div>
+      <div class="info-tooltip">
+        <h4>About This Simulation</h4>
+        <div class="info-section">
+          <p>This interactive simulation demonstrates <strong>Galilean relativity</strong> — the principle that the laws of motion are the same in all inertial (non-accelerating) reference frames.</p>
+        </div>
+        <div class="info-section">
+          <p>Two observers, <strong>A</strong> and <strong>B</strong>, move at constant velocities along a straight line. A ball moves at a chosen velocity relative to A. Switch frames (A, B, ball, or ground) to see how the same event looks different to different observers.</p>
+        </div>
+        <div class="info-section">
+          <p>Velocities transform by simple addition/subtraction, but <strong>relative velocities</strong> (differences) are the same in every inertial frame.</p>
+        </div>
+        <div class="info-section">
+          <p><strong>Scene info:</strong> Top-down view of 1D motion along x. Grid spacing = 1 m. Trails are shown in the <strong>active frame</strong>. Arrows indicate velocity vectors (scaled).</p>
+        </div>
+      </div>
+    </div>
+    <div class="top-bar-spacer"></div>
+    <div class="top-actions sim-playback-btn-group">
+      <button type="button" class="btn btn-topbar-reset" id="resetBtn">Reset</button>
+      <button type="button" class="btn btn-topbar-playpause" id="btnPlayPause">Pause</button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="plot-area">
+      <div class="plot-box" id="plotBox">
+        <div class="plot-title">Relative motion in the active frame</div>
+        <canvas id="main"></canvas>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel-controls-title">Controls</div>
+
+      <div>
+        <h3>Velocity Controls</h3>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">v(A) → ground</span>
+            <span class="control-value" id="vaVal">2.0 m/s</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="vaSlider" min="-5" max="5" step="0.1" value="2.0">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">v(B) → ground</span>
+            <span class="control-value" id="vbVal">-1.0 m/s</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="vbSlider" min="-5" max="5" step="0.1" value="-1.0">
+          </div>
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <span class="ctrl-box-label">Ball vₓ (rel A)</span>
+            <span class="control-value" id="vbAVal">5.0 m/s</span>
+          </div>
+          <div class="ctrl-slider-row">
+            <input type="range" id="vbASlider" min="-15" max="15" step="0.1" value="5.0">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Reference Frame</h3>
+        <div class="ctrl-box">
+          <div class="frame-tabs">
+            <div class="frame-tab" data-frame="ground">Ground</div>
+            <div class="frame-tab active" data-frame="A">A</div>
+            <div class="frame-tab" data-frame="B">B</div>
+            <div class="frame-tab" data-frame="ball">Ball</div>
+          </div>
+          <div class="divider" style="margin: 10px 0;"></div>
+          <div class="stat-row">
+            <div class="stat-label">Active</div>
+            <div class="stat-value" id="activeFrame">A's rest frame</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Velocity Readouts (current frame)</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <div class="stat-label"><span class="dot a"></span>A: vₓ</div>
+            <div class="stat-value"><span id="aSpeed">0.00</span> m/s</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">A: dir</div>
+            <div class="stat-value" id="aDir">—</div>
+          </div>
+          <div class="divider" style="margin: 8px 0;"></div>
+          <div class="stat-row">
+            <div class="stat-label"><span class="dot b"></span>B: vₓ</div>
+            <div class="stat-value"><span id="bSpeed">0.00</span> m/s</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">B: dir</div>
+            <div class="stat-value" id="bDir">—</div>
+          </div>
+          <div class="divider" style="margin: 8px 0;"></div>
+          <div class="stat-row">
+            <div class="stat-label"><span class="dot ball"></span>Ball: vₓ</div>
+            <div class="stat-value"><span id="ballSpeed">0.00</span> m/s</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">Ball: dir</div>
+            <div class="stat-value" id="ballDir">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Relative Velocities (frame-invariant)</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <div class="stat-label">B − A</div>
+            <div class="stat-value"><span id="relBA">0.00</span> m/s</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">Ball − A</div>
+            <div class="stat-value"><span id="relBallA">0.00</span> m/s</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">Ball − B</div>
+            <div class="stat-value"><span id="relBallB">0.00</span> m/s</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('main');
+  const ctx = canvas.getContext('2d');
+
+  // Fixed world window (meters) — sized for readable scale on screen.
+  // (Full slider-range motion can extend beyond this; trails still compute correctly.)
+  const WORLD_HALF_X = 42;
+  const WORLD_HALF_Y = 14;
+
+  // Simulation state
+  const state = {
+    vA: 2.0,
+    vB: -1.0,
+    vBallRelA: 5.0,
+    frame: 'A',
+    t: 0,
+    tMax: 10,
+    paused: false,
+    A0: {x: -8, y: 0},
+    B0: {x: 8, y: 0},
+    Ball0: {x: -8, y: 0}
+  };
+
+  let trailA = [], trailB = [], trailBall = [];
+  let currentView = null;
+
+  // DOM
+  const vaSlider = document.getElementById('vaSlider');
+  const vbSlider = document.getElementById('vbSlider');
+  const vbASlider = document.getElementById('vbASlider');
+  const vaVal = document.getElementById('vaVal');
+  const vbVal = document.getElementById('vbVal');
+  const vbAVal = document.getElementById('vbAVal');
+  const pauseBtn = document.getElementById('btnPlayPause');
+  const resetBtn = document.getElementById('resetBtn');
+  const activeFrameEl = document.getElementById('activeFrame');
+  const aSpeed = document.getElementById('aSpeed');
+  const aDir = document.getElementById('aDir');
+  const bSpeed = document.getElementById('bSpeed');
+  const bDir = document.getElementById('bDir');
+  const ballSpeed = document.getElementById('ballSpeed');
+  const ballDir = document.getElementById('ballDir');
+  const relBA = document.getElementById('relBA');
+  const relBallA = document.getElementById('relBallA');
+  const relBallB = document.getElementById('relBallB');
+
+  function resetSim(clearTrails=true){
+    state.t = 0;
+    if (clearTrails){
+      trailA = [];
+      trailB = [];
+      trailBall = [];
+    }
+  }
+
+  // Changing a velocity changes the (analytic) trajectory, so the existing
+  // trail no longer matches. Clear trails but keep the clock running so the
+  // motion continues rather than snapping back to t = 0.
+  function refreshTrajectory(){
+    trailA = [];
+    trailB = [];
+    trailBall = [];
+  }
+
+  vaSlider.addEventListener('input', e => {
+    state.vA = parseFloat(e.target.value);
+    vaVal.textContent = state.vA.toFixed(1) + ' m/s';
+    refreshTrajectory();
+  });
+  vbSlider.addEventListener('input', e => {
+    state.vB = parseFloat(e.target.value);
+    vbVal.textContent = state.vB.toFixed(1) + ' m/s';
+    refreshTrajectory();
+  });
+  vbASlider.addEventListener('input', e => {
+    state.vBallRelA = parseFloat(e.target.value);
+    vbAVal.textContent = state.vBallRelA.toFixed(1) + ' m/s';
+    refreshTrajectory();
+  });
+  pauseBtn.addEventListener('click', () => {
+    state.paused = !state.paused;
+    pauseBtn.textContent = state.paused ? 'Play' : 'Pause';
+    pauseBtn.classList.toggle('paused', state.paused);
+  });
+  resetBtn.addEventListener('click', () => resetSim(true));
+
+  document.querySelectorAll('.frame-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.frame-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.frame = tab.dataset.frame;
+      trailA = []; trailB = []; trailBall = [];
+      currentView = null;
+    });
+  });
+
+  function resize(){
+    const container = document.getElementById('plotBox');
+    const dpr = window.devicePixelRatio || 1;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    currentView = null;
+  }
+  window.addEventListener('resize', resize);
+  setTimeout(resize, 50);
+  resize();
+
+  function groundVelocities(){
+    const vA = {x: state.vA, y: 0};
+    const vB = {x: state.vB, y: 0};
+    const vBallRelA = {x: state.vBallRelA, y: 0};
+    const vBall = {x: vA.x + vBallRelA.x, y: vA.y + vBallRelA.y};
+    return {vA, vB, vBall};
+  }
+
+  function groundPositions(t){
+    const {vA, vB, vBall} = groundVelocities();
+    return {
+      A: {x: state.A0.x + vA.x*t, y: state.A0.y + vA.y*t},
+      B: {x: state.B0.x + vB.x*t, y: state.B0.y + vB.y*t},
+      Ball: {x: state.Ball0.x + vBall.x*t, y: state.Ball0.y + vBall.y*t}
+    };
+  }
+
+  function frameVelocity(t){
+    const {vA, vB, vBall} = groundVelocities();
+    switch(state.frame){
+      case 'ground': return {x:0, y:0};
+      case 'A': return vA;
+      case 'B': return vB;
+      case 'ball': return vBall;
+      default: return {x:0, y:0};
+    }
+  }
+
+  function frameOrigin0(){
+    switch(state.frame){
+      case 'ground': return {x:0, y:0};
+      case 'A': return {x: state.A0.x, y: state.A0.y};
+      case 'B': return {x: state.B0.x, y: state.B0.y};
+      case 'ball': return {x: state.Ball0.x, y: state.Ball0.y};
+      default: return {x:0, y:0};
+    }
+  }
+
+  function transformPos(posGround, t){
+    const o = frameOrigin0();
+    const v = frameVelocity(t);
+    return {x: posGround.x - (o.x + v.x*t), y: posGround.y - (o.y + v.y*t)};
+  }
+
+  function transformVel(velGround){
+    const v = frameVelocity(0);
+    return {x: velGround.x - v.x, y: velGround.y - v.y};
+  }
+
+  // The view is recomputed once per animation frame and cached, so the many
+  // worldToScreen() calls (per trail vertex) don't re-measure the DOM each time.
+  function computeView(){
+    const container = document.getElementById('plotBox');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const scale = Math.min(w / (WORLD_HALF_X * 2), h / (WORLD_HALF_Y * 2));
+    const cx = w / 2;
+    const cy = h / 2;
+    return {w, h, scale, cx, cy};
+  }
+  function getView(){
+    if (!currentView) currentView = computeView();
+    return currentView;
+  }
+  function worldToScreen(p){
+    const v = getView();
+    return {x: v.cx + p.x * v.scale, y: v.cy - p.y * v.scale};
+  }
+
+  // Pick a "nice" step (1, 2, 5, 10, …) so spacing is at least minPx on screen.
+  function niceWorldStep(scale, minPx){
+    const minUnits = minPx / Math.max(1e-6, scale);
+    const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+    return steps.find(s => s >= minUnits) ?? 500;
+  }
+
+  function drawGrid(){
+    const view = getView();
+    const {w, h, scale, cx, cy} = view;
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(0, 0, w, h);
+
+    const grad = ctx.createRadialGradient(cx, cy, 50, cx, cy, Math.max(w,h)/1.2);
+    grad.addColorStop(0, 'rgba(30, 41, 59, 0.6)');
+    grad.addColorStop(1, 'rgba(11, 18, 32, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid + axes contrast tuned for dark background.
+    const gridStep = niceWorldStep(scale, 28);
+    const labelStep = niceWorldStep(scale, 52);
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.09)';
+    const startX = Math.ceil(-cx/scale);
+    const endX = Math.ceil((w-cx)/scale);
+    const xGridStart = Math.ceil(startX / gridStep) * gridStep;
+    for (let i = xGridStart; i <= endX; i += gridStep){
+      const sx = cx + i * scale;
+      ctx.beginPath();
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, h);
+      ctx.stroke();
+    }
+    const startY = Math.ceil(-cy/scale);
+    const endY = Math.ceil((h-cy)/scale);
+    const yGridStart = Math.ceil(startY / gridStep) * gridStep;
+    for (let j = yGridStart; j <= endY; j += gridStep){
+      const sy = cy - j * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(w, sy);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.58)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.92)';
+    ctx.font = '700 12px -apple-system, sans-serif';
+    const sub = frameAxisSubscript();
+    drawAxisLabel('x', sub, ' (m)', w - 92, cy - 8);
+    drawAxisLabel('y', sub, ' (m)', cx + 8, 16);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+    ctx.font = '700 11px -apple-system, sans-serif';
+    ctx.textBaseline = 'alphabetic';
+
+    const xLabelStart = Math.ceil(startX / labelStep) * labelStep;
+    for (let i = xLabelStart; i <= endX; i += labelStep){
+      if (i === 0) continue;
+      const sx = cx + i * scale;
+      ctx.fillText(i.toString(), sx + 2, cy + 14);
+    }
+
+    const yLabelStart = Math.ceil(startY / labelStep) * labelStep;
+    for (let j = yLabelStart; j <= endY; j += labelStep){
+      if (j === 0) continue;
+      const sy = cy - j * scale;
+      ctx.fillText(j.toString(), cx + 6, sy - 2);
+    }
+    ctx.restore();
+  }
+
+  // Tag that ties the drawn axes to the active observer, so the coordinate
+  // transform is visible (x_A in A's frame, x_B in B's, x_ground in ground).
+  function frameAxisSubscript(){
+    switch(state.frame){
+      case 'A': return 'A';
+      case 'B': return 'B';
+      case 'ball': return 'ball';
+      default: return 'ground';
+    }
+  }
+
+  function drawAxisLabel(base, sub, suffix, x, y){
+    ctx.save();
+
+    // Base character
+    ctx.font = '700 12px -apple-system, sans-serif';
+    ctx.fillText(base, x, y);
+    const baseW = ctx.measureText(base).width;
+
+    // Subscript: smaller + lowered
+    ctx.font = '700 9px -apple-system, sans-serif';
+    ctx.fillText(sub, x + baseW + 1, y + 4);
+    const subW = ctx.measureText(sub).width;
+
+    // Units suffix
+    ctx.font = '700 12px -apple-system, sans-serif';
+    ctx.fillText(suffix, x + baseW + 1 + subW + 1, y);
+
+    ctx.restore();
+  }
+
+  function drawTrail(trail, color){
+    if (trail.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < trail.length; i++){
+      const s = worldToScreen(trail[i]);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    }
+    ctx.stroke();
+  }
+
+  function drawArrow(pos, vel, color){
+    const speed = Math.hypot(vel.x, vel.y);
+    if (speed < 0.01) return;
+    const arrowLen = Math.min(speed * 0.5, 4);
+    const tip = {x: pos.x + (vel.x/speed)*arrowLen, y: pos.y + (vel.y/speed)*arrowLen};
+    const sStart = worldToScreen(pos);
+    const sEnd = worldToScreen(tip);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(sStart.x, sStart.y);
+    ctx.lineTo(sEnd.x, sEnd.y);
+    ctx.stroke();
+    const ang = Math.atan2(sEnd.y - sStart.y, sEnd.x - sStart.x);
+    const ah = 8;
+    ctx.beginPath();
+    ctx.moveTo(sEnd.x, sEnd.y);
+    ctx.lineTo(sEnd.x - ah*Math.cos(ang - Math.PI/6), sEnd.y - ah*Math.sin(ang - Math.PI/6));
+    ctx.lineTo(sEnd.x - ah*Math.cos(ang + Math.PI/6), sEnd.y - ah*Math.sin(ang + Math.PI/6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawPerson(pos, color, label){
+    const s = worldToScreen(pos);
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 24);
+    g.addColorStop(0, color + 'aa');
+    g.addColorStop(1, color + '00');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 24, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 9, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = 'bold 12px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, s.x, s.y - 16);
+    ctx.textAlign = 'left';
+  }
+
+  function drawBall(pos, color){
+    const s = worldToScreen(pos);
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 18);
+    g.addColorStop(0, color + 'cc');
+    g.addColorStop(1, color + '00');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 18, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function dirString(v){
+    const sp = Math.hypot(v.x, v.y);
+    if (sp < 0.01) return 'at rest';
+    if (Math.abs(v.y) < 0.001){
+      return v.x >= 0 ? '+x →' : '−x ←';
+    }
+    const ang = Math.atan2(v.y, v.x) * 180 / Math.PI;
+    return ang.toFixed(0) + '°';
+  }
+
+  function updateReadouts(){
+    const {vA, vB, vBall} = groundVelocities();
+    const vAf = transformVel(vA);
+    const vBf = transformVel(vB);
+    const vBallf = transformVel(vBall);
+
+    aSpeed.textContent = vAf.x.toFixed(2);
+    aDir.textContent = dirString(vAf);
+    bSpeed.textContent = vBf.x.toFixed(2);
+    bDir.textContent = dirString(vBf);
+    ballSpeed.textContent = vBallf.x.toFixed(2);
+    ballDir.textContent = dirString(vBallf);
+
+    const names = {
+      ground: "Ground rest frame",
+      A: "A's rest frame",
+      B: "B's rest frame",
+      ball: "Ball's rest frame"
+    };
+    activeFrameEl.textContent = names[state.frame];
+    // Relative velocities are differences of ground velocities, so they are
+    // identical in every inertial frame. Computing them once proves the point.
+    relBA.textContent = (vB.x - vA.x).toFixed(2);
+    relBallA.textContent = (vBall.x - vA.x).toFixed(2);
+    relBallB.textContent = (vBall.x - vB.x).toFixed(2);
+  }
+
+  let lastTime = performance.now();
+
+  function animate(now){
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    if (!state.paused){
+      state.t += dt;
+      if (state.t > state.tMax){
+        state.t = 0;
+        trailA = []; trailB = []; trailBall = [];
+      }
+    }
+
+    const gp = groundPositions(state.t);
+    const Af = transformPos(gp.A, state.t);
+    const Bf = transformPos(gp.B, state.t);
+    const Ballf = transformPos(gp.Ball, state.t);
+
+    if (!state.paused){
+      trailA.push(Af);
+      trailB.push(Bf);
+      trailBall.push(Ballf);
+      const maxLen = 2000;
+      if (trailA.length > maxLen) trailA.shift();
+      if (trailB.length > maxLen) trailB.shift();
+      if (trailBall.length > maxLen) trailBall.shift();
+    }
+
+    currentView = computeView();
+
+    drawGrid();
+
+    drawTrail(trailA, 'rgba(96, 165, 250, 0.55)');
+    drawTrail(trailB, 'rgba(244, 114, 182, 0.55)');
+    drawTrail(trailBall, 'rgba(251, 191, 36, 0.7)');
+
+    const {vA, vB, vBall} = groundVelocities();
+    drawArrow(Af, transformVel(vA), '#60a5fa');
+    drawArrow(Bf, transformVel(vB), '#f472b6');
+    drawArrow(Ballf, transformVel(vBall), '#fbbf24');
+
+    drawPerson(Af, '#60a5fa', 'A');
+    drawPerson(Bf, '#f472b6', 'B');
+    drawBall(Ballf, '#fbbf24');
+
+    updateReadouts();
+
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

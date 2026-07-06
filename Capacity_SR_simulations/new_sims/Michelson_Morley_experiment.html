@@ -284,9 +284,9 @@ body {
 }
 #detectorCanvas {
   width: 100%;
-  height: 70px;
+  height: 150px;
   background: #000;
-  border-radius: 4px;
+  border-radius: 8px;
   display: block;
 }
 #fringePlot {
@@ -750,6 +750,38 @@ body {
   #canvas-area { right: 552px; }
   .detector-panel { right: 276px; width: 260px; }
 }
+
+.dropdown-toggle {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.dropdown-toggle:hover {
+  color: var(--accent);
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  color: #64748b;
+}
+
+.dropdown-toggle.open .dropdown-arrow {
+  transform: rotate(90deg);
+}
+
+.control-note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
 </style>
 </head>
 <body>
@@ -767,7 +799,7 @@ body {
       <p>In the 19th century, physicists believed light traveled through a medium called the <em>“luminiferous aether.”</em> If so, the Earth’s motion through this aether would create a “wind” that changes the effective speed of light differently in each arm, producing a measurable <em>fringe shift</em> when the apparatus is rotated.</p>
       <p><strong>Aether Prediction mode</strong> shows the expected fringe shift using Galilean velocity addition — <em>this prediction is wrong.</em></p>
       <p><strong>Actual (Relativity) mode</strong> shows the real result: <em>no fringe shift at any angle</em>. The speed of light is the same in all directions, leading directly to Einstein’s Special Relativity (1905).</p>
-      <div class="tip-note">Note: β (v/c) is greatly exaggerated here for visibility. Earth’s actual orbital β ≈ 10⁻⁴.</div>
+      <div class="tip-note">β (v/c) is fixed at Earth’s real orbital speed (β ≈ 9.93×10⁻⁵). With ~11 m arms the predicted aether shift is only ≈ 0.4 fringe, so a magnified telescope view is used to make it visible.</div>
     </div>
   </div>
   <div class="top-bar-spacer"></div>
@@ -784,21 +816,35 @@ body {
 </div>
 
 <div class="detector-panel">
-  <div class="detector-title"><span>Detector — Interference Pattern</span><span id="detMode">Aether mode</span></div>
+  <div class="detector-title"><span>Telescope — Fringe Detail</span><span id="detMode">Aether mode</span></div>
   <canvas id="detectorCanvas"></canvas>
   <canvas id="fringePlot"></canvas>
   <div class="detector-meta">
-    <span>Intensity profile</span>
+    <span id="detMag">magnified view</span>
     <span>Fringe shift ΔN vs θ</span>
   </div>
 </div>
 
 <div class="sidebar">
-  <div class="panel-title">Controls</div>
+  <div class="panel-title">Mode</div>
+  <div class="mode-switch-sidebar">
+    <button class="mode-btn active aether" id="modeAether">⚠ Aether</button>
+    <button class="mode-btn relativity" id="modeRel">✓ Actual (Relativity)</button>
+  </div>
+
+  <div class="divider"></div>
+  <div class="panel-title">Rotation</div>
   <div class="control-row">
     <div class="control-label"><span>Rotation θ</span><span class="val" id="vTheta">0°</span></div>
     <input type="range" class="slider" id="theta" min="0" max="360" value="0" step="0.5">
   </div>
+  <div class="control-row">
+    <div class="control-label"><span>Auto-rotate speed</span><span class="val" id="vSpd">0.5</span></div>
+    <input type="range" class="slider" id="spd" min="0" max="3" value="0.5" step="0.05">
+  </div>
+
+  <div class="divider"></div>
+  <div class="panel-title">Parameters</div>
   <div class="control-row">
     <div class="control-label"><span>Arm length L</span><span class="val" id="vL">11.0 m</span></div>
     <input type="range" class="slider" id="L" min="1" max="20" value="11" step="0.1">
@@ -807,25 +853,13 @@ body {
     <div class="control-label"><span>Wavelength λ</span><span class="val" id="vLam">550 nm</span></div>
     <input type="range" class="slider" id="lam" min="400" max="700" value="550" step="1">
   </div>
-  <div class="control-row">
-    <div class="control-label"><span>β = v/c (exaggerated)</span><span class="val" id="vBeta">0.30</span></div>
-    <input type="range" class="slider" id="beta" min="0" max="0.6" value="0.3" step="0.005">
-  </div>
-  <div class="control-row">
-    <div class="control-label"><span>Auto-rotate speed</span><span class="val" id="vSpd">0.5</span></div>
-    <input type="range" class="slider" id="spd" min="0" max="3" value="0.5" step="0.05">
-  </div>
 
   <div class="divider"></div>
-  <div class="panel-title">Mode</div>
-  <div class="mode-switch-sidebar">
-    <button class="mode-btn active aether" id="modeAether">⚠ Aether</button>
-    <button class="mode-btn relativity" id="modeRel">✓ Actual (Relativity)</button>
+  <div class="panel-title dropdown-toggle" id="statsToggle">
+    Statistics
+    <span class="dropdown-arrow">▶</span>
   </div>
-
-  <div class="divider"></div>
-  <div class="panel-title">Statistics</div>
-  <div class="stats-grid">
+  <div class="stats-grid" id="statsContent" style="display: none;">
     <div class="stat-card"><div class="stat-label">Δℓ</div><div class="stat-value" id="sDl">0.00 nm</div></div>
     <div class="stat-card"><div class="stat-label">Fringe shift ΔN</div><div class="stat-value" id="sDN">0.000</div></div>
   </div>
@@ -860,8 +894,7 @@ function resize(){
   detH = dr.height;
   detC.width = Math.round(detW * dpr);
   detC.height = Math.round(detH * dpr);
-  // We will NOT use setTransform for detX since we use putImageData
-  // Instead we'll handle scaling manually
+  // detX's transform is (re)applied each frame inside drawDetectorPattern.
 
   const pr = plotC.getBoundingClientRect();
   plotW = pr.width;
@@ -872,12 +905,16 @@ function resize(){
 }
 window.addEventListener('resize', resize);
 
+// Earth's orbital speed through space: v ≈ 29.78 km/s, so β = v/c ≈ 9.93×10⁻⁵.
+// This is the real value the 1887 experiment was sensitive to (not exaggerated).
+const EARTH_ORBITAL_BETA = 9.93e-5;
+const BETA_SCI = '9.93\u00d710\u207b\u2075'; // pre-formatted for canvas/legend display
+
 const state = {
   mode: 'aether',
   theta: 0,
   L: 11,
   lam: 550,
-  beta: 0.3,
   spd: 0.5,
   autoRotate: false,
   phase: 0,
@@ -885,9 +922,10 @@ const state = {
   fps: 60
 };
 
-// Background wind drift speed is directly proportional to beta.
-// Tuned for clear visual separation across the full beta slider range.
-const WIND_DRIFT_PX_PER_SEC_PER_BETA = 220;
+// The aether-wind arrows are purely illustrative. At Earth's real β the physical
+// drift would be imperceptible, so the visual animation speed is decoupled from
+// β and runs at a fixed symbolic rate.
+const AETHER_WIND_VIS_SPEED = 26; // px/sec, visual only
 
 function wavelengthToRGB(wl){
   let r=0,g=0,b=0;
@@ -903,10 +941,9 @@ function wavelengthToRGB(wl){
   return { r: Math.round(255*Math.pow(r*f,0.8)), g: Math.round(255*Math.pow(g*f,0.8)), b: Math.round(255*Math.pow(b*f,0.8)) };
 }
 
-function aetherPathDiff(thetaDeg){
+function aetherPathDiffFor(thetaDeg, beta, L){
   const th = thetaDeg * Math.PI/180;
-  const b2 = Math.min(state.beta*state.beta, 1 - 1e-12);
-  const L = state.L;
+  const b2 = Math.min(beta*beta, 1 - 1e-12);
   const costh = Math.cos(th);
   const sinth = Math.sin(th);
 
@@ -917,6 +954,10 @@ function aetherPathDiff(thetaDeg){
   const path1 = scale * Math.sqrt(Math.max(0, 1 - b2 * sinth * sinth));
   const path2 = scale * Math.sqrt(Math.max(0, 1 - b2 * costh * costh));
   return path1 - path2;
+}
+
+function aetherPathDiff(thetaDeg){
+  return aetherPathDiffFor(thetaDeg, EARTH_ORBITAL_BETA, state.L);
 }
 
 function pathDiff(thetaDeg){
@@ -1303,18 +1344,21 @@ function drawWindLegend(){
   ctx.fillStyle = 'rgba(15,23,42,0.7)';
   ctx.strokeStyle = 'rgba(148,163,184,0.2)';
   ctx.lineWidth = 1;
-  roundRect(x,y,160,52,6); ctx.fill(); ctx.stroke();
+  roundRect(x,y,168,66,6); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#94a3b8';
   ctx.font = '10px -apple-system';
   ctx.textAlign = 'left';
   ctx.fillText('AETHER WIND \u2192', x+12, y+18);
   ctx.fillStyle = state.mode==='aether' ? '#f87171' : '#64748b';
   ctx.font = 'bold 11px -apple-system';
-  ctx.fillText('\u03b2 = '+state.beta.toFixed(3), x+12, y+38);
+  ctx.fillText('\u03b2 = '+BETA_SCI, x+12, y+38);
   ctx.strokeStyle = state.mode==='aether' ? '#f87171' : '#64748b';
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = 2;
-  drawArrow(x+90, y+34, x+140, y+34);
+  drawArrow(x+92, y+34, x+150, y+34);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '9px -apple-system';
+  ctx.fillText('arrow motion is symbolic', x+12, y+56);
   ctx.restore();
 }
 
@@ -1371,35 +1415,118 @@ function roundRect(x,y,w,h,r){
   ctx.closePath();
 }
 
+// Telescope eyepiece: a strongly magnified circular view of a small region of
+// the fringe pattern. At Earth's real β the 0→90° fringe shift is only ≈0.4
+// fringe — invisible in a wide detector strip — so we zoom in and add a fixed
+// reticle so that shift becomes a clearly visible slide of the fringes.
+const TELESCOPE_FRINGE_SPAN = 1.2;   // fringes visible across the eyepiece diameter
+const BASELINE_FRINGES_ACROSS = 10;  // reference "unmagnified" fringe count
+
 function drawDetectorPattern(){
-  // Use actual pixel dimensions of the canvas for putImageData
-  const pw = detC.width;   // actual pixel width
-  const ph = detC.height;  // actual pixel height
-  
-  if (pw === 0 || ph === 0) return;
+  const w = detW, h = detH; // CSS pixels
+  if (w === 0 || h === 0) return;
 
-  const dl = fringeShift(state.theta);
+  detX.setTransform(dpr, 0, 0, dpr, 0, 0);
+  detX.clearRect(0, 0, w, h);
+  detX.fillStyle = '#04070b';
+  detX.fillRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+  const R = Math.min(w, h) / 2 - 8;
+  const diameter = 2 * R;
+
+  // Physical fringe shift (in fringes). Zero in the relativity/null mode.
   const lam_m = state.lam * 1e-9;
-  const delta = (2*Math.PI*dl/lam_m) % (2*Math.PI);
-
-  const fringesAcross = 10;
+  const deltaN = fringeShift(state.theta) / lam_m;
+  const delta = 2 * Math.PI * deltaN;
   const rgb = wavelengthToRGB(state.lam);
 
-  const imgData = detX.createImageData(pw, ph);
-  for (let x=0; x<pw; x++){
-    const phaseShift = (x/pw - 0.5) * fringesAcross * 2 * Math.PI;
-    const I = 0.5 * (1 + Math.cos(delta + phaseShift));
-    for (let y=0; y<ph; y++){
-      const idx = (y*pw + x)*4;
-      imgData.data[idx]   = Math.round(rgb.r * I);
-      imgData.data[idx+1] = Math.round(rgb.g * I);
-      imgData.data[idx+2] = Math.round(rgb.b * I);
-      imgData.data[idx+3] = 255;
-    }
+  // Map screen x → fringe coordinate. At delta = 0 a maximum sits exactly on the
+  // central reticle, so any shift moves the bright bands off the crosshair.
+  const fringeAt = x => ((x - cx) / diameter) * TELESCOPE_FRINGE_SPAN;
+
+  detX.save();
+  detX.beginPath();
+  detX.arc(cx, cy, R, 0, Math.PI * 2);
+  detX.clip();
+
+  for (let x = 0; x <= w; x++) {
+    const f = fringeAt(x);
+    const I = 0.5 * (1 + Math.cos(2 * Math.PI * f + delta));
+    detX.fillStyle = 'rgb(' + Math.round(rgb.r * I) + ',' + Math.round(rgb.g * I) + ',' + Math.round(rgb.b * I) + ')';
+    detX.fillRect(x, cy - R, 2, diameter);
   }
-  // Reset any transform before putImageData (putImageData ignores transforms but we want clean state)
-  detX.setTransform(1,0,0,1,0,0);
-  detX.putImageData(imgData, 0, 0);
+
+  // Vignette so it reads like an eyepiece.
+  const vig = detX.createRadialGradient(cx, cy, R * 0.55, cx, cy, R);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+  detX.fillStyle = vig;
+  detX.fillRect(cx - R, cy - R, diameter, diameter);
+  detX.restore();
+
+  // Eyepiece bezel.
+  detX.strokeStyle = 'rgba(148,163,184,0.55)';
+  detX.lineWidth = 2;
+  detX.beginPath();
+  detX.arc(cx, cy, R, 0, Math.PI * 2);
+  detX.stroke();
+  detX.strokeStyle = 'rgba(148,163,184,0.18)';
+  detX.lineWidth = 1;
+  detX.beginPath();
+  detX.arc(cx, cy, R - 3, 0, Math.PI * 2);
+  detX.stroke();
+
+  // Fixed reticle (crosshair). The vertical hair marks the θ=0 fringe peak, so
+  // the visible offset of the bright band from this line IS the fringe shift.
+  detX.save();
+  detX.beginPath();
+  detX.arc(cx, cy, R - 4, 0, Math.PI * 2);
+  detX.clip();
+  detX.strokeStyle = 'rgba(255,255,255,0.5)';
+  detX.lineWidth = 1;
+  detX.beginPath();
+  detX.moveTo(cx, cy - R); detX.lineTo(cx, cy + R);
+  detX.moveTo(cx - R, cy); detX.lineTo(cx + R, cy);
+  detX.stroke();
+  // Small scale ticks along the horizontal hair, spaced 0.25 fringe apart.
+  detX.strokeStyle = 'rgba(255,255,255,0.4)';
+  for (let fk = -1; fk <= 1; fk += 0.25) {
+    const tx = cx + (fk / TELESCOPE_FRINGE_SPAN) * diameter;
+    if (Math.abs(tx - cx) > R - 4) continue;
+    const big = Math.abs(fk) < 1e-6;
+    detX.beginPath();
+    detX.moveTo(tx, cy - (big ? 7 : 4));
+    detX.lineTo(tx, cy + (big ? 7 : 4));
+    detX.stroke();
+  }
+  detX.restore();
+
+  // Live marker tracking the shifted central bright band.
+  const markerX = cx + deltaN * (diameter / TELESCOPE_FRINGE_SPAN);
+  if (Math.abs(markerX - cx) <= R - 4) {
+    detX.strokeStyle = '#fbbf24';
+    detX.lineWidth = 1.5;
+    detX.setLineDash([4, 3]);
+    detX.beginPath();
+    detX.moveTo(markerX, cy - R + 6);
+    detX.lineTo(markerX, cy + R - 6);
+    detX.stroke();
+    detX.setLineDash([]);
+  }
+
+  // Readout: ΔN and the magnification relative to the baseline strip.
+  const mag = Math.round(BASELINE_FRINGES_ACROSS / TELESCOPE_FRINGE_SPAN);
+  detX.fillStyle = 'rgba(226,232,240,0.92)';
+  detX.font = '600 11px -apple-system, sans-serif';
+  detX.textAlign = 'left';
+  detX.fillText('ΔN = ' + (Math.abs(deltaN) < 1e-4 ? '0.000' : deltaN.toFixed(3)), 8, 16);
+  detX.textAlign = 'right';
+  detX.fillStyle = state.mode === 'relativity' ? '#60a5fa' : '#f87171';
+  detX.fillText(state.mode === 'relativity' ? 'NULL' : 'shift', w - 8, 16);
+
+  const magEl = document.getElementById('detMag');
+  if (magEl) magEl.textContent = '×' + mag + ' magnified';
 }
 
 function drawFringePlot(){
@@ -1421,19 +1548,39 @@ function drawFringePlot(){
   plotX.stroke();
 
   const N = 180;
+  const lam_m = state.lam * 1e-9;
+  const ampPx = h * 0.40; // pixels per full-scale (PLOT_FRINGE_FS) fringes
   const vals = [];
-  let maxDl = 1e-15;
-  
-  // Always compute the aether prediction for the dashed reference curve.
+
+  // Always compute the aether prediction (in true fringe units ΔN) for the
+  // dashed reference curve.
   for (let i=0; i<=N; i++){
     const th = (i/N)*360;
-    const dl = aetherFringeShift(th);
-    vals.push(dl);
-    if (Math.abs(dl) > maxDl) maxDl = Math.abs(dl);
+    vals.push(aetherFringeShift(th) / lam_m);
   }
-  
-  // Ensure maxDl is never zero to avoid division issues
-  if (maxDl < 1e-15) maxDl = 1e-15;
+
+  const yForN = dN => h/2 - (dN / PLOT_FRINGE_FS) * ampPx;
+
+  // Reference gridlines at ±0.4 fringe (historical expected swing scale).
+  plotX.strokeStyle = 'rgba(148,163,184,0.18)';
+  plotX.lineWidth = 1;
+  plotX.setLineDash([2,3]);
+  [0.4, -0.4].forEach(tick => {
+    const y = yForN(tick);
+    if (y > 8 && y < h-2){
+      plotX.beginPath();
+      plotX.moveTo(0, y); plotX.lineTo(w, y);
+      plotX.stroke();
+    }
+  });
+  plotX.setLineDash([]);
+  plotX.fillStyle = '#64748b';
+  plotX.font = '8px -apple-system';
+  plotX.textAlign = 'left';
+  [0.4, -0.4].forEach(tick => {
+    const y = yForN(tick);
+    if (y > 8 && y < h-2) plotX.fillText((tick>0?'+':'')+tick.toFixed(1), 2, y - 2);
+  });
 
   // Draw aether prediction as dashed line (always visible as reference)
   plotX.strokeStyle = 'rgba(248,113,113,0.5)';
@@ -1442,7 +1589,7 @@ function drawFringePlot(){
   plotX.beginPath();
   for (let i=0; i<=N; i++){
     const x = (i/N)*w;
-    const y = h/2 - (vals[i]/maxDl) * (h*0.38);
+    const y = yForN(vals[i]);
     if (i===0) plotX.moveTo(x,y); else plotX.lineTo(x,y);
   }
   plotX.stroke();
@@ -1463,7 +1610,7 @@ function drawFringePlot(){
     plotX.beginPath();
     for (let i=0; i<=N; i++){
       const x = (i/N)*w;
-      const y = h/2 - (vals[i]/maxDl) * (h*0.38);
+      const y = yForN(vals[i]);
       if (i===0) plotX.moveTo(x,y); else plotX.lineTo(x,y);
     }
     plotX.stroke();
@@ -1485,8 +1632,8 @@ function drawFringePlot(){
   plotX.textAlign = 'right';
   plotX.fillText('360°', w-2, h-2);
   plotX.textAlign = 'left';
-  plotX.fillText('fringe shift', 4, 10);
-  
+  plotX.fillText('ΔN (fringes)', 4, 10);
+
   if (state.mode === 'relativity'){
     plotX.fillStyle = '#60a5fa';
     plotX.textAlign = 'right';
@@ -1515,7 +1662,7 @@ function animate(now){
   const dt = Math.min(0.05, (now - last)/1000);
   last = now;
   state.phase += dt;
-  state.windPhase += dt * state.beta * WIND_DRIFT_PX_PER_SEC_PER_BETA;
+  state.windPhase += dt * AETHER_WIND_VIS_SPEED;
 
   if (state.autoRotate && state.spd > 0){
     state.theta = (state.theta + state.spd * dt * 30) % 360;
@@ -1531,7 +1678,7 @@ function animate(now){
   const lam_m = state.lam * 1e-9;
   const dN = fringeShift(state.theta) / lam_m;
   document.getElementById('sDl').textContent = formatLength(dl);
-  document.getElementById('sDN').textContent = (Math.abs(dN) < 0.0001 ? '0.000' : dN.toFixed(3));
+  document.getElementById('sDN').textContent = (Math.abs(dN) < 1e-4 ? '0.0000' : dN.toFixed(4));
 
   requestAnimationFrame(animate);
 }
@@ -1547,8 +1694,21 @@ function bind(id, key, fmt){
 bind('theta','theta', v=>v.toFixed(0)+'°');
 bind('L','L', v=>v.toFixed(1)+' m');
 bind('lam','lam', v=>v.toFixed(0)+' nm');
-bind('beta','beta', v=>v.toFixed(3));
 bind('spd','spd', v=>v.toFixed(2));
+
+// Vertical full-scale for the fringe-shift plot, expressed in true fringe units
+// (ΔN). Anchored to the worst case across the remaining sliders — largest arm
+// length and shortest wavelength — at Earth's real β, so the plotted curve and
+// the ±0.4-fringe reference tick stay on a stable, physically meaningful axis.
+const L_MAX   = parseFloat(document.getElementById('L').max);
+const LAM_MIN = parseFloat(document.getElementById('lam').min);
+let PLOT_FRINGE_FS = 1e-6;
+for (let i=0; i<=180; i++){
+  const th = (i/180)*360;
+  const dl = aetherPathDiffFor(th, EARTH_ORBITAL_BETA, L_MAX) - aetherPathDiffFor(0, EARTH_ORBITAL_BETA, L_MAX);
+  const dN = Math.abs(dl) / (LAM_MIN * 1e-9);
+  if (dN > PLOT_FRINGE_FS) PLOT_FRINGE_FS = dN;
+}
 
 document.getElementById('resetBtn').addEventListener('click', () => {
   state.theta = 0;
@@ -1595,6 +1755,14 @@ function setMode(m){
 }
 btnA.addEventListener('click', () => setMode('aether'));
 btnR.addEventListener('click', () => setMode('relativity'));
+
+const statsToggle = document.getElementById('statsToggle');
+const statsContent = document.getElementById('statsContent');
+
+statsToggle.addEventListener('click', () => {
+  const isOpen = statsToggle.classList.toggle('open');
+  statsContent.style.display = isOpen ? 'flex' : 'none';
+});
 
 resize();
 setMode('aether');

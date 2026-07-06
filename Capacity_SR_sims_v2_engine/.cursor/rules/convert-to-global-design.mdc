@@ -1,0 +1,106 @@
+---
+description: Upgrade an SR sim (older engine shell) to the global design — cream global top bar, dynamic sidebar with the guided-inquiry stepper, design-system skin — WITHOUT changing the physics, canvas visuals, or controls.
+globs: ["L*.html"]
+alwaysApply: false
+---
+
+# Convert an SR sim to the GLOBAL DESIGN
+
+You are upgrading one existing SR simulation HTML file to the shared global design.
+These files ALREADY sit on an older engine shell (they have `#shell` with
+`shell-header`/`shell-hero`/`shell-aside`/`shell-formal`, transport IDs, and a
+`Shell` runtime). Your job is a **targeted upgrade**, not a rewrite.
+
+## Reference material (read these first, every run)
+- `_design-reference/reference-converted-sim.html` — a fully converted sim. This
+  is the ground truth for markup, the Shell runtime, and the guided-inquiry stepper.
+  **When anything below is ambiguous, copy from this file.**
+- `_design-reference/SHELL-DESIGN-GUIDE.md` — the full spec (regions, runtime
+  contract, stepper authoring, components, pedagogy rules).
+- `_design-reference/simulation-shell.css` — the global stylesheet.
+
+## THE #1 RULE — do not touch the science
+- **NEVER change the physics or the canvas drawing.** The simulation's physics
+  math, numerical methods, draw/render functions, equations, constants, and the
+  canvas visuals must be **byte-for-byte identical** to the original. You only
+  restructure the CHROME and MARKUP around them.
+- **Do not change what controls exist or what they do.** Every slider, toggle,
+  button, and readout in the original must still exist and behave identically —
+  you only move it into its new home and restyle its wrapper.
+- If you cannot make a design change without editing physics/draw code, STOP and
+  leave that part as-is; note it in the report instead.
+
+## Output
+- Write a NEW file `<original-name>-shell.html` in the same folder. Never
+  overwrite the original.
+- End with a short **CONVERSION REPORT**: (1) what markup moved where, (2) the
+  guided-inquiry steps you authored, (3) an explicit line confirming
+  "physics/draw code unchanged," and (4) anything you could not do.
+
+## Upgrade procedure
+
+1. **Stylesheet + head.** Inline the full contents of
+   `_design-reference/simulation-shell.css` into a `<style>` in `<head>` (so the
+   file stays self-contained), OR `<link rel="stylesheet" href="_design-reference/simulation-shell.css">`
+   if the user prefers linked. Keep the KaTeX `<link>`/`<script defer>`. Copy the
+   base64 `<style data-sim-fonts>` block from the reference file into `<head>` so
+   fonts embed. Ensure `<div id="shell" class="hide-formal">`.
+
+2. **Swap in the NEW Shell runtime.** Replace the file's existing
+   `const Shell = (function(){ … })();` block with the **verbatim** new runtime
+   from the reference file (it owns the guided-inquiry stepper: dots, Next/Finish,
+   Skip, collapse/restore, `onStep`). Do not edit it.
+
+3. **Header (global controls only), canonical order:** title · `#shell-info` ·
+   `#shell-theme` · `#shell-maximize` · `#toggle-formal` · Speed(`#shell-speed`) ·
+   `#shell-reset` · `#shell-play`. If `#shell-theme` (☾ light/dark) is missing,
+   ADD it beside Info (copy from reference). Remove any sim-specific control that
+   crept into the header. Drop `∑ Formal` only if there is no formal region, and
+   Speed only if there is no time-animation.
+
+4. **Aside → the two-zone dynamic sidebar.** Replace the old aside contents with
+   the reference's structure verbatim: `#aside-inquiry` (its head + `Skip ✕`, the
+   empty `#inq-dots`, `#inq-cards` holding the step cards, and `#inq-next`), then
+   `#aside-inquiry-restore`, then `#aside-controls`. You fill only `#inq-cards`
+   and `#aside-controls`.
+
+5. **Guided inquiry — convert the OLD prediction into step cards.** Take the
+   sim's existing prediction (`pred` / `opt-btn` block) and its wording and turn
+   it into a sequence of 4–6 `<div class="inq-step">` cards, fundamental → full:
+   predict (gated, `data-gate`) → observe → verify (gated) → next layer/frame →
+   resolve. Reuse the original question/answer/feedback text where it exists; only
+   add cards to complete the arc. Encode the misconception as a wrong
+   `<button class="choice" data-correct="0" data-fb="…">`; correct choice gets
+   `data-correct="1"`. Add a `<div class="predict-eval"></div>` to each predict
+   card. Add the generic prediction-feedback handler from the reference/guide to
+   the SIM JS. Do NOT invent new physics claims — keep the pedagogy the sim already had.
+
+6. **Controls + stats → design-system components.** Move the sim's sliders,
+   toggles, and readouts into `#aside-controls` inside `.shell-panel` cards, using
+   `.ctrl-box ctrl-box--slider` (slider), `.ctrl-box` + `.stat-row` (toggles/
+   stats). Keep the SAME element IDs the sim's JS references (rename the wrappers,
+   not the inputs) so no listener breaks. Keep every readout the sim shows.
+
+7. **Hero.** Wrap each `<canvas>` in `<div class="plot-box">` with an optional
+   `.plot-title` and `.legend`. Do not touch the canvas element's id or the draw code.
+
+8. **Formal.** Move the equations into `.shell-formal` (`.formal-grid` of
+   `.eq-row`). Keep KaTeX rendering but guard it for deferred load
+   (`if(window.katex) render(); else window.addEventListener('DOMContentLoaded', render)`).
+
+9. **Boot.** Ensure the SIM calls `Shell.init({ onFrame, onReset, onResize, onStep })`.
+   Rewire ONLY the transport: the old rAF loop body becomes `onFrame(dt)` (dt is
+   already speed-scaled), state-reset becomes `onReset()`, canvas re-fit becomes
+   `onResize()`. Delete the sim's own play/pause/reset/speed/formal button
+   handlers (the shell wires those). Everything else in the physics closure stays.
+
+10. **Info modal.** Fill `#shell-info-modal`'s title + source/principles blocks
+    from the sim's own metadata if present; otherwise keep the sim's existing info
+    content. Never emit a literal `{{…}}` token.
+
+## Self-check before finishing
+- Loads with no console errors; canvas renders; Play toggles; every original
+  slider/toggle still fires its handler; `Next` gates only on predict cards;
+  `Finish` collapses the inquiry; Skip works; Maximize/Formal/Theme all present.
+- The physics/draw code is unchanged from the original (diff them mentally).
+- Design tokens (`var(--…)`) used for chrome; canvas colours left as the original had them.

@@ -211,7 +211,7 @@ html[data-theme="light"] .info-tooltip::before {
 .main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 14px;
   min-height: 0;
   min-width: 0;
@@ -542,16 +542,16 @@ canvas.viz.dragging { cursor: grabbing; }
 }
 .bottom-bar {
   position: absolute;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
+  left: 16px;
+  bottom: 16px;
+  transform: none;
   width: max-content;
-  max-width: calc(100% - 48px);
+  max-width: calc(100% - 32px);
   background: rgba(6, 14, 17, 0.86);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 9px 18px;
-  text-align: center;
+  text-align: left;
   z-index: 20;
   pointer-events: none;
   backdrop-filter: blur(8px);
@@ -627,19 +627,7 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
   <div class="plot-area">
     <div class="main">
       <div class="plot-box" id="panelL">
-        <div class="plot-title">Unprimed Frame <span class="plot-inline">S</span></div>
-        <div class="panel-sub">axes: x, y</div>
-        <canvas class="viz" id="canvasL"></canvas>
-        <div class="legend">
-          <div class="legend-item"><span class="dot a"></span>Vector A</div>
-          <div class="legend-item"><span class="dot b"></span>Vector B</div>
-          <div class="legend-item"><span class="dot diff"></span>A − B</div>
-        </div>
-      </div>
-      <div class="plot-box" id="panelR">
-        <div class="plot-title">Rotated Frame <span class="plot-inline">S′</span></div>
-        <div class="panel-sub" id="subR">axes: x′, y′ (rotated by θ)</div>
-        <canvas class="viz" id="canvasR"></canvas>
+        <canvas class="viz" id="canvasMain"></canvas>
         <div class="legend">
           <div class="legend-item"><span class="dot a"></span>Vector A</div>
           <div class="legend-item"><span class="dot b"></span>Vector B</div>
@@ -649,7 +637,7 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
     </div>
 
     <div class="bottom-bar">
-      <div class="cp-subtitle">Drag vector tips on either panel to modify A and B.</div>
+      <div class="cp-subtitle">Drag vector tips to modify A and B.</div>
     </div>
   </div>
 
@@ -665,10 +653,6 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
             <span class="theta-value" id="thetaVal">30.0°</span>
           </div>
           <input type="range" class="slider" id="theta" min="0" max="360" step="0.5" value="30">
-          <label class="checkbox-control">
-            <input type="checkbox" id="axisNumbersToggle" checked>
-            <span>Show axis numbers</span>
-          </label>
         </div>
       </div>
       </div>
@@ -676,15 +660,22 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
       <div>
         <h3>Vector Components</h3>
         <div class="ctrl-box">
-        <div class="comp-block">
           <div class="comp-frame-label">Frame S (unprimed)</div>
           <div id="compL"></div>
+          <label class="checkbox-control" style="margin-top:10px">
+            <input type="checkbox" id="showSGridNumbers" checked>
+            <span>Show numbers and grid</span>
+          </label>
         </div>
-        <div class="comp-block">
+
+        <div class="ctrl-box">
           <div class="comp-frame-label primed">Frame S′ (rotated)</div>
           <div id="compR"></div>
+          <label class="checkbox-control" style="margin-top:10px">
+            <input type="checkbox" id="showSpGridNumbers" checked>
+            <span>Show numbers and grid</span>
+          </label>
         </div>
-      </div>
       </div>
 
       <div>
@@ -704,18 +695,16 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
 
 <script>
 (function(){
-  const canvasL = document.getElementById('canvasL');
-  const canvasR = document.getElementById('canvasR');
-  const ctxL = canvasL.getContext('2d');
-  const ctxR = canvasR.getContext('2d');
+  const canvasMain = document.getElementById('canvasMain');
+  const ctxMain = canvasMain.getContext('2d');
   const thetaSlider = document.getElementById('theta');
   const thetaVal = document.getElementById('thetaVal');
-  const axisNumbersToggle = document.getElementById('axisNumbersToggle');
+  const showSGridNumbersToggle = document.getElementById('showSGridNumbers');
+  const showSpGridNumbersToggle = document.getElementById('showSpGridNumbers');
   const animBtn = document.getElementById('animBtn');
   const resetBtn = document.getElementById('resetBtn');
   const compL = document.getElementById('compL');
   const compR = document.getElementById('compR');
-  const subR = document.getElementById('subR');
   const invTable = document.getElementById('invTable');
 
   let A = { x: 3, y: 1 };
@@ -723,20 +712,19 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
   let theta = 30 * Math.PI / 180;
   let animating = false;
   let dragging = null;
-  let showAxisNumbers = true;
+  let showSGridNumbers = true;
+  let showSpGridNumbers = true;
 
   const RANGE = 6;
   const COMP_MAX = 5;
   const ZERO_VECTOR_EPS = 1e-9;
 
   function resize() {
-    [canvasL, canvasR].forEach(c => {
-      const r = c.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      c.width = r.width * dpr;
-      c.height = r.height * dpr;
-      c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
-    });
+    const r = canvasMain.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvasMain.width = r.width * dpr;
+    canvasMain.height = r.height * dpr;
+    ctxMain.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   window.addEventListener('resize', resize);
 
@@ -778,77 +766,152 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
     };
   }
 
-  function drawGrid(ctx, info, ang){
+  function drawGrid(ctx, info, ang, opts){
+    // Grid + axes are drawn in the rotated coordinate system, but the numbers/labels
+    // should remain upright for readability (like Vectors_Inner_prod_invariance.html).
+    const isRot = Math.abs(ang) > 1e-8;
+    const showGrid = opts?.showGrid ?? true;
+    const showNumbers = opts?.showNumbers ?? true;
+    const cosT = Math.cos(ang), sinT = Math.sin(ang);
+    const axisEnd = RANGE * info.scale;
+
+    // 1) Draw grid/axes/ticks in rotated local coords.
     ctx.save();
     ctx.translate(info.cx, info.cy);
     ctx.rotate(-ang);
 
     const half = Math.max(info.w, info.h);
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
-    ctx.lineWidth = 1;
-    for (let i = -RANGE; i <= RANGE; i++){
-      if (i === 0) continue;
-      const p = i * info.scale;
-      ctx.beginPath();
-      ctx.moveTo(-half, p); ctx.lineTo(half, p); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(p, -half); ctx.lineTo(p, half); ctx.stroke();
+    if (showGrid) {
+      // Match the stronger grid contrast used in Vectors_Inner_prod_invariance.html.
+      ctx.strokeStyle = isRot ? 'rgba(251, 191, 36, 0.20)' : 'rgba(148, 163, 184, 0.22)';
+      ctx.lineWidth = 1;
+      for (let i = -RANGE; i <= RANGE; i++){
+        if (i === 0) continue;
+        const p = i * info.scale;
+        ctx.beginPath();
+        ctx.moveTo(-half, p); ctx.lineTo(half, p); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p, -half); ctx.lineTo(p, half); ctx.stroke();
+      }
     }
-    ctx.strokeStyle = ang === 0 ? 'rgba(148, 163, 184, 0.5)' : 'rgba(244, 114, 182, 0.6)';
+
+    ctx.strokeStyle = isRot ? 'rgba(251, 191, 36, 0.78)' : 'rgba(148, 163, 184, 0.70)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(-half, 0); ctx.lineTo(half, 0); ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(0, -half); ctx.lineTo(0, half); ctx.stroke();
 
-    ctx.fillStyle = ang === 0 ? '#64748b' : '#f472b6';
-    ctx.font = '10px SF Mono, Menlo, monospace';
-    for (let i = -RANGE; i <= RANGE; i++){
-      if (i === 0) continue;
-      const p = i * info.scale;
-      ctx.fillRect(p - 0.5, -3, 1, 6);
-      ctx.fillRect(-3, p - 0.5, 6, 1);
-    }
-
-    if (showAxisNumbers) {
-      ctx.fillStyle = ang === 0 ? 'rgba(203, 213, 225, 0.78)' : 'rgba(249, 168, 212, 0.82)';
+    if (showNumbers) {
+      ctx.fillStyle = isRot ? 'rgba(251, 191, 36, 0.90)' : 'rgba(148, 163, 184, 0.85)';
       ctx.font = '10px SF Mono, Menlo, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for (let i = -RANGE; i <= RANGE; i++) {
+      for (let i = -RANGE; i <= RANGE; i++){
         if (i === 0) continue;
         const p = i * info.scale;
-        ctx.fillText(String(i), p, 10);
+        ctx.fillRect(p - 0.5, -3, 1, 6);
+        ctx.fillRect(-3, p - 0.5, 6, 1);
       }
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      for (let i = -RANGE; i <= RANGE; i++) {
-        if (i === 0) continue;
-        const p = -i * info.scale;
-        ctx.fillText(String(i), 8, p);
-      }
-      ctx.textAlign = 'start';
-      ctx.textBaseline = 'alphabetic';
     }
+    ctx.restore();
 
-    ctx.fillStyle = ang === 0 ? '#94a3b8' : '#f472b6';
-    ctx.font = 'italic 14px Georgia, serif';
-    const lx = ang === 0 ? 'x' : "x′";
-    const ly = ang === 0 ? 'y' : "y′";
-    const axisEnd = RANGE * info.scale;
-    const drawAxisLabel = (label, x, y, align, baseline) => {
+    // 2) Draw numbers/labels in screen coords (upright).
+    const drawOutlinedText = (label, x, y, align, baseline, fillStyle) => {
+      ctx.save();
       ctx.textAlign = align;
       ctx.textBaseline = baseline;
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(6, 14, 17, 0.9)';
+      ctx.fillStyle = fillStyle;
       ctx.strokeText(label, x, y);
       ctx.fillText(label, x, y);
+      ctx.restore();
     };
-    drawAxisLabel(lx, axisEnd - 8, 18, 'right', 'top');
-    drawAxisLabel(ly, -16, -axisEnd + 8, 'right', 'top');
-    ctx.textAlign = 'start';
-    ctx.textBaseline = 'alphabetic';
 
+    const drawPill = (label, x, y, fillStyle) => {
+      ctx.save();
+      ctx.font = 'italic 14px Georgia, serif';
+      const padX = 8, padY = 5;
+      const tw = ctx.measureText(label).width;
+      const w = tw + padX * 2;
+      const h = 18 + padY * 2;
+      const rx = x - w / 2;
+      const ry = y - h / 2;
+      ctx.fillStyle = 'rgba(6, 14, 17, 0.78)';
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rx + 7, ry);
+      ctx.arcTo(rx + w, ry, rx + w, ry + h, 7);
+      ctx.arcTo(rx + w, ry + h, rx, ry + h, 7);
+      ctx.arcTo(rx, ry + h, rx, ry, 7);
+      ctx.arcTo(rx, ry, rx + w, ry, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      drawOutlinedText(label, x, y, 'center', 'middle', fillStyle);
+      ctx.restore();
+    };
+
+    if (showNumbers) {
+      ctx.save();
+      ctx.fillStyle = isRot ? 'rgba(252, 211, 77, 0.90)' : 'rgba(203, 213, 225, 0.78)';
+      ctx.font = '10px SF Mono, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Flip label offsets when the axis points mostly left, so labels stay "upright-ish"
+      // and do not end up visually upside-down.
+      const flip = cosT < 0;
+      const sign = flip ? -1 : 1;
+
+      // x-axis numbers
+      const xNx = sinT * 14 * sign;
+      const xNy = cosT * 14 * sign;
+      // y-axis numbers
+      const yNx = -cosT * 14 * sign;
+      const yNy = sinT * 14 * sign;
+
+      for (let i = -RANGE; i <= RANGE; i++) {
+        if (i === 0) continue;
+        if (!isRot) {
+          // x-axis numbers
+          const px = info.cx + i * info.scale;
+          drawOutlinedText(String(i), px, info.cy + 16, 'center', 'middle', ctx.fillStyle);
+          // y-axis numbers
+          const py = info.cy - i * info.scale;
+          drawOutlinedText(String(i), info.cx - 14, py, 'right', 'middle', ctx.fillStyle);
+        } else {
+          const xTickX = info.cx + i * info.scale * cosT;
+          const xTickY = info.cy - i * info.scale * sinT;
+          drawOutlinedText(String(i), xTickX + xNx, xTickY + xNy, 'center', 'middle', ctx.fillStyle);
+
+          const yTickX = info.cx - i * info.scale * sinT;
+          const yTickY = info.cy - i * info.scale * cosT;
+          drawOutlinedText(String(i), yTickX + yNx, yTickY + yNy, 'center', 'middle', ctx.fillStyle);
+        }
+      }
+      ctx.restore();
+    }
+
+    // Axis labels
+    ctx.save();
+    const labelColor = isRot ? '#fbbf24' : '#94a3b8';
+    const lx = isRot ? "x′" : 'x';
+    const ly = isRot ? "y′" : 'y';
+    if (!isRot) {
+      // Place labels in pill boxes, offset from axes and numbers.
+      drawPill(lx, info.cx + axisEnd - 10, info.cy + 32, labelColor);
+      drawPill(ly, info.cx - 30, info.cy - axisEnd + 14, labelColor);
+    } else {
+      const flip = cosT < 0;
+      const sign = flip ? -1 : 1;
+      const xLabelX = info.cx + axisEnd * cosT + sinT * 34 * sign;
+      const xLabelY = info.cy - axisEnd * sinT + cosT * 34 * sign;
+      const yLabelX = info.cx - axisEnd * sinT - cosT * 34 * sign;
+      const yLabelY = info.cy - axisEnd * cosT + sinT * 34 * sign;
+      drawPill(lx, xLabelX, xLabelY, labelColor);
+      drawPill(ly, yLabelX, yLabelY, labelColor);
+    }
     ctx.restore();
   }
 
@@ -896,12 +959,16 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
     }
   }
 
-  function drawPanel(ctx, canvas, ang, panelKey){
+  function drawPanel(ctx, canvas){
     const info = panelScale(canvas);
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--panel-bg').trim() || '#060E11';
     ctx.fillRect(0, 0, info.w, info.h);
 
-    drawGrid(ctx, info, ang);
+    // Merged view: draw both coordinate frames on one canvas
+    drawGrid(ctx, info, 0, { showGrid: showSGridNumbers, showNumbers: showSGridNumbers });
+    if (Math.abs(theta) > 1e-8) {
+      drawGrid(ctx, info, theta, { showGrid: showSpGridNumbers, showNumbers: showSpGridNumbers });
+    }
 
     const origin = worldToScreen({x:0,y:0}, info);
     const tipA = worldToScreen(A, info);
@@ -997,13 +1064,10 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
         : `<div class="inv-cell match"><span class="match-ok">${ok?'✓':'≈'}</span></div>`;
     }
     invTable.innerHTML = html;
-
-    subR.textContent = `axes: x′, y′ (rotated by θ = ${(theta*180/Math.PI).toFixed(1)}°)`;
   }
 
   function render(){
-    drawPanel(ctxL, canvasL, 0, 'L');
-    drawPanel(ctxR, canvasR, theta, 'R');
+    drawPanel(ctxMain, canvasMain);
     updateInfo();
   }
 
@@ -1050,15 +1114,13 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
     }
   }
 
-  [canvasL, canvasR].forEach(c => {
-    c.addEventListener('mousedown', e => startDrag(e, c));
-    c.addEventListener('touchstart', e => {
-      if (e.touches.length){
-        const t = e.touches[0];
-        startDrag({clientX: t.clientX, clientY: t.clientY}, c);
-      }
-    }, {passive:true});
-  });
+  canvasMain.addEventListener('mousedown', e => startDrag(e, canvasMain));
+  canvasMain.addEventListener('touchstart', e => {
+    if (e.touches.length){
+      const t = e.touches[0];
+      startDrag({clientX: t.clientX, clientY: t.clientY}, canvasMain);
+    }
+  }, {passive:true});
   window.addEventListener('mousemove', moveDrag);
   window.addEventListener('mouseup', endDrag);
   window.addEventListener('touchmove', e => {
@@ -1075,8 +1137,13 @@ html[data-theme="light"] .inv-cell.name { color: #0f172a; }
     render();
   });
 
-  axisNumbersToggle.addEventListener('change', e => {
-    showAxisNumbers = e.target.checked;
+  showSGridNumbersToggle.addEventListener('change', e => {
+    showSGridNumbers = e.target.checked;
+    render();
+  });
+
+  showSpGridNumbersToggle.addEventListener('change', e => {
+    showSpGridNumbers = e.target.checked;
     render();
   });
 
