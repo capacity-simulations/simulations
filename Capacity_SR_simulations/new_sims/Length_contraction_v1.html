@@ -1147,7 +1147,7 @@ html[data-theme="light"] #gammaGraph {
             <span class="slider-val" id="rocketVal">100</span>
           </div>
           <div class="ctrl-slider-row">
-            <input type="range" id="rocketSlider" min="10" max="300" step="1" value="100">
+            <input type="range" id="rocketSlider" min="10" max="100" step="1" value="100">
           </div>
         </div>
         <div class="ctrl-box ctrl-box--slider">
@@ -1279,11 +1279,11 @@ function resetSimulation(){
 }
 
 const ROCKET_PHYS_MIN = 10;
-const ROCKET_PHYS_MAX = 300;
+const ROCKET_PHYS_MAX = 100;
 const ROCKET_LAYOUT = {
- marginX: 48,
- maxLenFrac: 0.30,
- minLenFrac: 0.58
+  marginX: 48,
+  maxLenFrac: 0.30,
+  minLenFrac: 0.10
 };
 const PLANET_PHYS_MIN = 1000;
 const PLANET_PHYS_MAX = 1500;
@@ -1385,8 +1385,8 @@ function rocketPhysToVisual(physLenM, canvasWidth){
  const minPx = maxPx * ROCKET_LAYOUT.minLenFrac;
  const norm = (physLenM - ROCKET_PHYS_MIN) / (ROCKET_PHYS_MAX - ROCKET_PHYS_MIN);
  const clampedNorm = Math.max(0, Math.min(1, norm));
- const curved = Math.pow(clampedNorm, 0.55);
- return minPx + curved * (maxPx - minPx);
+ // Linear mapping over the 10–100 m range so each step adds a consistent, clearly visible amount.
+ return minPx + clampedNorm * (maxPx - minPx);
 }
 
 function getRocketMeasurePx(properLenM,b,canvasWidth){
@@ -2365,6 +2365,27 @@ function drawLabel(ctx,x,y,text,color,size){
  ctx.restore();
 }
 
+/** Fixed, boxed caption pinned to the top-left of the scene canvas (readable while objects move). */
+function drawCornerCaption(ctx,text,color){
+ ctx.save();
+ ctx.font='600 12px -apple-system,sans-serif';
+ ctx.textAlign='left';
+ ctx.textBaseline='top';
+ const padX=10,padY=7;
+ const tw=ctx.measureText(text).width;
+ const bx=14,by=44,bw=tw+padX*2,bh=12+padY*2;
+ ctx.fillStyle='rgba(6,14,17,0.85)';
+ ctx.strokeStyle=color;
+ ctx.lineWidth=1.5;
+ if(ctx.roundRect){ctx.beginPath();ctx.roundRect(bx,by,bw,bh,6);ctx.fill();ctx.stroke();}
+ else{ctx.fillRect(bx,by,bw,bh);ctx.strokeRect(bx,by,bw,bh);}
+ ctx.fillStyle=color;
+ ctx.shadowColor='rgba(0,0,0,0.5)';
+ ctx.shadowBlur=4;
+ ctx.fillText(text,bx+padX,by+padY);
+ ctx.restore();
+}
+
 function renderPlanetFrame(dt){
  const w=MC.width,h=MC.height;
  if(w<2||h<2||!mctx) return;
@@ -2427,10 +2448,11 @@ function renderPlanetFrame(dt){
  drawPlanetDimWitness(ctx,planetPts,'v','#34d399');
  drawDimLineVertical(ctx,planetPts.top,planetPts.bottom,planetVertDimX(planetPts),'D₀='+fmt(D0P,0)+' km','#34d399',false);
  
- const rocketCaption=beta>BETA_EPS
-  ?'Rocket (L contracted, height unchanged)'
-  :'Rocket (proper length L₀, height unchanged)';
- drawLabel(ctx,rocketX+rocketW/2,rocketY+rocketH/2+32,rocketCaption,'#f472b6');
+ if(beta>BETA_EPS){
+  drawCornerCaption(ctx,'Rocket (L contracted, height unchanged)','#f472b6');
+ } else {
+  drawLabel(ctx,rocketX+rocketW/2,rocketY+rocketH/2+32,'Rocket (proper length L₀, height unchanged)','#f472b6');
+ }
  drawLabel(ctx,centerX,planetHorizDimY(planetPts)+22,'Planet (sphere, proper diameter D₀)','#34d399');
  
  if(beta>BETA_EPS){
@@ -2510,13 +2532,11 @@ function renderRocketFrame(dt){
   ? 'Rocket at rest (proper length L₀)'
   : 'Rocket (proper length L₀, thrusting)';
  drawLabel(ctx,rocketX+rocketW/2,rocketY+rocketH/2+12,rocketFrameCaption,'#34d399');
- const planetCaptionY=hasContraction
-  ?planetHorizDimYProper(planetProperPts)+22
-  :planetHorizDimY(planetPts)+22;
- const planetCaption=hasContraction
-  ?'Planet (D∥ contracted, D⊥ unchanged)'
-  :'Planet at rest (no contraction)';
- drawLabel(ctx,planetCx,planetCaptionY,planetCaption,hasContraction?'#fbbf24':'#34d399');
+ if(hasContraction){
+  drawCornerCaption(ctx,'Planet (D∥ contracted, D⊥ unchanged)','#fbbf24');
+ } else {
+  drawLabel(ctx,planetCx,planetHorizDimY(planetPts)+22,'Planet at rest (no contraction)','#34d399');
+ }
 
  if(hasContraction){
   ctx.save();

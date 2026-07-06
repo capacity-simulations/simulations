@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frame Clock and Event Coordinates</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+/* ============================================================================
+   SHELL CSS — emit VERBATIM. Do not modify.
+   ========================================================================== */
+:root{
+  --bg:#08090c; --panel:#0f1218; --panel-2:#161a23; --line:rgba(148,163,184,.12);
+  --ink:#e2e8f0; --ink-mid:#94a3b8; --ink-mute:#64748b;
+  --accent:#a78bfa; --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
+  --r:8px;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;}
+
+#shell{
+  display:grid;
+  grid-template-areas:"header header" "hero aside" "formal formal";
+  grid-template-columns:1fr 300px;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  height:100vh;
+  gap:0;
+}
+#shell.hide-aside{grid-template-areas:"header header" "hero hero" "formal formal";}
+#shell.hide-aside .shell-aside{display:none;}
+#shell.hide-formal .shell-formal{display:none;}
+#shell.shell-max{grid-template-areas:"hero";grid-template-columns:1fr;grid-template-rows:minmax(0,1fr);}
+#shell.shell-max .shell-aside,#shell.shell-max .shell-formal,#shell.shell-max .shell-header{display:none !important;}
+#shell.shell-max .shell-hero{padding:0;}
+.shell-exit-max{position:fixed;top:12px;right:12px;z-index:100;display:none !important;}
+#shell.shell-max .shell-exit-max{display:inline-flex !important;}
+
+.shell-header{
+  grid-area:header;display:flex;align-items:center;gap:14px;flex-wrap:wrap;row-gap:8px;
+  padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);min-height:0;
+}
+.shell-title{font-size:15px;font-weight:700;color:#f8fafc;white-space:nowrap;}
+.shell-title span{font-weight:400;color:var(--ink-mid);font-size:12.5px;}
+.shell-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;row-gap:8px;margin-left:auto;}
+.shell-group{display:flex;align-items:center;gap:8px;padding:0 4px;}
+.shell-sep{width:1px;height:22px;background:var(--line);}
+
+.shell-btn{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+  font:inherit;font-size:12.5px;padding:6px 11px;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s;
+}
+.shell-btn:hover{background:#1e2531;border-color:rgba(148,163,184,.28);}
+.shell-btn.primary{background:rgba(167,139,250,.15);border-color:rgba(167,139,250,.4);color:#c4b5fd;}
+.shell-btn.active{background:rgba(6,182,212,.16);border-color:rgba(6,182,212,.4);color:#67e8f9;}
+.shell-btn:disabled{opacity:.4;cursor:not-allowed;}
+.shell-select{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+  font:inherit;font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer;
+}
+.shell-readout{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;color:var(--accent);
+  background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);padding:5px 10px;border-radius:6px;white-space:nowrap;}
+.shell-readout.danger{color:#fda4af;background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.35);animation:shellPulse 1s infinite;}
+@keyframes shellPulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+.shell-range{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;outline:none;
+  background:linear-gradient(90deg,var(--rest),#334155,var(--moving));width:150px;}
+.shell-range::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+  background:#fff;border:2px solid var(--moving);cursor:pointer;box-shadow:0 0 0 3px rgba(245,158,11,.18);}
+.shell-range::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;border:2px solid var(--moving);cursor:pointer;}
+
+.shell-hero{grid-area:hero;min-height:0;min-width:0;padding:10px;overflow:hidden;}
+
+.shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:10px;
+  padding:12px;overflow-y:auto;overflow-x:hidden;background:#0b0d12;border-left:1px solid var(--line);}
+.shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;
+  padding:12px 16px;background:#0b0d12;border-top:1px solid var(--line);}
+
+.shell-panel{flex-shrink:0;box-sizing:border-box;background:rgba(15,23,42,.6);
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden;}
+.shell-panel-head{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;user-select:none;}
+.shell-panel-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
+.shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
+.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel-body{padding:0 12px 12px;font-size:12.5px;color:#cbd5e1;line-height:1.55;overflow-wrap:anywhere;}
+
+.shell-modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.74);backdrop-filter:blur(2px);
+  z-index:200;display:none;align-items:center;justify-content:center;padding:24px;}
+.shell-modal-backdrop.open{display:flex;}
+.shell-modal{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;
+  max-width:720px;width:100%;max-height:84vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.55);}
+.shell-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.shell-modal-head h2{margin:0;font-size:14px;font-weight:700;color:#f8fafc;}
+.shell-modal-body{padding:16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--ink);}
+.shell-modal-body h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--ink-mute);margin:18px 0 8px;font-weight:600;}
+.shell-modal-body h3:first-child{margin-top:0;}
+.shell-modal-body p{margin:0 0 8px;}
+.shell-info-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 4px;}
+.shell-info-table th,.shell-info-table td{text-align:left;vertical-align:top;padding:6px 8px;
+  border-bottom:1px solid var(--line);}
+.shell-info-table thead th{color:var(--ink-mid);font-weight:600;white-space:nowrap;
+  text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;}
+.shell-info-table td.pid{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--accent);white-space:nowrap;}
+.shell-info-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;}
+.shell-info-dl dt{color:var(--ink-mid);font-weight:600;}
+.shell-info-dl dd{margin:0;}
+
+@media(max-width:1000px){
+  body{overflow:auto;}
+  #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;
+    grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
+  .shell-aside{border-left:none;border-top:1px solid var(--line);}
+}
+
+/* ============================================================================
+   SIM CSS
+   ========================================================================== */
+.stage{width:100%;height:100%;min-height:0;}
+#cv{width:100%;height:100%;display:block;border-radius:8px;background:#0a0c11;cursor:crosshair;}
+
+.ctl-label{font-size:11px;color:var(--ink-mid);}
+
+.choices{display:flex;flex-direction:column;gap:6px;margin:8px 0;}
+.choice{text-align:left;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+  font:inherit;font-size:12.5px;padding:8px 10px;border-radius:6px;cursor:pointer;line-height:1.4;}
+.choice:hover{background:#1e2531;border-color:rgba(148,163,184,.3);}
+.choice.sel{border-color:var(--accent);background:rgba(167,139,250,.14);}
+.choice b{color:var(--accent);}
+.eval{font-size:12.5px;line-height:1.55;margin-top:8px;padding:9px 11px;border-radius:6px;display:none;}
+.eval.show{display:block;}
+.eval.ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.35);color:#a7f3d0;}
+.eval.no{background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.35);color:#fecdd3;}
+.eval.mid{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fde68a;}
+.evlive{margin-top:8px;padding-top:8px;border-top:1px solid rgba(148,163,184,.25);color:var(--ink);}
+.step-nav{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.step-nav button{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 11px;cursor:pointer;font-size:13px;}
+.step-nav button:hover{background:#1e2531;}
+#step-ind{font-size:11px;color:var(--ink-mid);font-weight:600;}
+#step-body{font-size:12.5px;line-height:1.55;}
+#step-body h4{margin:0 0 6px;font-size:12.5px;color:var(--accent);}
+
+.legend-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px;}
+.swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1px solid rgba(255,255,255,.18);}
+.symdef{font-size:12px;margin:4px 0;}
+.symdef b{font-family:ui-monospace,monospace;color:var(--accent);}
+.note{font-size:12px;color:var(--ink-mid);margin-top:8px;line-height:1.5;}
+
+.formal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:1000px){.formal-grid{grid-template-columns:1fr;}}
+.eq-row{background:rgba(15,23,42,.5);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+.eq-row .cap{font-size:11px;color:var(--ink-mid);margin-bottom:5px;}
+.eq-row .math{font-size:14px;color:#e2e8f0;overflow-x:auto;}
+.formal-note{font-size:12px;color:var(--ink-mid);margin-top:10px;line-height:1.55;}
+</style>
+</head>
+<body>
+<!-- POLISH: [physics] HUD now shows "t′(x′=0)" instead of bare "t′" to disambiguate the S′ central-clock reading from per-event Lorentz-transformed t′ values (major). Formal KaTeX equation for t′_clock now uses ≤ with v=0 equality note instead of unconditional strict inequality (minor). ; [pedagogy] (no findings provided) ; [visuals] (no findings provided) -->
+<div id="shell" class="hide-formal">
+
+  <button id="shell-exit-max" class="shell-btn shell-exit-max" title="Restore (Esc)">⤢ Restore</button>
+
+  <div id="shell-info-modal" class="shell-modal-backdrop">
+    <div class="shell-modal" role="dialog" aria-modal="true" aria-label="About this simulation">
+      <div class="shell-modal-head">
+        <h2>About: Frame Clock and Event Coordinates</h2>
+        <button id="shell-info-close" class="shell-btn shell-modal-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="shell-modal-body">
+        <h3>Source</h3>
+        <dl class="shell-info-dl">
+          <dt>Lecture</dt><dd>5 — Spacetime</dd>
+          <dt>Simulation</dt><dd>1 — Frame clock and event time (guided inquiry)</dd>
+          <dt>Concept</dt><dd>Coordinate time is assigned to an event by the whole reference frame at once — it does not depend on the event's distance from any clock and does not wait for light to propagate.</dd>
+          <dt>Serves</dt><dd>Define events and reference frames in spacetime; appreciate the physical meaning of simultaneity; establishes the shared visual language (frame badge, single central clock, frame-coloured grid) reused by all later frame sims.</dd>
+          <dt>Inquiry</dt><dd>Why one clock per frame? · What time is stamped for an event at x = 10 when t = 0? · Should the sim wait for light? · Do two frames agree on an event's time?</dd>
+          <dt>Misconception</dt><dd>That the recorded time for a distant event should include the light-travel delay to the clock (encoded as prediction choice B).</dd>
+        </dl>
+        <h3>Pedagogy principles applied</h3>
+        <table class="shell-info-table">
+          <thead><tr><th>ID</th><th>Principle</th><th>How it shows up here</th></tr></thead>
+          <tbody>
+            <tr><td class="pid">A1</td><td>One concept</td><td>Every element serves "coordinate time is frame-wide, not light-delayed".</td></tr>
+            <tr><td class="pid">A2</td><td>Minimise elements</td><td>S′ grid and the light path appear only on their own toggles.</td></tr>
+            <tr><td class="pid">B1</td><td>Standard terminology</td><td>event, frame, coordinate time, Lorentz transformation.</td></tr>
+            <tr><td class="pid">B3</td><td>Symbols defined</td><td>t, t′, x, x′, v, γ defined in the Frames &amp; symbols panel.</td></tr>
+            <tr><td class="pid">C1</td><td>Every number used</td><td>Clock reading stamps events; v feeds the badge &amp; transform; γ sets t′ and grid spacing.</td></tr>
+            <tr><td class="pid">C2</td><td>Numbers carry frame &amp; units</td><td>"t = 2.41 [S]", "v = 0.40 c (rel. to S)".</td></tr>
+            <tr><td class="pid">D1</td><td>Visualization dominance</td><td>The grid canvas is the largest region; panels are collapsible.</td></tr>
+            <tr><td class="pid">D3</td><td>Entities labelled</td><td>Each event is Eₙ with a full coordinate tag, not a bare dot.</td></tr>
+            <tr><td class="pid">D5</td><td>No clipping</td><td>Tags are bounds-checked and stacked to avoid edges, each other, and the HUD.</td></tr>
+            <tr><td class="pid">D6</td><td>Incremental complexity</td><td>S only at first; S′ and light path are additive layers via always-on controls.</td></tr>
+            <tr><td class="pid">D7</td><td>Playable from load</td><td>Clicking, ticking clock, slider and S′ toggle are all live immediately.</td></tr>
+            <tr><td class="pid">D8</td><td>Canvas = labels</td><td>Prose lives in panels; the canvas shows tags, axis numbers, badges, clocks.</td></tr>
+            <tr><td class="pid">E1</td><td>Faithful evolution</td><td>S clock linear, S′ clock at 1/γ, S′ grid slides at constant v; no looping.</td></tr>
+            <tr><td class="pid">E3</td><td>No decorative extras</td><td>Only a brief tag glow when an event is placed.</td></tr>
+            <tr><td class="pid">F1</td><td>Name before reference</td><td>Events are labelled Eₙ before prompts cite them.</td></tr>
+            <tr><td class="pid">F2</td><td>Conceptual prediction</td><td>Asks "what time?" not "compute γ(t − vx)".</td></tr>
+            <tr><td class="pid">F9–F14</td><td>Prompt wording</td><td>Step 1 open, Step 2 predict, Step 3 warrant, Step 4 relationship; formative feedback.</td></tr>
+            <tr><td class="pid">G2</td><td>Invariant vs frame-dependent</td><td>v, γ tagged to the (S, S′) pair; times tagged to their frame.</td></tr>
+            <tr><td class="pid">G3</td><td>Frame toggle re-renders</td><td>S′ adds a moving, contracted, orange grid — not just a label.</td></tr>
+            <tr><td class="pid">G4b</td><td>One frame default</td><td>S alone is the entry point; S′ is toggled on when ready.</td></tr>
+            <tr><td class="pid">G5</td><td>Live-bound numbers</td><td>Prompts reference the live clock and the x = 10 target.</td></tr>
+            <tr><td class="pid">G7</td><td>Operational events</td><td>Event = click → (x, y, t); simultaneity = same t-tag vs different t′-tag.</td></tr>
+            <tr><td class="pid">H1</td><td>Structural misconception</td><td>The light-delay idea is prediction choice B, never a standing card.</td></tr>
+            <tr><td class="pid">H2</td><td>Rebuttal on selection</td><td>Choice B reveals the targeted rebuttal only when chosen.</td></tr>
+            <tr><td class="pid">J3</td><td>Correct model</td><td>Lorentz signs, γ, S′ clock = 1/γ, grid = 1/γ contraction along x.</td></tr>
+            <tr><td class="pid">J5</td><td>Stable axes</td><td>Fixed grid range; default v = 0.40 c (γ ≈ 1.09).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HEADER ============ -->
+  <header class="shell-header">
+    <div class="shell-title">Frame Clock &amp; Event Coordinates <span>· coordinate time is frame-wide, not light-delayed</span></div>
+    <div class="shell-controls">
+      <div class="shell-group">
+        <label class="ctl-label">v / c</label>
+        <input id="v-slider" class="shell-range" type="range" min="0" max="0.9" step="0.01" value="0.4">
+        <span id="v-read" class="shell-readout">v = 0.40 c</span>
+        <span id="g-read" class="shell-readout">γ = 1.091</span>
+      </div>
+      <div class="shell-sep"></div>
+      <div class="shell-group">
+        <button id="sp-toggle" class="shell-btn">＋ Frame S′</button>
+        <button id="light-toggle" class="shell-btn">☀ Light path</button>
+        <button id="reset-clocks" class="shell-btn">⏱ Reset clocks</button>
+        <button id="clear-events" class="shell-btn">✕ Clear events</button>
+      </div>
+      <div class="shell-sep"></div>
+      <div class="shell-group">
+        <button id="shell-play" class="shell-btn">⏸ Pause</button>
+        <button id="shell-reset" class="shell-btn">↻ Reset</button>
+        <label style="font-size:11px;color:var(--ink-mid);display:none;">Speed</label>
+        <select id="shell-speed" class="shell-select" style="display:none;">
+          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+        </select>
+      </div>
+      <div class="shell-sep"></div>
+      <div class="shell-group">
+        <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
+        <button id="toggle-aside" class="shell-btn active">👁 Panels</button>
+        <button id="toggle-formal" class="shell-btn">∑ Formal</button>
+        <button id="shell-maximize" class="shell-btn">⛶ Maximize</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <main class="shell-hero">
+    <div class="stage"><canvas id="cv"></canvas></div>
+  </main>
+
+  <!-- ============ ASIDE ============ -->
+  <aside class="shell-aside">
+
+    <div class="shell-panel" data-panel="inquiry">
+      <div class="shell-panel-head"><h3>Inquiry steps</h3><span class="shell-caret">▾</span></div>
+      <div class="shell-panel-body">
+        <div class="step-nav">
+          <button id="step-prev">◀</button>
+          <span id="step-ind">Step 1 / 4</span>
+          <button id="step-next">▶</button>
+        </div>
+        <div id="step-body"></div>
+      </div>
+    </div>
+
+    <div class="shell-panel" data-panel="predict">
+      <div class="shell-panel-head"><h3>Predict (optional)</h3><span class="shell-caret">▾</span></div>
+      <div class="shell-panel-body">
+        <p style="margin:0 0 4px;">Pause and <b>Reset clocks</b> so <b>t = 0</b>. You are about to click at <b>x = 10</b>. What time coordinate will the frame assign to this event?</p>
+        <div class="choices">
+          <button class="choice" data-c="A"><b>A</b> &nbsp; t = 0 — the frame clock reads zero right now</button>
+          <button class="choice" data-c="B"><b>B</b> &nbsp; t = 10 — light needs 10 time-units to reach the clock</button>
+          <button class="choice" data-c="C"><b>C</b> &nbsp; Between 0 and 10, depending on the exact position</button>
+        </div>
+        <div id="predict-eval" class="eval"></div>
+        <div class="note">Optional — you can just click the grid and explore without predicting.</div>
+      </div>
+    </div>
+
+    <div class="shell-panel" data-panel="legend">
+      <div class="shell-panel-head"><h3>Frames &amp; symbols</h3><span class="shell-caret">▾</span></div>
+      <div class="shell-panel-body">
+        <div class="legend-row"><span class="swatch" style="background:#7f9cb8"></span> Frame <b>S</b> — rest frame (v = 0)</div>
+        <div class="legend-row"><span class="swatch" style="background:#f59e0b"></span> Frame <b>S′</b> — moves at v relative to S</div>
+        <div class="symdef"><b>t</b> = coordinate time in S · <b>t′</b> = coordinate time in S′</div>
+        <div class="symdef"><b>x, y</b> = S space coords · <b>x′, y′</b> = S′ space coords</div>
+        <div class="symdef"><b>v</b> = speed of S′ rel. to S (units of c) · <b>γ</b> = Lorentz factor = <span id="legend-gamma">1.091</span></div>
+        <div class="note"><b>HUD notation:</b> The canvas HUD shows <b>t′(x′=0)</b> — the S′ central-clock reading at its own origin. Each event tag shows <b>t′ = γ(t − vx)</b>, the full Lorentz-transformed time at that event's position. These generally differ when x ≠ 0.</div>
+        <div class="note"><b>Invariant vs frame-dependent:</b> the <i>event</i> (a point in spacetime) is the same for both frames; its coordinates (x,t) and (x′,t′) are frame-dependent. v and γ are properties of the pair (S, S′).</div>
+        <div class="note">Units: c = 1, so 1 grid-square = 1 length-unit = 1 time-unit.</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ============ FORMAL ============ -->
+  <section class="shell-formal">
+    <div class="formal-grid">
+      <div class="eq-row"><div class="cap">Lorentz factor (c = 1)</div><div class="math" data-tex="\gamma=\dfrac{1}{\sqrt{1-v^{2}}}"></div></div>
+      <div class="eq-row"><div class="cap">Space transform (along motion)</div><div class="math" data-tex="x'=\gamma\,(x-v\,t)\qquad y'=y"></div></div>
+      <div class="eq-row"><div class="cap">Coordinate-time transform</div><div class="math" data-tex="t'=\gamma\,(t-v\,x)"></div></div>
+      <div class="eq-row"><div class="cap">S′ central clock (at x′ = 0)</div><div class="math" data-tex="t'_{\text{clock}}=t/\gamma\;\;(\leq t,\;\text{equality iff }v=0)"></div></div>
+      <div class="eq-row"><div class="cap">S′ grid spacing seen from S</div><div class="math" data-tex="\Delta x=1/\gamma\ \ (\text{contracted along }x)"></div></div>
+      <div class="eq-row"><div class="cap">Core claim</div><div class="math" data-tex="t_{\text{event}}=t_{\text{clock}}\ \ \text{(independent of }x,y)"></div></div>
+    </div>
+    <div class="formal-note">The event's S time tag uses the full transform <b>t′ = γ(t − vx)</b>, which generally differs from the S′ central-clock reading <b>t/γ</b> at the same S-moment — that difference is the relativity of simultaneity. In Newtonian physics every frame stamps the same t; here, because the event has x ≠ 0, S and S′ disagree on its time coordinate.</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================================
+   SHELL RUNTIME — emit VERBATIM.
+   ========================================================================== */
+const Shell = (function(){
+  const root = document.getElementById('shell');
+  let onFrame=()=>{}, onReset=()=>{}, onResize=()=>{};
+  let playing=true, speed=1, last=performance.now(), started=false;
+
+  function loop(now){
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    if(playing) onFrame(dt*speed);
+    requestAnimationFrame(loop);
+  }
+  function refit(){ onResize(); last=performance.now(); }
+
+  function setPlaying(p){
+    playing=p; last=performance.now();
+    const b=document.getElementById('shell-play');
+    if(b) b.textContent = p ? '⏸ Pause' : '▶ Play';
+  }
+  function setMaximized(on){
+    root.classList.toggle('shell-max', on);
+    const maxBtn=document.getElementById('shell-maximize');
+    if(maxBtn){
+      maxBtn.classList.toggle('active', on);
+      maxBtn.textContent = on ? '⤢ Restore' : '⛶ Maximize';
+    }
+    requestAnimationFrame(refit);
+  }
+
+  function wire(){
+    const play=document.getElementById('shell-play');
+    const reset=document.getElementById('shell-reset');
+    const spd=document.getElementById('shell-speed');
+    const maxBtn=document.getElementById('shell-maximize');
+    const exitMax=document.getElementById('shell-exit-max');
+    const tAside=document.getElementById('toggle-aside');
+    const tFormal=document.getElementById('toggle-formal');
+
+    if(play) play.addEventListener('click',()=>setPlaying(!playing));
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
+
+    if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
+    if(exitMax) exitMax.addEventListener('click',()=>setMaximized(false));
+
+    const infoBtn=document.getElementById('shell-info');
+    const infoModal=document.getElementById('shell-info-modal');
+    const infoClose=document.getElementById('shell-info-close');
+    function setInfo(open){ if(infoModal) infoModal.classList.toggle('open',open); }
+    if(infoBtn) infoBtn.addEventListener('click',()=>setInfo(true));
+    if(infoClose) infoClose.addEventListener('click',()=>setInfo(false));
+    if(infoModal) infoModal.addEventListener('click',e=>{ if(e.target===infoModal) setInfo(false); });
+
+    document.addEventListener('keydown',e=>{
+      if(e.key!=='Escape') return;
+      if(infoModal && infoModal.classList.contains('open')) setInfo(false);
+      else if(root.classList.contains('shell-max')) setMaximized(false);
+    });
+
+    if(tAside) tAside.addEventListener('click',()=>{
+      const hidden=root.classList.toggle('hide-aside');
+      tAside.classList.toggle('active',!hidden);
+      requestAnimationFrame(refit);
+    });
+    if(tFormal) tFormal.addEventListener('click',()=>{
+      const hidden=root.classList.toggle('hide-formal');
+      tFormal.classList.toggle('active',!hidden);
+      requestAnimationFrame(refit);
+    });
+
+    root.querySelectorAll('.shell-panel-head').forEach(head=>{
+      head.addEventListener('click',()=>{
+        head.parentElement.classList.toggle('collapsed');
+        requestAnimationFrame(refit);
+      });
+    });
+
+    let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(refit,80); });
+  }
+
+  return {
+    init(opts){
+      onFrame=opts.onFrame||onFrame; onReset=opts.onReset||onReset; onResize=opts.onResize||onResize;
+      wire();
+      onResize(); onReset();
+      last=performance.now();
+      if(!started){ started=true; requestAnimationFrame(loop); }
+    },
+    get speed(){return speed;}, get playing(){return playing;},
+    setPlaying, refit
+  };
+})();
+
+/* ============================================================================
+   SIM
+   ========================================================================== */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// ---- colours ----
+const sLineDim='rgba(138,164,200,0.13)';
+const sAxis='rgba(176,196,224,0.85)';
+const sText='#b6cae6';
+const spLineDim='rgba(245,158,11,0.20)';
+const spAxis='rgba(251,191,36,0.95)';
+const spText='#fbbf24';
+
+// ---- state ----
+const st = {
+  t:0, v:0.40, showSp:false, showLight:false,
+  events:[], eventCount:0,
+  inquiryStep:1, predictChoice:null, predictPlaced:false
+};
+
+let geom={ox:0,oy:0,ppu:30,W:0,H:0};
+let occupied=[];
+let hudRect=null;
+
+function gammaOf(v){ return 1/Math.sqrt(1 - v*v); }
+
+const SUB={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+function sub(n){ return (''+n).split('').map(d=>SUB[d]).join(''); }
+
+function fit(canvas, c){
+  const dpr=window.devicePixelRatio||1;
+  const r=canvas.getBoundingClientRect();
+  const w=Math.floor(r.width*dpr), h=Math.floor(r.height*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+  c.setTransform(1,0,0,1,0,0); c.scale(dpr,dpr);
+  return {w:r.width, h:r.height};
+}
+function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function ov(a,b){ return !(a.x+a.w<b.x||b.x+b.w<a.x||a.y+a.h<b.y||b.y+b.h<a.y); }
+
+// ---------------------------------------------------------------- DRAW
+function draw(){
+  const G=fit(cv,ctx);
+  const W=G.w, H=G.h;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a0c11'; ctx.fillRect(0,0,W,H);
+
+  const ppu=Math.max(26, Math.min(W/18, H/12));
+  const ox=Math.round(W*0.15);
+  const oy=Math.round(H*0.5);
+  const gam=gammaOf(st.v);
+  geom={ox,oy,ppu,W,H};
+
+  const X2P=x=>ox+x*ppu, Y2P=y=>oy-y*ppu;
+  const xmin=Math.floor((0-ox)/ppu), xmax=Math.ceil((W-ox)/ppu);
+  const ymin=Math.floor((oy-H)/ppu), ymax=Math.ceil(oy/ppu);
+
+  // ---- S grid ----
+  ctx.lineWidth=1; ctx.strokeStyle=sLineDim;
+  for(let xi=xmin;xi<=xmax;xi++){const px=X2P(xi);if(px<-1||px>W+1)continue;line(px,0,px,H);}
+  for(let yi=ymin;yi<=ymax;yi++){const py=Y2P(yi);if(py<-1||py>H+1)continue;line(0,py,W,py);}
+  ctx.strokeStyle=sAxis; ctx.lineWidth=1.6;
+  line(0,oy,W,oy); line(ox,0,ox,H);
+  // axis numbers
+  ctx.fillStyle=sText; ctx.font='11px ui-monospace,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let xi=xmin;xi<=xmax;xi++){ if(xi===0)continue; const px=X2P(xi); if(px<14||px>W-14)continue; ctx.fillText(xi,px,oy+5); }
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let yi=ymin;yi<=ymax;yi++){ if(yi===0)continue; const py=Y2P(yi); if(py<12||py>H-12)continue; ctx.fillText(yi,ox-6,py); }
+  // axis names
+  ctx.fillStyle=sText; ctx.font='12px sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='bottom'; ctx.fillText('x [S]', W-8, oy-6);
+  ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('y [S]', ox+6, 6);
+
+  // ---- S′ grid ----
+  if(st.showSp){
+    const gx=st.v*st.t; // S-position of S′ origin
+    const nMin=Math.floor((((0-ox)/ppu)-gx)*gam)-1;
+    const nMax=Math.ceil((((W-ox)/ppu)-gx)*gam)+1;
+    // faint orange horizontals (y' = y)
+    ctx.strokeStyle='rgba(245,158,11,0.055)'; ctx.lineWidth=1;
+    for(let yi=ymin;yi<=ymax;yi++){const py=Y2P(yi);if(py<-1||py>H+1)continue;line(0,py,W,py);}
+    // vertical x'=const lines (spacing 1/γ, drifting)
+    ctx.setLineDash([5,5]);
+    for(let n=nMin;n<=nMax;n++){
+      const sx=gx+n/gam; const px=X2P(sx);
+      if(px<-1||px>W+1)continue;
+      if(n===0){ ctx.strokeStyle=spAxis; ctx.lineWidth=1.8; ctx.setLineDash([]); line(px,0,px,H); ctx.setLineDash([5,5]); }
+      else { ctx.strokeStyle=spLineDim; ctx.lineWidth=1; line(px,0,px,H); }
+    }
+    ctx.setLineDash([]);
+    // x' tick labels
+    ctx.fillStyle=spText; ctx.font='11px ui-monospace,monospace'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    for(let n=nMin;n<=nMax;n++){ if(n===0)continue; const sx=gx+n/gam; const px=X2P(sx); if(px<16||px>W-16)continue; ctx.fillText(n,px,oy-4); }
+    // S′ origin marker
+    const opx=X2P(gx), opy=Y2P(0);
+    ctx.fillStyle=spAxis; ctx.beginPath(); ctx.arc(opx,opy,4,0,2*Math.PI); ctx.fill();
+    if(opx<W-120){ ctx.fillStyle=spText; ctx.font='11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom'; ctx.fillText("S′ origin (x′=0)", opx+7, opy-6); }
+  }
+  // S origin marker
+  ctx.fillStyle=sAxis; ctx.beginPath(); ctx.arc(X2P(0),Y2P(0),4,0,2*Math.PI); ctx.fill();
+
+  // ---- target ring (x = 10) ----
+  const ringOn = (st.inquiryStep===2) || (st.predictChoice!==null && !st.predictPlaced);
+  if(ringOn){
+    const px=X2P(10), py=Y2P(0), rr0=Math.max(11,0.42*ppu);
+    ctx.strokeStyle='rgba(167,139,250,0.85)'; ctx.lineWidth=1.6; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.arc(px,py,rr0,0,2*Math.PI); ctx.stroke(); ctx.setLineDash([]);
+    if(px>40&&px<W-40){ ctx.fillStyle='#c4b5fd'; ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText('x = 10', px, py-rr0-3); }
+  }
+
+  // ---- HUD layout (measure first; seed collision avoidance) ----
+  const hud=buildHUD(W,gam);
+  hudRect={x:hud.minX-6, y2:hud.bottom+4};
+  occupied=[{x:hud.minX-6, y:0, w:W-(hud.minX-6), h:hud.bottom+4}];
+
+  // ---- events ----
+  drawEvents(W,H,X2P,Y2P,gam);
+
+  // ---- HUD on top ----
+  drawHUD(hud);
+
+  // ---- bottom captions ----
+  if(st.showLight && st.events.length){
+    ctx.fillStyle='rgba(254,243,199,0.8)'; ctx.font='11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+    ctx.fillText('— — light signal toward origin (not used for time-stamping)', 12, H-12);
+  } else if(st.events.length===0){
+    ctx.fillStyle='rgba(182,202,230,0.62)'; ctx.font='12px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+    ctx.fillText('▶ click anywhere on the grid to place an event E₁', 12, H-12);
+  }
+}
+
+function buildHUD(W,gam){
+  const lines=[];
+  lines.push({text:'Frame S    |    v = 0', col:sText, bg:'rgba(138,164,200,0.14)', bd:'rgba(138,164,200,0.5)', big:false});
+  lines.push({text:'t = '+st.t.toFixed(2)+'  [S]', col:sText, bg:'rgba(138,164,200,0.06)', bd:'rgba(138,164,200,0.4)', big:true});
+  if(st.showSp){
+    lines.push({gap:true});
+    lines.push({text:'Frame S′    |    v = '+st.v.toFixed(2)+' c  (rel. to S)', col:spText, bg:'rgba(245,158,11,0.14)', bd:'rgba(245,158,11,0.55)', big:false});
+    lines.push({text:"t′(x′=0) = "+(st.t/gam).toFixed(2)+"  [S′]", col:spText, bg:'rgba(245,158,11,0.06)', bd:'rgba(245,158,11,0.45)', big:true});
+  }
+  let maxW=0;
+  for(const L of lines){ if(L.gap)continue; ctx.font=L.big?'bold 17px ui-monospace,monospace':'12px sans-serif'; L.w=ctx.measureText(L.text).width+18; L.h=L.big?30:24; if(L.w>maxW)maxW=L.w; }
+  const minX=W-12-maxW;
+  let y=12;
+  for(const L of lines){ if(L.gap){y+=6;continue;} L.y=y; L.x=W-12-L.w; y+=L.h+5; }
+  return {lines, minX, bottom:y, maxW};
+}
+function drawHUD(hud){
+  for(const L of hud.lines){ if(L.gap)continue;
+    rr(L.x,L.y,L.w,L.h,6); ctx.fillStyle='rgba(10,12,17,0.86)'; ctx.fill();
+    rr(L.x,L.y,L.w,L.h,6); ctx.fillStyle=L.bg; ctx.fill();
+    rr(L.x,L.y,L.w,L.h,6); ctx.strokeStyle=L.bd; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=L.col; ctx.font=L.big?'bold 17px ui-monospace,monospace':'12px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(L.text, L.x+9, L.y+L.h/2);
+  }
+}
+
+function placeBlock(w,h,ax,ay,W,H){
+  let preferRight=true;
+  let x=ax+14; if(x+w>W-8){ x=ax-14-w; preferRight=false; } if(x<8)x=8;
+  let y=ay-h/2; y=Math.max(8,Math.min(H-h-8,y));
+  let guard=0;
+  while(occupied.some(r=>ov(r,{x,y,w,h})) && guard<70){
+    y+=16;
+    if(y+h>H-8){ y=8; x = preferRight ? ax-14-w : ax+14; preferRight=!preferRight; if(x<8)x=8; if(x+w>W-8)x=W-8-w; }
+    guard++;
+  }
+  occupied.push({x,y,w,h});
+  return {x,y};
+}
+
+function drawEvents(W,H,X2P,Y2P,gam){
+  const now=performance.now();
+  for(const ev of st.events){
+    const px=X2P(ev.x), py=Y2P(ev.y);
+    // light path
+    if(st.showLight){
+      ctx.strokeStyle='rgba(254,243,199,0.55)'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(X2P(0),Y2P(0)); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // glow on placement
+    const age=(now-ev.born)/1000;
+    if(age<1.3){ const a=1-age/1.3; ctx.beginPath(); ctx.arc(px,py,8+12*(1-a),0,2*Math.PI); ctx.fillStyle='rgba(167,139,250,'+(0.35*a).toFixed(3)+')'; ctx.fill(); }
+    // dot
+    ctx.beginPath(); ctx.arc(px,py,6,0,2*Math.PI); ctx.fillStyle='#f8fafc'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#0a0c11'; ctx.stroke();
+
+    // tag lines
+    const sTxt='E'+sub(ev.id)+'  (x='+ev.x+', y='+ev.y+', t='+ev.t.toFixed(2)+') [S]';
+    const tagLines=[{t:sTxt,c:sText}];
+    if(st.showSp){
+      const xp=gam*(ev.x - st.v*ev.t);
+      const tp=gam*(ev.t - st.v*ev.x);
+      tagLines.push({t:'      (x′='+xp.toFixed(2)+', y′='+ev.y+', t′='+tp.toFixed(2)+') [S′]', c:spText});
+    }
+    ctx.font='12px ui-monospace,monospace';
+    let bw=0; for(const l of tagLines){ bw=Math.max(bw, ctx.measureText(l.t).width); }
+    bw+=14; const lh=17; const bh=tagLines.length*lh+8;
+    const pos=placeBlock(bw,bh,px,py,W,H);
+    // connector
+    ctx.strokeStyle='rgba(148,163,184,0.35)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(pos.x<px?pos.x+bw:pos.x, pos.y+bh/2); ctx.stroke();
+    // box
+    rr(pos.x,pos.y,bw,bh,5); ctx.fillStyle='rgba(10,12,17,0.85)'; ctx.fill();
+    rr(pos.x,pos.y,bw,bh,5); ctx.strokeStyle='rgba(148,163,184,0.28)'; ctx.lineWidth=1; ctx.stroke();
+    // text
+    ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.font='12px ui-monospace,monospace';
+    tagLines.forEach((l,i)=>{ ctx.fillStyle=l.c; ctx.fillText(l.t, pos.x+7, pos.y+8+lh/2+i*lh); });
+  }
+}
+
+// ---------------------------------------------------------------- INTERACTION
+function placeEvent(x,y){
+  st.eventCount++;
+  st.events.push({id:st.eventCount, x, y, t:st.t, born:performance.now()});
+  if(st.predictChoice!==null) st.predictPlaced=true;
+  renderPredict();
+  draw();
+}
+
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  if(hudRect && px>=hudRect.x && py<=hudRect.y2) return; // ignore clicks on the HUD
+  const x=Math.round((px-geom.ox)/geom.ppu);
+  const y=Math.round((geom.oy-py)/geom.ppu);
+  placeEvent(x,y);
+});
+
+// ---- panels / readouts ----
+const vSlider=document.getElementById('v-slider');
+const vRead=document.getElementById('v-read');
+const gRead=document.getElementById('g-read');
+const spBtn=document.getElementById('sp-toggle');
+const lightBtn=document.getElementById('light-toggle');
+const resetClocksBtn=document.getElementById('reset-clocks');
+const clearBtn=document.getElementById('clear-events');
+const evalEl=document.getElementById('predict-eval');
+const stepBody=document.getElementById('step-body');
+const stepInd=document.getElementById('step-ind');
+const legendGamma=document.getElementById('legend-gamma');
+
+function updateReadouts(){
+  const g=gammaOf(st.v);
+  vRead.textContent='v = '+st.v.toFixed(2)+' c';
+  gRead.textContent='γ = '+g.toFixed(3);
+  if(legendGamma) legendGamma.textContent=g.toFixed(3);
+}
+
+vSlider.addEventListener('input',e=>{ st.v=parseFloat(e.target.value); updateReadouts(); draw(); });
+
+spBtn.addEventListener('click',()=>{ st.showSp=!st.showSp;
+  spBtn.classList.toggle('active',st.showSp); spBtn.textContent=(st.showSp?'✓ Frame S′':'＋ Frame S′'); draw(); });
+
+lightBtn.addEventListener('click',()=>{ st.showLight=!st.showLight;
+  lightBtn.classList.toggle('active',st.showLight); lightBtn.textContent=(st.showLight?'✓ Light path':'☀ Light path'); draw(); });
+
+resetClocksBtn.addEventListener('click',()=>{ st.t=0; draw(); });
+
+clearBtn.addEventListener('click',()=>{ st.events=[]; st.eventCount=0; st.predictPlaced=false; renderPredict(); draw(); });
+
+document.querySelectorAll('.choice').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.choice').forEach(c=>c.classList.remove('sel'));
+  b.classList.add('sel');
+  st.predictChoice=b.dataset.c; st.predictPlaced=false;
+  renderPredict();
+  if(st.inquiryStep===4) renderStep();
+  draw();
+}));
+
+function renderPredict(){
+  if(st.predictChoice===null){ evalEl.className='eval'; evalEl.innerHTML=''; return; }
+  let cls, txt;
+  if(st.predictChoice==='A'){
+    cls='ok';
+    txt='<b>You predicted (A): t = 0.</b> ✓ Correct — coordinate time is the whole frame\u2019s synchronised-clock reading, so it does <i>not</i> depend on where the event is. (Different frames need not agree, though — see Step 4.)';
+  } else if(st.predictChoice==='B'){
+    cls='no';
+    txt='<b>You predicted (B): t = 10.</b> That would be the time you\u2019d <i>see</i> the flash arrive at the origin — but coordinate time is not what any single observer <i>sees</i>. A frame\u2019s coordinate time comes from an imagined network of synchronised clocks at every point in space; the central clock here represents that whole network. The event happened when the network read t = 0, so it gets <b>t = 0</b> — regardless of where it is.';
+  } else {
+    cls='mid';
+    txt='<b>You predicted (C).</b> Coordinate time does not interpolate with distance. Every synchronised clock in the frame reads the same time at a given moment; the event is stamped with that common reading.';
+  }
+  let live='';
+  if(st.predictPlaced && st.events.length){
+    const ev=st.events[st.events.length-1];
+    live='<div class="evlive">You placed E'+ev.id+' at x = '+ev.x+', t = '+ev.t.toFixed(2)+' [S]. The frame stamped <b>t = '+ev.t.toFixed(2)+'</b> — set by the clock network, independent of x.</div>';
+  }
+  evalEl.className='eval show '+cls;
+  evalEl.innerHTML=txt+live;
+}
+
+const STEPS=[
+  {h:'1 — One clock, why?',
+   b:'This simulation gives each frame <b>exactly one</b> central clock — you can\u2019t drop extra clocks at other positions. Why might that be? What goes wrong if every observer at a different position carried their <i>own</i> unsynchronised clock?'},
+  {h:'2 — Predict',
+   b:'Press <b>⏸ Pause</b>, then <b>⏱ Reset clocks</b> so <b>t = 0</b>. You\u2019re about to click at <b>x = 10</b> (dashed ring on the grid). What time will the frame assign? Commit in the <b>Predict</b> panel, then place the event and check.'},
+  {h:'3 — Light delay',
+   b:'Light from x = 10 would take 10 time-units to reach x = 0. <b>Should</b> the sim wait for that light before recording the time? Turn on <b>☀ Light path</b> to draw the signal it does <i>not</i> use. Coordinate time = the reading of the frame\u2019s synchronised-clock network, <b>not</b> when light arrives anywhere.'},
+  {h:'4 — Two frames',
+   b:'Toggle <b>＋ Frame S′</b> on, set <b>v ≈ 0.40 c</b>, press <b>Reset clocks</b> (both read 0), then place a new event. Do the two frames assign the <b>same</b> time coordinate? Read the two colour-coded t-tags on the event. Note: the HUD shows <b>t′(x′=0)</b> — the S′ central-clock reading at its own origin — while each event tag shows the full Lorentz-transformed <b>t′ = γ(t − vx)</b>. These differ whenever x ≠ 0 — that\u2019s the relativity of simultaneity.'}
+];
+
+function renderStep(){
+  const s=STEPS[st.inquiryStep-1];
+  let html='<h4>'+s.h+'</h4><div>'+s.b+'</div>';
+  if(st.inquiryStep===4 && st.predictChoice==='A'){
+    html+='<div class="note">You saw that <b>within one frame</b> coordinate time doesn\u2019t depend on position. <b>Across frames</b> the story changes — compare the two time tags on your event.</div>';
+  }
+  stepBody.innerHTML=html;
+  stepInd.textContent='Step '+st.inquiryStep+' / 4';
+}
+
+document.getElementById('step-prev').addEventListener('click',()=>{ st.inquiryStep=Math.max(1,st.inquiryStep-1); renderStep(); draw(); });
+document.getElementById('step-next').addEventListener('click',()=>{ st.inquiryStep=Math.min(4,st.inquiryStep+1); renderStep(); draw(); });
+
+// ---------------------------------------------------------------- LIFECYCLE
+function resetAll(){
+  st.t=0; st.v=0.40; st.showSp=false; st.showLight=false;
+  st.events=[]; st.eventCount=0;
+  st.inquiryStep=1; st.predictChoice=null; st.predictPlaced=false;
+  vSlider.value='0.4';
+  spBtn.classList.remove('active'); spBtn.textContent='＋ Frame S′';
+  lightBtn.classList.remove('active'); lightBtn.textContent='☀ Light path';
+  document.querySelectorAll('.choice').forEach(c=>c.classList.remove('sel'));
+  renderPredict(); renderStep(); updateReadouts(); draw();
+}
+
+function onFrame(dt){ st.t+=dt; draw(); }
+
+function renderMath(){
+  if(!window.katex){ window.addEventListener('load',renderMath,{once:true}); return; }
+  document.querySelectorAll('[data-tex]').forEach(el=>{
+    try{ katex.render(el.getAttribute('data-tex'), el, {throwOnError:false, displayMode:true}); }catch(e){}
+  });
+}
+
+// machine-readable audit hook (reuses sim physics, c = 1, β = v/c)
+window.__audit = {
+  at(beta){
+    const g=gammaOf(beta);
+    return {
+      gamma:g,
+      contractedLength:1/g,   // S′ grid spacing in S, L₀ = 1 → 1/γ
+      deltaTPrime:-g*beta     // event at Δx = 1, Δt = 0 → t′ = γ(0 − β) = −γβ
+    };
+  }
+};
+
+renderStep(); updateReadouts();
+Shell.init({ onFrame, onReset:resetAll, onResize:draw });
+renderMath();
+</script>
+</body>
+</html>

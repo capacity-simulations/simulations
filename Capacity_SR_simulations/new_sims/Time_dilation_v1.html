@@ -924,7 +924,7 @@ html[data-theme="light"] .info-tooltip .formula-box {
       <div class="info-tooltip">
         <h4>About This Simulation</h4>
         <div class="info-section">
-          <p>This simulation demonstrates the <strong>muon-mountain problem</strong>, one of the most compelling real-world proofs of Einstein's Special Relativity.</p>
+          <p>This simulation contrasts a <strong>muon at rest in the lab</strong> (proper lifetime τ₀ = 2.2 μs) with the <strong>muon-mountain problem</strong> — one of the most compelling real-world proofs of Einstein's Special Relativity.</p>
         </div>
         <div class="info-section">
           <p><strong>Muons</strong> are subatomic particles created when cosmic rays hit the upper atmosphere (~10 km altitude). They have a very short rest-frame lifetime:</p>
@@ -943,7 +943,7 @@ html[data-theme="light"] .info-tooltip .formula-box {
         <div class="info-section">
           <p>Animation motion uses a <strong>schematic</strong> progress coordinate along a fixed 10 km track. Playback speed only changes how fast that progress advances; it does not rescale physics when you change v/c. Distances, γ, and lifetimes are always computed from the formulas above.</p>
         </div>
-        <p><em>Left panel: Classical prediction (no relativity)<br>Right panel: Reality (with time dilation)</em></p>
+        <p><em>Left panel: Muon at rest in the lab frame (τ₀ = 2.2 μs)<br>Right panel: Fast muon with relativistic time dilation</em></p>
       </div>
     </div>
     <div class="top-bar-spacer"></div>
@@ -1098,15 +1098,15 @@ function getPanelLayout(){
 }
 
 let liveStats={
- classDist:'',relDist:'',classLifeRem:1,relLifeRem:1,
- classLifePct:'',relLifePct:'',classTime:'',relTime:'',relOk:true
+ labLifeRem:1,labLifePct:'',labTime:'',
+ relDist:'',relLifeRem:1,relLifePct:'',relTime:'',relOk:true
 };
 
 /** Progress per second at 1× playback (matches former slider value 4). */
 const PROGRESS_RATE_AT_1X=0.22;
 let progress=0,animSpeed=1,time=0,paused=false;
-let classDecayed=false,relReached=false,relDecayed=false;
-let decayParts=[],successParts=[],pauseT=0;
+let labDecayed=false,relReached=false,relDecayed=false;
+let labDecayParts=[],decayParts=[],successParts=[],pauseT=0;
 let cosmicFlash=1;
 
 /** Progress at which relativistic panel treats decay/survival (cap at ground when relFrac ≥ 1). */
@@ -1115,21 +1115,26 @@ function getRelDecayProgress(){
 }
 
 function updateLiveStats(){
- const classLifeRem=classFrac>0?Math.max(0,1-progress/classFrac):0;
- const relLifeRem=relFrac>=1?Math.max(0,1-progress):(relFrac>0?Math.max(0,1-progress/relFrac):0);
- const classElapsed=(Math.min(progress,classFrac)*MTN_H)/(vc*C_LIGHT);
+ // Shared lab clock: progress maps to lab-frame time via the moving muon's 10 km track.
+ // The at-rest muon dies after one proper lifetime τ₀, i.e. at progress = classFrac (γ× sooner
+ // than the relativistic muon, which survives to decayFrac thanks to time dilation).
+ const labDecayProg=classFrac>0?classFrac:1;
+ const labElapsed=Math.min(progress,labDecayProg)*MTN_H/(vc*C_LIGHT);
+ const labLifeRem=Math.max(0,1-progress/labDecayProg);
+ // Proper-time remaining for the fast muon: lab time / dilated lifetime (γτ₀) = progress / relFrac,
+ // frozen at the decay event (or ground arrival, where it is detected still ~alive).
+ const relLifeRem=relFrac>0?Math.max(0,1-Math.min(progress,getRelDecayProgress())/relFrac):0;
  const relDistTraveled=relFrac>=1?Math.min(progress,1)*MTN_H:Math.min(progress,relFrac)*MTN_H;
  const relElapsed=relDistTraveled/(vc*C_LIGHT);
  const relSym=relFrac>=1?'≥':'<';
 
- liveStats.classDist='d = v·τ₀ = '+classDist.toFixed(0)+' m  <  '+MTN_H.toLocaleString()+' m';
+ liveStats.labLifeRem=labLifeRem;
+ liveStats.labLifePct='Lifetime: '+(labLifeRem*100).toFixed(0)+'%';
+ liveStats.labTime='t = '+(labElapsed*1e6).toFixed(2)+' μs';
  liveStats.relDist='d = v·γ·τ₀ = '+relDist.toFixed(0)+' m  '+relSym+'  '+MTN_H.toLocaleString()+' m';
  liveStats.relOk=relFrac>=1;
- liveStats.classLifeRem=classLifeRem;
  liveStats.relLifeRem=relLifeRem;
- liveStats.classLifePct='Lifetime: '+(classLifeRem*100).toFixed(0)+'%';
  liveStats.relLifePct='Lifetime: '+(relLifeRem*100).toFixed(0)+'%';
- liveStats.classTime='t = '+(classElapsed*1e6).toFixed(2)+' μs';
  liveStats.relTime='t = '+(relElapsed*1e6).toFixed(2)+' μs';
 }
 
@@ -1232,8 +1237,8 @@ function fillMidpoint(arr,lo,hi,rough){
 generateMountainProfiles();
 
 function reset(){
-  progress=0;time=0;classDecayed=false;relReached=false;relDecayed=false;
-  decayParts=[];successParts=[];pauseT=0;cosmicFlash=1;
+  progress=0;time=0;labDecayed=false;relReached=false;relDecayed=false;
+  labDecayParts=[];decayParts=[];successParts=[];pauseT=0;cosmicFlash=1;
 }
 
 document.getElementById('vcSlider').addEventListener('input',function(){vc=this.value/1000;calcPhysics();reset();});
@@ -1400,6 +1405,413 @@ function drawEnhancedMountains(xOff,w,baseY,topY){
   }
 }
 
+function drawLabPanelStats(xOff,w,layout){
+ const y=layout.statsY,h=layout.statsH,pad=10;
+ const barW=w-pad*2,barY=y+30,barH=6;
+ const headerY=y+16;
+
+ const bg=ctx.createLinearGradient(0,y,0,y+h);
+ bg.addColorStop(0,'rgba(6,14,17,0.98)');
+ bg.addColorStop(1,'rgba(6,14,17,0.96)');
+ ctx.fillStyle=bg;
+ ctx.fillRect(xOff,y,w,h);
+ ctx.strokeStyle='rgba(96,165,250,0.35)';
+ ctx.lineWidth=1;
+ ctx.strokeRect(xOff+0.5,y+0.5,w-1,h-1);
+
+ const accent='#60a5fa';
+ const label='Lab frame  ·  μ⁻ at rest  ·  τ₀ = 2.2 μs';
+
+ ctx.font=STATS_FONT_LABEL;
+ ctx.textAlign='left';
+ ctx.textBaseline='alphabetic';
+ ctx.fillStyle=accent;
+ ctx.fillText(label,xOff+pad,headerY);
+
+ ctx.font=STATS_FONT_DIST;
+ ctx.fillStyle='#e2e8f0';
+ ctx.textAlign='right';
+ ctx.fillText('v = 0   ·   γ = 1',xOff+w-pad,headerY);
+
+ ctx.fillStyle='rgba(19,49,49,0.35)';
+ ctx.fillRect(xOff+pad,barY,barW,barH);
+ const lifeRem=liveStats.labLifeRem;
+ let fillCol='rgba(96,165,250,0.92)';
+ if(lifeRem<=0.1) fillCol='rgba(248,113,113,0.92)';
+ else if(lifeRem<=0.3) fillCol='rgba(251,191,36,0.92)';
+ ctx.fillStyle=fillCol;
+ ctx.fillRect(xOff+pad,barY,barW*Math.max(0,Math.min(1,lifeRem)),barH);
+
+ ctx.font=STATS_FONT_LIFE;
+ ctx.fillStyle='#e2e8f0';
+ ctx.textAlign='left';
+ ctx.fillText(liveStats.labLifePct,xOff+pad,y+50);
+ ctx.fillStyle='#60a5fa';
+ ctx.textAlign='right';
+ ctx.fillText(liveStats.labTime,xOff+w-pad,y+50);
+}
+
+let labDust=[];
+(function(){for(let i=0;i<40;i++){labDust.push({x:Math.random(),y:Math.random(),s:0.4+Math.random()*1.6,sp:0.2+Math.random()*0.6,ph:Math.random()*6.28,drift:(Math.random()-0.5)*0.03});}})();
+
+function labRoundRectPath(x,y,w,h,r){
+ ctx.beginPath();
+ ctx.moveTo(x+r,y);
+ ctx.lineTo(x+w-r,y);
+ ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+ ctx.lineTo(x+w,y+h-r);
+ ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+ ctx.lineTo(x+r,y+h);
+ ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+ ctx.lineTo(x,y+r);
+ ctx.quadraticCurveTo(x,y,x+r,y);
+ ctx.closePath();
+}
+
+function drawGlassware(bx,baseY,type){
+ if(type==='bottle'){
+  const bw=8,bh=20;
+  ctx.fillStyle='rgba(120,160,200,0.16)';
+  labRoundRectPath(bx-bw/2,baseY-bh,bw,bh,2);ctx.fill();
+  ctx.strokeStyle='rgba(150,195,235,0.28)';ctx.lineWidth=0.8;ctx.stroke();
+  ctx.fillStyle='rgba(40,60,80,0.6)';ctx.fillRect(bx-2,baseY-bh-4,4,5);
+  ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(bx-bw/2+1.5,baseY-bh+2,1.5,bh-5);
+ } else {
+  const fw=14,fh=18;
+  ctx.fillStyle='rgba(120,160,200,0.14)';
+  ctx.beginPath();
+  ctx.moveTo(bx-2,baseY-fh);ctx.lineTo(bx+2,baseY-fh);
+  ctx.lineTo(bx+fw/2,baseY);ctx.lineTo(bx-fw/2,baseY);
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(150,195,235,0.26)';ctx.lineWidth=0.8;ctx.stroke();
+  ctx.fillStyle='rgba(40,60,80,0.6)';ctx.fillRect(bx-2,baseY-fh-5,4,6);
+  ctx.fillStyle='rgba(52,211,153,0.20)';
+  ctx.beginPath();
+  ctx.moveTo(bx-fw*0.34,baseY-fh*0.34);ctx.lineTo(bx+fw*0.34,baseY-fh*0.34);
+  ctx.lineTo(bx+fw/2,baseY);ctx.lineTo(bx-fw/2,baseY);
+  ctx.closePath();ctx.fill();
+ }
+}
+
+function drawLabCounter(x,cw,horizonY){
+ const surfY=horizonY-12;
+ const baseY=horizonY+20;
+ const bg=ctx.createLinearGradient(0,surfY,0,baseY);
+ bg.addColorStop(0,'#101c24');
+ bg.addColorStop(1,'#0a141a');
+ ctx.fillStyle=bg;ctx.fillRect(x,surfY,cw,baseY-surfY);
+ ctx.strokeStyle='rgba(59,155,143,0.18)';ctx.lineWidth=1;
+ ctx.strokeRect(x+0.5,surfY+0.5,cw-1,baseY-surfY-1);
+ // door seams
+ ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;
+ ctx.beginPath();ctx.moveTo(x+cw/2,surfY+3);ctx.lineTo(x+cw/2,baseY-3);ctx.stroke();
+ ctx.strokeStyle='rgba(150,195,235,0.05)';
+ ctx.beginPath();ctx.moveTo(x+2,surfY+(baseY-surfY)*0.45);ctx.lineTo(x+cw-2,surfY+(baseY-surfY)*0.45);ctx.stroke();
+ // handles
+ ctx.fillStyle='rgba(150,195,235,0.25)';
+ ctx.fillRect(x+cw*0.5-7,surfY+6,2,5);
+ ctx.fillRect(x+cw*0.5+5,surfY+6,2,5);
+ // counter slab
+ ctx.fillStyle='#1b2a34';ctx.fillRect(x-3,surfY-4,cw+6,5);
+ ctx.fillStyle='rgba(150,195,235,0.12)';ctx.fillRect(x-3,surfY-4,cw+6,1);
+ // glassware on top
+ drawGlassware(x+cw*0.26,surfY-4,'bottle');
+ drawGlassware(x+cw*0.62,surfY-4,'flask');
+ drawGlassware(x+cw*0.85,surfY-4,'bottle');
+}
+
+function drawLabRestSide(xOff,w,layout){
+ const pad=15;
+ const topY=layout.trackTop;
+ const bottomY=layout.bottomY;
+ const cx=xOff+w/2;
+ const cy=(topY+bottomY)/2;
+ const hasDecayed=progress>=(classFrac>0?classFrac:1);
+ const sceneH=bottomY-topY;
+ const horizonY=topY+sceneH*0.60;
+ const floorBot=bottomY+36;
+
+ ctx.save();
+ ctx.beginPath();ctx.rect(xOff,0,w,H);ctx.clip();
+
+ // Back wall
+ const wallG=ctx.createLinearGradient(0,topY,0,horizonY);
+ wallG.addColorStop(0,'#0a141b');
+ wallG.addColorStop(0.6,'#0b1820');
+ wallG.addColorStop(1,'#0d2029');
+ ctx.fillStyle=wallG;
+ ctx.fillRect(xOff,topY,w,horizonY-topY);
+ // wall panel seams
+ ctx.strokeStyle='rgba(59,155,143,0.05)';
+ ctx.lineWidth=1;
+ for(let gx=xOff+50;gx<xOff+w;gx+=64){
+  ctx.beginPath();ctx.moveTo(gx,topY);ctx.lineTo(gx,horizonY);ctx.stroke();
+ }
+
+ // Floor
+ const floorG=ctx.createLinearGradient(0,horizonY,0,floorBot);
+ floorG.addColorStop(0,'#0a141a');
+ floorG.addColorStop(1,'#04080b');
+ ctx.fillStyle=floorG;
+ ctx.fillRect(xOff,horizonY,w,floorBot-horizonY);
+
+ // Horizon glow strip
+ const hg=ctx.createLinearGradient(0,horizonY-22,0,horizonY+22);
+ hg.addColorStop(0,'rgba(59,155,143,0)');
+ hg.addColorStop(0.5,'rgba(59,155,143,0.12)');
+ hg.addColorStop(1,'rgba(59,155,143,0)');
+ ctx.fillStyle=hg;ctx.fillRect(xOff,horizonY-22,w,44);
+
+ // Perspective floor lines converging to vanishing point (cx,horizonY)
+ ctx.strokeStyle='rgba(59,155,143,0.10)';
+ for(let i=-7;i<=7;i++){
+  const fx=cx+i*(w/7);
+  ctx.beginPath();ctx.moveTo(cx,horizonY);ctx.lineTo(fx,floorBot);ctx.stroke();
+ }
+ // Receding horizontal lines, scrolling in real time
+ const scroll=(time*0.18)%1;
+ for(let i=0;i<10;i++){
+  const tt=(i+scroll)/10;
+  const yy=horizonY+(floorBot-horizonY)*tt*tt;
+  ctx.strokeStyle=`rgba(59,155,143,${0.16*(1-tt)})`;
+  ctx.beginPath();ctx.moveTo(xOff,yy);ctx.lineTo(xOff+w,yy);ctx.stroke();
+ }
+
+ // --- Realistic lab setup against the back wall ---
+ // Ceiling strip with recessed light panels
+ ctx.fillStyle='#070f14';
+ ctx.fillRect(xOff,topY,w,12);
+ for(let k=0;k<2;k++){
+  const lx=xOff+w*(0.30+k*0.40);
+  const lg=ctx.createRadialGradient(lx,topY+6,1,lx,topY+6,28);
+  lg.addColorStop(0,'rgba(140,170,210,0.12)');
+  lg.addColorStop(1,'rgba(140,170,210,0)');
+  ctx.fillStyle=lg;ctx.fillRect(lx-28,topY,56,18);
+  ctx.fillStyle='rgba(160,200,240,0.16)';ctx.fillRect(lx-16,topY+4,32,3);
+ }
+ // Overhead conduit pipes
+ for(let p=0;p<3;p++){
+  const py=topY+16+p*7;
+  ctx.fillStyle=p===1?'#16242e':'#11202a';
+  ctx.fillRect(xOff,py,w,5);
+  ctx.fillStyle='rgba(150,195,235,0.06)';
+  ctx.fillRect(xOff,py,w,1);
+ }
+ // Back-wall counters with glassware near the edges (kept clear of center)
+ if(w>280){
+  const ccw=Math.min(w*0.17,90);
+  drawLabCounter(xOff+6,ccw,horizonY);
+  drawLabCounter(xOff+w-6-ccw,ccw,horizonY);
+ }
+ // Wall-mounted safety/info panel
+ if(w>280){
+  const pw=42,ph=28,px=xOff+w*0.72-pw/2,pyy=topY+32;
+  ctx.fillStyle='#0d1820';ctx.fillRect(px,pyy,pw,ph);
+  ctx.strokeStyle='rgba(59,155,143,0.20)';ctx.lineWidth=1;ctx.strokeRect(px+0.5,pyy+0.5,pw-1,ph-1);
+  ctx.strokeStyle='rgba(150,195,235,0.10)';
+  for(let r=1;r<4;r++){ctx.beginPath();ctx.moveTo(px+4,pyy+r*7);ctx.lineTo(px+pw-4,pyy+r*7);ctx.stroke();}
+ }
+
+ // Floating dust motes (real-time drift)
+ for(const d of labDust){
+  const dnx=((d.x+d.drift*time)%1+1)%1;
+  const dny=((d.y-d.sp*time*0.02)%1+1)%1;
+  const px=xOff+dnx*w;
+  const py=topY+dny*sceneH;
+  const tw=0.2+0.35*(Math.sin(time*d.sp*4+d.ph)*0.5+0.5);
+  ctx.fillStyle=`rgba(150,190,230,${tw})`;
+  ctx.beginPath();ctx.arc(px,py,d.s,0,6.28);ctx.fill();
+ }
+
+ // Edge vignette
+ const vg=ctx.createRadialGradient(cx,cy,sceneH*0.18,cx,cy,sceneH*0.95);
+ vg.addColorStop(0,'rgba(0,0,0,0)');
+ vg.addColorStop(1,'rgba(0,0,0,0.45)');
+ ctx.fillStyle=vg;ctx.fillRect(xOff,topY,w,floorBot-topY);
+
+ // Hanging lab lamp fixture + volumetric light cone onto chamber
+ const lampY=topY+30;
+ // cord from ceiling
+ ctx.strokeStyle='rgba(120,150,180,0.45)';ctx.lineWidth=1.5;
+ ctx.beginPath();ctx.moveTo(cx,topY+12);ctx.lineTo(cx,lampY);ctx.stroke();
+ // lamp shade (trapezoid)
+ ctx.fillStyle='#1a2730';
+ ctx.beginPath();
+ ctx.moveTo(cx-10,lampY);ctx.lineTo(cx+10,lampY);
+ ctx.lineTo(cx+22,lampY+16);ctx.lineTo(cx-22,lampY+16);
+ ctx.closePath();ctx.fill();
+ ctx.strokeStyle='rgba(150,195,235,0.22)';ctx.lineWidth=1;ctx.stroke();
+ ctx.fillStyle='rgba(150,195,235,0.14)';
+ ctx.fillRect(cx-10,lampY,20,2);
+ // bulb glow
+ const bulb=ctx.createRadialGradient(cx,lampY+16,1,cx,lampY+16,18);
+ bulb.addColorStop(0,'rgba(170,205,255,0.55)');
+ bulb.addColorStop(1,'rgba(170,205,255,0)');
+ ctx.fillStyle=bulb;ctx.beginPath();ctx.arc(cx,lampY+16,18,0,6.28);ctx.fill();
+ // volumetric cone
+ const cone=ctx.createLinearGradient(0,lampY+16,0,cy+84);
+ cone.addColorStop(0,'rgba(120,170,255,0.10)');
+ cone.addColorStop(1,'rgba(120,170,255,0)');
+ ctx.beginPath();
+ ctx.moveTo(cx-18,lampY+16);
+ ctx.lineTo(cx+18,lampY+16);
+ ctx.lineTo(cx+78,cy+88);
+ ctx.lineTo(cx-78,cy+88);
+ ctx.closePath();
+ ctx.fillStyle=cone;ctx.fill();
+
+ // Containment chamber (glass vacuum tube)
+ const chW=70, chTopY=cy-80, chBotY=cy+64, chR=14;
+ // Lab table the chamber rests on
+ const tableHalf=Math.min(w*0.42,150);
+ const backHalf=tableHalf*0.80;
+ const topBackY=chBotY+12;
+ const topFrontY=topBackY+16;
+ const apronH=12;
+ const legBottom=Math.min(bottomY+26,floorBot-4);
+ const legW=10;
+ // floor shadow under table
+ const tsh=ctx.createRadialGradient(cx,legBottom+2,4,cx,legBottom+2,tableHalf*1.2);
+ tsh.addColorStop(0,'rgba(0,0,0,0.5)');
+ tsh.addColorStop(1,'rgba(0,0,0,0)');
+ ctx.fillStyle=tsh;ctx.beginPath();ctx.ellipse(cx,legBottom+2,tableHalf*1.1,14,0,0,6.28);ctx.fill();
+ // back legs (behind top)
+ ctx.fillStyle='#1a242d';
+ ctx.fillRect(cx-backHalf*0.86-legW/2,topBackY,legW,legBottom-topBackY);
+ ctx.fillRect(cx+backHalf*0.86-legW/2,topBackY,legW,legBottom-topBackY);
+ // front legs
+ ctx.fillStyle='#202d37';
+ ctx.fillRect(cx-tableHalf*0.9-legW/2,topFrontY,legW,legBottom-topFrontY);
+ ctx.fillRect(cx+tableHalf*0.9-legW/2,topFrontY,legW,legBottom-topFrontY);
+ ctx.fillStyle='rgba(150,195,235,0.10)';
+ ctx.fillRect(cx-tableHalf*0.9-legW/2,topFrontY,2,legBottom-topFrontY);
+ ctx.fillRect(cx+tableHalf*0.9-legW/2,topFrontY,2,legBottom-topFrontY);
+ // tabletop surface (perspective trapezoid)
+ const topG=ctx.createLinearGradient(0,topBackY,0,topFrontY);
+ topG.addColorStop(0,'#2b3a46');
+ topG.addColorStop(1,'#22303b');
+ ctx.beginPath();
+ ctx.moveTo(cx-backHalf,topBackY);
+ ctx.lineTo(cx+backHalf,topBackY);
+ ctx.lineTo(cx+tableHalf,topFrontY);
+ ctx.lineTo(cx-tableHalf,topFrontY);
+ ctx.closePath();
+ ctx.fillStyle=topG;ctx.fill();
+ // back-edge sheen
+ ctx.fillStyle='rgba(150,195,235,0.12)';
+ ctx.beginPath();
+ ctx.moveTo(cx-backHalf,topBackY);
+ ctx.lineTo(cx+backHalf,topBackY);
+ ctx.lineTo(cx+backHalf*0.98,topBackY+2);
+ ctx.lineTo(cx-backHalf*0.98,topBackY+2);
+ ctx.closePath();ctx.fill();
+ // front apron (thickness)
+ const aprG=ctx.createLinearGradient(0,topFrontY,0,topFrontY+apronH);
+ aprG.addColorStop(0,'#1c2832');
+ aprG.addColorStop(1,'#141d25');
+ ctx.fillStyle=aprG;
+ ctx.beginPath();
+ ctx.moveTo(cx-tableHalf,topFrontY);
+ ctx.lineTo(cx+tableHalf,topFrontY);
+ ctx.lineTo(cx+tableHalf,topFrontY+apronH);
+ ctx.lineTo(cx-tableHalf,topFrontY+apronH);
+ ctx.closePath();ctx.fill();
+ ctx.fillStyle='rgba(59,155,143,0.25)';
+ ctx.fillRect(cx-tableHalf,topFrontY+apronH-2,tableHalf*2,2);
+ // contact shadow under chamber on tabletop
+ ctx.fillStyle='rgba(0,0,0,0.35)';
+ ctx.beginPath();ctx.ellipse(cx,topBackY+3,chW*0.6,5,0,0,6.28);ctx.fill();
+ // metal end caps
+ ctx.fillStyle='#2a3a46';
+ labRoundRectPath(cx-chW/2-4,chTopY-12,chW+8,15,4);ctx.fill();
+ labRoundRectPath(cx-chW/2-4,chBotY-3,chW+8,15,4);ctx.fill();
+ ctx.fillStyle='rgba(150,195,235,0.18)';
+ labRoundRectPath(cx-chW/2-4,chTopY-12,chW+8,3,2);ctx.fill();
+ // glass body
+ const glass=ctx.createLinearGradient(cx-chW/2,0,cx+chW/2,0);
+ glass.addColorStop(0,'rgba(120,160,200,0.04)');
+ glass.addColorStop(0.18,'rgba(150,195,235,0.18)');
+ glass.addColorStop(0.5,'rgba(120,160,200,0.06)');
+ glass.addColorStop(0.82,'rgba(150,195,235,0.14)');
+ glass.addColorStop(1,'rgba(120,160,200,0.04)');
+ labRoundRectPath(cx-chW/2,chTopY,chW,chBotY-chTopY,chR);
+ ctx.fillStyle=glass;ctx.fill();
+ ctx.strokeStyle='rgba(150,195,235,0.3)';ctx.lineWidth=1.2;ctx.stroke();
+ // glass highlight streaks
+ ctx.fillStyle='rgba(255,255,255,0.07)';
+ ctx.fillRect(cx-chW/2+9,chTopY+10,5,chBotY-chTopY-20);
+ ctx.fillStyle='rgba(255,255,255,0.04)';
+ ctx.fillRect(cx+chW/2-12,chTopY+14,3,chBotY-chTopY-28);
+
+ const pulse=0.55+0.45*Math.sin(time*4);
+ if(!hasDecayed){
+  for(let ri=1;ri<=3;ri++){
+   const r=18+ri*14+pulse*4;
+   ctx.strokeStyle=`rgba(96,165,250,${0.12/ri})`;
+   ctx.lineWidth=1.5;
+   ctx.beginPath();ctx.arc(cx,cy,r,0,6.28);ctx.stroke();
+  }
+  const gl=ctx.createRadialGradient(cx,cy,0,cx,cy,32);
+  gl.addColorStop(0,`rgba(96,165,250,${0.55+pulse*0.2})`);
+  gl.addColorStop(0.45,'rgba(96,165,250,0.12)');
+  gl.addColorStop(1,'rgba(96,165,250,0)');
+  ctx.fillStyle=gl;ctx.beginPath();ctx.arc(cx,cy,32,0,6.28);ctx.fill();
+  ctx.fillStyle='#93c5fd';ctx.beginPath();ctx.arc(cx,cy,7,0,6.28);ctx.fill();
+  ctx.fillStyle='#dbeafe';ctx.beginPath();ctx.arc(cx,cy,3.5,0,6.28);ctx.fill();
+  ctx.fillStyle='#93c5fd';ctx.font='bold 16px serif';ctx.textAlign='left';
+  ctx.fillText('μ⁻',cx+16,cy+5);
+  ctx.fillStyle='rgba(148,163,184,0.85)';ctx.font='600 11px system-ui';ctx.textAlign='center';
+  ctx.fillText('AT REST',cx,cy-44);
+ } else {
+  if(!labDecayed){
+   labDecayed=true;
+   for(let i=0;i<40;i++){
+    const a=Math.random()*6.28,sp=0.8+Math.random()*3;
+    labDecayParts.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,d:0.008+Math.random()*0.015,c:Math.random()>0.5?'96,165,250':'251,191,36'});
+   }
+  }
+  ctx.strokeStyle='#f87171';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(cx-10,cy-10);ctx.lineTo(cx+10,cy+10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx+10,cy-10);ctx.lineTo(cx-10,cy+10);ctx.stroke();
+  ctx.fillStyle='#f87171';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+  ctx.fillText('DECAYED',cx,cy+36);
+  ctx.font='10px system-ui';ctx.fillStyle='#fb923c';
+  ctx.fillText('after τ₀ = 2.2 μs',cx,cy+52);
+  for(const p of labDecayParts){
+   ctx.fillStyle=`rgba(${p.c},${p.life})`;
+   ctx.beginPath();ctx.arc(p.x,p.y,2.5*p.life,0,6.28);ctx.fill();
+  }
+ }
+
+ const boxW=Math.min(200,w-pad*2);
+ const boxH=52;
+ const boxX=cx-boxW/2;
+ const boxY=Math.round((topFrontY+apronH+legBottom)/2-boxH/2);
+ ctx.fillStyle='rgba(6,14,17,0.88)';
+ ctx.strokeStyle='rgba(96,165,250,0.35)';
+ ctx.lineWidth=1;
+ ctx.beginPath();
+ const br=6;
+ ctx.moveTo(boxX+br,boxY);
+ ctx.lineTo(boxX+boxW-br,boxY);
+ ctx.quadraticCurveTo(boxX+boxW,boxY,boxX+boxW,boxY+br);
+ ctx.lineTo(boxX+boxW,boxY+boxH-br);
+ ctx.quadraticCurveTo(boxX+boxW,boxY+boxH,boxX+boxW-br,boxY+boxH);
+ ctx.lineTo(boxX+br,boxY+boxH);
+ ctx.quadraticCurveTo(boxX,boxY+boxH,boxX,boxY+boxH-br);
+ ctx.lineTo(boxX,boxY+br);
+ ctx.quadraticCurveTo(boxX,boxY,boxX+br,boxY);
+ ctx.closePath();
+ ctx.fill();ctx.stroke();
+ ctx.fillStyle='#60a5fa';ctx.font='600 11px system-ui';ctx.textAlign='center';
+ ctx.fillText('Proper lifetime (rest frame)',cx,boxY+18);
+ ctx.font="600 13px 'JetBrainsMonoNums', monospace";
+ ctx.fillStyle='#e2e8f0';
+ ctx.fillText('τ₀ = 2.2 μs',cx,boxY+38);
+
+ ctx.restore();
+}
+
 function drawPanelStats(xOff,w,isRel,layout){
  const y=layout.statsY,h=layout.statsH,pad=10;
  const barW=w-pad*2,barY=y+30,barH=6;
@@ -1426,7 +1838,7 @@ function drawPanelStats(xOff,w,isRel,layout){
  const labelW=ctx.measureText(label).width;
  ctx.font=STATS_FONT_DIST;
  ctx.fillStyle=isRel?(liveStats.relOk?'#6ee7b7':'#fcd34d'):'#e2e8f0';
- let distText=isRel?liveStats.relDist:liveStats.classDist;
+ let distText=liveStats.relDist;
  const distMaxW=Math.max(48,w-pad*2-labelW-12);
  while(ctx.measureText(distText).width>distMaxW&&distText.length>8){
   distText=distText.slice(0,-4)+'…';
@@ -1436,7 +1848,7 @@ function drawPanelStats(xOff,w,isRel,layout){
 
  ctx.fillStyle='rgba(19,49,49,0.35)';
  ctx.fillRect(xOff+pad,barY,barW,barH);
- const lifeRem=isRel?liveStats.relLifeRem:liveStats.classLifeRem;
+ const lifeRem=liveStats.relLifeRem;
  let fillCol=isRel?'rgba(59,155,143,0.92)':'rgba(96,165,250,0.92)';
  if(lifeRem<=0.1) fillCol='rgba(248,113,113,0.92)';
  else if(lifeRem<=0.3) fillCol='rgba(251,191,36,0.92)';
@@ -1446,10 +1858,10 @@ function drawPanelStats(xOff,w,isRel,layout){
  ctx.font=STATS_FONT_LIFE;
  ctx.fillStyle='#e2e8f0';
  ctx.textAlign='left';
- ctx.fillText(isRel?liveStats.relLifePct:liveStats.classLifePct,xOff+pad,y+50);
+ ctx.fillText(liveStats.relLifePct,xOff+pad,y+50);
  ctx.fillStyle='#3b9b8f';
  ctx.textAlign='right';
- ctx.fillText(isRel?liveStats.relTime:liveStats.classTime,xOff+w-pad,y+50);
+ ctx.fillText(liveStats.relTime,xOff+w-pad,y+50);
 }
 
 function drawSide(xOff,w,isRel,layout){
@@ -1781,12 +2193,14 @@ function animate(t){
     }
     shootingStars=shootingStars.filter(ss=>ss.life>0);
 
+    for(const p of labDecayParts){p.x+=p.vx;p.y+=p.vy;p.vy+=0.02;p.life-=p.d;}
+    labDecayParts=labDecayParts.filter(p=>p.life>0);
     for(const p of decayParts){p.x+=p.vx;p.y+=p.vy;p.vy+=0.03;p.life-=p.d;}
     decayParts=decayParts.filter(p=>p.life>0);
     for(const p of successParts){p.x+=p.vx;p.y+=p.vy;p.vy+=0.04;p.life-=p.d;}
     successParts=successParts.filter(p=>p.life>0);
 
-    const allDone=(progress>classFrac+0.3)&&(progress>(relFrac>=1?1.3:relFrac+0.3));
+    const allDone=(progress>1.3)&&(progress>(relFrac>=1?1.3:relFrac+0.3));
     if(allDone){pauseT+=dt;if(pauseT>3.5)restartSimulation();}
   }
 
@@ -1801,12 +2215,12 @@ function animate(t){
   ctx.fillStyle='#060E11';
   ctx.fillRect(0,0,W,layout.trackTop);
 
-  drawSide(0,halfW,false,layout);
+  drawLabRestSide(0,halfW,layout);
   drawSide(halfW,halfW,true,layout);
 
-  drawPanelTitle('Classical',halfW/2,layout.titleY,'#f87171');
-  drawPanelTitle('Relativistic',halfW+halfW/2,layout.titleY,'#34d399');
-  drawPanelStats(0,halfW,false,layout);
+  drawPanelTitle('Lab Frame',halfW/2,layout.titleY,'#60a5fa');
+  drawPanelTitle('Cosmic Muon',halfW+halfW/2,layout.titleY,'#34d399');
+  drawLabPanelStats(0,halfW,layout);
   drawPanelStats(halfW,halfW,true,layout);
 
   const dg2=ctx.createLinearGradient(0,0,0,H);

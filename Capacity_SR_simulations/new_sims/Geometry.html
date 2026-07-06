@@ -880,9 +880,14 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
   top: 16px;
   z-index: 10;
   background: transparent;
-  border: none;
-  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 6px;
+  padding: 10px 12px;
   pointer-events: none;
+}
+body.light-theme .sim-legend,
+html[data-theme="light"] .sim-legend {
+  border-color: rgba(51, 65, 85, 0.25);
 }
 .sim-legend-title {
   font-size: 10px;
@@ -1178,13 +1183,13 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
       <div class="info-tooltip">
         <h4>About This Simulation</h4>
         <p>Two reference frames map the same plot of land — frame <strong>S</strong> aligns its axes to <strong>X</strong> and <strong>Y</strong>; frame <strong>S′</strong> is rotated by an angle θ with axes <strong>X′</strong> and <strong>Y′</strong>. <strong>Drag the trees</strong> and watch coordinate readings in S and S′ <span class="highlight">disagree wildly</span>.</p>
-        <p style="margin-top:8px;">Yet the <span class="highlight">distance between any two trees</span> stays perfectly identical in both frames.</p>
-        <div class="formula">D² = ΔX² + ΔY²  (same in both frames)</div>
+        <p style="margin-top:8px;">Yet the <span class="highlight">distance D between any two trees</span> stays perfectly identical in both frames.</p>
+        <div class="formula">D = √(ΔX² + ΔY²)  (same in both frames)</div>
         <p>Observers in different frames disagree on coordinates, but agree on invariant distances. <span class="highlight">Coordinates are labels — geometry is real.</span></p>
         <div class="info-divider"></div>
         <h4 class="bridge-title">★ The Bridge to Relativity</h4>
-        <p>Here, observers disagree on (X, Y) but agree on <strong>Euclidean distance</strong>:</p>
-        <div class="formula">D² = ΔX² + ΔY²</div>
+        <p>Here, observers disagree on (X, Y) but agree on <strong>Euclidean distance D</strong>:</p>
+        <div class="formula">D = √(ΔX² + ΔY²)</div>
         <p>In spacetime, observers in different inertial frames disagree on <strong>time and space</strong> coordinates, but agree on the <strong>invariant interval</strong>:</p>
         <div class="formula">S² = −c²Δt² + ΔX² + ΔY² + ΔZ²</div>
         <p>Coordinates are merely labels we choose. <strong style="color:#6ee7b7">Geometry is real.</strong></p>
@@ -1247,11 +1252,8 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
         <h3>S frame</h3>
         <div class="ctrl-box surveyor-section surveyor-a">
           <div class="delta-section">
-            <div class="lbl">D²₁₂ = ΔX² + ΔY²</div>
-            <div class="coord-row ds2-row" id="ds2RowA">
-              <span class="tree-label">D²₁₂</span>
-              <span class="coord-val ds2-val" id="ds2A">0.00</span>
-            </div>
+            <div class="lbl">D = √(ΔX² + ΔY²)</div>
+            <div id="ds2-rows-a"></div>
           </div>
           <div class="frame-display-toggles">
             <label class="frame-check" for="showGridS">
@@ -1271,11 +1273,8 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
         <h3>S′ frame</h3>
         <div class="ctrl-box surveyor-section surveyor-b">
           <div class="delta-section">
-            <div class="lbl">D²₁₂ = ΔX′² + ΔY′²</div>
-            <div class="coord-row ds2-row" id="ds2RowB">
-              <span class="tree-label">D²₁₂</span>
-              <span class="coord-val ds2-val" id="ds2B">0.00</span>
-            </div>
+            <div class="lbl">D = √(ΔX′² + ΔY′²)</div>
+            <div id="ds2-rows-b"></div>
           </div>
           <div class="frame-display-toggles">
             <label class="frame-check" for="showGridSprime">
@@ -1296,16 +1295,16 @@ html[data-theme="light"] .stat-value { color: #0f172a; }
         <div class="ctrl-box invariants-section">
           <div class="inv-grid">
             <div class="inv-item">
-              <div class="inv-label">Side D₁₂</div>
-              <div class="inv-value" id="d12">0.00 m</div>
+              <div class="inv-label">Side D<sub>12</sub></div>
+              <div class="inv-value" id="d12">0.00</div>
             </div>
             <div class="inv-item inv-triangle-only" id="inv-d23-wrap">
-              <div class="inv-label">Side D₂₃</div>
-              <div class="inv-value" id="d23">0.00 m</div>
+              <div class="inv-label">Side D<sub>23</sub></div>
+              <div class="inv-value" id="d23">0.00</div>
             </div>
             <div class="inv-item inv-triangle-only" id="inv-d31-wrap">
-              <div class="inv-label">Side D₃₁</div>
-              <div class="inv-value" id="d31">0.00 m</div>
+              <div class="inv-label">Side D<sub>13</sub></div>
+              <div class="inv-value" id="d31">0.00</div>
             </div>
           </div>
         </div>
@@ -1335,8 +1334,9 @@ let scale = 32;
 const GRID_MAJOR_EVERY = 5;
 
 function updateScale() {
-  // ~22 world units across the shorter axis (original default zoom)
-  scale = Math.min(W, H) / 22;
+  // ~16 world units across the shorter axis (±8 labels), inset so tick labels stay on canvas
+  const axisLabelPad = 18;
+  scale = (Math.min(W, H) - 2 * axisLabelPad) / 16;
 }
 
 /** Frame coordinates (X,Y or X′,Y′) → world (S) coordinates. */
@@ -1352,7 +1352,7 @@ function frameCoordsToWorld(frameAngle, fx, fy) {
 function visibleGridExtent() {
   return Math.min(
     Math.ceil(Math.max(W, H) / (2 * scale)) + 1,
-    14
+    8
   );
 }
 
@@ -1361,6 +1361,12 @@ function worldToScreen(x, y) {
 }
 function screenToWorld(sx, sy) {
   return { x: (sx - W / 2) / scale, y: (H / 2 - sy) / scale };
+}
+
+/** Frame coordinates (X,Y or X′,Y′) → screen pixels (same pipeline as trees and tick labels). */
+function frameToScreen(frameAngle, fx, fy) {
+  const w = frameCoordsToWorld(frameAngle, fx, fy);
+  return worldToScreen(w.x, w.y);
 }
 
 const MIN_TREES = 2;
@@ -1552,62 +1558,78 @@ function rotate(p, t) {
 }
 
 function drawFrameGridMesh(angle, color, alpha) {
-  ctx.save();
-  ctx.translate(W / 2, H / 2);
-  ctx.rotate(-angle);
-
   const range = Math.ceil(Math.max(W, H) / scale) + 2;
+  ctx.save();
   ctx.strokeStyle = color;
 
   for (let i = -range; i <= range; i++) {
-    const major = i % GRID_MAJOR_EVERY === 0;
-    ctx.globalAlpha = alpha * (major ? 0.58 : 0.32);
-    ctx.lineWidth = major ? 1.5 : 1.1;
+    if (i % GRID_MAJOR_EVERY !== 0) continue;
+    ctx.globalAlpha = alpha * 0.58;
+    ctx.lineWidth = 1.5;
+    const vx1 = frameToScreen(angle, i, -range);
+    const vx2 = frameToScreen(angle, i, range);
     ctx.beginPath();
-    ctx.moveTo(i * scale, -range * scale);
-    ctx.lineTo(i * scale, range * scale);
+    ctx.moveTo(vx1.x, vx1.y);
+    ctx.lineTo(vx2.x, vx2.y);
     ctx.stroke();
+    const hy1 = frameToScreen(angle, -range, i);
+    const hy2 = frameToScreen(angle, range, i);
     ctx.beginPath();
-    ctx.moveTo(-range * scale, i * scale);
-    ctx.lineTo(range * scale, i * scale);
+    ctx.moveTo(hy1.x, hy1.y);
+    ctx.lineTo(hy2.x, hy2.y);
     ctx.stroke();
   }
 
   ctx.restore();
 }
 
-function drawFrameAxes(angle, color, alpha) {
-  ctx.save();
-  ctx.translate(W / 2, H / 2);
-  ctx.rotate(-angle);
+function drawAxisArrowhead(tipX, tipY, dirX, dirY) {
+  const len = Math.hypot(dirX, dirY) || 1;
+  const ux = dirX / len;
+  const uy = dirY / len;
+  const px = -uy;
+  const py = ux;
+  const back = 10;
+  const half = 5;
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(tipX - ux * back + px * half, tipY - uy * back + py * half);
+  ctx.lineTo(tipX - ux * back - px * half, tipY - uy * back - py * half);
+  ctx.closePath();
+  ctx.fill();
+}
 
+function drawFrameAxes(angle, color, alpha) {
   const range = Math.ceil(Math.max(W, H) / scale) + 2;
+  const o = worldToScreen(0, 0);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const xDir = { x: cos * scale, y: -sin * scale };
+  const yDir = { x: -sin * scale, y: -cos * scale };
+  const axisLen = 10;
+
+  ctx.save();
   ctx.globalAlpha = alpha;
   ctx.lineWidth = 2.5;
   ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+
+  const xNeg = frameToScreen(angle, -range, 0);
+  const xPos = frameToScreen(angle, range, 0);
   ctx.beginPath();
-  ctx.moveTo(-range * scale, 0);
-  ctx.lineTo(range * scale, 0);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(0, -range * scale);
-  ctx.lineTo(0, range * scale);
+  ctx.moveTo(xNeg.x, xNeg.y);
+  ctx.lineTo(xPos.x, xPos.y);
   ctx.stroke();
 
-  const axisLen = 10 * scale;
-  ctx.fillStyle = color;
+  const yNeg = frameToScreen(angle, 0, -range);
+  const yPos = frameToScreen(angle, 0, range);
   ctx.beginPath();
-  ctx.moveTo(axisLen, 0);
-  ctx.lineTo(axisLen - 10, -5);
-  ctx.lineTo(axisLen - 10, 5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(0, -axisLen);
-  ctx.lineTo(-5, -axisLen + 10);
-  ctx.lineTo(5, -axisLen + 10);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(yNeg.x, yNeg.y);
+  ctx.lineTo(yPos.x, yPos.y);
+  ctx.stroke();
+
+  drawAxisArrowhead(o.x + xDir.x * axisLen, o.y + xDir.y * axisLen, xDir.x, xDir.y);
+  drawAxisArrowhead(o.x + yDir.x * axisLen, o.y + yDir.y * axisLen, yDir.x, yDir.y);
 
   ctx.restore();
 }
@@ -1666,12 +1688,13 @@ function drawFrameAxisNumbers(frameAngle, color, alpha, labelSide) {
     const p = worldToScreen(w.x, w.y);
     const nx = yPerpU.x * yNumOff;
     const ny = yPerpU.y * yNumOff;
-    ctx.textAlign = j > 0 ? 'right' : 'left';
+    const yLabelRight = labelSide.yNum > 0;
+    ctx.textAlign = yLabelRight ? 'right' : 'left';
     ctx.textBaseline = 'middle';
     const txt = String(j);
     const tw = ctx.measureText(txt).width + 4;
     ctx.fillStyle = 'rgba(6, 14, 17, 0.75)';
-    ctx.fillRect(p.x + nx - (j > 0 ? tw : 0), p.y + ny - 6, tw, 12);
+    ctx.fillRect(p.x + nx - (yLabelRight ? tw : 0), p.y + ny - 6, tw, 12);
     ctx.fillStyle = color;
     ctx.fillText(txt, p.x + nx, p.y + ny);
 
@@ -2125,18 +2148,21 @@ function drawTreeCoordLabels() {
 }
 
 function drawEdgeLabel(a, b, wa, wb, treeI, treeJ) {
-  const d = Math.hypot(wb.x - wa.x, wb.y - wa.y);
+  const dxw = wb.x - wa.x;
+  const dyw = wb.y - wa.y;
+  const dist = Math.hypot(dxw, dyw);
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
-  const dx = b.x - a.x, dy = b.y - a.y;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
   const len = Math.hypot(dx, dy);
   const nx = -dy / (len || 1) * 14;
   const ny = dx / (len || 1) * 14;
   const lx = mx + nx;
   const ly = my + ny;
 
-  const pairStr = String(treeI + 1) + String(treeJ + 1);
-  const suffix = ' = ' + d.toFixed(2) + ' m';
+  const pairStr = pairSubscript(treeI, treeJ);
+  const suffix = ' = ' + dist.toFixed(2);
   const mainFont = '600 11px -apple-system, sans-serif';
   const subFont = '600 10px -apple-system, sans-serif';
   const subOffsetY = 3;
@@ -2218,44 +2244,77 @@ function drawInvariantGeometry() {
   ctx.restore();
 }
 
+function getTreePairIndices() {
+  if (trees.length < 3) return [[0, 1]];
+  return [[0, 1], [1, 2], [0, 2]];
+}
+
+function pairSubscript(i, j) {
+  const a = Math.min(i, j) + 1;
+  const b = Math.max(i, j) + 1;
+  return String(a) + String(b);
+}
+
+function separationInFrame(i, j, useSprime) {
+  if (!useSprime) {
+    const dx = trees[j].x - trees[i].x;
+    const dy = trees[j].y - trees[i].y;
+    return Math.hypot(dx, dy);
+  }
+  const pi = rotate(trees[i], theta);
+  const pj = rotate(trees[j], theta);
+  const dx = pj.x - pi.x;
+  const dy = pj.y - pi.y;
+  return Math.hypot(dx, dy);
+}
+
+function updateDs2Rows(containerId, useSprime, flashClass) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (const [i, j] of getTreePairIndices()) {
+    const dist = separationInFrame(i, j, useSprime);
+    const row = document.createElement('div');
+    row.className = 'coord-row ds2-row' + flashClass;
+    const label = document.createElement('span');
+    label.className = 'tree-label';
+    label.innerHTML = 'D<sub>' + pairSubscript(i, j) + '</sub>';
+    const value = document.createElement('span');
+    value.className = 'coord-val ds2-val';
+    value.textContent = '= ' + dist.toFixed(2);
+    row.appendChild(label);
+    row.appendChild(value);
+    container.appendChild(row);
+  }
+}
+
 function computeGeometry() {
   const A = trees[0], B = trees[1];
-  const d12 = Math.hypot(B.x - A.x, B.y - A.y);
+  const dx12 = B.x - A.x, dy12 = B.y - A.y;
+  const d12 = Math.hypot(dx12, dy12);
   if (trees.length < 3) {
     return { d12, d23: null, d31: null };
   }
   const C = trees[2];
-  const d23 = Math.hypot(C.x - B.x, C.y - B.y);
-  const d31 = Math.hypot(A.x - C.x, A.y - C.y);
+  const dx23 = C.x - B.x, dy23 = C.y - B.y;
+  const dx31 = A.x - C.x, dy31 = A.y - C.y;
+  const d23 = Math.hypot(dx23, dy23);
+  const d31 = Math.hypot(dx31, dy31);
   return { d12, d23, d31 };
 }
 
 function updatePanels() {
   const flashClass = flashTime > 0 ? ' flash' : '';
 
-  const dxA = trees[1].x - trees[0].x;
-  const dyA = trees[1].y - trees[0].y;
-  const p1B = rotate(trees[0], theta);
-  const p2B = rotate(trees[1], theta);
-  const dxB = p2B.x - p1B.x;
-  const dyB = p2B.y - p1B.y;
-
-  const dsA2 = dxA * dxA + dyA * dyA;
-  const dsB2 = dxB * dxB + dyB * dyB;
-  const ds2RowA = document.getElementById('ds2RowA');
-  const ds2RowB = document.getElementById('ds2RowB');
-  document.getElementById('ds2A').textContent = dsA2.toFixed(2);
-  document.getElementById('ds2B').textContent = dsB2.toFixed(2);
-  ds2RowA.className = 'coord-row ds2-row' + flashClass;
-  ds2RowB.className = 'coord-row ds2-row' + flashClass;
+  updateDs2Rows('ds2-rows-a', false, flashClass);
+  updateDs2Rows('ds2-rows-b', true, flashClass);
 
   const g = computeGeometry();
   const hasTriangle = trees.length >= 3;
   setTriangleInvariantVisibility(hasTriangle);
-  document.getElementById('d12').textContent = g.d12.toFixed(2) + ' m';
+  document.getElementById('d12').textContent = g.d12.toFixed(2);
   if (hasTriangle) {
-    document.getElementById('d23').textContent = g.d23.toFixed(2) + ' m';
-    document.getElementById('d31').textContent = g.d31.toFixed(2) + ' m';
+    document.getElementById('d23').textContent = g.d23.toFixed(2);
+    document.getElementById('d31').textContent = g.d31.toFixed(2);
   }
   updateTreeCountButtons();
 }
@@ -2362,18 +2421,40 @@ const tick = function(timestamp) {
       ctx.stroke();
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 12px -apple-system, sans-serif';
-      const midA = -arcTheta / 2;
-      ctx.fillText('θ', Math.cos(midA) * 50, Math.sin(midA) * 50);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const cosT = Math.cos(arcTheta);
+      const sinT = Math.sin(arcTheta);
+      const bx = 1 + cosT;
+      const by = -sinT;
+      const blen = Math.hypot(bx, by) || 1;
+      ctx.fillText('θ', (bx / blen) * 50, (by / blen) * 50);
       ctx.restore();
     }
 
-    // Drag hint on canvas
+    // Drag hint on canvas (bottom-left, boxed)
+    const hintText = 'Drag the trees to explore';
+    const hintFont = '600 12px -apple-system, sans-serif';
+    const hintPadX = 12;
+    const hintPadY = 8;
+    const hintMargin = 16;
     ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '12px -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Drag the trees to explore', W / 2, H - 20);
+    ctx.font = hintFont;
+    const hintW = ctx.measureText(hintText).width + hintPadX * 2;
+    const hintH = hintPadY * 2 + 14;
+    const hintX = hintMargin;
+    const hintY = H - hintMargin - hintH;
+    ctx.fillStyle = 'rgba(6, 14, 17, 0.92)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(hintX, hintY, hintW, hintH, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e2e8f0';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(hintText, hintX + hintPadX, hintY + hintH / 2);
     ctx.restore();
 
     panelUpdateTimer += dt;

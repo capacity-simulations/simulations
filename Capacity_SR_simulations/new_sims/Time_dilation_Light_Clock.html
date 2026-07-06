@@ -1530,6 +1530,68 @@ html[data-theme="light"] #graph {
     drawRail(groundY + 15);
   }
 
+  function computeSceneryArrowLayout(x0, w, groundY, backgroundScroll) {
+    if (beta <= 0.01) return null;
+
+    const trackLeft = x0 + 10;
+    const trackRight = x0 + w - 10;
+    const scrollRate = 0.8;
+    const platformH = 20;
+    const platformY = groundY - platformH;
+    const postTop = platformY - 55;
+    const arrowY = postTop - 20;
+    const aL = 40 * beta + 25;
+    const edgeMargin = 30;
+    const hGap = 18;
+    const loopSpan = Math.max(40, trackRight - trackLeft - edgeMargin * 2);
+    const phase = (backgroundScroll * scrollRate) % loopSpan;
+    const px = trackRight - edgeMargin - aL / 2 - phase - hGap;
+
+    return {
+      px,
+      arrowY,
+      aL,
+      xHead: px - aL / 2,
+      xTail: px + aL / 2
+    };
+  }
+
+  function drawSceneryVelocityArrow(layout, accent, alpha) {
+    if (!layout) return;
+
+    const { px, arrowY, aL, xHead, xTail } = layout;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xTail, arrowY);
+    ctx.lineTo(xHead, arrowY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(xHead, arrowY);
+    ctx.lineTo(xHead + 7, arrowY - 4);
+    ctx.lineTo(xHead + 7, arrowY + 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('v = ' + beta.toFixed(2) + 'c', px, arrowY + 8);
+    ctx.restore();
+  }
+
+  function sceneryArrowOverlapsTrain(layout, trainCenterX, trainW) {
+    if (!layout) return false;
+    const pad = 8;
+    const trainLeft = trainCenterX - trainW / 2 - pad;
+    const trainRight = trainCenterX + trainW / 2 + pad;
+    return layout.xTail > trainLeft && layout.xHead < trainRight;
+  }
+
   function drawLightClockChamber(clockX, clockTopY, clockFloorY, accent) {
     const chamberW = 32;
     const padY = 6;
@@ -1579,15 +1641,16 @@ html[data-theme="light"] #graph {
       ctx.stroke();
     });
 
-    // "Light Clock" label
+    // "Light Clock" label — sit above the chamber, clear of train windows
     ctx.fillStyle = accent + 'aa';
     ctx.font = '600 8px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('LIGHT CLOCK', clockX, chamberY - 3);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('LIGHT CLOCK', clockX, chamberY - 8);
   }
 
   // ========== IMPROVED REALISTIC TRAIN DRAWING ==========
-  function drawTrain(cx, groundY, trainW, trainH, accent, moving, wheelSpeed) {
+  function drawTrain(cx, groundY, trainW, trainH, accent, moving, wheelSpeed, showVelocityArrow) {
     const trainX = cx - trainW / 2;
     const trainY = groundY - trainH;
     const bodyRadius = 6;
@@ -1943,8 +2006,8 @@ html[data-theme="light"] #graph {
       ctx.stroke();
     }
 
-    // ---- Velocity arrow for moving train ----
-    if (moving && beta > 0.01) {
+    // ---- Velocity arrow for moving train (platform frame only) ----
+    if (showVelocityArrow && beta > 0.01) {
       const arrowY = trainY - 22;
       const aL = 40 * beta + 25;
       ctx.strokeStyle = accent;
@@ -2136,10 +2199,24 @@ html[data-theme="light"] #graph {
     });
 
     const trainCenterX = x0 + w / 2 + trainOffset;
+    const arrowLayout = !showDiagonal
+      ? computeSceneryArrowLayout(x0, w, groundY, backgroundScroll)
+      : null;
+    const arrowBehindTrain = sceneryArrowOverlapsTrain(arrowLayout, trainCenterX, trainW);
+
+    // Behind train: draw dimmed arrow with scenery before the train body occludes it
+    if (arrowBehindTrain) {
+      drawSceneryVelocityArrow(arrowLayout, accent, 0.38);
+    }
 
     // Rest-frame observer: train fixed, world streams past; platform frame: train moves over fixed world
     const showTrainMotion = showDiagonal || beta > 0.001;
-    drawTrain(trainCenterX, groundY, trainW, trainH, accent, showTrainMotion, wheelSpeed);
+    drawTrain(trainCenterX, groundY, trainW, trainH, accent, showTrainMotion, wheelSpeed, showDiagonal);
+
+    // In front of scenery: full-contrast arrow when clear of the train
+    if (arrowLayout && !arrowBehindTrain) {
+      drawSceneryVelocityArrow(arrowLayout, accent, 1);
+    }
 
     // Light clock components
     const clockFloorY = groundY - 18;

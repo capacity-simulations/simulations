@@ -1,0 +1,289 @@
+/* ============================================================================
+   WIKI SR SIMULATION — GLOBAL SHELL STYLESHEET
+   ----------------------------------------------------------------------------
+   Drop-in design system for every sim in wiki_SR_sims_v1. It provides:
+     • the design-system theme tokens (dark default + full light-theme override)
+     • the cream 62px GLOBAL top bar (Info · Theme · Maximize · Formal · Speed ·
+       Reset · Play/Pause) — theme-independent
+     • the DYNAMIC sidebar: guided-inquiry stepper (dots + Next/Finish + Skip)
+       that collapses to a restore bar, then the always-present controls + stats
+     • the plot-box hero card, info modal, formal region
+     • design-system components: .ctrl-box sliders, .stat-row, .choice /
+       .predict-eval prediction styling, legend, dividers
+
+   HOW TO USE
+     1. Link this file in <head>:  <link rel="stylesheet" href="simulation-shell.css">
+     2. Follow the HTML skeleton + Shell runtime in SHELL-DESIGN-GUIDE.md.
+     3. Reference implementation: boost-hyperbolic-rotation-shell.html.
+
+   The class/ID names here are the contract — the Shell runtime wires them by
+   name (#shell-play, #inq-next, #aside-inquiry, .inq-step, .shell-panel, …).
+   Do NOT rename them. Fill regions with SIM content; never edit this file per-sim.
+
+   FONTS: the tokens below expect DM Sans SemiBold (UI) + JetBrains Mono SemiBold
+   (numerals). The @font-face rules point at relative .ttf files; for a fully
+   self-contained single HTML file, replace them with base64 data-URI @font-face
+   (see "Fonts" in the guide). A system-font fallback is built into the tokens.
+   ========================================================================== */
+
+/* ---- FONT FACES (swap src for base64 data-URIs to make a sim self-contained) ---- */
+@font-face{
+  font-family:'DMSansUser';
+  src:url('DMSans-SemiBold.ttf') format('truetype');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'JetBrainsMonoNums';
+  src:url('JetBrainsMono-SemiBold.ttf') format('truetype');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+
+/* ============================================================================
+   SHELL CSS — the design system, layout, dynamic sidebar, stepper, components.
+   (Verbatim from the engine shell template; keep in sync with it.)
+   ========================================================================== */
+:root{
+  /* Surfaces (design system) */
+  --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
+  /* Back-compat aliases for the shell's older --panel / --panel-2 / --line names */
+  --panel:var(--surface); --panel-2:#0f1a1d; --line:var(--border);
+  /* Text */
+  --ink:#e2e8f0; --ink-mid:#cbd5e1; --ink-mute:#9ca3af;
+  --text:#e2e8f0; --muted:#cbd5e1; --text-muted:#9ca3af;
+  /* Borders */
+  --border:rgba(19,49,49,.45);
+  /* Accent (teal) */
+  --accent:#3b9b8f; --accent-soft:rgba(59,155,143,.35);
+  /* Control-box (Figma green) */
+  --ctrl-bg:rgba(30,77,58,.15); --ctrl-border:rgba(30,77,58,.50); --track-bg:rgba(30,77,58,.35);
+  /* Top bar — theme-INDEPENDENT cream (stays the same in light/dark) */
+  --topbar-bg:#FAF8F4; --topbar-text:#0f172a; --topbar-border:rgba(19,49,49,.25);
+  --btn-play-bg:#1E4D3A; --btn-play-hover:#2D6E52; --btn-play-text:#fff;
+  --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
+  --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
+  /* SR frame-coding colours (preserved — used by sim canvas drawing) */
+  --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
+  /* Fonts (embedded at final-assembly time — see simFonts.ts) */
+  --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
+  --r:8px;
+}
+/* Light theme — toggled by body.light-theme (shell theme button) or html[data-theme=light] */
+body.light-theme,html[data-theme="light"]{
+  --bg:#e2e8f0; --surface:rgba(248,250,252,.96); --surface-soft:rgba(241,245,249,.96); --panel-bg:#e5e7eb;
+  --panel-2:#e5e7eb;
+  --ink:#0f172a; --ink-mid:#334155; --ink-mute:#6b7280;
+  --text:#0f172a; --muted:#334155; --text-muted:#6b7280;
+  --border:rgba(51,65,85,.18);
+  --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
+  --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
+  --topbar-border:rgba(19,49,49,.20);
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow:hidden;}
+
+#shell{
+  display:grid;
+  grid-template-areas:"header header" "hero aside" "formal formal";
+  grid-template-columns:1fr 320px;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  height:100vh;
+  gap:0;
+}
+#shell.hide-aside{grid-template-areas:"header header" "hero hero" "formal formal";}
+#shell.hide-aside .shell-aside{display:none;}
+#shell.hide-formal .shell-formal{display:none;}
+/* Maximize keeps the cream top bar visible (so the Maximize→Minimize button is
+   always reachable) and collapses only the sidebar + formal; the hero fills the
+   rest. This retires the floating restore button that used to overlap a sim's
+   top-right legend/readout. !important so a stray SIM rule can't re-show them. */
+#shell.shell-max{grid-template-areas:"header" "hero";grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+#shell.shell-max .shell-aside,#shell.shell-max .shell-formal{display:none !important;}
+/* Floating restore is retired — the always-visible header button restores. */
+.shell-exit-max{display:none !important;}
+
+.shell-header{
+  grid-area:header;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;
+  height:62px;min-height:62px;padding:0 18px;background:var(--topbar-bg);
+  border-bottom:1px solid var(--topbar-border);position:relative;z-index:3000;overflow:visible;
+}
+.shell-title{font-size:18px;font-weight:600;color:var(--topbar-text);white-space:nowrap;letter-spacing:.5px;}
+.shell-title span{font-weight:400;color:#475569;font-size:13px;letter-spacing:0;}
+.shell-controls{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto;}
+.shell-group{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.shell-sep{width:1px;height:24px;background:var(--topbar-border);}
+/* Speed label sits on the cream bar — force a dark colour regardless of theme. */
+.shell-header label{color:#475569;font-family:var(--font-sans);}
+
+/* Base button — used on dark surfaces (aside Skip/restore etc.). */
+.shell-btn{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 11px;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;
+}
+.shell-btn:hover{background:rgba(30,77,58,.28);border-color:var(--accent-soft);}
+.shell-btn.primary{background:var(--ctrl-bg);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn.active{background:rgba(59,155,143,.16);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn:disabled{opacity:.4;cursor:not-allowed;}
+.shell-select{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;
+}
+/* Cream top-bar overrides — header buttons read on the light parchment bar. */
+.shell-header .shell-btn{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;padding:0 12px;}
+.shell-header .shell-btn:hover{background:var(--btn-reset-hover);border-color:var(--topbar-border);color:#0f172a;}
+.shell-header .shell-btn.active{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:#fff;}
+.shell-header .shell-select{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;}
+/* Play/Pause — green when playing, white-outline when paused (.paused set by runtime). */
+.shell-header #shell-play{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:var(--btn-play-text);}
+.shell-header #shell-play:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+.shell-header #shell-play.paused{background:var(--btn-paused-bg);border-color:var(--btn-paused-border);color:var(--btn-paused-text);}
+.shell-header #shell-play.paused:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+/* Reset — cream fill, gold border + gold text. */
+.shell-header #shell-reset{background:var(--btn-reset-bg);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-header #shell-reset:hover{background:var(--btn-reset-hover);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-readout{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:var(--accent);
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);padding:4px 9px;border-radius:5px;white-space:nowrap;}
+.shell-readout.danger{color:#fda4af;background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.35);animation:shellPulse 1s infinite;}
+@keyframes shellPulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+.shell-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;
+  background:var(--track-bg);width:150px;cursor:pointer;}
+.shell-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+.shell-range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+
+.shell-hero{grid-area:hero;min-height:0;min-width:0;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:14px;}
+
+.shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:16px;
+  padding:18px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);
+  backdrop-filter:blur(12px);border-left:1px solid rgba(148,163,184,.18);}
+.shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;
+  padding:14px 18px;background:var(--surface-soft);border-top:1px solid var(--border);}
+
+/* Plot-box card for hero canvases (design system). One global maximize only
+   (#shell-maximize) — do NOT add per-plot maximize buttons. */
+.plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
+.plot-box canvas{display:block;width:100%;height:100%;}
+.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
+  letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
+.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
+  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-dot{width:10px;height:10px;border-radius:999px;}
+
+.shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
+.shell-panel-head h3{margin:0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
+.shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
+.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel-body{padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere;font-family:var(--font-sans);}
+
+/* Design-system control + stat components (use INSIDE panels for sliders/stats). */
+.ctrl-box{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:5px;padding:12px;margin-bottom:8px;box-sizing:border-box;}
+.ctrl-box:last-child{margin-bottom:0;}
+.ctrl-box--slider{min-height:73px;display:flex;flex-direction:column;justify-content:center;}
+.ctrl-box-label{display:block;font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.ctrl-box-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.ctrl-box-head .ctrl-box-label{flex:1;min-width:0;}
+.ctrl-slider-row{display:flex;align-items:center;gap:10px;width:100%;}
+.ctrl-slider-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:6px;background:var(--track-bg);border-radius:3px;outline:none;cursor:pointer;}
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
+.ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
+.slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
+.control-range{font-size:.75rem;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
+.ctrl-box .stat-row:first-child{padding-top:0;}
+.ctrl-box .stat-row:last-child{padding-bottom:0;}
+.stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;}
+.stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
+.stat-value.highlight{font-size:18px;}
+.divider{height:1px;background:var(--border);}
+.note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
+.shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
+
+/* Prediction choices + feedback (guided inquiry). Deliberately NOT green-tinted
+   like the control boxes, so the correct=green / wrong=red states stay high
+   contrast in both themes. The correct answer always pops green — even inside a
+   "Not quite" (wrong) feedback box. */
+.choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;line-height:1.5;
+  padding:10px 12px;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.choice:hover{border-color:var(--accent-soft);}
+.choice:disabled{cursor:default;}
+.choice.correct{background:rgba(52,211,153,.18);border:1px solid #34d399;color:#d1fae5;}
+.choice.wrong{background:rgba(244,63,94,.16);border:1px solid #f43f5e;color:#ffe4e6;}
+.choice.dim{opacity:.55;}
+.predict-eval{margin-top:10px;padding:12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);font-size:13px;line-height:1.6;color:var(--text);}
+.predict-eval.correct{background:rgba(52,211,153,.14);border-color:#34d399;}
+.predict-eval.wrong{background:rgba(244,63,94,.12);border-color:#f43f5e;}
+.predict-eval .answer,.predict-eval strong{color:#6ee7b7;font-weight:700;}
+body.light-theme .choice.correct,html[data-theme="light"] .choice.correct{background:rgba(16,185,129,.16);border-color:#059669;color:#065f46;}
+body.light-theme .choice.wrong,html[data-theme="light"] .choice.wrong{background:rgba(244,63,94,.12);border-color:#e11d48;color:#9f1239;}
+body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,html[data-theme="light"] .predict-eval .answer,html[data-theme="light"] .predict-eval strong{color:#047857;}
+
+/* Dynamic sidebar — two zones: guided-inquiry (collapses after answer/skip) + controls/stats. */
+.aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+#aside-controls{flex:1 1 auto;}
+.aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.aside-zone-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.aside-skip{font-size:11px;padding:4px 9px;color:var(--ink-mid);}
+/* Stepper dots — one per inquiry step; shell marks active / done. */
+.inq-dots{display:flex;gap:6px;flex-shrink:0;}
+.inq-dots .inq-dot{flex:1;height:4px;border-radius:2px;background:var(--ctrl-border);transition:background .2s;}
+.inq-dots .inq-dot.active{background:var(--accent);}
+.inq-dots .inq-dot.done{background:var(--accent-soft);}
+/* Inquiry step cards — shell shows ONLY the active one (F3). */
+#inq-cards{flex:1 1 auto;min-height:0;}
+.inq-step{display:none;}
+.inq-step.active{display:block;}
+.inq-nav{display:flex;justify-content:flex-end;flex-shrink:0;}
+#inq-next{min-width:96px;justify-content:center;}
+.aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
+  color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s;}
+.aside-restore:hover{background:rgba(30,77,58,.28);color:var(--text);}
+#shell.inquiry-collapsed #aside-inquiry{display:none;}
+#shell.inquiry-collapsed #aside-inquiry-restore{display:block;}
+#shell.no-inquiry #aside-inquiry,#shell.no-inquiry #aside-inquiry-restore{display:none !important;}
+
+/* Info modal — source-row context + principles-applied table (shell-owned). */
+.shell-modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.74);backdrop-filter:blur(2px);
+  z-index:200;display:none;align-items:center;justify-content:center;padding:24px;}
+.shell-modal-backdrop.open{display:flex;}
+.shell-modal{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;
+  max-width:720px;width:100%;max-height:84vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.55);}
+.shell-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.shell-modal-head h2{margin:0;font-size:14px;font-weight:700;color:var(--text);}
+.shell-modal-body{padding:16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--ink);}
+.shell-modal-body h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--ink-mute);margin:18px 0 8px;font-weight:600;}
+.shell-modal-body h3:first-child{margin-top:0;}
+.shell-modal-body p{margin:0 0 8px;}
+.shell-info-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 4px;}
+.shell-info-table th,.shell-info-table td{text-align:left;vertical-align:top;padding:6px 8px;
+  border-bottom:1px solid var(--line);}
+.shell-info-table thead th{color:var(--ink-mid);font-weight:600;white-space:nowrap;
+  text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;}
+.shell-info-table td.pid{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--accent);white-space:nowrap;}
+.shell-info-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;}
+.shell-info-dl dt{color:var(--ink-mid);font-weight:600;}
+.shell-info-dl dd{margin:0;}
+
+@media(max-width:1000px){
+  body{overflow:auto;}
+  #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;
+    grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
+  .shell-header{flex-wrap:wrap;height:auto;min-height:62px;padding:8px 14px;}
+  .shell-aside{border-left:none;border-top:1px solid var(--border);}
+}
