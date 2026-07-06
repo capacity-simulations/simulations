@@ -1,0 +1,162 @@
+---
+description: Add a "Lecture display mode" button to an SR shell sim — a top-bar button (beside the theme button) that hides the guided inquiry and jumps the sim to its complete, post-Finish state; toggling it back (or the restore bar) re-initiates the guided inquiry from step 1. Also removes the old "Skip ✕" button. Chrome/runtime only — NEVER touch physics, canvas, or controls.
+globs: ["L*.html"]
+alwaysApply: false
+---
+
+# Add LECTURE DISPLAY MODE to an SR shell sim
+
+You are adding one small feature to a single already-converted SR shell sim
+(`*-shell.html`). It already has `#shell` with `shell-header`/`shell-aside`, the
+guided-inquiry stepper (`#aside-inquiry`, `#inq-cards`, `#aside-inquiry-restore`),
+and a `Shell = (function(){…})()` runtime that owns the stepper.
+
+**The feature:** a header button **`🎓 Lecture`**, placed right after the theme
+button, that toggles a *lecture display mode*:
+- **ON:** hide the guided inquiry (collapse it to the existing `▸ Guided inquiry`
+  restore bar) AND advance the sim to its **complete state** — the exact scene a
+  student sees after clicking *Finish* on the last card.
+- **OFF** (second click on the button, OR clicking the restore bar): re-open the
+  guided inquiry and **re-initiate it from step 1**.
+
+It also **removes the old `Skip ✕` button** — the header Lecture button now owns
+the "hide the inquiry" affordance.
+
+## THE #1 RULE — do not touch the science, visuals, or controls
+- **NEVER change physics, numerical methods, draw/render functions, equations,
+  constants, or canvas visuals.** Byte-for-byte identical.
+- **Do not change what controls/readouts exist or what they do.**
+- **Do not edit `simulation-shell.css`.** No CSS changes are needed — the button
+  reuses `.shell-btn` and the existing `.active` state; hiding the inquiry reuses
+  the existing `inquiry-collapsed` machinery.
+- This is a **surgical, anchor-based edit of one HTML file.** Do NOT swap the whole
+  `Shell` runtime block — the runtime has drifted slightly between sims, so only
+  make the four targeted changes below and leave every other runtime line as-is.
+
+## Why this is safe / how it works (read once)
+- The runtime already has `setInquiryCollapsed(on)` (hides the inquiry to the
+  restore bar) and `inqShow(n)` (sets the step, updates dots, **and calls
+  `onStep(n)`** which repaints the scene).
+- Every sim's `onStep(i)` is idempotent — the scene is a pure function of the step
+  index (`onStep(i)` → `setStage(…)`/`applyInquiryStep(i)` → `draw()`). So the
+  "complete, post-Finish scene" is reached by jumping to the **last** step:
+  `inqShow(lastIndex)`.
+- **If (and only if) a specific sim's `onStep` turns out to be *incremental*** (a
+  one-time delta per step rather than state = f(step)) and jumping to the last step
+  does NOT show the full scene, use the fallback in Edit 2's note (replay all
+  steps). Verify by comparing against a real click-through-and-Finish.
+
+---
+
+## Edit 1 — Header: add the Lecture button (after the theme button)
+
+Find the theme button in the header markup:
+
+```html
+<button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+```
+
+Insert **immediately after it** (same `.shell-group`):
+
+```html
+<button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
+```
+
+Do not add it to the transport group on the right; it belongs beside Info/Theme.
+
+## Edit 2 — Runtime: add the `setLectureMode` function
+
+Inside the `Shell = (function(){…})()` IIFE, next to the existing
+`function setInquiryCollapsed(on){…}`, add this function (it uses only in-scope
+helpers `root`, `inqCards`, `inqShow`, `setInquiryCollapsed`):
+
+```js
+function setLectureMode(on){
+  root.classList.toggle('lecture-mode', on);
+  const b = document.getElementById('shell-lecture');
+  if(b) b.classList.toggle('active', on);
+  if(on){
+    const cards = inqCards();
+    if(cards.length) inqShow(cards.length - 1); // jump to last step → onStep(last) paints the complete scene
+    setInquiryCollapsed(true);                  // hide inquiry → restore bar
+  } else {
+    setInquiryCollapsed(false);
+    inqShow(0);                                 // re-initiate guided inquiry from step 1
+  }
+}
+```
+
+> **Incremental-onStep fallback (use ONLY if testing shows the jump is incomplete):**
+> replace the `if(cards.length) inqShow(cards.length - 1);` line with
+> `if(cards.length){ for(let i=0;i<cards.length;i++) onStep(i); inqShow(cards.length-1); }`
+
+## Edit 3 — Runtime: wire the button and re-point the restore bar
+
+In `wire()`, the existing lookups include `const restore = document.getElementById('aside-inquiry-restore');`
+and a theme block. Add the Lecture lookup + listener (place it next to the theme
+wiring):
+
+```js
+const lecture = document.getElementById('shell-lecture');
+if(lecture) lecture.addEventListener('click', ()=> setLectureMode(!root.classList.contains('lecture-mode')));
+```
+
+Change the existing restore-bar handler so it exits lecture mode (keeping the two
+paths consistent — the restore bar re-initiates from step 1 too):
+
+```js
+// BEFORE:
+if(restore) restore.addEventListener('click',()=>setInquiryCollapsed(false));
+// AFTER:
+if(restore) restore.addEventListener('click',()=> setLectureMode(false));
+```
+
+## Edit 4 — Remove the old Skip button (markup + wiring)
+
+Delete the Skip button **markup** from the inquiry zone head (leave the
+`<h3>Guided Inquiry</h3>` and the `.aside-zone-head` wrapper intact):
+
+```html
+<button id="aside-inquiry-skip" class="shell-btn aside-skip" title="Skip the guided inquiry">Skip ✕</button>
+```
+
+Delete its **wiring** in `wire()` — the lookup line and the listener line:
+
+```js
+const skip = document.getElementById('aside-inquiry-skip');   // delete
+...
+if(skip) skip.addEventListener('click',()=>setInquiryCollapsed(true));   // delete
+```
+
+(Leave `setInquiryCollapsed` itself and the restore lookup in place — they are
+still used.)
+
+---
+
+## Notes / edge cases
+- **No-inquiry sims:** if `#inq-cards` has zero `.inq-step` cards (`#shell` gets
+  the `no-inquiry` class), the Lecture button has nothing to do — optionally hide
+  it, but the last-10 sims all have an inquiry, so normally no action needed.
+- **Transport is untouched:** entering/leaving lecture mode must not force
+  Play/Pause. Do not add `setPlaying(...)` calls.
+- **"Restart at step 1" = show card 1 again** via `inqShow(0)`. This does not wipe
+  a student's previous answers by default. If a fully fresh re-run is wanted, that
+  is a separate, opt-in enhancement — do not add it unless asked.
+
+## Self-check before finishing
+- Loads with **no console errors**; canvas renders; every original slider/readout
+  still works; `Next` still gates only on predict cards.
+- Header shows `🎓 Lecture` beside the theme button; the old `Skip ✕` is gone.
+- Click `🎓 Lecture` → inquiry hides to the `▸ Guided inquiry` restore bar AND the
+  scene matches the post-Finish "complete" view (compare against a manual
+  click-through + Finish). Button shows its `.active` state.
+- Click `🎓 Lecture` again → inquiry re-opens at **step 1**.
+- Click the `▸ Guided inquiry` restore bar (while in lecture mode) → also re-opens
+  at step 1 and clears the button's active state.
+- **Physics/draw code is byte-for-byte unchanged; `simulation-shell.css` untouched.**
+
+## Report
+End with a short **LECTURE-MODE REPORT**: (1) the four edits applied with line
+anchors, (2) whether the default last-step jump gave the complete scene or the
+incremental fallback was needed, (3) an explicit line confirming
+"physics/draw code and CSS unchanged."

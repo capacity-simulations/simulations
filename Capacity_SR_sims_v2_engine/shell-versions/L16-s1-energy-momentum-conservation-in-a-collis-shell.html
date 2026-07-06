@@ -375,6 +375,18 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .deltaM-callout .cap{font-size:12px;color:#94a3b8;}
 .e0row{margin:4px 0;font-size:12.5px;color:#cbd5e1;}
 .warn-note{margin-top:6px;color:#fda4af;font-size:12.5px;}
+.budget{margin-top:8px;display:flex;flex-direction:column;gap:5px;}
+.budget-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;}
+.budget-lab{flex:0 0 116px;}
+.budget-track{flex:1;height:8px;border-radius:5px;background:rgba(148,163,184,.18);overflow:hidden;}
+.budget-fill{display:block;height:100%;border-radius:5px;}
+.budget-fill.avail{background:#67e8f9;}
+.budget-fill.need{background:#a3e635;}
+.budget-fill.need.over{background:#f87171;}
+.budget-val{flex:0 0 40px;text-align:right;font-family:ui-monospace,monospace;}
+.budget-q{font-size:12px;margin-top:2px;}
+.budget-q.neg{color:#fda4af;}
+.budget-q.pos{color:#86efac;}
 .inv-big{font-family:ui-monospace,monospace;font-size:13px;color:#a7f3d0;}
 .inv-mid{font-family:ui-monospace,monospace;font-size:12.5px;color:#cbd5e1;margin-top:2px;}
 .cap{font-size:12px;color:#94a3b8;display:block;margin-top:4px;}
@@ -470,6 +482,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="shell-group">
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+      <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -503,7 +516,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="aside-inquiry" class="aside-zone">
       <div class="aside-zone-head">
         <h3>Guided Inquiry</h3>
-        <button id="aside-inquiry-skip" class="shell-btn aside-skip" title="Skip the guided inquiry">Skip ✕</button>
       </div>
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
@@ -612,7 +624,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <div class="ctrl-box ctrl-box--slider ctrl-box--stacked">
               <span class="ctrl-box-label">M<sub>parent</sub> <span class="ctrl-hint">[rest mass of decaying parent]</span></span>
               <div class="ctrl-slider-row">
-                <input type="range" class="shell-range" id="s-mp" min="0.2" max="10" step="0.01" value="3.33">
+                <input type="range" class="shell-range" id="s-mp" min="0.2" max="10" step="0.01" value="3.33" disabled>
                 <span class="shell-readout" id="r-mp">3.33</span>
               </div>
             </div>
@@ -691,6 +703,18 @@ const Shell = (function(){
     root.classList.toggle('inquiry-collapsed', on);
     requestAnimationFrame(refit);
   }
+  function setLectureMode(on){
+    root.classList.toggle('lecture-mode', on);
+    const b = document.getElementById('shell-lecture');
+    if(b) b.classList.toggle('active', on);
+    if(on){
+      inqShow(0);
+      setInquiryCollapsed(true);
+    } else {
+      setInquiryCollapsed(false);
+      inqShow(0);
+    }
+  }
 
   // ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
   // The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
@@ -749,7 +773,6 @@ const Shell = (function(){
     const reset=document.getElementById('shell-reset');
     const spd=document.getElementById('shell-speed');
     const maxBtn=document.getElementById('shell-maximize');
-    const skip=document.getElementById('aside-inquiry-skip');
     const restore=document.getElementById('aside-inquiry-restore');
     const tFormal=document.getElementById('toggle-formal');
 
@@ -776,15 +799,16 @@ const Shell = (function(){
       requestAnimationFrame(refit);
     });
 
+    const lecture = document.getElementById('shell-lecture');
+    if(lecture) lecture.addEventListener('click', ()=> setLectureMode(!root.classList.contains('lecture-mode')));
+
     document.addEventListener('keydown',e=>{
       if(e.key!=='Escape') return;
       if(infoModal && infoModal.classList.contains('open')) setInfo(false);
       else if(root.classList.contains('shell-max')) setMaximized(false);
     });
 
-    // Skip ✕ collapses the inquiry zone; the restore bar reopens it.
-    if(skip) skip.addEventListener('click',()=>setInquiryCollapsed(true));
-    if(restore) restore.addEventListener('click',()=>setInquiryCollapsed(false));
+    if(restore) restore.addEventListener('click', ()=> setLectureMode(false));
     // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
     const inqNextBtn=document.getElementById('inq-next');
     if(inqNextBtn) inqNextBtn.addEventListener('click',inqNext);
@@ -886,9 +910,8 @@ function computePhysics(){
       const B={ name:'B', m:mB, color:COL.p2, E:EB, p:-pmag, v:-pmag/EB };
       return { mode, before:[parent], after:[A,B], valid:true };
     } else {
-      const A={ name:'A', m:mA, color:COL.p1, E:mA, p:0, v:0 };
-      const B={ name:'B', m:mB, color:COL.p2, E:mB, p:0, v:0 };
-      return { mode, before:[parent], after:[A,B], valid:false };
+      return { mode, before:[parent], after:[{...parent}], valid:false,
+               sumProd:mA+mB, Q:Mp-(mA+mB) };
     }
   }
   const g1=gammaOf(S.v1), g2=gammaOf(S.v2);
@@ -1012,7 +1035,19 @@ function drawScene(canvas, ctx, phys, vb, fname){
   }
   ctx.textAlign='left'; ctx.fillStyle='#475569'; ctx.font='11px Inter, sans-serif';
   ctx.textBaseline='top';
-  ctx.fillText(showBefore?('\u25b8 before '+eventWord):('\u25b8 after '+eventWord), 12, h-16);
+  if(phys.mode==='decay' && phys.valid===false){
+    ctx.save();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle='#f87171'; ctx.font='bold 16px Inter, sans-serif';
+    ctx.fillText('✕ Decay forbidden', cx, 52);
+    ctx.fillStyle='#fca5a5'; ctx.font='13px ui-monospace, monospace';
+    ctx.fillText('M = '+S.Mparent.toFixed(2)+'  <  m_A + m_B = '+(S.m1+S.m2).toFixed(2), cx, 74);
+    ctx.restore();
+  }
+  ctx.fillText(
+    (phys.mode==='decay' && phys.valid===false) ? '▸ decay did not occur (forbidden)'
+      : (showBefore?('▸ before '+eventWord):('▸ after '+eventWord)),
+    12, h-16);
 }
 
 function render(){
@@ -1026,12 +1061,21 @@ function render(){
 }
 
 /* ---- readouts ---- */
-function buildTable(beforeB, afterB){
+function buildTable(beforeB, afterB, phys){
   const rows=list=>list.map(b=>{
     return `<tr><td class="nm" style="color:${b.color}">${b.name}</td>`
       +`<td>${b.m.toFixed(2)}</td>`
       +`<td>${fmtNum(b.E)}</td><td>${fmtNum(b.p)}</td></tr>`;
   }).join('');
+  if(phys && phys.mode==='decay' && phys.valid===false){
+    return `<table class="fm-table">
+      <thead><tr><th></th><th>m</th><th>E</th><th>p</th></tr></thead>
+      <tbody>
+        <tr class="sec"><td colspan="4">Parent (stable — no decay)</td></tr>${rows(beforeB)}
+      </tbody></table>
+      <div class="cons bad">No decay occurs: Q = M − (m_A + m_B) &lt; 0, so there is no “after” state to compare.</div>
+      <div class="units-note">m, E, p in arbitrary units (c = 1)</div>`;
+  }
   const MB=sum(beforeB,'m'),EB=sum(beforeB,'E'),PB=sum(beforeB,'p');
   const MA=sum(afterB,'m'),EA=sum(afterB,'E'),PA=sum(afterB,'p');
   const ok=Math.abs(EB-EA)<1e-6 && Math.abs(PB-PA)<1e-6;
@@ -1073,7 +1117,17 @@ function buildRestEnergy(phys, beforeB, afterB){
     <div>Products &nbsp; m_A + m_B = ${(mA+mB).toFixed(3)}</div>
     <div class="deltaM-callout">Q = M − (m_A+m_B) = <b>${Q.toFixed(3)}</b><br>
     <span class="cap">rest energy released as product kinetic energy</span></div>
-    ${phys.valid?'':'<div class="warn-note">⚠ m_A + m_B exceeds M_parent — this decay is forbidden. Lower the product masses or raise M_parent.</div>'}`;
+    ${(()=>{ const need=mA+mB, scaleMax=Math.max(Mp,need)||1;
+      const wM=100*Mp/scaleMax, wN=100*need/scaleMax, over=Q<0;
+      return `<div class="budget">
+        <div class="budget-row"><span class="budget-lab">Available (M)</span>
+          <span class="budget-track"><span class="budget-fill avail" style="width:${wM}%"></span></span>
+          <span class="budget-val">${Mp.toFixed(2)}</span></div>
+        <div class="budget-row"><span class="budget-lab">Required (m_A+m_B)</span>
+          <span class="budget-track"><span class="budget-fill need${over?' over':''}" style="width:${wN}%"></span></span>
+          <span class="budget-val">${need.toFixed(2)}</span></div>
+        <div class="budget-q ${over?'neg':'pos'}">Q = M − (m_A+m_B) = ${Q.toFixed(2)} ${over?'→ forbidden: a decay needs Q ≥ 0':'→ released as product kinetic energy'}</div>
+      </div>`; })()}`;
 }
 function buildInvariant(EB,PB){
   const inv2=EB*EB-PB*PB;
@@ -1089,7 +1143,7 @@ function updateReadouts(){
   const EB=sum(beforeB,'E'),PB=sum(beforeB,'p');
   const Msys=Math.sqrt(Math.max(0,EB*EB-PB*PB));
   document.getElementById('fourmom-frame').textContent=frameName(vb);
-  document.getElementById('fourmom-table').innerHTML=buildTable(beforeB,afterB);
+  document.getElementById('fourmom-table').innerHTML=buildTable(beforeB,afterB,phys);
   document.getElementById('restenergy-body').innerHTML=buildRestEnergy(phys,beforeB,afterB);
   document.getElementById('invariant-body').innerHTML=buildInvariant(EB,PB);
   S._fd={ EB, PB, Msys, mode:phys.mode };
@@ -1124,9 +1178,24 @@ const PRED_FEEDBACK={
 
 /* ---- emphasis / step ---- */
 function applyModeEmphasis(){
-  const gV=document.getElementById('g-v'), gMp=document.getElementById('g-mp');
-  if(S.mode==='decay'){ gV.classList.add('dim'); gMp.classList.remove('dim'); }
-  else { gV.classList.remove('dim'); gMp.classList.add('dim'); }
+  const gM=document.getElementById('g-m');
+  const gV=document.getElementById('g-v');
+  const gMp=document.getElementById('g-mp');
+  const boostGroup=document.querySelector('.boost-group');
+  const decay=S.mode==='decay';
+  // In decay the product velocities are computed outputs → only v1/v2 are disabled.
+  ['v1','v2'].forEach(id=>{ const el=document.getElementById('s-'+id); if(el) el.disabled=decay; });
+  // Rest masses are inputs in BOTH modes (incoming particles ↔ decay products A/B).
+  ['m1','m2'].forEach(id=>{ const el=document.getElementById('s-'+id); if(el) el.disabled=false; });
+  // Boost to S′ is valid in every mode.
+  const boostEl=document.getElementById('s-boost'); if(boostEl) boostEl.disabled=false;
+  // Parent rest mass exists only in decay.
+  const mp=document.getElementById('s-mp'); if(mp) mp.disabled=!decay;
+  // Dimming mirrors the disabled state:
+  if(gM) gM.classList.remove('dim');
+  if(gV) gV.classList.toggle('dim', decay);
+  if(boostGroup) boostGroup.classList.remove('dim');
+  if(gMp) gMp.classList.toggle('dim', !decay);
 }
 function applyStep(){
   const root=document.getElementById('shell');
@@ -1144,9 +1213,17 @@ function refresh(){ updateReadouts(); render(); }
 function setSlider(id,val){ const el=document.getElementById('s-'+id); if(el) el.value=val; }
 function setReadout(id,txt){ const el=document.getElementById('r-'+id); if(el) el.textContent=txt; }
 
+function replayCollision(){
+  S.progress=0;
+  refresh();
+  Shell.setPlaying(true);
+}
+
 function bindSlider(id, key, fmt){
   const el=document.getElementById('s-'+id), out=document.getElementById('r-'+id);
-  el.addEventListener('input',()=>{ S[key]=parseFloat(el.value); out.textContent=fmt(S[key]); refresh(); });
+  const sync=()=>{ S[key]=parseFloat(el.value); out.textContent=fmt(S[key]); };
+  el.addEventListener('input',()=>{ sync(); S.progress=0; refresh(); });
+  el.addEventListener('change',()=>{ sync(); replayCollision(); });
 }
 bindSlider('m1','m1', v=>v.toFixed(2));
 bindSlider('m2','m2', v=>v.toFixed(2));
@@ -1157,21 +1234,15 @@ bindSlider('mp','Mparent', v=>v.toFixed(2));
 // (M static in its rest frame → M moving in the boosted frame).
 (function(){
   const el=document.getElementById('s-boost'), out=document.getElementById('r-boost');
-  el.addEventListener('input',()=>{
-    S.boost=parseFloat(el.value); out.textContent=fmtV(S.boost); refresh();
-  });
-  el.addEventListener('change',()=>{
-    S.boost=parseFloat(el.value); out.textContent=fmtV(S.boost);
-    S.progress=0; refresh(); Shell.setPlaying(true);   // rewind + replay in the new frame
-  });
+  const sync=()=>{ S.boost=parseFloat(el.value); out.textContent=fmtV(S.boost); };
+  el.addEventListener('input',()=>{ sync(); S.progress=0; refresh(); });
+  el.addEventListener('change',()=>{ sync(); replayCollision(); });
 })();
 
 document.querySelectorAll('#mode-seg .seg-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
     setMode(btn.dataset.mode);
-    S.progress=0;
-    refresh();
-    Shell.setPlaying(true);
+    replayCollision();
   });
 });
 
@@ -1218,7 +1289,9 @@ function onFrame(dt){
 function onReset(){
   S.prediction=null;
   clearPrediction();
-  applyInquiryStep(typeof Shell!=='undefined'?Shell.step:0);
+  const shell=document.getElementById('shell');
+  const i=(shell && shell.classList.contains('lecture-mode')) ? 0 : Shell.step;
+  applyInquiryStep(i);
 }
 function onResize(){ render(); }
 
