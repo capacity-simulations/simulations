@@ -259,8 +259,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #inq-cards{flex:1 1 auto;min-height:0;}
 .inq-step{display:none;}
 .inq-step.active{display:block;}
-.inq-nav{display:flex;justify-content:flex-end;flex-shrink:0;}
-#inq-next{min-width:96px;justify-content:center;}
+.inq-nav{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;}
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
+#inq-next{min-width:96px;justify-content:center;margin-left:auto;}
 .aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
   color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
   padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s;}
@@ -412,6 +414,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="shell-group">
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+      <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -444,7 +447,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="aside-inquiry" class="aside-zone">
       <div class="aside-zone-head">
         <h3>Guided Inquiry</h3>
-        <button id="aside-inquiry-skip" class="shell-btn aside-skip" title="Skip the guided inquiry">Skip ✕</button>
       </div>
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
@@ -479,7 +481,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <li>The <b>circle</b> never breaks alignment — it glows the whole time.</li>
           <li>Toggle <b>Show order</b> in Controls to see the count <i>n</i> beside each shape.</li>
         </ul>
-        <p>Type nothing yet — just sweep and read the symmetry-angle lists under each panel.</p>
       </div>
 
       <div class="inq-step">
@@ -489,7 +490,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
 
       </div>
-      <div class="inq-nav"><button id="inq-next" class="shell-btn primary">Next →</button></div>
+      <div class="inq-nav">
+        <div class="inq-pager">
+          <button id="inq-prev" class="shell-btn primary inq-pager-btn" title="Previous step" aria-label="Previous step" disabled>&lt;</button>
+          <button id="inq-pager-next" class="shell-btn primary inq-pager-btn" title="Next step" aria-label="Next step">&gt;</button>
+        </div>
+        <button id="inq-next" class="shell-btn primary">Next →</button>
+      </div>
     </div>
 
     <button id="aside-inquiry-restore" class="aside-restore" title="Revisit the guided inquiry">▸ Guided inquiry</button>
@@ -583,6 +590,19 @@ const Shell = (function(){
     root.classList.toggle('inquiry-collapsed', on);
     requestAnimationFrame(refit);
   }
+  function setLectureMode(on){
+    root.classList.toggle('lecture-mode', on);
+    const b = document.getElementById('shell-lecture');
+    if(b) b.classList.toggle('active', on);
+    if(on){
+      const cards = inqCards();
+      if(cards.length) inqShow(cards.length - 1);
+      setInquiryCollapsed(true);
+    } else {
+      setInquiryCollapsed(false);
+      inqShow(0);
+    }
+  }
 
   // ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
   // The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
@@ -590,6 +610,13 @@ const Shell = (function(){
   // A card marked data-gate keeps Next disabled until the student clicks a .choice
   // inside it (auto-detected) or the SIM calls Shell.stepReady().
   function inqCards(){ return root.querySelectorAll('#inq-cards .inq-step'); }
+  function inqUpdatePager(){
+    const cards=inqCards();
+    const prev=document.getElementById('inq-prev');
+    const pnext=document.getElementById('inq-pager-next');
+    if(prev) prev.disabled = inqStep<=0;
+    if(pnext) pnext.disabled = inqStep>=cards.length-1;
+  }
   function inqShow(n){
     const cards=inqCards();
     if(!cards.length) return;
@@ -606,8 +633,16 @@ const Shell = (function(){
       next.disabled = gated;
       next.textContent = (inqStep>=cards.length-1) ? 'Finish' : 'Next →';
     }
+    inqUpdatePager();
     onStep(inqStep);
     requestAnimationFrame(refit);
+  }
+  function inqPrev(){
+    if(inqStep>0) inqShow(inqStep-1);
+  }
+  function inqPagerNext(){
+    const cards=inqCards();
+    if(inqStep<cards.length-1) inqShow(inqStep+1);
   }
   function inqNext(){
     const cards=inqCards();
@@ -626,7 +661,6 @@ const Shell = (function(){
     const reset=document.getElementById('shell-reset');
     const spd=document.getElementById('shell-speed');
     const maxBtn=document.getElementById('shell-maximize');
-    const skip=document.getElementById('aside-inquiry-skip');
     const restore=document.getElementById('aside-inquiry-restore');
     const tFormal=document.getElementById('toggle-formal');
 
@@ -653,18 +687,23 @@ const Shell = (function(){
       requestAnimationFrame(refit);
     });
 
+    const lecture = document.getElementById('shell-lecture');
+    if(lecture) lecture.addEventListener('click', ()=> setLectureMode(!root.classList.contains('lecture-mode')));
+
     document.addEventListener('keydown',e=>{
       if(e.key!=='Escape') return;
       if(infoModal && infoModal.classList.contains('open')) setInfo(false);
       else if(root.classList.contains('shell-max')) setMaximized(false);
     });
 
-    // Skip ✕ collapses the inquiry zone; the restore bar reopens it.
-    if(skip) skip.addEventListener('click',()=>setInquiryCollapsed(true));
-    if(restore) restore.addEventListener('click',()=>setInquiryCollapsed(false));
+    if(restore) restore.addEventListener('click', ()=> setLectureMode(false));
     // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
     const inqNextBtn=document.getElementById('inq-next');
     if(inqNextBtn) inqNextBtn.addEventListener('click',inqNext);
+    const inqPrevBtn=document.getElementById('inq-prev');
+    if(inqPrevBtn) inqPrevBtn.addEventListener('click',inqPrev);
+    const inqPagerNextBtn=document.getElementById('inq-pager-next');
+    if(inqPagerNextBtn) inqPagerNextBtn.addEventListener('click',inqPagerNext);
     // Auto-gate: a .choice click inside the active gated card enables Next.
     const cardsHost=document.getElementById('inq-cards');
     if(cardsHost) cardsHost.addEventListener('click',e=>{
@@ -904,10 +943,47 @@ const Shell = (function(){
     state.theta=0;
     state.discovered=SHAPES.map(s=> s.n===Infinity? null : new Set([0]));
     slider.value=0;
+    Object.keys(stepSnapshots).forEach(k=>delete stepSnapshots[k]);
+    const cur=prevInqStep;
+    prevInqStep=null;
+    if(cur!==null) applyStepDefaults(cur);
+    else Shell.setPlaying(false);
     updateReadout();
     drawAll();
   }
   function onResize(){ drawAll(); }
+
+  const stepSnapshots={};
+  let prevInqStep=null;
+
+  function saveStepState(i){
+    stepSnapshots[i]={
+      theta:state.theta,
+      discovered:state.discovered.map(d=> d===null? null : [...d]),
+      sliderVal:slider.value,
+      playing:Shell.playing,
+      showOrder:panelsEl.classList.contains('show-order')
+    };
+  }
+  function restoreStepState(i){
+    const snap=stepSnapshots[i];
+    if(!snap) return false;
+    state.theta=snap.theta;
+    state.discovered=snap.discovered.map(d=> d===null? null : new Set(d));
+    slider.value=snap.sliderVal;
+    Shell.setPlaying(snap.playing);
+    panelsEl.classList.toggle('show-order',snap.showOrder);
+    orderTog.classList.toggle('active',snap.showOrder);
+    updateReadout();
+    drawAll();
+    return true;
+  }
+  function applyStepDefaults(i){
+    if(i===0) Shell.setPlaying(false);
+    else if(i===1) Shell.setPlaying(true);
+    else if(i===2) Shell.setPlaying(false);
+    else if(i===3) Shell.setPlaying(true);
+  }
 
   // ---- KaTeX ----
   function renderMath(){
@@ -927,10 +1003,9 @@ const Shell = (function(){
 
 
   function onStep(i){
-    if(i===0) Shell.setPlaying(false);
-    else if(i===1) Shell.setPlaying(true);
-    else if(i===2) Shell.setPlaying(false);
-    else if(i===3) Shell.setPlaying(true);
+    if(prevInqStep!==null) saveStepState(prevInqStep);
+    prevInqStep=i;
+    if(!restoreStepState(i)) applyStepDefaults(i);
   }
 
   document.querySelectorAll('#inq-cards .inq-step').forEach(card => {

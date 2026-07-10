@@ -259,7 +259,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #inq-cards{flex:1 1 auto;min-height:0;}
 .inq-step{display:none;}
 .inq-step.active{display:block;}
-.inq-nav{display:flex;justify-content:flex-end;flex-shrink:0;}
+.inq-nav{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;}
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
 #inq-next{min-width:96px;justify-content:center;}
 .aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
   color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
@@ -411,6 +413,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="shell-group">
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+      <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -458,7 +461,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="aside-inquiry" class="aside-zone">
       <div class="aside-zone-head">
         <h3>Guided Inquiry</h3>
-        <button id="aside-inquiry-skip" class="shell-btn aside-skip" title="Skip the guided inquiry">Skip ✕</button>
       </div>
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
@@ -474,7 +476,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
       <div class="inq-step">
         <h4>2 · Observe A's frame</h4>
-        <p>Select <b>A's frame</b> in Controls. A is at rest; B and the ball move. Read each velocity in the strip below the field. Note the ball's speed <i>before</i> you switch.</p>
+        <p>You're in <b>A's frame</b> and the throw is running: A stays put while B and the ball move. Read each velocity in the strip below the field, and note the <b>ball's speed</b> before you switch frames.</p>
       </div>
 
       <div class="inq-step">
@@ -485,7 +487,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
       <div class="inq-step">
         <h4>4 · Ball's rest frame</h4>
-        <p>Try the <b>ball's rest frame</b>. The ball stops; A and B move. The ball-reaches-B event still happens at the same instant — the physics is identical.</p>
+        <p>You're now in the <b>ball's rest frame</b>: the ball sits still while A and B move. The ball still reaches B at the <b>same instant</b> — the physics is identical, only the description changed.</p>
       </div>
 
       <div class="inq-step">
@@ -495,7 +497,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
 
       </div>
-      <div class="inq-nav"><button id="inq-next" class="shell-btn primary">Next →</button></div>
+      <div class="inq-nav">
+        <div class="inq-pager">
+          <button id="inq-prev" class="shell-btn primary inq-pager-btn" title="Previous step" aria-label="Previous step" disabled>&lt;</button>
+          <button id="inq-pager-next" class="shell-btn primary inq-pager-btn" title="Next step" aria-label="Next step">&gt;</button>
+        </div>
+        <button id="inq-next" class="shell-btn primary">Next →</button>
+      </div>
     </div>
 
     <button id="aside-inquiry-restore" class="aside-restore" title="Revisit the guided inquiry">▸ Guided inquiry</button>
@@ -597,6 +605,19 @@ const Shell = (function(){
     root.classList.toggle('inquiry-collapsed', on);
     requestAnimationFrame(refit);
   }
+  function setLectureMode(on){
+    root.classList.toggle('lecture-mode', on);
+    const b = document.getElementById('shell-lecture');
+    if(b) b.classList.toggle('active', on);
+    if(on){
+      const cards = inqCards();
+      if(cards.length) inqShow(cards.length - 1);
+      setInquiryCollapsed(true);
+    } else {
+      setInquiryCollapsed(false);
+      inqShow(0);
+    }
+  }
 
   // ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
   // The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
@@ -604,6 +625,13 @@ const Shell = (function(){
   // A card marked data-gate keeps Next disabled until the student clicks a .choice
   // inside it (auto-detected) or the SIM calls Shell.stepReady().
   function inqCards(){ return root.querySelectorAll('#inq-cards .inq-step'); }
+  function inqUpdatePager(){
+    const cards=inqCards();
+    const prev=document.getElementById('inq-prev');
+    const pnext=document.getElementById('inq-pager-next');
+    if(prev) prev.disabled = inqStep<=0;
+    if(pnext) pnext.disabled = inqStep>=cards.length-1;
+  }
   function inqShow(n){
     const cards=inqCards();
     if(!cards.length) return;
@@ -620,8 +648,16 @@ const Shell = (function(){
       next.disabled = gated;
       next.textContent = (inqStep>=cards.length-1) ? 'Finish' : 'Next →';
     }
+    inqUpdatePager();
     onStep(inqStep);
     requestAnimationFrame(refit);
+  }
+  function inqPrev(){
+    if(inqStep>0) inqShow(inqStep-1);
+  }
+  function inqPagerNext(){
+    const cards=inqCards();
+    if(inqStep<cards.length-1) inqShow(inqStep+1);
   }
   function inqNext(){
     const cards=inqCards();
@@ -640,7 +676,6 @@ const Shell = (function(){
     const reset=document.getElementById('shell-reset');
     const spd=document.getElementById('shell-speed');
     const maxBtn=document.getElementById('shell-maximize');
-    const skip=document.getElementById('aside-inquiry-skip');
     const restore=document.getElementById('aside-inquiry-restore');
     const tFormal=document.getElementById('toggle-formal');
 
@@ -667,18 +702,23 @@ const Shell = (function(){
       requestAnimationFrame(refit);
     });
 
+    const lecture = document.getElementById('shell-lecture');
+    if(lecture) lecture.addEventListener('click', ()=> setLectureMode(!root.classList.contains('lecture-mode')));
+
     document.addEventListener('keydown',e=>{
       if(e.key!=='Escape') return;
       if(infoModal && infoModal.classList.contains('open')) setInfo(false);
       else if(root.classList.contains('shell-max')) setMaximized(false);
     });
 
-    // Skip ✕ collapses the inquiry zone; the restore bar reopens it.
-    if(skip) skip.addEventListener('click',()=>setInquiryCollapsed(true));
-    if(restore) restore.addEventListener('click',()=>setInquiryCollapsed(false));
+    if(restore) restore.addEventListener('click', ()=> setLectureMode(false));
     // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
     const inqNextBtn=document.getElementById('inq-next');
     if(inqNextBtn) inqNextBtn.addEventListener('click',inqNext);
+    const inqPrevBtn=document.getElementById('inq-prev');
+    if(inqPrevBtn) inqPrevBtn.addEventListener('click',inqPrev);
+    const inqPagerNextBtn=document.getElementById('inq-pager-next');
+    if(inqPagerNextBtn) inqPagerNextBtn.addEventListener('click',inqPagerNext);
     // Auto-gate: a .choice click inside the active gated card enables Next.
     const cardsHost=document.getElementById('inq-cards');
     if(cardsHost) cardsHost.addEventListener('click',e=>{
@@ -825,7 +865,7 @@ function drawEdge(side, y, color, label){
   else { ctx.textAlign='right'; ctx.fillText(label+' (off-screen) ▶', VIEW.w-8, y); }
 }
 
-function drawEntity(x,y,r,color,label,v){
+function drawEntity(x,y,r,color,label,v,labelDir){
   if(x < -r){ drawEdge(-1, y, color, label); return; }
   if(x > VIEW.w + r){ drawEdge(1, y, color, label); return; }
   // circle
@@ -835,13 +875,18 @@ function drawEntity(x,y,r,color,label,v){
   // velocity arrow over the entity
   drawArrow(x,y,v);
   const lx=Math.max(22, Math.min(VIEW.w-22, x));
-  // label above
-  ctx.fillStyle='#f8fafc'; ctx.font='600 13px Inter, sans-serif'; ctx.textAlign='center';
-  ctx.fillText(label, lx, y - r - 8);
-  // value below
-  ctx.font='12px JetBrains Mono, monospace'; ctx.fillStyle='#cbd5e1';
   const vs = Math.abs(v)<0.05 ? 'at rest' : fmtSigned(v)+' m/s';
-  ctx.fillText(vs, lx, y + r + 16);
+  ctx.textAlign='center';
+  if(labelDir==='up'){            // name + value stacked ABOVE the marker
+    ctx.fillStyle='#f8fafc'; ctx.font='600 13px Inter, sans-serif'; ctx.fillText(label, lx, y - r - 22);
+    ctx.font='12px JetBrains Mono, monospace'; ctx.fillStyle='#cbd5e1'; ctx.fillText(vs, lx, y - r - 8);
+  } else if(labelDir==='down'){   // name + value stacked BELOW the marker
+    ctx.fillStyle='#f8fafc'; ctx.font='600 13px Inter, sans-serif'; ctx.fillText(label, lx, y + r + 14);
+    ctx.font='12px JetBrains Mono, monospace'; ctx.fillStyle='#cbd5e1'; ctx.fillText(vs, lx, y + r + 28);
+  } else {                        // default: name above, value below
+    ctx.fillStyle='#f8fafc'; ctx.font='600 13px Inter, sans-serif'; ctx.fillText(label, lx, y - r - 8);
+    ctx.font='12px JetBrains Mono, monospace'; ctx.fillStyle='#cbd5e1'; ctx.fillText(vs, lx, y + r + 16);
+  }
 }
 
 function draw(){
@@ -877,9 +922,10 @@ function draw(){
   ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(w,cy); ctx.stroke();
 
   // entities
-  drawEntity(S.xA*scale, cy, 11, COL.A, 'A', vAcur());
-  drawEntity(S.xB*scale, cy, 11, COL.B, 'B', vBcur());
-  drawEntity(S.xBall*scale, cy, 6, COL.ball, 'ball', vBallcur());
+  const ballY = cy + 20;   // ball rides a slight lane just below the A/B line: near-contact with A but never overlapping
+  drawEntity(S.xA*scale, cy, 11, COL.A, 'A', vAcur(), 'up');
+  drawEntity(S.xB*scale, cy, 11, COL.B, 'B', vBcur(), 'up');
+  drawEntity(S.xBall*scale, ballY, 6, COL.ball, 'ball', vBallcur(), 'down');
 
   // comparison annotation (additive emphasis, step >= 2 after a frame switch)
   if(S.switchedOnce && Shell.step>=2 && S.prevFrame){
@@ -962,24 +1008,73 @@ document.getElementById('vBallA').addEventListener('input',e=>{ S.vBallA=parseFl
 ['A','B','ball'].forEach(k=>document.getElementById('frame-'+k).addEventListener('click',()=>setFrame(k)));
 
 /* ---- shell callbacks ---- */
+const stepSnapshots={};
+let prevInqStep=null;
+
+function syncSliders(){
+  document.getElementById('vA').value=S.vA;
+  document.getElementById('vB').value=S.vB;
+  document.getElementById('vBallA').value=S.vBallA;
+}
+
+function saveStepState(i){
+  stepSnapshots[i]={
+    vA:S.vA, vB:S.vB, vBallA:S.vBallA,
+    frame:S.frame,
+    xA:S.xA, xB:S.xB, xBall:S.xBall, courtPhase:S.courtPhase,
+    prevFrame:S.prevFrame ? {key:S.prevFrame.key} : null,
+    switchedOnce:S.switchedOnce,
+    playing:Shell.playing
+  };
+}
+function restoreStepState(i){
+  const snap=stepSnapshots[i];
+  if(!snap) return false;
+  S.vA=snap.vA; S.vB=snap.vB; S.vBallA=snap.vBallA;
+  S.frame=snap.frame;
+  S.xA=snap.xA; S.xB=snap.xB; S.xBall=snap.xBall; S.courtPhase=snap.courtPhase;
+  S.prevFrame=snap.prevFrame ? {key:snap.prevFrame.key} : null;
+  S.switchedOnce=snap.switchedOnce;
+  syncSliders();
+  Shell.setPlaying(snap.playing);
+  return true;
+}
+function applyStepDefaults(i){
+  if(i===0){ Shell.setPlaying(false); setFrame('A'); }
+  else if(i===1){ Shell.setPlaying(true); setFrame('A'); }   // observe card runs so B and the ball actually move on screen
+  else if(i===2){ Shell.setPlaying(true); }
+  else if(i===3){ Shell.setPlaying(true); setFrame('ball'); }
+  else { Shell.setPlaying(true); setFrame('ball'); }
+}
+
+function applyLectureScene(){
+  S.frame='A';
+  resetCycle();
+  S.courtPhase=0;
+  Shell.setPlaying(true);
+}
+
 function onReset(){
+  Object.keys(stepSnapshots).forEach(k=>delete stepSnapshots[k]);
+  prevInqStep=null;
   S.vA=DEF.vA; S.vB=DEF.vB; S.vBallA=DEF.vBallA;
   S.frame='A';
   S.xA=XA0; S.xB=XB0; S.xBall=XA0; S.courtPhase=0;
   S.prevFrame=null; S.switchedOnce=false;
-  document.getElementById('vA').value=DEF.vA;
-  document.getElementById('vB').value=DEF.vB;
-  document.getElementById('vBallA').value=DEF.vBallA;
+  syncSliders();
+  applyStepDefaults(Shell.step);
   updateUI(); draw();
 }
 
-
 function onStep(i){
-  if(i===0){ Shell.setPlaying(false); setFrame('A'); }
-  else if(i===1){ Shell.setPlaying(false); setFrame('A'); }
-  else if(i===2){ Shell.setPlaying(true); }
-  else if(i===3){ Shell.setPlaying(true); setFrame('ball'); }
-  else { Shell.setPlaying(true); }
+  if(prevInqStep!==null) saveStepState(prevInqStep);
+  prevInqStep=i;
+  const lecture=document.getElementById('shell').classList.contains('lecture-mode');
+  if(lecture){
+    applyLectureScene();
+  } else if(!restoreStepState(i)){
+    applyStepDefaults(i);
+  }
   updateUI(); draw();
 }
 
