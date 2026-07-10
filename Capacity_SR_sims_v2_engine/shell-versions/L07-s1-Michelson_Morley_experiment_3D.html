@@ -873,10 +873,10 @@ body {
     <div class="info-tooltip">
       <h3>About This Simulation</h3>
       <p>This interactive 3D simulation reproduces the <strong>Michelson–Morley experiment</strong> (1887) as it was actually built: the optics are bolted to a massive <em>stone slab</em> that floats on liquid <em>mercury</em> in an annular cast-iron trough on a brick pier, so the whole apparatus can be rotated smoothly.</p>
-      <p>Light from the source is split by a <strong>half-silvered mirror at 45°</strong> (the beam splitter, BS). One beam passes through a <em>compensating plate</em> to mirror M₁; the other reflects to mirror M₂. The returning beams recombine at BS and interfere in the <strong>telescope detector</strong>.</p>
+      <p>Light from the source is split by a <strong>half-silvered mirror at 45°</strong> (the beam splitter, BS). One beam passes through a <em>compensating plate</em> to mirror M₁; the other reflects to mirror M₂. The compensator is an identical, unsilvered copy of the splitter, so both beams traverse the same thickness of glass — without it, white-light fringes could not be seen. The returning beams recombine at BS and interfere in the <strong>telescope detector</strong>.</p>
       <p>In the 19th century, physicists believed light traveled through a medium called the <em>“luminiferous aether.”</em> If so, the Earth’s motion through this aether would create a “wind” that changes the effective speed of light differently in each arm, producing a measurable <em>fringe shift</em> when the slab is rotated.</p>
       <p><strong>Aether Prediction mode</strong> shows the expected fringe shift using Galilean velocity addition — <em>this prediction is wrong.</em></p>
-      <p><strong>Actual (Relativity) mode</strong> shows the real result: <em>no fringe shift at any angle</em>. The speed of light is the same in all directions, leading directly to Einstein’s Special Relativity (1905).</p>
+      <p><strong>Actual (Relativity) mode</strong> shows the real result: <em>no fringe shift at any angle</em>. FitzGerald and Lorentz first explained this with an ad-hoc length contraction of the arm along the motion; Einstein’s Special Relativity (1905) explained it fundamentally — the speed of light is the same in all directions for every inertial observer.</p>
       <div class="tip-note">β (v/c) is fixed at Earth’s real orbital speed (β ≈ 9.93×10⁻⁵). With ~11 m folded arms the predicted aether shift is only ≈ 0.4 fringe, so a magnified telescope view is used to make it visible. Drag the 3D view to orbit; scroll to zoom.</div>
     </div>
   </div>
@@ -946,7 +946,7 @@ body {
     <span class="dropdown-arrow">▶</span>
   </div>
   <div class="stats-grid" id="statsContent" style="display: none;">
-    <div class="stat-card"><div class="stat-label">Δℓ</div><div class="stat-value" id="sDl">0.00 nm</div></div>
+    <div class="stat-card"><div class="stat-label">Δℓ (rel. θ = 0)</div><div class="stat-value" id="sDl">0.00 nm</div></div>
     <div class="stat-card"><div class="stat-label">Fringe shift ΔN</div><div class="stat-value" id="sDN">0.000</div></div>
   </div>
 </div>
@@ -1013,16 +1013,17 @@ function aetherPathDiff(thetaDeg){
   return aetherPathDiffFor(thetaDeg, EARTH_ORBITAL_BETA, state.L);
 }
 
-function pathDiff(thetaDeg){
-  return state.mode === 'relativity' ? 0 : aetherPathDiff(thetaDeg);
-}
-
-function aetherFringeShift(thetaDeg){
+// Rotation-induced change in optical path difference, in METERS, referenced to
+// θ = 0. Only this change is observable — the absolute arm asymmetry is
+// swallowed by the (never perfectly equal) arm lengths of the real apparatus.
+// Divide by λ to obtain the fringe shift ΔN, so ΔN = Δℓ/λ holds exactly for
+// the two quantities shown in the Statistics panel.
+function aetherPathShift(thetaDeg){
   return aetherPathDiff(thetaDeg) - aetherPathDiff(0);
 }
 
-function fringeShift(thetaDeg){
-  return state.mode === 'relativity' ? 0 : aetherFringeShift(thetaDeg);
+function pathShift(thetaDeg){
+  return state.mode === 'relativity' ? 0 : aetherPathShift(thetaDeg);
 }
 
 /* ===========================================================================
@@ -1290,9 +1291,12 @@ const blackboardTex = canvasTexture(1024, (g, s) => {
   g.font = 'italic 600 40px Georgia, serif';
   g.fillText('Michelson – Morley  1887', 52, 96);
   g.beginPath(); g.moveTo(52, 116); g.lineTo(520, 112); g.lineWidth = 3; g.stroke();
-  g.font = 'italic 34px Georgia, serif';
-  g.fillText('Δ = (2L/λ) · [ 1/(1−β²)  −  1/√(1−β²) ]', 52, 196);
-  g.fillText('β = v/c ≈ 9.9 × 10⁻⁵', 52, 262);
+  g.font = 'italic 24px Georgia, serif';
+  g.fillText('turn slab through 90°:', 52, 172);
+  g.font = 'italic 30px Georgia, serif';
+  g.fillText('ΔN = (4L/λ) · [ 1/(1−β²) − 1/√(1−β²) ]', 52, 214);
+  g.font = 'italic 32px Georgia, serif';
+  g.fillText('ΔN ≈ 2Lβ²/λ ,  β = v/c ≈ 9.9 × 10⁻⁵', 52, 268);
   g.fillText('expected  ΔN ≈ 0.4 fringe', 52, 328);
   g.fillText('observed  ΔN = 0  ?!', 52, 394);
   g.beginPath(); g.moveTo(215, 404); g.lineTo(360, 404); g.lineWidth = 2.5; g.stroke();
@@ -2074,7 +2078,7 @@ function drawDetectorPattern(){
 
   // Physical fringe shift (in fringes). Zero in the relativity/null mode.
   const lam_m = state.lam * 1e-9;
-  const deltaN = fringeShift(state.theta) / lam_m;
+  const deltaN = pathShift(state.theta) / lam_m;
   const delta = 2 * Math.PI * deltaN;
   const rgb = wavelengthToRGB(state.lam);
 
@@ -2140,7 +2144,9 @@ function drawDetectorPattern(){
   detX.restore();
 
   // Live marker tracking the shifted central bright band.
-  const markerX = cx + deltaN * (diameter / TELESCOPE_FRINGE_SPAN);
+  // Intensity is I ∝ 1 + cos(2πf + δ) with δ = 2π·ΔN, so the central maximum
+  // sits at fringe coordinate f = −ΔN, i.e. at x = cx − ΔN·(diameter/SPAN).
+  const markerX = cx - deltaN * (diameter / TELESCOPE_FRINGE_SPAN);
   if (Math.abs(markerX - cx) <= R - 4) {
     detX.strokeStyle = '#fbbf24';
     detX.lineWidth = 1.5;
@@ -2193,16 +2199,19 @@ function drawFringePlot(){
   // dashed reference curve.
   for (let i=0; i<=N; i++){
     const th = (i/N)*360;
-    vals.push(aetherFringeShift(th) / lam_m);
+    vals.push(aetherPathShift(th) / lam_m);
   }
 
   const yForN = dN => h/2 - (dN / PLOT_FRINGE_FS) * ampPx;
 
-  // Reference gridlines at ±0.4 fringe (historical expected swing scale).
+  // Reference gridline at −0.4 fringe: the historical expected shift when the
+  // slab turns through 90°. ΔN is referenced to θ = 0 (a maximum of cos 2θ),
+  // so the predicted curve swings between 0 and −0.4 — it never goes positive,
+  // and drawing a +0.4 line would wrongly suggest a 0.8-fringe swing.
   plotX.strokeStyle = 'rgba(148,163,184,0.18)';
   plotX.lineWidth = 1;
   plotX.setLineDash([2,3]);
-  [0.4, -0.4].forEach(tick => {
+  [-0.4].forEach(tick => {
     const y = yForN(tick);
     if (y > 8 && y < h-2){
       plotX.beginPath();
@@ -2214,9 +2223,9 @@ function drawFringePlot(){
   plotX.fillStyle = '#64748b';
   plotX.font = '8px -apple-system';
   plotX.textAlign = 'left';
-  [0.4, -0.4].forEach(tick => {
+  [-0.4].forEach(tick => {
     const y = yForN(tick);
-    if (y > 8 && y < h-2) plotX.fillText((tick>0?'+':'')+tick.toFixed(1), 2, y - 2);
+    if (y > 8 && y < h-2) plotX.fillText(tick.toFixed(1) + ' (90° swing)', 2, y - 2);
   });
 
   // Draw aether prediction as dashed line (always visible as reference)
@@ -2359,9 +2368,10 @@ function animate(now){
 
   thetaChip.textContent = 'θ = ' + state.theta.toFixed(0) + '°';
 
-  const dl = pathDiff(state.theta);
+  // Both statistics use the same θ=0 reference, so ΔN = Δℓ/λ exactly.
+  const dl = pathShift(state.theta);
   const lam_m = state.lam * 1e-9;
-  const dN = fringeShift(state.theta) / lam_m;
+  const dN = dl / lam_m;
   document.getElementById('sDl').textContent = formatLength(dl);
   document.getElementById('sDN').textContent = (Math.abs(dN) < 1e-4 ? '0.0000' : dN.toFixed(4));
 
@@ -2388,7 +2398,7 @@ bind('spd','spd', v=>v.toFixed(2));
 // Vertical full-scale for the fringe-shift plot, expressed in true fringe units
 // (ΔN). Anchored to the worst case across the remaining sliders — largest arm
 // length and shortest wavelength — at Earth's real β, so the plotted curve and
-// the ±0.4-fringe reference tick stay on a stable, physically meaningful axis.
+// the −0.4-fringe (90° swing) reference tick stay on a stable, physical axis.
 const L_MAX   = parseFloat(document.getElementById('L').max);
 const LAM_MIN = parseFloat(document.getElementById('lam').min);
 let PLOT_FRINGE_FS = 1e-6;
