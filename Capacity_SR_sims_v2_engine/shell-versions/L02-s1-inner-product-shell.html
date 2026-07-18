@@ -317,15 +317,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .canvas-box canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:default;}
 .readout{flex-shrink:0;font-size:13px;color:var(--muted);display:none;flex-direction:column;gap:8px;
   background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:8px;padding:12px 14px;line-height:1.5;}
-.stage-1 .readout,.stage-2 .readout,.stage-3 .readout,.stage-4 .readout{display:flex;}
+.stage-2 .readout,.stage-3 .readout,.stage-4 .readout{display:flex;}
 .readout-frame-s{border-color:rgba(148,163,184,.48);background:rgba(148,163,184,.08);}
 .readout-frame-sp{border-color:rgba(167,139,250,.48);background:rgba(167,139,250,.08);}
 .ro-line{display:none;align-items:center;gap:6px 10px;flex-wrap:wrap;padding:0;line-height:1.55;}
-.stage-1 .ro-point{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
 .stage-2 .ro-comp-v{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
-.stage-3 .ro-tail,.stage-3 .ro-tip,.stage-3 .ro-comp-v{display:flex;}
-.stage-3 .ro-tail,.stage-3 .ro-tip{padding-bottom:4px;}
-.stage-3 .ro-comp-v{padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
+.stage-3 .ro-comp-v{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
 .stage-2 .ro-norm-v,.stage-3 .ro-norm-v,.stage-4 .ro-norm-v,.stage-4 .ro-norm-u,.stage-4 .ro-dot{display:flex;}
 .stage-4 .ro-comp-v,.stage-4 .ro-comp-u{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
 .calc-off .ro-calc{display:none !important;}
@@ -449,7 +446,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="sim-wrap stage-1 calc-off" id="simRoot">
       <div class="hero-caption-wrap">
         <div class="hero-caption">
-          Drag <b style="color:#fbbf24">P</b> (stage 1), <b style="color:#60a5fa">V</b> (stages 2–3), or <b style="color:#f59e0b">u</b> and <b style="color:#60a5fa">V</b> (stage 4) in either panel.
+          Click and drag points to move.
         </div>
       </div>
       <div class="panels">
@@ -626,6 +623,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <label class="ctrl-check ctrl-box">
             <input type="checkbox" id="includeCalc">
             Include calculation
+          </label>
+          <label class="ctrl-check ctrl-box">
+            <input type="checkbox" id="showProjection" checked>
+            Show projection
           </label>
           <div class="ctrl-box ctrl-box--slider" id="transControls" style="display:none">
             <div class="ctrl-box-head">
@@ -923,7 +924,7 @@ const Shell = (function(){
     B: { x: 4, y: -1 },      // u (internal key)
     Vtail: { x: -1.5, y: 1 }
   };
-  let stage = 1, dragging = null, sliderActive = false, includeCalc = false;
+  let stage = 1, dragging = null, sliderActive = false, includeCalc = false, showProjection = true;
 
   const simRoot = el('simRoot');
   const panels = {
@@ -932,6 +933,7 @@ const Shell = (function(){
   };
   const slider = el('thetaSlider');
   const calcChk = el('includeCalc');
+  const projChk = el('showProjection');
   const transBox = el('transControls');
   const slTx = el('slTx'), slTy = el('slTy');
 
@@ -1056,7 +1058,8 @@ const Shell = (function(){
       ctx.strokeStyle = color; ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.moveTo(neg.x, neg.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
       arrowHead(ctx, pos.x, pos.y, pos.x - neg.x, pos.y - neg.y, 9, color);
-      let lx = cx + uh.x * (viewRange * scale + 13), ly = cy - uh.y * (viewRange * scale + 13);
+      const lab = W2S(ox + uh.x * (viewRange + 0.6), oy + uh.y * (viewRange + 0.6));
+      let lx = lab.x, ly = lab.y;
       lx = Math.max(12, Math.min(w - 12, lx)); ly = Math.max(12, Math.min(h - 12, ly));
       ctx.fillStyle = color; ctx.font = '600 14px Inter, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1128,17 +1131,33 @@ const Shell = (function(){
     const tail = vTail(), tip = vTip();
     const vS = vCompS();
 
-    if (stage >= 2){
+    const coordStr = pt => { const c = pointCoords(pt, angleDeg, ox, oy); return '(' + c.x.toFixed(1) + ', ' + c.y.toFixed(1) + ')'; };
+    function drawCoordTag(sx, sy, text, color){
+      ctx.font = '600 12px Inter, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      const tw = ctx.measureText(text).width;
+      let tx = Math.max(tw/2 + 4, Math.min(w - tw/2 - 4, sx));
+      let ty = Math.max(1, Math.min(h - 17, sy));
+      ctx.fillStyle = 'rgba(11,14,20,0.72)';
+      ctx.fillRect(tx - tw/2 - 4, ty - 1, tw + 8, 16);
+      ctx.fillStyle = color; ctx.fillText(text, tx, ty);
+    }
+
+    if (stage >= 2 && showProjection){
       if (stage >= 4) drawProjVec(state.B.x, state.B.y, 0, 0, COL_u);
       drawProjVec(vS.x, vS.y, tail.x, tail.y, COL_V);
     }
 
     if (stage === 1){
       drawPoint(state.P.x, state.P.y, COL_P, 'P');
+      const pS = W2S(state.P.x, state.P.y); drawCoordTag(pS.x, pS.y + 12, coordStr(state.P), COL_P);
     } else if (stage === 2){
       drawVecFromTo(0, 0, tip.x, tip.y, COL_V, 'V', true, false);
+      const tS = W2S(tip.x, tip.y); drawCoordTag(tS.x, tS.y + 12, coordStr(tip), COL_V);
     } else if (stage === 3){
       drawVecFromTo(tail.x, tail.y, tip.x, tip.y, COL_V, 'V', true, true);
+      const tS = W2S(tip.x, tip.y);   drawCoordTag(tS.x, tS.y + 12, coordStr(tip), COL_V);
+      const lS = W2S(tail.x, tail.y); drawCoordTag(lS.x, lS.y + 12, coordStr(tail), COL_V);
     } else {
       drawVecFromTo(0, 0, tip.x, tip.y, COL_V, 'V', true, false);
       drawVecFromTo(0, 0, state.B.x, state.B.y, COL_u, 'u', true, false);
@@ -1337,6 +1356,13 @@ const Shell = (function(){
     });
   }
 
+  if (projChk){
+    projChk.addEventListener('change', () => {
+      showProjection = projChk.checked;
+      render();
+    });
+  }
+
   if (ENABLE_ORIGIN_TRANSLATION && transBox){
     transBox.style.display = '';
     slTx.addEventListener('input', () => { state.tx = parseFloat(slTx.value); syncHeader(); render(); });
@@ -1375,6 +1401,8 @@ const Shell = (function(){
     state.Vtail = { x: -1.5, y: 1 };
     includeCalc = false;
     if (calcChk) calcChk.checked = false;
+    showProjection = true;
+    if (projChk) projChk.checked = true;
     if (slTx) slTx.value = 0;
     if (slTy) slTy.value = 0;
     Object.keys(stepSnapshots).forEach(k => delete stepSnapshots[k]);
@@ -1397,7 +1425,7 @@ const Shell = (function(){
       A: { x: state.A.x, y: state.A.y },
       B: { x: state.B.x, y: state.B.y },
       Vtail: { x: state.Vtail.x, y: state.Vtail.y },
-      stage: stage, includeCalc: includeCalc,
+      stage: stage, includeCalc: includeCalc, showProjection: showProjection,
       playing: Shell.playing
     };
   }
@@ -1413,6 +1441,8 @@ const Shell = (function(){
     stage = snap.stage;
     includeCalc = !!snap.includeCalc;
     if (calcChk) calcChk.checked = includeCalc;
+    showProjection = snap.showProjection !== false;
+    if (projChk) projChk.checked = showProjection;
     if (slTx) slTx.value = state.tx;
     if (slTy) slTy.value = state.ty;
     Shell.setPlaying(snap.playing);
@@ -1422,9 +1452,9 @@ const Shell = (function(){
 
   function applyStepDefaults(i){
     if (i === 0){ stage = 1; Shell.setPlaying(false); }
-    else if (i === 1){ stage = 1; Shell.setPlaying(true); }
-    else if (i === 2){ stage = 2; Shell.setPlaying(true); }
-    else { stage = 4; Shell.setPlaying(true); }
+    else if (i === 1){ stage = 1; Shell.setPlaying(false); }   // was true
+    else if (i === 2){ stage = 2; Shell.setPlaying(false); }   // was true
+    else { stage = 4; Shell.setPlaying(false); }               // was true
     applyStage();
   }
 

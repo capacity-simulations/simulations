@@ -716,14 +716,12 @@ const Shell = (function(){
     S.xP += vP * dt * ANIM_TIME_SCALE;
     S.animT += dt;                       // cosmetic icon clock (wheels / walk / prop)
 
-    // Keep objects on screen with continuous edge-wrap (no jarring mean-recenter).
-    // The active frame's rest object has v=0 → stays centred; moving objects wrap edge-to-edge.
+    // Re-loop the WHOLE scene when any object reaches the edge (preserves relative spacing).
     if(W > 0){
       const pxPerKm = Math.min(W,900)/900;
-      const HALF = (W/2 + 24)/pxPerKm;   // half the visible width in km, + small off-screen margin
-      for(const k of ['xA','xB','xP']){
-        if(S[k] >  HALF) S[k] -= 2*HALF;
-        else if(S[k] < -HALF) S[k] += 2*HALF;
+      const edgeKm  = (W/2 - 10)/pxPerKm;                 // km at which an on-screen object reaches the edge
+      if(Math.abs(S.xA) > edgeKm || Math.abs(S.xB) > edgeKm || Math.abs(S.xP) > edgeKm){
+        S.xA = 0; S.xB = 0; S.xP = 0;                     // re-loop the whole scene; relative spacing preserved
       }
     }
     render();
@@ -745,12 +743,16 @@ const Shell = (function(){
     const groundY = H*0.72;
     const skyY    = H*0.30;
 
-    // Draw sky gradient hint
-    const skyGrad = ctx.createLinearGradient(0,0,0,groundY);
-    skyGrad.addColorStop(0, 'rgba(59,155,143,0.05)');
-    skyGrad.addColorStop(1, 'rgba(59,155,143,0.0)');
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0,0,W,groundY);
+    // Sky: top → groundY
+    const sky = ctx.createLinearGradient(0,0,0,groundY);
+    sky.addColorStop(0,'rgba(96,140,200,0.22)');
+    sky.addColorStop(1,'rgba(96,140,200,0.05)');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,groundY);
+    // Ground: groundY → H
+    const grd = ctx.createLinearGradient(0,groundY,0,H);
+    grd.addColorStop(0,'rgba(74,120,80,0.30)');
+    grd.addColorStop(1,'rgba(74,120,80,0.12)');
+    ctx.fillStyle = grd; ctx.fillRect(0,groundY,W,H-groundY);
 
     // Ground / position axis — high-contrast so the number line reads clearly
     ctx.strokeStyle = 'rgba(226,232,240,0.75)';
@@ -758,9 +760,6 @@ const Shell = (function(){
     ctx.beginPath();
     ctx.moveTo(0,groundY); ctx.lineTo(W,groundY);
     ctx.stroke();
-    // subtle fill band under the axis for contrast
-    ctx.fillStyle = 'rgba(148,163,184,0.08)';
-    ctx.fillRect(0, groundY, W, H - groundY);
 
     // Distance ruler (km marks). Center of screen is xRef.
     // We choose scale so 200 km fits comfortably.
@@ -847,188 +846,114 @@ const Shell = (function(){
 
   function drawPersonIcon(x, y, color, vel){
     // Walk only when moving East (+v). Negative velocity = sliding backward past
-    // the observer (e.g. Alice in Bob's frame) — standing pose, facing East, no gait.
+    // the observer — standing pose, facing East, no gait.
     const walking = vel > 0.5;
-    const drifting = vel < -0.5;
     const phase = walking ? S.animT * (2.8 + Math.min(Math.abs(vel)/80, 3)) : 0;
-    const stride = walking ? Math.sin(phase) * 5 : 0;
-    const armSwing = walking ? Math.sin(phase) * 4 : 0;
-    const bob = walking ? Math.abs(Math.sin(phase*2)) * 1.2 : 0;
+    const stride = walking ? Math.sin(phase) * 4 : 0;
+    const bob = walking ? Math.abs(Math.sin(phase*2)) * 1.0 : 0;
     const gy = y - bob;
-    // Face East always; slight lean into the relative wind when drifting backward
-    const lean = drifting ? -1.2 : 0;
 
     ctx.save();
-    ctx.translate(lean, 0);
 
     // soft ground shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath(); ctx.ellipse(x, y+11, 9, 2.4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.ellipse(x, y+11, 8, 2.2, 0, 0, Math.PI*2); ctx.fill();
 
-    // legs — standing (feet planted) when drifting / at rest
-    ctx.strokeStyle = shade(color, 0.72);
-    ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    // legs
+    ctx.strokeStyle = shade(color, 0.75);
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     ctx.beginPath();
     if(walking){
-      ctx.moveTo(x, gy+1); ctx.lineTo(x - 3 - stride*0.35, gy+10);
-      ctx.moveTo(x, gy+1); ctx.lineTo(x + 3 + stride*0.35, gy+10);
+      ctx.moveTo(x, gy+1); ctx.lineTo(x - 2.5 - stride*0.3, gy+10);
+      ctx.moveTo(x, gy+1); ctx.lineTo(x + 2.5 + stride*0.3, gy+10);
     } else {
-      ctx.moveTo(x, gy+1); ctx.lineTo(x - 2.5, gy+10);
-      ctx.moveTo(x, gy+1); ctx.lineTo(x + 2.5, gy+10);
+      ctx.moveTo(x, gy+1); ctx.lineTo(x - 2.2, gy+10);
+      ctx.moveTo(x, gy+1); ctx.lineTo(x + 2.2, gy+10);
     }
     ctx.stroke();
-    // shoes (toes point East / +x)
-    ctx.fillStyle = shade(color, 0.55);
-    const shoeL = walking ? (x - 3 - stride*0.35) : (x - 2.5);
-    const shoeR = walking ? (x + 3 + stride*0.35) : (x + 2.5);
-    ctx.beginPath(); ctx.ellipse(shoeL + 1.2, gy+10.5, 3.4, 1.4, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(shoeR + 1.2, gy+10.5, 3.4, 1.4, 0, 0, Math.PI*2); ctx.fill();
 
-    // torso (jacket)
-    const bodyGrad = ctx.createLinearGradient(x-6, gy-12, x+6, gy+2);
-    bodyGrad.addColorStop(0, shade(color, 1.25));
-    bodyGrad.addColorStop(1, shade(color, 0.85));
-    ctx.fillStyle = bodyGrad;
-    roundRect(ctx, x-5.5, gy-11, 11, 13, 3.5, true, false);
-    // belt
-    ctx.fillStyle = shade(color, 0.55);
-    ctx.fillRect(x-5.5, gy-1, 11, 1.5);
+    // simple body (neutral silhouette — no jacket/belt detailing)
+    ctx.fillStyle = color;
+    roundRect(ctx, x-5, gy-10, 10, 12, 3, true, false);
 
-    // arms — still at sides when drifting; walk-swing only when walking East
+    // arms
     ctx.strokeStyle = shade(color, 0.9);
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     if(walking){
-      ctx.moveTo(x-5, gy-8); ctx.lineTo(x-9, gy-2 + armSwing);
-      ctx.moveTo(x+5, gy-8); ctx.lineTo(x+9, gy-2 - armSwing);
+      const arm = Math.sin(phase) * 3;
+      ctx.moveTo(x-4.5, gy-7); ctx.lineTo(x-7.5, gy-1 + arm);
+      ctx.moveTo(x+4.5, gy-7); ctx.lineTo(x+7.5, gy-1 - arm);
     } else {
-      ctx.moveTo(x-5, gy-8); ctx.lineTo(x-7.5, gy+1);
-      ctx.moveTo(x+5, gy-8); ctx.lineTo(x+7.5, gy+1);
+      ctx.moveTo(x-4.5, gy-7); ctx.lineTo(x-6.5, gy+1);
+      ctx.moveTo(x+4.5, gy-7); ctx.lineTo(x+6.5, gy+1);
     }
     ctx.stroke();
 
     // head
-    ctx.fillStyle = '#fcd9b0';
-    ctx.beginPath(); ctx.arc(x, gy-16, 5.2, 0, Math.PI*2); ctx.fill();
-    // hair — swept West when drifting backward (relative wind)
-    ctx.fillStyle = shade(color, 0.65);
+    ctx.fillStyle = '#f5d0b0';
+    ctx.beginPath(); ctx.arc(x, gy-15.5, 4.8, 0, Math.PI*2); ctx.fill();
+    // hair — simple filled cap so the figure isn't bald / male-coded
+    ctx.fillStyle = shade(color, 0.55);
     ctx.beginPath();
-    if(drifting){
-      ctx.arc(x, gy-17.5, 5.4, Math.PI*1.05, Math.PI*1.95);
-      ctx.quadraticCurveTo(x-2, gy-22, x-8, gy-18);
-      ctx.quadraticCurveTo(x-6, gy-15, x-5.2, gy-17);
-    } else {
-      ctx.arc(x, gy-17.5, 5.4, Math.PI*1.05, Math.PI*1.95);
-      ctx.quadraticCurveTo(x+4, gy-20, x, gy-21.5);
-      ctx.quadraticCurveTo(x-4, gy-20, x-5.2, gy-17);
-    }
+    ctx.arc(x, gy-16.5, 5.0, Math.PI*1.05, Math.PI*1.95);
+    ctx.quadraticCurveTo(x, gy-21, x-5.0, gy-16.5);
     ctx.fill();
-    // face hint — eyes biased East (facing +x)
-    ctx.fillStyle = 'rgba(40,30,20,0.55)';
-    ctx.beginPath(); ctx.arc(x-0.4, gy-16.2, 0.7, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x+2.4, gy-16.2, 0.7, 0, Math.PI*2); ctx.fill();
 
     ctx.restore();
   }
 
   function drawTrainIcon(x, y, color, vel){
     const moving = Math.abs(vel) > 0.5;
-    // Nose always points along ground-frame travel (V); in-frame vel only drives wheel spin.
     const heading = S.V >= 0 ? 1 : -1;
     const spinDir = vel >= 0 ? 1 : -1;
     const spin = moving ? S.animT * (3.5 + Math.min(Math.abs(vel)/60, 4)) * spinDir : 0;
 
     // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(x, y+12, 26, 3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.ellipse(x, y+11, 22, 2.6, 0, 0, Math.PI*2); ctx.fill();
 
-    // undercarriage
-    ctx.fillStyle = '#1e293b';
-    roundRect(ctx, x-24, y+2, 48, 6, 2, true, false);
+    // flat rounded-rectangle body
+    ctx.fillStyle = color;
+    roundRect(ctx, x-24, y-12, 48, 16, 4, true, false);
+    // darker lower accent stripe
+    ctx.fillStyle = shade(color, 0.7);
+    ctx.fillRect(x-24, y+1, 48, 3);
 
-    // main coach body
-    const body = ctx.createLinearGradient(x, y-16, x, y+4);
-    body.addColorStop(0, shade(color, 1.35));
-    body.addColorStop(0.55, color);
-    body.addColorStop(1, shade(color, 0.75));
-    ctx.fillStyle = body;
-    roundRect(ctx, x-26, y-14, 52, 18, 5, true, false);
-
-    // darker lower stripe
-    ctx.fillStyle = shade(color, 0.65);
-    ctx.fillRect(x-26, y+1, 52, 3);
-
-    // cabin / nose (ground-frame heading — does not flip when observer frame changes)
-    const noseX = heading > 0 ? x+20 : x-20;
-    ctx.fillStyle = shade(color, 1.1);
+    // nose hint along ground-frame heading
+    ctx.fillStyle = shade(color, 0.85);
     if(heading > 0){
       ctx.beginPath();
-      ctx.moveTo(x+18, y-14); ctx.lineTo(x+30, y-6); ctx.lineTo(x+30, y+4);
-      ctx.lineTo(x+18, y+4); ctx.closePath(); ctx.fill();
+      ctx.moveTo(x+20, y-12); ctx.lineTo(x+28, y-4); ctx.lineTo(x+28, y+4);
+      ctx.lineTo(x+20, y+4); ctx.closePath(); ctx.fill();
     } else {
       ctx.beginPath();
-      ctx.moveTo(x-18, y-14); ctx.lineTo(x-30, y-6); ctx.lineTo(x-30, y+4);
-      ctx.lineTo(x-18, y+4); ctx.closePath(); ctx.fill();
+      ctx.moveTo(x-20, y-12); ctx.lineTo(x-28, y-4); ctx.lineTo(x-28, y+4);
+      ctx.lineTo(x-20, y+4); ctx.closePath(); ctx.fill();
     }
-    // headlight
-    ctx.fillStyle = '#fef9c3';
-    ctx.beginPath(); ctx.arc(noseX + heading*8, y-2, 2.2, 0, Math.PI*2); ctx.fill();
 
-    // windows with glass tint
-    const wins = [-16, -4, 8];
-    wins.forEach(wx=>{
-      const g = ctx.createLinearGradient(x+wx, y-11, x+wx, y-3);
-      g.addColorStop(0, 'rgba(186,230,253,0.95)');
-      g.addColorStop(1, 'rgba(14,116,144,0.55)');
-      ctx.fillStyle = g;
-      roundRect(ctx, x+wx-5, y-11, 10, 8, 2, true, false);
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillRect(x+wx-4, y-10, 3, 6);
-    });
+    // two simple window slits
+    ctx.fillStyle = 'rgba(15,23,42,0.45)';
+    roundRect(ctx, x-14, y-9, 10, 6, 1.5, true, false);
+    roundRect(ctx, x+2, y-9, 10, 6, 1.5, true, false);
 
-    // roof ridge
-    ctx.fillStyle = shade(color, 0.55);
-    roundRect(ctx, x-22, y-16, 44, 3, 1.5, true, false);
-
-    // wheels + spokes
-    const wheels = [-16, 0, 16];
-    wheels.forEach(wx=>{
-      const cx = x+wx, cy = y+8;
+    // two plain dark wheels (subtle spin when moving)
+    [[-12, 8],[12, 8]].forEach(([wx, wy])=>{
+      const cx = x+wx, cy = y+wy;
       ctx.fillStyle = '#0f172a';
-      ctx.beginPath(); ctx.arc(cx, cy, 5.2, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#64748b';
-      ctx.beginPath(); ctx.arc(cx, cy, 3.4, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(spin)*3, cy + Math.sin(spin)*3);
-      ctx.lineTo(cx - Math.cos(spin)*3, cy - Math.sin(spin)*3);
-      ctx.moveTo(cx + Math.cos(spin+Math.PI/2)*3, cy + Math.sin(spin+Math.PI/2)*3);
-      ctx.lineTo(cx - Math.cos(spin+Math.PI/2)*3, cy - Math.sin(spin+Math.PI/2)*3);
-      ctx.stroke();
-      ctx.fillStyle = '#e2e8f0';
-      ctx.beginPath(); ctx.arc(cx, cy, 1.2, 0, Math.PI*2); ctx.fill();
-    });
-
-    // exhaust puffs when moving
-    if(moving){
-      for(let i=0;i<3;i++){
-        const t = (S.animT*1.4 + i*0.45) % 1.5;
-        const px = noseX - heading*(8 + t*18);
-        const py = y-18 - t*10;
-        ctx.fillStyle = `rgba(148,163,184,${0.35*(1-t/1.5)})`;
-        ctx.beginPath(); ctx.arc(px, py, 2.5 + t*3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI*2); ctx.fill();
+      if(moving){
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(spin)*3, cy + Math.sin(spin)*3);
+        ctx.lineTo(cx - Math.cos(spin)*3, cy - Math.sin(spin)*3);
+        ctx.stroke();
       }
-    }
-
-    // tiny Bob silhouette in middle window
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(x-4, y-8.5, 1.6, 0, Math.PI*2); ctx.fill();
-    ctx.fillRect(x-5.5, y-7, 3, 3.5);
+    });
   }
 
   function drawPlaneIcon(x, y, color, vel){
     const moving = Math.abs(vel) > 0.5;
-    // Fuselage always points along ground-frame travel (u); vel only drives prop/contrail.
     const heading = S.u >= 0 ? 1 : -1;
     const prop = moving ? S.animT * (10 + Math.min(Math.abs(vel)/40, 8)) : 0;
 
@@ -1036,101 +961,46 @@ const Shell = (function(){
     ctx.translate(x, y);
     ctx.scale(heading, 1);
 
-    // soft shadow below
+    // soft shadow
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.beginPath(); ctx.ellipse(0, 16, 18, 3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 14, 16, 2.5, 0, 0, Math.PI*2); ctx.fill();
 
-    // wings (behind fuselage)
-    const wingGrad = ctx.createLinearGradient(0, -16, 0, 16);
-    wingGrad.addColorStop(0, shade(color, 1.3));
-    wingGrad.addColorStop(1, shade(color, 0.7));
-    ctx.fillStyle = wingGrad;
+    // single swept wing (flat)
+    ctx.fillStyle = shade(color, 0.85);
     ctx.beginPath();
-    ctx.moveTo(-4, -2); ctx.lineTo(-14, -18); ctx.lineTo(-2, -4);
-    ctx.lineTo(6, -3); ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-4, 2); ctx.lineTo(-14, 18); ctx.lineTo(-2, 4);
-    ctx.lineTo(6, 3); ctx.closePath(); ctx.fill();
-    // wing tips
-    ctx.fillStyle = shade(color, 1.15);
-    ctx.beginPath(); ctx.ellipse(-14, -18, 3, 1.5, -0.4, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(-14, 18, 3, 1.5, 0.4, 0, Math.PI*2); ctx.fill();
+    ctx.moveTo(-2, 0); ctx.lineTo(-12, -14); ctx.lineTo(4, -1);
+    ctx.lineTo(4, 1); ctx.lineTo(-12, 14); ctx.closePath();
+    ctx.fill();
 
-    // fuselage
-    const fus = ctx.createLinearGradient(0, -6, 0, 6);
-    fus.addColorStop(0, shade(color, 1.4));
-    fus.addColorStop(0.5, color);
-    fus.addColorStop(1, shade(color, 0.8));
-    ctx.fillStyle = fus;
+    // flat fuselage
+    ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(22, 0);
-    ctx.quadraticCurveTo(16, -5, 4, -5.5);
-    ctx.lineTo(-14, -4.5);
-    ctx.quadraticCurveTo(-20, -3, -20, 0);
-    ctx.quadraticCurveTo(-20, 3, -14, 4.5);
-    ctx.lineTo(4, 5.5);
-    ctx.quadraticCurveTo(16, 5, 22, 0);
+    ctx.moveTo(20, 0);
+    ctx.quadraticCurveTo(14, -4.5, 2, -4.5);
+    ctx.lineTo(-14, -3.5);
+    ctx.quadraticCurveTo(-18, -2, -18, 0);
+    ctx.quadraticCurveTo(-18, 2, -14, 3.5);
+    ctx.lineTo(2, 4.5);
+    ctx.quadraticCurveTo(14, 4.5, 20, 0);
     ctx.closePath();
     ctx.fill();
 
-    // cockpit glass
-    const glass = ctx.createLinearGradient(8, -4, 16, 2);
-    glass.addColorStop(0, 'rgba(224,242,254,0.95)');
-    glass.addColorStop(1, 'rgba(56,189,248,0.45)');
-    ctx.fillStyle = glass;
-    ctx.beginPath();
-    ctx.moveTo(14, -3.5); ctx.quadraticCurveTo(18, -2, 19, 0);
-    ctx.quadraticCurveTo(18, 2, 14, 3.5); ctx.lineTo(10, 2.5);
-    ctx.lineTo(10, -2.5); ctx.closePath(); ctx.fill();
-
-    // cabin windows
-    ctx.fillStyle = 'rgba(15,23,42,0.55)';
-    for(let i=0;i<3;i++){
-      roundRect(ctx, -2 - i*5, -2.2, 3.5, 4.4, 1, true, false);
-    }
-
     // tail fin
-    ctx.fillStyle = shade(color, 0.9);
+    ctx.fillStyle = shade(color, 0.75);
     ctx.beginPath();
-    ctx.moveTo(-16, -3); ctx.lineTo(-22, -14); ctx.lineTo(-12, -3);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-16, 3); ctx.lineTo(-20, 10); ctx.lineTo(-12, 3);
+    ctx.moveTo(-14, -2.5); ctx.lineTo(-20, -12); ctx.lineTo(-10, -2.5);
     ctx.closePath(); ctx.fill();
 
-    // engines under wings
-    ctx.fillStyle = shade(color, 0.6);
-    roundRect(ctx, -8, -11, 10, 4, 2, true, false);
-    roundRect(ctx, -8, 7, 10, 4, 2, true, false);
-    ctx.fillStyle = '#94a3b8';
-    ctx.beginPath(); ctx.arc(2, -9, 1.6, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(2, 9, 1.6, 0, Math.PI*2); ctx.fill();
-
-    // spinning prop disc at nose
+    // subtle prop disc when moving
     if(moving){
       ctx.save();
-      ctx.globalAlpha = 0.35;
+      ctx.globalAlpha = 0.3;
       ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.ellipse(22, 0, 2.5, 7, prop*0.05, 0, Math.PI*2);
+      ctx.ellipse(20, 0, 2, 6, prop*0.05, 0, Math.PI*2);
       ctx.stroke();
       ctx.restore();
-      // contrail
-      for(let i=0;i<4;i++){
-        const t = (S.animT*2 + i*0.2) % 1;
-        ctx.fillStyle = `rgba(226,232,240,${0.22*(1-t)})`;
-        ctx.beginPath();
-        ctx.ellipse(-22 - t*28, 0, 6+t*4, 1.2, 0, 0, Math.PI*2);
-        ctx.fill();
-      }
-    } else {
-      // static prop blades
-      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(22, -6); ctx.lineTo(22, 6);
-      ctx.moveTo(20, -1); ctx.lineTo(24, 1);
-      ctx.stroke();
     }
 
     ctx.restore();
@@ -1149,10 +1019,10 @@ const Shell = (function(){
       return;
     }
 
-    // Icon — richer sprites; motion tied to |vel| via S.animT (cosmetic only)
+    // Icon — flat silhouettes; motion tied to |vel| via S.animT (cosmetic only)
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(1.45, 1.45);
+    ctx.scale(1.15, 1.15);
     ctx.translate(-x, -y);
     if(kind==='person'){
       drawPersonIcon(x, y, color, vel);
