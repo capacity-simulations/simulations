@@ -466,8 +466,18 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
 
+      <div class="inq-step">
+        <h4>1 · Watch from Alice's frame</h4>
+        <p>Alice stays put at x = 0 while Bella flies out and back. Watch the amber <b>"now" line</b> sweep upward: by the reunion E₂, Alice has aged more than Bella (τ<sub>A</sub> &gt; τ<sub>B</sub>).</p>
+      </div>
+
+      <div class="inq-step">
+        <h4>2 · Now watch from Bella</h4>
+        <p>Same journey, but seen from a frame that <b>rides along with Bella the whole trip</b> — her worldline stays vertical. Watch what happens at the turnaround: Bella switches inertial frames, and her <b>line of simultaneity swings</b> — Alice's "now" (and age) jumps forward. That swing is where the paradox breaks.</p>
+      </div>
+
       <div class="inq-step" data-gate>
-        <h4>1 · Predict</h4>
+        <h4>3 · Predict</h4>
         <p id="predictPrompt">Bella departs at <b>v = 0.60c</b>, turns around at E₍ₜ₎, and returns at the same speed. At the reunion E₂, which twin has aged more?</p>
         <button class="choice" data-c="a" data-correct="1" data-fb=""><span class="ck">A</span>Alice (A) — the stay-at-home twin</button>
         <button class="choice" data-c="b" data-correct="0" data-fb=""><span class="ck">B</span>Bella (B) — the traveler</button>
@@ -476,12 +486,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
 
       <div class="inq-step">
-        <h4>2 · Compare frames</h4>
+        <h4>4 · Compare frames</h4>
         <p>Watch the amber <b>"now" line</b> sweep from E₁ up to E₂. Read τ<sub>A</sub> and τ<sub>B</sub> in the <b>Readings</b> panel — they are tagged <em>(invariant)</em>. Now switch to <b>Bella's outbound frame (S′)</b> using the frame selector below. The totals at E₂ are unchanged. Is this consistent with which twin ends up older?</p>
       </div>
 
       <div class="inq-step">
-        <h4>3 · Find the asymmetry</h4>
+        <h4>5 · Find the asymmetry</h4>
         <p>Switch between all three frames. Is there <b>any single inertial frame</b> in which Bella is at rest for the <em>entire</em> journey? The kink at Eₜ is present in <em>every</em> frame — that turnaround breaks the symmetry.</p>
         <div class="friend" style="margin-top:10px;">
           <div class="who">A friend says:</div>
@@ -496,7 +506,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
 
       <div class="inq-step">
-        <h4>4 · Resolution</h4>
+        <h4>6 · Resolution</h4>
         <p>The straight worldline (Alice) always carries the maximum proper time between two events — this is the Minkowski "triangle inequality". The turnaround at Eₜ breaks the symmetry, but the age gap itself comes from the different path lengths through spacetime.</p>
         <p>Hit <b>Finish</b> to explore freely.</p>
       </div>
@@ -532,6 +542,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <button class="shell-btn frame-btn active" data-frame="S">Alice's frame (S)</button>
               <button class="shell-btn frame-btn" data-frame="Sp">Bella outbound (S′)</button>
               <button class="shell-btn frame-btn" data-frame="Spp">Bella return (S″)</button>
+              <button class="shell-btn frame-btn" data-frame="Bwhole">Bella (whole trip)</button>
             </div>
           </div>
           <div class="ctrl-box" id="modeGroup">
@@ -795,8 +806,22 @@ const readingsBody=document.getElementById('readingsBody');
 const readingsPanel=document.getElementById('readingsPanel');
 
 /* ---- physics ---- */
+// Effective boost for the "Bella whole-trip" co-moving frame: +v outbound, swing +v→−v
+// across a short window at the turnaround (t=T/2), −v on the return. Uses the sweep p.
+function betaNow(){
+  const tNow = p * T;                 // current now-time (p:0→1 maps t:0→T)
+  const sw = 0.06 * T;                // half-width of the turnaround swing window
+  if(tNow <= T/2 - sw) return  v;
+  if(tNow >= T/2 + sw) return -v;
+  const u = (tNow - (T/2 - sw)) / (2*sw);   // 0→1 across the window
+  return v * (1 - 2*u);               // +v → −v
+}
 function tf(pt){
   if(frame==='S') return {x:pt.x,t:pt.t};
+  if(frame==='Bwhole'){
+    const b=betaNow(), g=gammaOf(b);
+    return {x:g*(pt.x-b*pt.t), t:g*(pt.t-b*pt.x)};
+  }
   const g=gammaOf(v);
   if(frame==='Sp')  return {x:g*(pt.x-v*pt.t), t:g*(pt.t-v*pt.x)};
   return              {x:g*(pt.x+v*pt.t), t:g*(pt.t+v*pt.x)};
@@ -924,6 +949,11 @@ function frameBadgeCopy(){
     sub:"S\u2032 \u00B7 Bella at rest on the way out",
     accent:'rgba(251,191,36,.50)', color:'#fde68a', subColor:'#fcd34d'
   };
+  if(frame==='Bwhole') return {
+    main:"Bella\u2019s frame \u2014 whole trip (co-moving)",
+    sub:"Bella at rest throughout \u00B7 watch the swing at the turnaround",
+    accent:'rgba(252,138,138,.55)', color:'#fecaca', subColor:'#fca5a5'
+  };
   return {
     main:"Viewing from Bella\u2019s return frame",
     sub:"S\u2033 \u00B7 Bella at rest on the way back",
@@ -1022,14 +1052,33 @@ function render(){
     ctx.lineWidth=1.5;ctx.strokeStyle='#fff';ctx.stroke(); return [X,Y]; }
   [aPX,aPY]=dot(A.pos,colA); [bPX,bPY]=dot(B.pos,colB);
 
-  // kink indicator (Step 3 = Shell.step===2) — round-trip only
-  if(!ow && Shell.step>=2){
+  // kink indicator (Step 5 = Shell.step===4) — round-trip only
+  if(!ow && Shell.step>=4){
     const Xk=PX(ET.x),Yk=PY(ET.t);
     const a1=Math.atan2(PY(E1.t)-Yk,PX(E1.x)-Xk);
     const a2=Math.atan2(PY(E2.t)-Yk,PX(E2.x)-Xk);
     ctx.strokeStyle='#e879f9'; ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(Xk,Yk,17,Math.min(a1,a2),Math.max(a1,a2));ctx.stroke();
     ctx.beginPath();ctx.arc(Xk,Yk,8,0,7);ctx.stroke();
+  }
+
+  // turnaround swing emphasis — Bwhole frame only, during the swing window at t = T/2
+  const swingOn = !ow && frame==='Bwhole' && Math.abs(p*T - T/2) < 0.06*T;
+  if(swingOn){
+    // faint before/after simultaneity lines through Eₜ (outbound +v, return −v)
+    const span=2*(xHi-xLo);
+    [v,-v].forEach(u=>{
+      const a=tf({x:ev.ET.x-span, t:ev.ET.t-u*span});
+      const b2=tf({x:ev.ET.x+span, t:ev.ET.t+u*span});
+      ctx.strokeStyle='rgba(252,138,138,.25)'; ctx.lineWidth=1.4; ctx.setLineDash([4,5]);
+      ctx.beginPath();ctx.moveTo(PX(a.x),PY(a.t));ctx.lineTo(PX(b2.x),PY(b2.t));ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    // pulsing ring at Eₜ
+    const k=1-Math.abs(p*T-T/2)/(0.06*T);
+    ctx.strokeStyle=`rgba(252,138,138,${(0.35+0.55*k).toFixed(3)})`;
+    ctx.lineWidth=2.2;
+    ctx.beginPath();ctx.arc(PX(ET.x),PY(ET.t),12+8*k,0,7);ctx.stroke();
   }
 
   ctx.restore();
@@ -1062,17 +1111,22 @@ function render(){
   // speed labels
   const w=2*v/(1+v*v);
   const Amid={x:(E1.x+E2.x)/2,t:(E1.t+E2.t)/2};
-  const aTxt = frame==='S'?'Alice: at rest':(frame==='Sp'?`Alice: \u2212${v.toFixed(2)}c`:`Alice: +${v.toFixed(2)}c`);
+  const aTxt = frame==='S'?'Alice: at rest'
+    :(frame==='Sp'?`Alice: \u2212${v.toFixed(2)}c`
+    :(frame==='Bwhole'?`Alice: ${(-betaNow()>=0?'+':'\u2212')}${Math.abs(betaNow()).toFixed(2)}c`
+    :`Alice: +${v.toFixed(2)}c`));
   drawLabel(aTxt, PX(Amid.x)-9, PY(Amid.t), colA,'right');
   if(ow){
     const m={x:(E1.x+EoutD.x)/2,t:(E1.t+EoutD.t)/2};
     drawLabel(`Bella: ${v.toFixed(2)}c`, PX(m.x)+9, PY(m.t), colB,'left');
   } else if(frame==='Sp'){ const m={x:(ET.x+E2.x)/2,t:(ET.t+E2.t)/2}; drawLabel(`Bella return: ${w.toFixed(2)}c`, PX(m.x)-9, PY(m.t), colB,'right'); }
   else if(frame==='Spp'){ const m={x:(E1.x+ET.x)/2,t:(E1.t+ET.t)/2}; drawLabel(`Bella outbound: ${w.toFixed(2)}c`, PX(m.x)+9, PY(m.t), colB,'left'); }
+  else if(frame==='Bwhole'){ const m={x:(E1.x+ET.x)/2,t:(E1.t+ET.t)/2}; drawLabel('Bella: at rest (co-moving)', PX(m.x)+9, PY(m.t), colB,'left'); }
   else { const m={x:(E1.x+ET.x)/2,t:(E1.t+ET.t)/2}; drawLabel(`Bella: ${v.toFixed(2)}c`, PX(m.x)+9, PY(m.t), colB,'left'); }
 
-  // kink label (Step 3+) — round-trip only
-  if(!ow && Shell.step>=2){ drawLabel('Turnaround \u00B7 non-inertial', PX(ET.x)+12, PY(ET.t)-16, '#f5c0ff','left'); }
+  // kink label (Step 5+) — round-trip only
+  if(!ow && Shell.step>=4){ drawLabel('Turnaround \u00B7 non-inertial', PX(ET.x)+12, PY(ET.t)-16, '#f5c0ff','left'); }
+  if(swingOn){ drawLabel('turnaround \u2014 Bella switches frames', PX(ET.x)+14, PY(ET.t)+18, '#fca5a5','left'); }
 
   // one-way signal readout badge near E_recv
   if(ow){
@@ -1084,7 +1138,7 @@ function render(){
   }
 
   // frame badge + now-line label
-  const prime= frame==='S'?'':(frame==='Sp'?'\u2032':'\u2033');
+  const prime= (frame==='S'||frame==='Bwhole')?'':(frame==='Sp'?'\u2032':'\u2033');
   const fb=frameBadgeCopy();
   drawBadge([fb.main, fb.sub], pl+8, pt_+8, fb);
   const nowBadgeRight=ynow<pt_+72;
@@ -1111,15 +1165,30 @@ function setFrameUI(){ frameBtns.forEach(b=>b.classList.toggle('active', b.datas
 function setModeUI(){
   modeBtns.forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
   if(onewayNote) onewayNote.style.display = mode==='oneway' ? '' : 'none';
+  // One-way + signal: no return leg → hide Bella return (S″)
+  const sppBtn=frameBtns.find(b=>b.dataset.frame==='Spp');
+  if(sppBtn) sppBtn.style.display = mode==='oneway' ? 'none' : '';
+  if(mode==='oneway' && frame==='Spp'){
+    frame='S';
+    setFrameUI();
+  }
+  // …and no turnaround → hide Bella (whole trip) too
+  const bwBtn=frameBtns.find(b=>b.dataset.frame==='Bwhole');
+  if(bwBtn) bwBtn.style.display = mode==='oneway' ? 'none' : '';
+  if(mode==='oneway' && frame==='Bwhole'){
+    frame='S';
+    setFrameUI();
+  }
 }
 
 function renderReadings(){
   const g=gammaOf(v);
   const tNow=p*tf(events().E2).t;
-  const prime= frame==='S'?'':(frame==='Sp'?'\u2032':'\u2033');
+  const prime= (frame==='S'||frame==='Bwhole')?'':(frame==='Sp'?'\u2032':'\u2033');
   const frameHead=frame==='S'
     ? 'We are in Alice\u2019s frame (S)'
-    : (frame==='Sp' ? "Bella\u2019s outbound frame (S\u2032)" : "Bella\u2019s return frame (S\u2033)");
+    : (frame==='Sp' ? "Bella\u2019s outbound frame (S\u2032)"
+    : (frame==='Bwhole' ? "Bella\u2019s frame \u2014 whole trip (co-moving)" : "Bella\u2019s return frame (S\u2033)"));
 
   if(mode==='oneway'){
     const og=oneWayGeom();
@@ -1148,6 +1217,7 @@ function renderReadings(){
   let speeds;
   if(frame==='S') speeds=`Alice at rest \u00B7 Bella out ${v.toFixed(2)}c \u00B7 Bella return ${v.toFixed(2)}c`;
   else if(frame==='Sp') speeds=`Alice moves \u2212${v.toFixed(2)}c \u00B7 Bella outbound at rest \u00B7 Bella return ${w.toFixed(2)}c`;
+  else if(frame==='Bwhole') speeds=`Bella at rest throughout \u00B7 Alice moves \u00B7 turnaround = frame swing`;
   else speeds=`Alice moves +${v.toFixed(2)}c \u00B7 Bella return at rest \u00B7 Bella outbound ${w.toFixed(2)}c`;
   readingsBody.innerHTML=`
     <div class="rd-row"><span>Active frame</span><b>${frameHead}</b></div>
@@ -1177,9 +1247,9 @@ function updateStepHL(){
   const vg=document.getElementById('vGroup');
   const fg=document.getElementById('frameGroup');
   const rp=document.getElementById('readingsPanel');
-  if(vg) vg.classList.toggle('hl', Shell.step===0);
-  if(fg) fg.classList.toggle('hl', Shell.step===1 || Shell.step===2);
-  if(rp) rp.classList.toggle('hl', Shell.step===1);
+  if(vg) vg.classList.toggle('hl', Shell.step===2);
+  if(fg) fg.classList.toggle('hl', Shell.step===3 || Shell.step===4);
+  if(rp) rp.classList.toggle('hl', Shell.step===3);
 }
 
 function evalPrediction(pred){
@@ -1256,7 +1326,10 @@ document.querySelectorAll('.fr-btn').forEach(b=>b.addEventListener('click',()=>f
 
 /* ---- shell callbacks ---- */
 function onFrame(dt){
-  if(p<1){ p=Math.min(1,p+dt/sweepDur); render(); renderReadings(); }
+  if(p<1){
+    p=Math.min(1,p+dt/sweepDur);
+    render(); renderReadings();
+  }
   else render();
 }
 function onResize(){ render(); }
@@ -1283,8 +1356,12 @@ function onReset(){
 }
 
 function onStep(i){
+  if(i===0){ frame='S'; p=0; setFrameUI(); Shell.setPlaying(true); }
+  else if(i===1){ frame='Bwhole'; p=0; setFrameUI(); Shell.setPlaying(true); }
+  else if(i===2){ frame='S'; p=0; setFrameUI(); Shell.setPlaying(true); }   // after the intro, back to Alice's frame
   updateStepHL();
   render();
+  renderReadings();
 }
 
 // Generic choice handler for gated predict steps

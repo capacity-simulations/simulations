@@ -719,19 +719,27 @@ const Shell = (function(){
   const M={l:60,r:24,t:56,b:44};
   function plotW(){return W-M.l-M.r;}
   function plotH(){return H-M.t-M.b;}
-  function X(x){
+  // Uniform pixels-per-unit for x and ct so light (Δx = Δct) renders at exactly 45°.
+  // x is centered in the plot; t is anchored at the bottom.
+  function uniScale(){
+    const {xMin,xMax,tMin,tMax}=view;
+    return Math.min(plotW()/(xMax-xMin), plotH()/(tMax-tMin));
+  }
+  function xOffset(){
     const {xMin,xMax}=view;
-    return M.l + (x-xMin)/(xMax-xMin)*plotW();
+    return (plotW()-(xMax-xMin)*uniScale())/2;
+  }
+  function X(x){
+    return M.l + xOffset() + (x-view.xMin)*uniScale();
   }
   function Y(t){
-    const {tMin,tMax}=view;
-    return M.t + (1-(t-tMin)/(tMax-tMin))*plotH();
+    return M.t + plotH() - (t-view.tMin)*uniScale();
   }
   // inverse: pixel -> world t (for hit-test on Bella line)
   function worldFromPixel(px,py){
-    const {xMin,xMax,tMin,tMax}=view;
-    const x = xMin + (px-M.l)/plotW()*(xMax-xMin);
-    const t = tMin + (1 - (py-M.t)/plotH())*(tMax-tMin);
+    const s=uniScale();
+    const x = view.xMin + (px-M.l-xOffset())/s;
+    const t = view.tMin + (M.t+plotH()-py)/s;
     return {x,t};
   }
 
@@ -744,47 +752,53 @@ const Shell = (function(){
     const majorCol = light ? 'rgba(51,65,85,0.26)' : 'rgba(226,232,240,0.28)';
     const axCol   = light ? 'rgba(51,65,85,0.58)' : 'rgba(226,232,240,0.60)';
     const textCol = light ? '#334155' : '#cbd5e1';
+    // visible world bounds under the uniform scale (grid fills the whole plot area)
+    const s=uniScale();
+    const vxMin=view.xMin - xOffset()/s;
+    const vxMax=vxMin + plotW()/s;
+    const vtMin=view.tMin;
+    const vtMax=view.tMin + plotH()/s;
     ctx.save();
     // unit grid
     ctx.strokeStyle=gridCol; ctx.lineWidth=1;
     ctx.beginPath();
-    for(let x=Math.ceil(view.xMin); x<=Math.floor(view.xMax); x++){
-      ctx.moveTo(X(x),Y(view.tMin)); ctx.lineTo(X(x),Y(view.tMax));
+    for(let x=Math.ceil(vxMin); x<=Math.floor(vxMax); x++){
+      ctx.moveTo(X(x),Y(vtMin)); ctx.lineTo(X(x),Y(vtMax));
     }
-    for(let t=Math.ceil(view.tMin); t<=Math.floor(view.tMax); t++){
-      ctx.moveTo(X(view.xMin),Y(t)); ctx.lineTo(X(view.xMax),Y(t));
+    for(let t=Math.ceil(vtMin); t<=Math.floor(vtMax); t++){
+      ctx.moveTo(X(vxMin),Y(t)); ctx.lineTo(X(vxMax),Y(t));
     }
     ctx.stroke();
     // every-2 major lines for extra structure
     ctx.strokeStyle=majorCol; ctx.lineWidth=1.15;
     ctx.beginPath();
-    for(let x=Math.ceil(view.xMin); x<=Math.floor(view.xMax); x++){
+    for(let x=Math.ceil(vxMin); x<=Math.floor(vxMax); x++){
       if(x%2!==0) continue;
-      ctx.moveTo(X(x),Y(view.tMin)); ctx.lineTo(X(x),Y(view.tMax));
+      ctx.moveTo(X(x),Y(vtMin)); ctx.lineTo(X(x),Y(vtMax));
     }
-    for(let t=Math.ceil(view.tMin); t<=Math.floor(view.tMax); t++){
+    for(let t=Math.ceil(vtMin); t<=Math.floor(vtMax); t++){
       if(t%2!==0) continue;
-      ctx.moveTo(X(view.xMin),Y(t)); ctx.lineTo(X(view.xMax),Y(t));
+      ctx.moveTo(X(vxMin),Y(t)); ctx.lineTo(X(vxMax),Y(t));
     }
     ctx.stroke();
 
     // axes at x=0, t=0
     ctx.strokeStyle=axCol; ctx.lineWidth=1.75;
     ctx.beginPath();
-    ctx.moveTo(X(0),Y(view.tMin)); ctx.lineTo(X(0),Y(view.tMax));
-    ctx.moveTo(X(view.xMin),Y(0)); ctx.lineTo(X(view.xMax),Y(0));
+    ctx.moveTo(X(0),Y(vtMin)); ctx.lineTo(X(0),Y(vtMax));
+    ctx.moveTo(X(vxMin),Y(0)); ctx.lineTo(X(vxMax),Y(0));
     ctx.stroke();
 
     // tick labels
     ctx.fillStyle=textCol;
     ctx.font='600 11px '+getComputedStyle(document.body).fontFamily;
     ctx.textAlign='center'; ctx.textBaseline='top';
-    for(let x=Math.ceil(view.xMin); x<=Math.floor(view.xMax); x++){
+    for(let x=Math.ceil(vxMin); x<=Math.floor(vxMax); x++){
       if(x===0) continue;
       ctx.fillText(x, X(x), Y(0)+4);
     }
     ctx.textAlign='right'; ctx.textBaseline='middle';
-    for(let t=Math.ceil(view.tMin); t<=Math.floor(view.tMax); t++){
+    for(let t=Math.ceil(vtMin); t<=Math.floor(vtMax); t++){
       if(t===0) continue;
       ctx.fillText(t, X(0)-6, Y(t));
     }
@@ -792,9 +806,9 @@ const Shell = (function(){
     ctx.fillStyle=textCol; ctx.font='600 12px '+getComputedStyle(document.body).fontFamily;
     const isSp = state.frame==='Sp';
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-    ctx.fillText(isSp?"x′":'x', X(view.xMax)-10, Y(0)-8);
+    ctx.fillText(isSp?"x′":'x', X(vxMax)-10, Y(0)-8);
     ctx.textAlign='right';
-    ctx.fillText(isSp?"ct′":'ct', X(0)-10, Y(view.tMax)+14);
+    ctx.fillText(isSp?"ct′":'ct', X(0)-10, Y(vtMax)+14);
 
     ctx.restore();
   }
@@ -934,7 +948,7 @@ const Shell = (function(){
       wSub=measureSubText(sublabel);
     }
     const wMax=Math.max(wLbl,wC,wSub);
-    const stackH = sublabel ? 40 : 26;
+    const stackH = sublabel ? 46 : 29;
     const isOrigin = Math.abs(p.x)<0.05 && Math.abs(p.t)<0.05;
     const onAliceLine = Math.abs(p.x)<0.05 && p.t>0.05; // E_R
     const onBellaRay = p.x > 0.15;                         // E_C
@@ -979,11 +993,11 @@ const Shell = (function(){
     fillTextSub(lbl, lx, ly);
     ctx.font='500 11px '+getComputedStyle(document.body).fontFamily;
     ctx.fillStyle= light ? '#334155' : '#cbd5e1';
-    ctx.fillText(coord, lx, ly+13);
+    ctx.fillText(coord, lx, ly+16);
     if(sublabel){
       ctx.fillStyle=color;
       ctx.font='600 11px '+getComputedStyle(document.body).fontFamily;
-      fillTextSub(sublabel, lx, ly+27);
+      fillTextSub(sublabel, lx, ly+33);
     }
     ctx.restore();
   }
@@ -1058,8 +1072,11 @@ const Shell = (function(){
     ctx.font='600 11px '+getComputedStyle(document.body).fontFamily;
     ctx.fillStyle='#06b6d4';
     const s = `τ_A = ${tNow.toFixed(2)}`;
-    let lx=X(p.x)-measureSubText(s)-10, ly=Y(p.t)-4;
-    if(lx<M.l+4) lx=X(p.x)+10;
+    // Label on the right of the dot — the E_R event badge sits on the left,
+    // so this keeps the two texts from stacking on top of each other.
+    const w=measureSubText(s);
+    let lx=X(p.x)+12, ly=Y(p.t)-6;
+    if(lx+w>W-6) lx=X(p.x)-w-12;
     fillTextSub(s,lx,ly);
     ctx.restore();
   }
