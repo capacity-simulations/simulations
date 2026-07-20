@@ -897,7 +897,7 @@ const Shell = (function(){
     ctx.strokeStyle = ink.windStroke(strength);
     ctx.fillStyle = ink.windFill(strength);
     ctx.lineWidth = 2;
-    for(let y=spacingY*0.6; y<H; y+=spacingY){
+    for(let y=spacingY*0.6; y<H*0.78; y+=spacingY){
       for(let x=spacingX*0.6; x<W; x+=spacingX){
         const x0 = x - dir.x*len/2;
         const y0 = y - dir.y*len/2;
@@ -931,17 +931,339 @@ const Shell = (function(){
     ctx.restore();
   }
 
-  function airportAt(x,y,label){
-    const ink = skyInk();
+  // Ground band with layered terrain and wind-rippled grass along the bottom.
+  // Returns the y of the ground line so towers / shadows can sit on it.
+  function drawGround(){
+    const gTop = H*0.82;
+    const light = isLight();
+    const t = state.crabWobble;
+    // wind strength ripples the grass faster/further when the sim wind is up
+    const gust = 1 + Math.min(1, state.w/100) * (state.caseNum===1 ? 0 : 1.6);
+
+    // --- distant rolling treeline on the horizon (parallax silhouette) ---
     ctx.save();
-    ctx.fillStyle = ink.airport;
-    ctx.strokeStyle = ink.airportRing;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x,y,9,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = light ? 'rgba(52,110,66,0.55)' : 'rgba(16,42,30,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(0, gTop);
+    for(let x=0; x<=W; x+=14){
+      const h1 = 6 + 7*Math.abs(Math.sin(x*0.023 + 1.7));
+      const h2 = 4*Math.abs(Math.sin(x*0.061 + 0.4));
+      ctx.lineTo(x, gTop - h1 - h2);
+    }
+    ctx.lineTo(W, gTop);
+    ctx.closePath();
+    ctx.fill();
+    // second, nearer tree band — slightly darker, slower bumps
+    ctx.fillStyle = light ? 'rgba(38,88,48,0.65)' : 'rgba(10,30,20,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(0, gTop);
+    for(let x=0; x<=W; x+=10){
+      const h = 3.5 + 5*Math.abs(Math.sin(x*0.017 + 4.2)) + 2.5*Math.abs(Math.sin(x*0.05));
+      ctx.lineTo(x, gTop - h);
+    }
+    ctx.lineTo(W, gTop);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // --- turf: vertical gradient ---
+    const soil = ctx.createLinearGradient(0, gTop, 0, H);
+    if(light){
+      soil.addColorStop(0, '#7fb84c');
+      soil.addColorStop(0.25, '#66a23a');
+      soil.addColorStop(0.7, '#4e8630');
+      soil.addColorStop(1, '#3c6b24');
+    } else {
+      soil.addColorStop(0, '#20402a');
+      soil.addColorStop(0.3, '#183321');
+      soil.addColorStop(0.7, '#102616');
+      soil.addColorStop(1, '#0a1c10');
+    }
+    ctx.fillStyle = soil;
+    ctx.fillRect(0, gTop, W, H-gTop);
+
+    // crisp horizon edge with a sunlit rim
+    ctx.strokeStyle = light ? 'rgba(255,255,235,0.5)' : 'rgba(140,200,150,0.2)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(0,gTop); ctx.lineTo(W,gTop); ctx.stroke();
+
+    // --- back layer of grass: short, dark, dense ---
+    ctx.lineCap = 'round';
+    for(let i=0;i<Math.floor(W/6);i++){
+      const gx = (i*6.4 + ((i*31)%5)) % W;
+      const hgt = 3.5 + ((i*47)%6);
+      // travelling gust wave: phase moves across the field
+      const sway = Math.sin(t*1.8*gust - gx*0.045 + i*0.15) * (1.4 + 1.3*gust);
+      const a = light ? 0.30 + ((i*23)%25)/160 : 0.22 + ((i*23)%20)/160;
+      ctx.strokeStyle = light ? `rgba(34,86,26,${a})` : `rgba(52,110,72,${a})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(gx, gTop+1.5);
+      ctx.quadraticCurveTo(gx + sway*0.35, gTop - hgt*0.6, gx + sway, gTop - hgt);
+      ctx.stroke();
+    }
+
+    // --- front layer of grass: taller, lighter, catches the light ---
+    for(let i=0;i<Math.floor(W/11);i++){
+      const gx = (i*11.7 + ((i*43)%9)) % W;
+      const hgt = 6 + ((i*53)%10);
+      const sway = Math.sin(t*1.8*gust - gx*0.045 + 2.1) * (2.0 + 1.8*gust);
+      const a = light ? 0.5 + ((i*29)%35)/120 : 0.32 + ((i*29)%28)/140;
+      ctx.strokeStyle = light ? `rgba(88,150,52,${a})` : `rgba(84,150,104,${a})`;
+      ctx.lineWidth = 1.7;
+      ctx.beginPath();
+      ctx.moveTo(gx, gTop+2);
+      ctx.quadraticCurveTo(gx + sway*0.4, gTop - hgt*0.55, gx + sway, gTop - hgt);
+      ctx.stroke();
+      // blade highlight tip
+      if(i%4===0){
+        ctx.strokeStyle = light ? 'rgba(190,230,120,0.5)' : 'rgba(140,200,160,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gx + sway*0.6, gTop - hgt*0.75);
+        ctx.lineTo(gx + sway, gTop - hgt);
+        ctx.stroke();
+      }
+    }
+
+    // --- grass tufts + tiny wildflowers scattered inside the band ---
+    for(let i=0;i<Math.floor(W/48);i++){
+      const gx = (i*49.3 + 23) % W;
+      const gy = gTop + 9 + ((i*41)%Math.max(6, H-gTop-16));
+      const depth = (gy-gTop)/(H-gTop);            // 0 far → 1 near
+      const sway = Math.sin(t*1.5*gust - gx*0.03 + i*1.9) * (1.2 + 1.4*gust*depth);
+      ctx.strokeStyle = light ? `rgba(30,80,25,${0.28+0.2*depth})` : `rgba(45,105,65,${0.24+0.14*depth})`;
+      ctx.lineWidth = 1.2 + depth*0.8;
+      const s = 0.8 + depth*0.9;
+      for(let b=-1;b<=1;b++){
+        ctx.beginPath();
+        ctx.moveTo(gx, gy);
+        ctx.quadraticCurveTo(gx + (b*2.4 + sway*0.5)*s, gy-5*s, gx + (b*4.6 + sway)*s, gy-9*s);
+        ctx.stroke();
+      }
+      // occasional flower head (daytime only)
+      if(light && i%3===0){
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.arc(gx + sway*s, gy-9*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(250,204,21,0.9)';
+        ctx.beginPath(); ctx.arc(gx + sway*s, gy-9*s, 0.7*s, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
+    // --- soft ambient occlusion at the very bottom ---
+    const ao = ctx.createLinearGradient(0, H-14, 0, H);
+    ao.addColorStop(0, 'rgba(0,0,0,0)');
+    ao.addColorStop(1, light ? 'rgba(20,40,10,0.25)' : 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = ao;
+    ctx.fillRect(0, H-14, W, 14);
+
+    return gTop;
+  }
+
+  // Airport control tower standing on the ground at x, base on groundY.
+  function airportAt(x, groundY, label){
+    const ink = skyInk();
+    const light = isLight();
+    const t = state.crabWobble;
+    const towerH = Math.max(70, Math.min(110, H*0.22));
+    const baseY = groundY + 2;
+    const topY  = baseY - towerH;
+    const side = label==='A' ? 1 : -1;   // terminal building faces the runway (inward)
+
+    ctx.save();
+
+    // tower shadow stretching along the ground
+    ctx.fillStyle = light ? 'rgba(20,50,15,0.18)' : 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x + side*14, baseY+2, 34, 4.5, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // apron / concrete pad at the tower base
+    ctx.fillStyle = light ? 'rgba(96,106,116,0.92)' : 'rgba(50,60,75,0.92)';
+    roundRect(x-40, baseY-5, 80, 9, 3); ctx.fill();
+    // expansion joints in the concrete
+    ctx.strokeStyle = light ? 'rgba(60,70,80,0.4)' : 'rgba(20,28,40,0.5)';
+    ctx.lineWidth = 1;
+    for(let jx=-30; jx<=30; jx+=15){
+      ctx.beginPath(); ctx.moveTo(x+jx, baseY-5); ctx.lineTo(x+jx, baseY+4); ctx.stroke();
+    }
+    ctx.strokeStyle = light ? 'rgba(255,255,255,0.75)' : 'rgba(200,210,230,0.45)';
+    ctx.setLineDash([6,5]); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(x-33, baseY-0.5); ctx.lineTo(x+33, baseY-0.5); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // low terminal building beside the tower
+    const bldX = x + side*12, bldW = 30, bldH = 16;
+    const bld = ctx.createLinearGradient(0, baseY-bldH-5, 0, baseY-4);
+    if(light){ bld.addColorStop(0,'#d7dee5'); bld.addColorStop(1,'#a5b2be'); }
+    else     { bld.addColorStop(0,'#31405a'); bld.addColorStop(1,'#1b2638'); }
+    ctx.fillStyle = bld;
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.5)' : 'rgba(148,163,184,0.35)';
+    ctx.lineWidth = 1.2;
+    roundRect(Math.min(bldX, bldX+side*bldW), baseY-bldH-4, bldW, bldH, 2);
+    ctx.fill(); ctx.stroke();
+    // roofline + windows (lit at night)
+    ctx.fillStyle = light ? '#8a97a3' : '#0f1826';
+    ctx.fillRect(Math.min(bldX, bldX+side*bldW)-1.5, baseY-bldH-6, bldW+3, 3);
+    for(let wx=4; wx<bldW-4; wx+=7){
+      ctx.fillStyle = light ? 'rgba(70,110,140,0.75)' : `rgba(255,225,140,${0.55+0.25*Math.sin(t*0.7+wx)})`;
+      ctx.fillRect(Math.min(bldX, bldX+side*bldW)+wx, baseY-bldH+1, 4, 5);
+    }
+
+    // tapered shaft with a vertical sunlit edge
+    const shaft = ctx.createLinearGradient(x-8, 0, x+8, 0);
+    if(light){ shaft.addColorStop(0,'#eef2f6'); shaft.addColorStop(0.45,'#c2ccd6'); shaft.addColorStop(1,'#8a99a7'); }
+    else     { shaft.addColorStop(0,'#4b5e75'); shaft.addColorStop(0.45,'#334155'); shaft.addColorStop(1,'#1c2839'); }
+    ctx.fillStyle = shaft;
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.55)' : 'rgba(148,163,184,0.4)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x-8, baseY-4);
+    ctx.lineTo(x-5, topY+21);
+    ctx.lineTo(x+5, topY+21);
+    ctx.lineTo(x+8, baseY-4);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // slit windows up the shaft (stairwell, gently flickering at night)
+    for(let f=0.28; f<0.85; f+=0.14){
+      const wy = topY + 24 + (baseY-topY-30)*f;
+      const glow = 0.4 + 0.3*Math.abs(Math.sin(t*0.5 + f*9));
+      ctx.fillStyle = light ? 'rgba(70,100,130,0.55)' : `rgba(255,228,150,${glow.toFixed(3)})`;
+      ctx.fillRect(x-1.6, wy, 3.2, 5.5);
+    }
+
+    // red/white aviation bands
+    ctx.fillStyle = light ? 'rgba(215,55,45,0.9)' : 'rgba(215,80,70,0.8)';
+    [0.22, 0.58].forEach(f=>{
+      const by = topY + 26 + (baseY-topY-32)*f;
+      const hw = 5.2 + 2.6*f;
+      ctx.fillRect(x-hw, by, hw*2, 5.5);
+      // subtle curvature shading on the band
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(x+hw-2.4, by, 2.4, 5.5);
+      ctx.fillStyle = light ? 'rgba(215,55,45,0.9)' : 'rgba(215,80,70,0.8)';
+    });
+
+    // catwalk ring under the cab
+    ctx.fillStyle = light ? '#7c8a97' : '#16202f';
+    roundRect(x-17, topY+19, 34, 3.5, 1.5); ctx.fill();
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.6)' : 'rgba(148,163,184,0.45)';
+    ctx.lineWidth = 0.9;
+    for(let rx=-15; rx<=15; rx+=5){
+      ctx.beginPath(); ctx.moveTo(x+rx, topY+19); ctx.lineTo(x+rx, topY+16); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(x-16, topY+16); ctx.lineTo(x+16, topY+16); ctx.stroke();
+
+    // control cab — flared glass, lit from inside at night
+    const cab = ctx.createLinearGradient(x, topY+3, x, topY+19);
+    if(light){ cab.addColorStop(0,'#e8f7ff'); cab.addColorStop(0.55,'#9fd0e8'); cab.addColorStop(1,'#4f96ba'); }
+    else     { cab.addColorStop(0,'#ffedb0'); cab.addColorStop(0.6,'#e0b23f'); cab.addColorStop(1,'#7a5c15'); }
+    ctx.fillStyle = cab;
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.65)' : 'rgba(20,28,40,0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x-16, topY+19);
+    ctx.lineTo(x-13, topY+4);
+    ctx.lineTo(x+13, topY+4);
+    ctx.lineTo(x+16, topY+19);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // slanted glass reflection streak
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x-16, topY+19); ctx.lineTo(x-13, topY+4); ctx.lineTo(x+13, topY+4);
+    ctx.lineTo(x+16, topY+19); ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = light ? 'rgba(255,255,255,0.4)' : 'rgba(255,250,220,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(x-14, topY+19); ctx.lineTo(x-6, topY+4); ctx.lineTo(x-1, topY+4); ctx.lineTo(x-9, topY+19);
+    ctx.closePath(); ctx.fill();
+    // tiny controller silhouettes at night
+    if(!light){
+      ctx.fillStyle = 'rgba(60,45,10,0.8)';
+      ctx.beginPath(); ctx.arc(x-5, topY+13, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(x-7.2, topY+14.5, 4.4, 4.5);
+      ctx.beginPath(); ctx.arc(x+6, topY+12.5, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(x+3.8, topY+14, 4.4, 5);
+    }
+    ctx.restore();
+    // window mullions
+    ctx.strokeStyle = light ? 'rgba(50,70,90,0.45)' : 'rgba(20,28,40,0.6)';
+    ctx.lineWidth = 1;
+    for(let mx=-9; mx<=9; mx+=6){
+      ctx.beginPath(); ctx.moveTo(x+mx, topY+5); ctx.lineTo(x+mx+1.2, topY+18); ctx.stroke();
+    }
+    // roof slab
+    ctx.fillStyle = light ? '#6b7a88' : '#141d2b';
+    roundRect(x-17.5, topY, 35, 4.5, 2); ctx.fill();
+
+    // rotating radar bar on the roof (sweeps like a real ASR antenna)
+    const radAng = t*1.3 + (label==='B'?2.1:0);
+    const radW = 13*Math.cos(radAng);            // apparent width as it rotates
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.85)' : 'rgba(170,185,205,0.8)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x-6, topY-3); ctx.lineTo(x-6, topY); ctx.stroke();
+    ctx.save();
+    ctx.translate(x-6, topY-4);
+    ctx.fillStyle = light ? '#5b6b7a' : '#9fb2c8';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, Math.max(1.6, Math.abs(radW)), 2.1, 0, 0, Math.PI*2);
+    ctx.fill();
+    // leading-edge glint when the bar faces the viewer
+    if(Math.cos(radAng) > 0.2){
+      ctx.fillStyle = light ? 'rgba(255,255,255,0.7)' : 'rgba(220,235,255,0.6)';
+      ctx.fillRect(-Math.abs(radW), -0.8, Math.abs(radW)*0.5, 1.2);
+    }
+    ctx.restore();
+
+    // antenna mast + double blinking beacons
+    ctx.strokeStyle = light ? 'rgba(60,75,90,0.8)' : 'rgba(148,163,184,0.7)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x+7, topY); ctx.lineTo(x+7, topY-12); ctx.stroke();
+    const blink = Math.max(0, Math.sin(t*2.4 + (label==='B'?1.3:0)));
+    const bl2 = blink*blink;                      // sharper strobe falloff
+    ctx.fillStyle = `rgba(248,70,50,${0.25+0.75*bl2})`;
+    ctx.beginPath(); ctx.arc(x+7, topY-14, 2.6, 0, Math.PI*2); ctx.fill();
+    // halo pulse
+    ctx.fillStyle = `rgba(248,110,80,${0.3*bl2})`;
+    ctx.beginPath(); ctx.arc(x+7, topY-14, 6 + 3*bl2, 0, Math.PI*2); ctx.fill();
+
+    // windsock on a pole, driven by the sim wind (limp in still air, flying in a gale)
+    const sockX = x - side*30, sockPoleTop = baseY - 24;
+    ctx.strokeStyle = light ? 'rgba(80,90,100,0.9)' : 'rgba(148,163,184,0.6)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(sockX, baseY-3); ctx.lineTo(sockX, sockPoleTop); ctx.stroke();
+    const wStr = state.caseNum===1 ? 0 : Math.min(1, state.w/80);
+    const flutter = Math.sin(t*6 + x)*0.08*(0.3+wStr);
+    // sock hangs straight down in still air and lifts toward horizontal as wind rises
+    const raise = 0.15 + 0.85*wStr;
+    const sockAngle = (Math.PI/2)*(1 - raise) + flutter;   // 0 = horizontal, π/2 = limp
+    ctx.save();
+    ctx.translate(sockX, sockPoleTop);
+    ctx.rotate(sockAngle);
+    const segs = 5, segL = 5.5;
+    for(let s2=0; s2<segs; s2++){
+      const wob = Math.sin(t*7 - s2*0.9)*0.9*(0.25+wStr);
+      ctx.fillStyle = (s2%2===0)
+        ? (light ? 'rgba(235,90,40,0.95)' : 'rgba(220,95,50,0.85)')
+        : (light ? 'rgba(255,255,255,0.95)' : 'rgba(225,230,240,0.8)');
+      const r0 = 3.4 - s2*0.45, r1 = 3.4 - (s2+1)*0.45;
+      ctx.beginPath();
+      ctx.moveTo(s2*segL, -r0 + wob);
+      ctx.lineTo((s2+1)*segL, -r1 + wob*1.15);
+      ctx.lineTo((s2+1)*segL,  r1 + wob*1.15);
+      ctx.lineTo(s2*segL,  r0 + wob);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // label above the tower
     ctx.fillStyle = ink.airportLabel;
-    ctx.font = '700 13px '+css('--font-sans');
+    ctx.font = '700 14px '+css('--font-sans');
     ctx.textAlign = 'center';
-    ctx.fillText(label, x, y-16);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, x, topY-24);
     ctx.restore();
   }
 
@@ -954,161 +1276,248 @@ const Shell = (function(){
     return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
   }
 
-  // Top-down plane sprite — ~2.8× larger than the old outline, high-contrast amber.
+  // Side-view plane sprite — amber prop plane seen from the side.
+  // noseAngle keeps the same convention as before (0 = right, π = left, ± crab tilt);
+  // the sprite is mirrored for leftward flight and tilted by the residual crab angle.
+  let groundLineY = 0;   // set each frame by drawScene, used for the drop shadow
   function drawPlane(x,y,noseAngle){
     const spinning = !state.done;
-    const prop = state.crabWobble * 6;
+    const t = state.crabWobble;
+    const prop = t * 6;
     const ink = skyInk();
+    const light = isLight();
+    const facingRight = Math.cos(noseAngle) >= 0;
+    const tilt = facingRight ? noseAngle : Math.PI - noseAngle;
+
+    // soft shadow on the ground below the plane — fades and shrinks with altitude
+    if(groundLineY > 0){
+      const alt = Math.max(0, Math.min(1, (groundLineY - y)/groundLineY));
+      ctx.save();
+      ctx.fillStyle = light ? `rgba(0,0,0,${0.22 - 0.1*alt})` : `rgba(0,0,0,${0.4 - 0.18*alt})`;
+      ctx.beginPath();
+      ctx.ellipse(x, groundLineY + 6, 26 - 8*alt, 4.5 - 1.5*alt, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- engine exhaust puffs trailing behind (world space, before mirroring) ----
+    if(spinning){
+      const behind = facingRight ? -1 : 1;
+      for(let i=1;i<=7;i++){
+        const px2 = x + behind*(42 + i*13 + (t*22 % 13));
+        const py2 = y + Math.sin(t*2.2 + i*1.4)*1.6 - i*0.5;
+        const fade = (1 - i/8) * 0.16;
+        const r = 2 + i*1.1;
+        ctx.fillStyle = light ? `rgba(255,255,255,${fade})` : `rgba(200,215,235,${fade*0.8})`;
+        ctx.beginPath(); ctx.arc(px2, py2, r, 0, Math.PI*2); ctx.fill();
+      }
+    }
 
     ctx.save();
     ctx.translate(x,y);
-    ctx.rotate(noseAngle);
+    ctx.scale(facingRight ? 1 : -1, 1);
+    ctx.rotate(tilt);
+    // layered bobbing + slight pitch breathing so cruise flight feels alive
+    ctx.translate(0, Math.sin(t*1.1)*1.4 + Math.sin(t*2.7+1.3)*0.5);
+    ctx.rotate(Math.sin(t*0.9)*0.012);
 
-    // soft ground shadow — lighter on night sky so it doesn't punch a black hole
-    ctx.fillStyle = isLight() ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.45)';
+    // ---- far wing (on the other side of the fuselage, drawn first, darker) ----
+    ctx.fillStyle = shadeAmber(0.55);
+    ctx.strokeStyle = ink.planeOutlineDeep;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.ellipse(0, 3, 28, 10, 0, 0, Math.PI*2);
-    ctx.fill();
+    ctx.moveTo(7, -3);
+    ctx.lineTo(-11, -13);
+    ctx.lineTo(-20, -13);
+    ctx.lineTo(-5, -3);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
 
-    // ---- wings (drawn first, under fuselage) ----
-    const wingGrad = ctx.createLinearGradient(0, -30, 0, 30);
-    wingGrad.addColorStop(0, shadeAmber(1.35));
-    wingGrad.addColorStop(0.5, '#f59e0b');
-    wingGrad.addColorStop(1, shadeAmber(0.7));
+    // ---- near wing (sweeping toward the viewer) ----
+    const wingGrad = ctx.createLinearGradient(0, -4, -16, 18);
+    wingGrad.addColorStop(0, shadeAmber(1.2));
+    wingGrad.addColorStop(1, shadeAmber(0.65));
     ctx.fillStyle = wingGrad;
     ctx.strokeStyle = ink.planeOutline;
     ctx.lineWidth = 1.8;
-    // port wing
     ctx.beginPath();
-    ctx.moveTo(6, -3);
-    ctx.lineTo(-4, -30);
-    ctx.lineTo(-14, -30);
-    ctx.lineTo(-8, -3);
+    ctx.moveTo(9, -1);
+    ctx.lineTo(-14, 14);
+    ctx.lineTo(-24, 14);
+    ctx.lineTo(-6, -1);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
-    // starboard wing
+    // wing root shading where it meets the fuselage
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
     ctx.beginPath();
-    ctx.moveTo(6, 3);
-    ctx.lineTo(-4, 30);
-    ctx.lineTo(-14, 30);
-    ctx.lineTo(-8, 3);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // wingtip markers (high-vis)
+    ctx.moveTo(9, -1); ctx.lineTo(2, 3.5); ctx.lineTo(-6, -1);
+    ctx.closePath(); ctx.fill();
     ctx.fillStyle = ink.wingtip;
-    ctx.beginPath(); ctx.ellipse(-9, -30, 4, 2.2, -0.2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(-9,  30, 4, 2.2,  0.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-19, 14, 4.5, 2, 0, 0, Math.PI*2); ctx.fill();
+    // green nav light on the near wingtip (starboard when flying right)
+    const navBlink = Math.max(0, Math.sin(t*3.1));
+    ctx.fillStyle = `rgba(74,222,128,${0.4+0.6*navBlink*navBlink})`;
+    ctx.beginPath(); ctx.arc(-21, 14, 1.6, 0, Math.PI*2); ctx.fill();
 
-    // engines under wings
-    ctx.fillStyle = shadeAmber(0.55);
-    ctx.strokeStyle = ink.planeOutlineDeep;
-    ctx.lineWidth = 1.2;
-    [[-2,-16],[-2,16]].forEach(([ex,ey])=>{
-      roundRect(ex-10, ey-4.5, 18, 9, 3);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = isLight() ? '#94a3b8' : '#cbd5e1';
-      ctx.beginPath(); ctx.arc(ex+7, ey, 2.4, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = shadeAmber(0.55);
-    });
-
-    // ---- fuselage ----
-    const fus = ctx.createLinearGradient(0, -10, 0, 10);
+    // ---- fuselage (side profile: pointed nose, raised tail cone) ----
+    const fus = ctx.createLinearGradient(0, -12, 0, 10);
     fus.addColorStop(0, shadeAmber(1.45));
     fus.addColorStop(0.45, '#fbbf24');
-    fus.addColorStop(1, shadeAmber(0.75));
+    fus.addColorStop(1, shadeAmber(0.7));
     ctx.fillStyle = fus;
     ctx.strokeStyle = ink.planeOutline;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(34, 0);                         // nose
-    ctx.quadraticCurveTo(26, -9, 8, -9);
-    ctx.lineTo(-22, -7);
-    ctx.quadraticCurveTo(-32, -5, -32, 0);      // tail cone
-    ctx.quadraticCurveTo(-32, 5, -22, 7);
-    ctx.lineTo(8, 9);
-    ctx.quadraticCurveTo(26, 9, 34, 0);
+    ctx.moveTo(36, 0);                          // nose tip
+    ctx.quadraticCurveTo(30, -7, 14, -8);       // upper nose → cabin roof
+    ctx.lineTo(-16, -7);
+    ctx.quadraticCurveTo(-30, -6, -34, -3);     // tapering rear top
+    ctx.lineTo(-34, 1);
+    ctx.quadraticCurveTo(-26, 5, -12, 6.5);     // belly rear
+    ctx.lineTo(16, 7);
+    ctx.quadraticCurveTo(30, 6, 36, 0);         // lower nose
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // specular highlight along the fuselage top
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(28, -5.5);
+    ctx.quadraticCurveTo(10, -7.3, -14, -6.2);
+    ctx.stroke();
+    // ambient occlusion under the belly
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(26, 5.2);
+    ctx.quadraticCurveTo(0, 7.6, -22, 5.4);
+    ctx.stroke();
+    // engine cowling ring behind the spinner
+    ctx.fillStyle = shadeAmber(0.6);
+    ctx.strokeStyle = ink.planeOutlineDeep;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(30, -5.5); ctx.lineTo(33.5, -3.5); ctx.lineTo(33.5, 3.5); ctx.lineTo(30, 5.2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // ---- vertical tail fin ----
+    ctx.fillStyle = shadeAmber(0.95);
+    ctx.strokeStyle = ink.planeOutline;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-22, -6);
+    ctx.lineTo(-31, -22);
+    ctx.lineTo(-37, -22);
+    ctx.lineTo(-34, -4);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = ink.wingtip;
+    ctx.beginPath(); ctx.ellipse(-34, -22, 3.6, 1.8, 0, 0, Math.PI*2); ctx.fill();
+    // white anti-collision strobe on the fin tip (sharp double-flash)
+    const strobe = Math.pow(Math.max(0, Math.sin(t*4.6)), 14);
+    if(strobe > 0.05){
+      ctx.fillStyle = `rgba(255,255,255,${0.9*strobe})`;
+      ctx.beginPath(); ctx.arc(-34, -23, 2 + 2.5*strobe, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.25*strobe})`;
+      ctx.beginPath(); ctx.arc(-34, -23, 6 + 4*strobe, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ---- tailplane (horizontal stabilizer, small in side view) ----
+    ctx.fillStyle = shadeAmber(0.8);
+    ctx.strokeStyle = ink.planeOutlineDeep;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-26, -2);
+    ctx.lineTo(-40, 2);
+    ctx.lineTo(-33, 4);
+    ctx.lineTo(-24, 2);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
 
-    // cockpit canopy (glass)
-    const glass = ctx.createLinearGradient(14, -6, 28, 4);
+    // ---- cockpit windshield ----
+    const glass = ctx.createLinearGradient(16, -9, 28, -1);
     glass.addColorStop(0, 'rgba(224,242,254,0.95)');
-    glass.addColorStop(1, 'rgba(14,116,144,0.55)');
+    glass.addColorStop(1, 'rgba(14,116,144,0.6)');
     ctx.fillStyle = glass;
     ctx.beginPath();
-    ctx.moveTo(18, -6);
-    ctx.quadraticCurveTo(28, -3, 30, 0);
-    ctx.quadraticCurveTo(28, 3, 18, 6);
-    ctx.lineTo(12, 4);
-    ctx.lineTo(12, -4);
+    ctx.moveTo(15, -7.5);
+    ctx.lineTo(26, -5.5);
+    ctx.quadraticCurveTo(28, -3, 26, -1.5);
+    ctx.lineTo(15, -2.5);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = isLight() ? 'rgba(120,53,15,0.55)' : 'rgba(253,230,138,0.55)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // cabin windows
-    ctx.fillStyle = 'rgba(15,23,42,0.6)';
-    for(let i=0;i<4;i++){
-      const wx = 4 - i*7;
-      roundRect(wx-2.2, -3.5, 4.4, 7, 1.5);
-      ctx.fill();
+    // ---- cabin windows (round portholes along the side, with glints) ----
+    for(let i=0;i<5;i++){
+      const wx = 8 - i*7.5;
+      ctx.fillStyle = light ? 'rgba(15,23,42,0.7)' : 'rgba(255,232,160,0.75)';   // lit from inside at night
+      ctx.beginPath(); ctx.arc(wx, -2.5, 2.1, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = light ? 'rgba(200,230,255,0.7)' : 'rgba(255,255,255,0.5)';
+      ctx.beginPath(); ctx.arc(wx-0.7, -3.2, 0.7, 0, Math.PI*2); ctx.fill();
     }
 
-    // ---- tail ----
-    ctx.fillStyle = shadeAmber(0.95);
-    ctx.strokeStyle = ink.planeOutline;
-    ctx.lineWidth = 1.6;
-    // vertical stabilizer (top-down: diamond behind)
+    // belly stripe
+    ctx.strokeStyle = isLight() ? 'rgba(120,53,15,0.4)' : 'rgba(69,26,3,0.55)';
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.moveTo(-20, 0);
-    ctx.lineTo(-28, -14);
-    ctx.lineTo(-18, -2);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-20, 0);
-    ctx.lineTo(-28, 14);
-    ctx.lineTo(-18, 2);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // horizontal stabilizer
-    ctx.beginPath();
-    ctx.moveTo(-18, -2);
-    ctx.lineTo(-26, -18);
-    ctx.lineTo(-30, -18);
-    ctx.lineTo(-24, 0);
-    ctx.lineTo(-30, 18);
-    ctx.lineTo(-26, 18);
-    ctx.lineTo(-18, 2);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.moveTo(24, 4); ctx.lineTo(-20, 4.5);
+    ctx.stroke();
 
-    // ---- spinning propeller at nose ----
+    // ---- landing gear tucked hint (small bump) ----
+    ctx.fillStyle = shadeAmber(0.55);
+    ctx.beginPath(); ctx.ellipse(2, 7, 5, 2, 0, 0, Math.PI); ctx.fill();
+
+    // ---- spinning propeller at the nose (blur disc + blade streaks) ----
     if(spinning){
       ctx.save();
-      ctx.globalAlpha = 0.4;
+      // translucent blur disc
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = ink.prop;
+      ctx.beginPath();
+      ctx.ellipse(37, -0.5, 3, 13.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      // rotating blade streaks caught mid-spin
+      ctx.globalAlpha = 0.5;
       ctx.strokeStyle = ink.prop;
-      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for(let b=0;b<3;b++){
+        const a = prop*2.4 + b*(Math.PI*2/3);
+        const ry = Math.sin(a);                 // vertical extent of this blade
+        const rx = Math.cos(a)*0.22;            // slight foreshortened wobble
+        ctx.lineWidth = 1.6 + 0.8*Math.abs(ry);
+        ctx.beginPath();
+        ctx.moveTo(37 - rx*3, -0.5);
+        ctx.lineTo(37 + rx*3, -0.5 + ry*13);
+        ctx.stroke();
+      }
+      // shimmering disc rim
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.ellipse(34, 0, 3, 11, prop*0.04, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath();
-      ctx.ellipse(34, 0, 2, 8, -prop*0.07, 0, Math.PI*2);
+      ctx.ellipse(37, -0.5, 2.6, 13 + Math.sin(prop)*1.0, 0, 0, Math.PI*2);
       ctx.stroke();
       ctx.restore();
     } else {
+      // stopped prop: two visible blades
       ctx.strokeStyle = ink.prop;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(34, -9); ctx.lineTo(34, 9);
-      ctx.moveTo(31, -2); ctx.lineTo(37, 2);
+      ctx.moveTo(37, -12); ctx.lineTo(37, 11);
+      ctx.stroke();
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(37, -12, 1.6, 3, 0, 0, Math.PI*2);
       ctx.stroke();
     }
-    // nose tip highlight
+    // spinner hub with a highlight
     ctx.fillStyle = ink.noseTip;
-    ctx.beginPath(); ctx.arc(34, 0, 2.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(36.5, -0.5, 2.8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.beginPath(); ctx.arc(35.8, -1.3, 1, 0, Math.PI*2); ctx.fill();
 
     ctx.restore();
   }
@@ -1116,12 +1525,15 @@ const Shell = (function(){
   function drawScene(){
     drawSky();
 
-    // Wind field (soft arrows over sky)
+    // Ground + grass band along the bottom; towers stand on it
+    groundLineY = drawGround();
+
+    // Wind field (soft arrows over sky, kept above the grass)
     drawWindField();
 
-    // Airports along a horizontal route
+    // Airports along a horizontal route (side view: control towers on the ground)
     const margin = 80;
-    const yRoute = H*0.5;
+    const yRoute = H*0.5;                 // cruise altitude of the flight path
     const xA = margin, xB = W - margin;
     const trackLen = xB - xA;
 
@@ -1140,9 +1552,9 @@ const Shell = (function(){
     ctx.fillText('400 km', (xA+xB)/2, yRoute-10);
     ctx.restore();
 
-    // Airports
-    airportAt(xA, yRoute, 'A');
-    airportAt(xB, yRoute, 'B');
+    // Control towers at A and B
+    airportAt(xA, groundLineY, 'A');
+    airportAt(xB, groundLineY, 'B');
 
     // Plane position
     const t = times(state.caseNum, state.w);
@@ -1188,7 +1600,7 @@ const Shell = (function(){
     const gs2 = state.leg===0 ? t.gOut : t.gRet;
     const legName = state.leg===0 ? 'Outbound' : 'Return';
     const legT = state.leg===0 ? state.tOut : state.tRet;
-    const line1 = 'leg: '+legName+'   ground speed: '+gs2.toFixed(1)+' km/h';
+    const line1 = 'Leg: '+legName+',   Ground speed: '+gs2.toFixed(1)+' km/h';
     const line2 = 't = '+legT.toFixed(2)+' h';
     ctx.save();
     ctx.textAlign='left';
