@@ -189,9 +189,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong{col
 .frame-toggle button{flex:1;background:transparent;border:none;color:var(--muted);font:inherit;font-family:var(--font-sans);font-size:12px;font-weight:600;padding:8px 6px;border-radius:5px;cursor:pointer;transition:all .15s;}
 .frame-toggle button.active[data-frame="alice"]{background:var(--alice);color:#fff;}
 .frame-toggle button.active[data-frame="bella"]{background:var(--bella);color:#fff;}
-.measure-btn{width:100%;background:var(--accent);border:none;color:#fff;font:inherit;font-family:var(--font-sans);font-size:13px;font-weight:600;padding:10px;border-radius:6px;cursor:pointer;letter-spacing:.5px;}
-.measure-btn:hover{background:#4ab5a6;}
-.measure-btn.active{box-shadow:0 0 0 2px rgba(94,234,212,.55);}
+.measure-btn{width:100%;background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;font-weight:600;padding:10px;border-radius:6px;cursor:pointer;letter-spacing:.5px;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;}
+.measure-btn:hover{background:rgba(30,77,58,.28);border-color:var(--accent-soft);color:var(--accent);}
+.measure-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 2px rgba(94,234,212,.55);}
+.measure-btn.active:hover{background:#4ab5a6;border-color:#4ab5a6;color:#fff;}
 .measure-btn:disabled{opacity:.5;cursor:not-allowed;}
 .formal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .eq-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;}
@@ -1082,6 +1083,42 @@ const Shell = (function(){
 
     // Axes
     const light = document.body.classList.contains('light-theme');
+
+    // Background grid (aligned with 0.2 m ticks), clipped to the plot area
+    {
+      sctx.save();
+      sctx.beginPath();
+      sctx.rect(pad.l, pad.t, plotW, plotH);
+      sctx.clip();
+      const spG = 0.2;
+      const nX = Math.floor(xHalf / spG + 1e-9);
+      const nTg = Math.floor(tHalf / spG + 1e-9);
+      sctx.lineWidth = 1;
+      for(let i=-nX; i<=nX; i++){
+        const px = worldToPx(i * spG);
+        const major = (i % 5 === 0);
+        sctx.strokeStyle = light
+          ? (major ? 'rgba(51,65,85,0.32)' : 'rgba(51,65,85,0.16)')
+          : (major ? 'rgba(148,163,184,0.42)' : 'rgba(148,163,184,0.22)');
+        sctx.beginPath();
+        sctx.moveTo(px, pad.t);
+        sctx.lineTo(px, pad.t + plotH);
+        sctx.stroke();
+      }
+      for(let i=-nTg; i<=nTg; i++){
+        const py = worldToPy(i * spG);
+        const major = (i % 5 === 0);
+        sctx.strokeStyle = light
+          ? (major ? 'rgba(51,65,85,0.32)' : 'rgba(51,65,85,0.16)')
+          : (major ? 'rgba(148,163,184,0.42)' : 'rgba(148,163,184,0.22)');
+        sctx.beginPath();
+        sctx.moveTo(pad.l, py);
+        sctx.lineTo(pad.l + plotW, py);
+        sctx.stroke();
+      }
+      sctx.restore();
+    }
+
     sctx.strokeStyle = light ? 'rgba(51,65,85,0.7)' : 'rgba(226,232,240,0.55)';
     sctx.lineWidth = 1.5;
     // x-axis (t=0)
@@ -1343,6 +1380,9 @@ const Shell = (function(){
   }
 
   function onStep(i){
+    // Lecture mode jumps to the last inquiry step for the full scene, but keeps
+    // "Measure endpoints" off by default so the instructor can toggle it live.
+    const lecture = document.getElementById('shell')?.classList.contains('lecture-mode');
     if(i===0){
       // Stage 1 — Bella's frame: rod at rest, read L′ = L₀ at leisure (no timing, no marks).
       state.measured=false; state.ev=null;
@@ -1353,18 +1393,24 @@ const Shell = (function(){
       selectFrame('alice'); updateReadouts();
     } else if(i===2){
       // Measure (Alice): show the two simultaneous marks → L = L₀/γ.
-      selectFrame('alice'); state.measured=true; computeEv(); updateReadouts();
+      selectFrame('alice');
+      if(lecture){ state.measured=false; state.ev=null; }
+      else { state.measured=true; computeEv(); }
+      updateReadouts();
     } else if(i===3){
       // Predict simultaneity — STAY in Alice's frame so Bella's Δt′ isn't pre-revealed.
-      if(!state.measured){ state.measured=true; computeEv(); }
+      if(lecture){ state.measured=false; state.ev=null; }
+      else if(!state.measured){ state.measured=true; computeEv(); }
       selectFrame('alice'); updateReadouts();
     } else if(i===4){
       // Switch frames — reveal the same two events in Bella's frame.
-      if(!state.measured){ state.measured=true; computeEv(); }
+      if(lecture){ state.measured=false; state.ev=null; }
+      else if(!state.measured){ state.measured=true; computeEv(); }
       selectFrame('bella');
     } else {
       // Evaluate — keep the Bella reveal.
-      if(!state.measured){ state.measured=true; computeEv(); }
+      if(lecture){ state.measured=false; state.ev=null; }
+      else if(!state.measured){ state.measured=true; computeEv(); }
       selectFrame('bella');
     }
   }
