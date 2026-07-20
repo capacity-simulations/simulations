@@ -83,9 +83,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .legend{position:absolute;top:12px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
-#live-readouts{display:flex;flex-direction:column;gap:10px;border-radius:8px;transition:box-shadow .25s ease, border-color .25s ease;}
-#live-readouts.loop-cue{box-shadow:0 0 16px rgba(34,211,238,.4);}
-#live-readouts.loop-cue .stat-value{color:#e0f2fe;}
+#live-readouts{display:flex;flex-direction:column;gap:10px;border-radius:8px;}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
@@ -239,8 +237,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
         <label style="font-size:11px;">Speed</label>
         <select id="shell-speed" class="shell-select">
-          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="0.25" selected>0.25×</option><option value="0.5">0.5×</option>
+          <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option>
         </select>
       </div>
       <div class="shell-sep"></div>
@@ -586,7 +584,6 @@ const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
 
 const LAND_HOLD    = 0.45; // s — hold on the floor so the landing readouts register
-const RELAUNCH_CUE = 0.35; // s — glow duration right after relaunch
 
 const state = {
   frame: 'cabin',      // 'cabin' | 'beach'
@@ -595,9 +592,8 @@ const state = {
   g: 9.8,              // gravity (m/s^2)
   t: 0,                // time since release (s)
   landed: false,
-  pan: 0,              // continuous world clock — drives scrolling, NEVER resets on loop
+  pan: 0,              // beach scroll clock — advances during each fall, resets to 0 on relaunch
   landHold: 0,         // seconds remaining holding the fly on the floor before relaunch
-  relaunchCue: 0,      // seconds remaining of the "loop reset" glow on the readouts
   trail: [],           // array of {x,y} in current frame's world coords
   // Positioning in world coords (metres, x rightward, y up from beach)
   boatX: 0,            // ship position along beach (only advances in beach frame view, but tracked here for both)
@@ -619,7 +615,6 @@ function resetSim(){
   state.landed = false;
   state.pan = 0;
   state.landHold = 0;
-  state.relaunchCue = 0;
   state.trail.length = 0;
   state.boatX = 0;
   updateReadouts();
@@ -643,20 +638,19 @@ function flyState(){
 }
 
 function updateReadouts(){
+  const fmt2 = v => { const r = v.toFixed(2); return r === '-0.00' ? '0.00' : r; };
   const s = flyState();
-  document.getElementById('stat-x').textContent  = s.x.toFixed(2) + ' m';
-  document.getElementById('stat-y').textContent  = s.y.toFixed(2) + ' m';
-  document.getElementById('stat-t').textContent  = s.t.toFixed(2) + ' s';
-  document.getElementById('stat-vx').textContent = s.vx.toFixed(2) + ' m/s';
-  document.getElementById('stat-vy').textContent = s.vy.toFixed(2) + ' m/s';
-  document.getElementById('stat-T').textContent  = fallTime().toFixed(2) + ' s';
+  document.getElementById('stat-x').textContent  = fmt2(s.x)  + ' m';
+  document.getElementById('stat-y').textContent  = fmt2(s.y)  + ' m';
+  document.getElementById('stat-t').textContent  = fmt2(s.t)  + ' s';
+  document.getElementById('stat-vx').textContent = fmt2(s.vx) + ' m/s';
+  document.getElementById('stat-vy').textContent = fmt2(s.vy) + ' m/s';
+  document.getElementById('stat-T').textContent  = fmt2(fallTime()) + ' s';
   const label = state.frame==='cabin' ? '(cabin frame)' : '(beach frame)';
   document.getElementById('pos-frame').textContent = label;
   document.getElementById('vel-frame').textContent = label;
   const bigLabel = state.frame==='cabin' ? '— Cabin frame (Alice & Bella)' : '— Beach frame (Galileo)';
   document.getElementById('active-frame-label').textContent = bigLabel;
-  const live = document.getElementById('live-readouts');
-  if(live) live.classList.toggle('loop-cue', state.relaunchCue > 0);
 }
 
 /* ---------- Drawing ---------- */
@@ -666,7 +660,7 @@ function updateReadouts(){
 // A shared metres→pixels scale keeps trajectories physically honest.
 let view = { W:800, H:500, waterY:400, scale:60, camX:0 };
 
-const GALILEO_X = -1.0; // beach metres: 1 m left of the cabin at release (cabin at x=0) — same in both frames
+const GALILEO_X = 1.5; // beach metres: start right of cabin so he drifts across during each fall, then pan resets
 
 function computeView(w,h){
   view.W = w; view.H = h;
@@ -807,10 +801,9 @@ function drawBackground(){
   ctx.fillStyle = sand;
   ctx.fillRect(0, view.waterY-6, view.W, 10);
 
-  // Galileo — fixed beach position GALILEO_X. At animation start (pan=0 / beachOffset=0)
-  // he sits 1 m left of the cabin in BOTH frames. Cabin frame: he scrolls with the beach;
-  // beach frame: he stays put while the cabin sails past.
-  const galX = GALILEO_X + beachOffset;
+  // Galileo — fixed beach position GALILEO_X. Smooth (un-wrapped) offset so he never teleports;
+  // pan resets each loop, so he returns to this start position every fall.
+  const galX = GALILEO_X + beachOffsetRaw;
   const gpx = wx(galX);
   if(gpx > -40 && gpx < view.W+40){
     drawPerson(gpx, view.waterY, '#fbbf24', 'Galileo', {idle:true, lookUp:false});
@@ -1070,33 +1063,37 @@ function drawShip(){
   ctx.closePath();
   ctx.fill();
 
-  // Direction arrow
+  // Direction arrow — beach frame: boat moves right; cabin frame: beach moves left
+  const isCabin = state.frame === 'cabin';
+  const dir = isCabin ? -1 : 1;
   const arrowY = cabTop - mastH - 10;
   const arrowX = cx + cabW*0.45;
-  ctx.strokeStyle = state.frame==='beach' ? '#f59e0b' : '#94a3b8';
+  ctx.strokeStyle = isCabin ? '#94a3b8' : '#f59e0b';
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = 2;
   const alen = Math.max(20, state.v*10);
+  ctx.beginPath(); ctx.moveTo(arrowX, arrowY); ctx.lineTo(arrowX + dir*alen, arrowY); ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(arrowX, arrowY);
-  ctx.lineTo(arrowX + alen, arrowY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(arrowX+alen, arrowY);
-  ctx.lineTo(arrowX+alen-8, arrowY-5);
-  ctx.lineTo(arrowX+alen-8, arrowY+5);
+  ctx.moveTo(arrowX + dir*alen, arrowY);
+  ctx.lineTo(arrowX + dir*alen - dir*8, arrowY-5);
+  ctx.lineTo(arrowX + dir*alen - dir*8, arrowY+5);
   ctx.closePath(); ctx.fill();
+  // label: "v" + subscript + " = [−]X.X m/s" (cabin: anchor left of arrow tip so text clears the shaft)
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const labelY = arrowY - 8;
+  const sub = isCabin ? 'beach' : 'boat';
+  const valStr = ' = ' + (isCabin ? '−' : '') + state.v.toFixed(1) + ' m/s';
   ctx.font = '11px '+css('--font-sans');
-  ctx.fillText('v', arrowX, labelY);
   const vW = ctx.measureText('v').width;
   ctx.font = '8px '+css('--font-sans');
-  ctx.fillText('boat', arrowX + vW, labelY + 3);
-  const subW = ctx.measureText('boat').width;
+  const subW = ctx.measureText(sub).width;
   ctx.font = '11px '+css('--font-sans');
-  ctx.fillText(' = '+state.v.toFixed(1)+' m/s', arrowX + vW + subW, labelY);
+  const valW = ctx.measureText(valStr).width;
+  const labelX = isCabin ? arrowX + dir*alen - (vW + subW + valW) : arrowX;
+  ctx.fillText('v', labelX, labelY);
+  ctx.font = '8px '+css('--font-sans'); ctx.fillText(sub, labelX + vW, labelY + 3);
+  ctx.font = '11px '+css('--font-sans'); ctx.fillText(valStr, labelX + vW + subW, labelY);
 
   return { cabinWorldX, cyBase };
 }
@@ -1298,19 +1295,19 @@ renderKatex();
 /* ---------- Shell hooks ---------- */
 function onFrame(dt){
   const T = fallTime();
-  state.pan += dt;                                   // continuous — background scroll uses this
-  if(state.relaunchCue > 0) state.relaunchCue = Math.max(0, state.relaunchCue - dt);
 
   if(state.landHold > 0){
-    // Hold on the floor, then relaunch from the top.
+    // brief hold on the floor, then relaunch the SAME view
     state.landHold = Math.max(0, state.landHold - dt);
     state.t = T; state.landed = true;
     if(state.landHold === 0){
-      state.t = 0; state.landed = false;
-      state.trail.length = 0;                        // fresh trail for the next loop
-      state.relaunchCue = RELAUNCH_CUE;              // glow the readouts to cue the reset
+      state.t = 0;
+      state.pan = 0;                 // ← reset the beach so each loop is the identical view (Galileo back in frame)
+      state.landed = false;
+      state.trail.length = 0;
     }
   } else {
+    state.pan += dt;                 // beach scrolls only WHILE the fly is falling (not across loops)
     state.t += dt;
     if(state.t >= T){
       state.t = T; state.landed = true; state.landHold = LAND_HOLD;
@@ -1341,6 +1338,8 @@ function onStep(i){
 
 Shell.init({ onFrame, onReset, onResize, onStep });
 Shell.setLectureMode(true);
+const spd = document.getElementById('shell-speed');
+if(spd){ spd.value = '0.25'; spd.dispatchEvent(new Event('change')); }
 </script>
 </body>
 </html>

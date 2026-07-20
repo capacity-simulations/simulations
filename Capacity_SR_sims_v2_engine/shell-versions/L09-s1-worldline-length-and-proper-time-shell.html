@@ -554,8 +554,12 @@ canvas#diagram{width:100%;height:100%;display:block;touch-action:none;cursor:cro
                 <button class="seg-btn active" id="frameS">S</button>
                 <button class="seg-btn" id="frameSp">S′</button>
               </div>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--ink-mid);cursor:pointer;">
+                <input type="checkbox" id="toggleShowSp">
+                Show frame S′
+              </label>
             </div>
-            <div class="ctrl-section ctrl-box">
+            <div class="ctrl-section ctrl-box" id="betaSection">
               <div class="ctrl-section-title">v/c</div>
               <div class="ctrl-section-controls shell-group">
                 <input type="range" id="betaSlider" class="shell-range" min="-0.9" max="0.9" step="0.01" value="0">
@@ -833,6 +837,7 @@ function freshState(){
     W2:{x:-1.0,ct:1.4}, W3:{x:1.0,ct:3.6},
     focus:'A', frame:'S', beta:0, stage:1,
     showC:false,
+    showSp:false,
     u:0, prediction:null, drag:null
   };
 }
@@ -960,12 +965,20 @@ function drawTickLabels(){
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 }
 function drawAxisTitles(){
-  const pr=st.frame==='Sp';
-  ctx.fillStyle='#cbd5e1'; ctx.font='600 13px Inter, sans-serif'; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
-  ctx.fillText(pr?'x′':'x', view.plotLeft+view.plotW-16, view.plotTop+view.plotH+22);
-  ctx.fillText(pr?'ct′':'ct', view.plotLeft+6, view.plotTop+13);
-  ctx.fillStyle='#64748b'; ctx.font='10px Inter, sans-serif';
-  ctx.fillText('c = 1', view.plotLeft+6, view.plotTop+26);
+  const pr = st.frame === 'Sp';
+  const o = toPx(0, 0);                       // screen position of the origin (axes cross here)
+  ctx.fillStyle = '#cbd5e1'; ctx.font = '600 13px Inter, sans-serif';
+  // ct — at the TOP of the vertical (ct) axis
+  const ctX = Math.max(view.plotLeft + 10, Math.min(view.plotLeft + view.plotW - 10, o.px));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(pr ? 'ct′' : 'ct', ctX + 8, view.plotTop + 14);
+  // x — at the RIGHT end of the horizontal (x) axis
+  const xY = Math.max(view.plotTop + 14, Math.min(view.plotTop + view.plotH - 8, o.py));
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillText(pr ? 'x′' : 'x', view.plotLeft + view.plotW - 8, xY - 12);
+  // keep the "c = 1" note (top-left corner, now free)
+  ctx.fillStyle = '#64748b'; ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('c = 1', view.plotLeft + 6, view.plotTop + 13);
 }
 function drawLightCone(){
   const d=toDisplay(st.E1), big=300;
@@ -1199,6 +1212,27 @@ function clampAndSet(key,s){
   else if(key==='W1') s.ct=Math.max(st.E1.ct+0.4, Math.min(st.E2.ct-0.4, s.ct));
   else if(key==='W2') s.ct=Math.max(st.E1.ct+0.4, Math.min(st.W3.ct-0.4, s.ct));
   else if(key==='W3') s.ct=Math.max(st.W2.ct+0.4, Math.min(st.E2.ct-0.4, s.ct));
+
+  // Keep every segment TIMELIKE: |Δx| < Δct against each neighbouring vertex,
+  // so no segment goes spacelike/superluminal and τ stays real. (Physics unchanged;
+  // this only limits how far a point can be dragged.)
+  const M = 0.05; // margin so segments stay strictly timelike (τ > 0), never exactly null
+  const neigh = ({
+    E1: ['E2','W1'].concat(st.showC ? ['W2'] : []),
+    E2: ['E1','W1'].concat(st.showC ? ['W3'] : []),
+    W1: ['E1','E2'],
+    W2: ['E1','W3'],
+    W3: ['W2','E2'],
+  }[key]) || [];
+  let lo = -3.4, hi = 3.4;
+  for(const nk of neigh){
+    const n = st[nk];
+    const room = Math.abs(s.ct - n.ct) - M;   // max |Δx| allowed for a timelike segment
+    if(room > 0){ lo = Math.max(lo, n.x - room); hi = Math.min(hi, n.x + room); }
+    else { lo = hi = n.x; }                    // degenerate guard (ct-ordering makes this rare)
+  }
+  s.x = (lo <= hi) ? Math.max(lo, Math.min(hi, s.x)) : (lo + hi) / 2;
+
   st[key].x=s.x; st[key].ct=s.ct;
 }
 canvas.addEventListener('pointerdown',e=>{
@@ -1210,8 +1244,9 @@ canvas.addEventListener('pointermove',e=>{
   const r=canvas.getBoundingClientRect();
   const px=e.clientX-r.left, py=e.clientY-r.top;
   if(st.drag){
-    const sc=fromDisplay(toWorld(px,py));
-    clampAndSet(st.drag,sc);
+    const sc = fromDisplay(toWorld(px,py));
+    clampAndSet(st.drag, sc);
+    st.u = 0;                 // moving a dot resets the play to the start
     updateReadout(); draw();
   } else {
     canvas.style.cursor = pickHandle(px,py)?'grab':'crosshair';
@@ -1225,6 +1260,7 @@ canvas.addEventListener('pointercancel',endDrag);
 function setActive(ids,active){ ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('active',id===active); }); }
 const slider=document.getElementById('betaSlider');
 const toggleShowC=document.getElementById('toggleShowC');
+const toggleShowSp=document.getElementById('toggleShowSp');
 
 function syncShowCUI(){
   const disp=st.showC?'':'none';
@@ -1233,6 +1269,15 @@ function syncShowCUI(){
   if(focusC) focusC.style.display=disp;
   if(clkC) clkC.style.display=disp;
   if(toggleShowC) toggleShowC.checked=!!st.showC;
+}
+
+function syncShowSpUI(){
+  const disp=st.showSp?'':'none';
+  const frameSp=document.getElementById('frameSp');
+  const betaSection=document.getElementById('betaSection');
+  if(frameSp) frameSp.style.display=disp;
+  if(betaSection) betaSection.style.display=disp;
+  if(toggleShowSp) toggleShowSp.checked=!!st.showSp;
 }
 
 ['A','B','C'].forEach(k=>{
@@ -1249,13 +1294,24 @@ toggleShowC.addEventListener('change',()=>{
   syncShowCUI();
   updateReadout(); updateClocks(); draw();
 });
+toggleShowSp.addEventListener('change',()=>{
+  st.showSp=toggleShowSp.checked;
+  if(!st.showSp){
+    st.frame='S';
+    setActive(['frameS','frameSp'],'frameS');
+  }
+  syncShowSpUI();
+  updateReadout(); draw();
+});
 document.getElementById('frameS').addEventListener('click',()=>{
   st.frame='S'; setActive(['frameS','frameSp'],'frameS'); updateReadout(); draw();
 });
 document.getElementById('frameSp').addEventListener('click',()=>{
+  if(!st.showSp) return;
   st.frame='Sp'; setActive(['frameS','frameSp'],'frameSp'); updateReadout(); draw();
 });
 slider.addEventListener('input',()=>{
+  if(!st.showSp) return;
   st.beta=parseFloat(slider.value);
   document.getElementById('betaRead').textContent='v/c = '+st.beta.toFixed(2);
   if(Math.abs(st.beta)>1e-9 && st.frame!=='Sp'){ st.frame='Sp'; setActive(['frameS','frameSp'],'frameSp'); }
@@ -1277,11 +1333,13 @@ let prevInqStep=null;
 
 function syncControlsFromState(){
   if(st.focus==='C' && !st.showC) st.focus='A';
+  if(!st.showSp) st.frame='S';
   setActive(['focusA','focusB','focusC'],'focus'+st.focus);
   setActive(['frameS','frameSp'], st.frame==='Sp'?'frameSp':'frameS');
   slider.value=String(st.beta);
   document.getElementById('betaRead').textContent='v/c = '+st.beta.toFixed(2);
   syncShowCUI();
+  syncShowSpUI();
   /* prediction feedback is handled by the standard .choice handler */
 }
 function saveStepState(i){
@@ -1290,6 +1348,7 @@ function saveStepState(i){
     W1:{...st.W1}, W2:{...st.W2}, W3:{...st.W3},
     focus:st.focus, frame:st.frame, beta:st.beta, stage:st.stage,
     showC:st.showC,
+    showSp:st.showSp,
     u:st.u, prediction:st.prediction,
     playing:Shell.playing
   };
@@ -1301,6 +1360,7 @@ function restoreStepState(i){
   st.W1={...snap.W1}; st.W2={...snap.W2}; st.W3={...snap.W3};
   st.focus=snap.focus; st.frame=snap.frame; st.beta=snap.beta; st.stage=snap.stage;
   st.showC=snap.showC ?? false;
+  st.showSp=snap.showSp ?? false;
   st.u=snap.u; st.prediction=snap.prediction; st.drag=null;
   syncControlsFromState();
   Shell.setPlaying(snap.playing);
