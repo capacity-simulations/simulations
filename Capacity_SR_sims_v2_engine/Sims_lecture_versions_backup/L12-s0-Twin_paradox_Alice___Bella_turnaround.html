@@ -144,9 +144,6 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .stat-sub{font-size:10.5px;color:var(--ink-mute);line-height:1.4;margin:-5px 0 7px;font-family:var(--font-sans);}
 .ctrl-box .stat-row:first-child{padding-top:0;}
 .ctrl-box .stat-row:last-child{padding-bottom:0;}
-.control-stack{display:flex;flex-direction:column;gap:7px;}
-.toggle-row{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
-.toggle-row input{accent-color:var(--accent);}
 .stat-label{color:var(--muted);display:inline-block;font-weight:600;}
 .stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
 .stat-value.highlight{font-size:16px;letter-spacing:-.01em;}
@@ -435,14 +432,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             </div>
           </div>
 
-          <div class="ctrl-box control-stack">
-            <label class="toggle-row"><input id="hide-bg" type="checkbox"> Hide background</label>
-          </div>
-
         </div>
       </div>
 
-      <div class="shell-panel reunion-panel collapsed hidden" id="reunion-panel">
+      <div class="shell-panel reunion-panel hidden" id="reunion-panel">
         <div class="shell-panel-head"><h3>Clock readings at reunion</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box">
@@ -685,8 +678,7 @@ const Shell = (function(){
     frameSwitchNotice: 0,
     turnaroundBannerT: 0,
     animT: 0,           // drives the running-limb animation
-    calloutLatchT: 0,   // keeps the frame-switch callout visible into leg 2
-    hideBackground: false
+    calloutLatchT: 0    // keeps the frame-switch callout visible into leg 2
   };
 
   function gamma(v){ return 1/Math.sqrt(1 - v*v); }
@@ -943,232 +935,84 @@ const Shell = (function(){
     ctx.restore();
   }
 
-  // ---- person sprites (ported from L11-s3 length-contraction sim) ----
-  function shade(hex, f){
-    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    if(!m) return hex;
-    const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
-    const r = clamp(parseInt(m[1],16)*f), g = clamp(parseInt(m[2],16)*f), b = clamp(parseInt(m[3],16)*f);
-    return `rgb(${r},${g},${b})`;
-  }
+  function drawFigure(x, y, color, name, pose, dir, phase, T){
+    const run = pose === 'running';
+    const s = run ? Math.sin(phase*11) : 0;
+    const c = run ? Math.cos(phase*11) : 0;
+    const bob  = run ? -Math.abs(s)*2.6 : 0;   // running bounce
+    const lean = run ? dir*4 : 0;
+    const gy = y;                               // ground reference
 
-  function roundPersonRect(x, y, w, h, r){
-    ctx.beginPath();
-    ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-    ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-    ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-    ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
-    ctx.closePath();
-  }
-
-  // Animated person: walking gait when moving, idle stance when at rest.
-  // opts: { walking, facing (±1), holding, hair: 'alice'|'bella', showName }
-  function drawPerson(x, floorY, color, name, opts){
-    opts = opts || {};
-    const walking = !!opts.walking;
-    const facing = opts.facing == null ? 1 : opts.facing;
-    const holding = !!opts.holding;
-    const who = opts.hair === 'bella' ? 'bella' : 'alice';
-    const f = facing; // +1 right, −1 left
-    const showName = opts.showName !== false;
-
-    // Distinct motion: Alice idle sway; Bella brisker run with ponytail swing
-    const phase = walking
-      ? state.animT * (3.6 + state.v * 2.8)
-      : state.animT * 1.4;
-    const stride = walking ? Math.sin(phase) * (who === 'bella' ? 9.5 : 7) : 0;
-    const armSwing = walking && !holding ? Math.sin(phase) * 7 : 0;
-    const bob = walking
-      ? Math.abs(Math.sin(phase * 2)) * (who === 'bella' ? 2.6 : 1.6)
-      : Math.sin(phase) * 0.8; // Alice: soft breathing bob
-    const sway = walking ? 0 : Math.sin(phase * 0.7) * 1.2; // Alice idle weight shift
-    const gy = floorY - bob;
-    const hx = x + sway; // head/torso x with idle sway
-    const ponytailSwing = walking ? Math.sin(phase + Math.PI) * 5 : Math.sin(phase) * 1.5;
-
-    // Natural hair colours (not jacket-tinted) so they read as people, not stick figures
-    const hairCol = who === 'bella' ? '#3b2416' : '#6b4423';
-    const hairHi = who === 'bella' ? '#5a3a28' : '#8b5e3c';
-
+    // soft contact shadow (tightens as she bounces up)
     ctx.save();
-
-    // Soft ground shadow
-    ctx.fillStyle = document.body.classList.contains('light-theme')
-      ? 'rgba(15,23,42,0.18)' : 'rgba(0,0,0,0.35)';
+    ctx.fillStyle = T.shadow;
     ctx.beginPath();
-    ctx.ellipse(x, floorY + 1, who === 'alice' ? 15 : 13, 3.2, 0, 0, Math.PI*2);
+    ctx.ellipse(x, gy+38, Math.max(10, 15 + bob*0.9), 3.6, 0, 0, Math.PI*2);
     ctx.fill();
+    ctx.restore();
 
-    // Legs — Alice: slim under skirt; Bella: athletic stride
-    ctx.strokeStyle = who === 'alice' ? shade(color, 0.55) : shade(color, 0.72);
-    ctx.lineWidth = who === 'bella' ? 3.4 : 2.8;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    if(walking){
-      ctx.moveTo(hx, gy - 28); ctx.lineTo(hx - 5*f - stride*0.45, gy - 2);
-      ctx.moveTo(hx, gy - 28); ctx.lineTo(hx + 5*f + stride*0.45, gy - 2);
-    } else {
-      ctx.moveTo(hx, gy - 28); ctx.lineTo(hx - 4.5, gy - 2);
-      ctx.moveTo(hx, gy - 28); ctx.lineTo(hx + 4.5, gy - 2);
-    }
-    ctx.stroke();
+    y += bob;
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-    // Shoes — Alice smaller; Bella slightly larger running shoes
-    ctx.fillStyle = shade(color, 0.45);
-    const shoeA = walking ? (hx - 5*f - stride*0.45) : (hx - 4.5);
-    const shoeB = walking ? (hx + 5*f + stride*0.45) : (hx + 4.5);
-    const shoeR = who === 'bella' ? 5.2 : 4.2;
-    ctx.beginPath(); ctx.ellipse(shoeA + 2*f, gy - 1, shoeR, 2.0, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(shoeB + 2*f, gy - 1, shoeR, 2.0, 0, 0, Math.PI*2); ctx.fill();
-
-    // Lower garment — Alice: A-line skirt; Bella: shorter tunic flap
-    if(who === 'alice'){
-      ctx.fillStyle = shade(color, 0.92);
+    // legs (jointed stride when running)
+    ctx.lineWidth = 4;
+    if(run){
       ctx.beginPath();
-      ctx.moveTo(hx - 7, gy - 32);
-      ctx.lineTo(hx + 7, gy - 32);
-      ctx.lineTo(hx + 12, gy - 6);
-      ctx.quadraticCurveTo(hx, gy - 2, hx - 12, gy - 6);
-      ctx.closePath();
-      ctx.fill();
-      // soft skirt edge
-      ctx.strokeStyle = shade(color, 0.7);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(hx - 12, gy - 6);
-      ctx.quadraticCurveTo(hx, gy - 2, hx + 12, gy - 6);
+      ctx.moveTo(x, y+13);
+      ctx.lineTo(x - dir*(4 + 4*s), y+23 - 1.5*s);
+      ctx.lineTo(x - dir*(7 + 6*s), y+33 - 2.5*Math.abs(s));
+      ctx.moveTo(x, y+13);
+      ctx.lineTo(x + dir*(4 + 4*c), y+23 - 1.5*c);
+      ctx.lineTo(x + dir*(7 + 6*c), y+33 - 2.5*Math.abs(c));
       ctx.stroke();
     } else {
-      ctx.fillStyle = shade(color, 0.78);
       ctx.beginPath();
-      ctx.moveTo(hx - 8, gy - 30);
-      ctx.lineTo(hx + 8, gy - 30);
-      ctx.lineTo(hx + 9, gy - 18);
-      ctx.lineTo(hx - 9, gy - 18);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(x, y+13); ctx.lineTo(x-5.5, y+34);
+      ctx.moveTo(x, y+13); ctx.lineTo(x+5.5, y+34);
+      ctx.stroke();
     }
 
-    // Torso / top
-    const bodyGrad = ctx.createLinearGradient(hx - 8, gy - 58, hx + 8, gy - 26);
-    bodyGrad.addColorStop(0, shade(color, 1.25));
-    bodyGrad.addColorStop(1, shade(color, 0.88));
-    ctx.fillStyle = bodyGrad;
-    if(who === 'alice'){
-      // softer rounded blouse
-      roundPersonRect(hx - 7.5, gy - 56, 15, 26, 6);
-      ctx.fill();
+    // Bella carries a traveller's backpack on her back
+    if(name === 'Bella'){
+      const bx = x - dir*8 + lean*0.4;
+      ctx.save();
+      ctx.fillStyle = T.isLight ? '#8a5a12' : '#c8901f';
+      roundRect(ctx, bx - 4.5, y - 13, 9, 15, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.30)'; ctx.lineWidth = 1;
+      line(bx - 4.5, y - 6, bx + 4.5, y - 6);
+      ctx.restore();
+    }
+
+    // torso — thick filled capsule (shoulder → hip)
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(x + lean, y-14); ctx.lineTo(x, y+13); ctx.stroke();
+
+    // arms (jointed pump when running)
+    ctx.lineWidth = 4;
+    if(run){
+      ctx.beginPath();
+      ctx.moveTo(x + lean*0.7, y-11);
+      ctx.lineTo(x - dir*(5 + 3*s), y-5 + 2*c);
+      ctx.lineTo(x - dir*(8 + 5*s), y+1 + 3*c);
+      ctx.moveTo(x + lean*0.7, y-11);
+      ctx.lineTo(x + dir*(5 + 3*c), y-4 + 2*s);
+      ctx.lineTo(x + dir*(8 + 5*c), y+2 + 3*s);
+      ctx.stroke();
     } else {
-      // athletic jacket
-      roundPersonRect(hx - 8.5, gy - 56, 17, 28, 4);
-      ctx.fill();
-      // belt
-      ctx.fillStyle = shade(color, 0.5);
-      ctx.fillRect(hx - 8.5, gy - 30, 17, 2.5);
+      ctx.beginPath();
+      ctx.moveTo(x, y-11); ctx.lineTo(x-8.5, y+3);
+      ctx.moveTo(x, y-11); ctx.lineTo(x+8.5, y+3);
+      ctx.stroke();
     }
 
-    // Arms
-    ctx.strokeStyle = shade(color, 0.95);
-    ctx.lineWidth = 2.8;
-    ctx.beginPath();
-    if(holding){
-      ctx.moveTo(hx - 7, gy - 48); ctx.lineTo(hx - 18, gy - 42);
-      ctx.moveTo(hx + 7, gy - 48); ctx.lineTo(hx + 18, gy - 42);
-    } else if(walking){
-      ctx.moveTo(hx - 7*f, gy - 50); ctx.lineTo(hx - 14*f, gy - 36 + armSwing);
-      ctx.moveTo(hx + 7*f, gy - 50); ctx.lineTo(hx + 14*f, gy - 36 - armSwing);
-    } else {
-      // Alice idle: arms relaxed at sides, slight sway
-      ctx.moveTo(hx - 6, gy - 50); ctx.lineTo(hx - 9 + sway*0.3, gy - 34);
-      ctx.moveTo(hx + 6, gy - 50); ctx.lineTo(hx + 9 + sway*0.3, gy - 34);
-    }
-    ctx.stroke();
-
-    // Head
-    ctx.fillStyle = '#f5c9a8';
-    ctx.beginPath(); ctx.arc(hx, gy - 66, who === 'alice' ? 8.2 : 7.8, 0, Math.PI*2); ctx.fill();
-
-    // Hair — clearly feminine & distinct
-    ctx.fillStyle = hairCol;
-    if(who === 'bella'){
-      // Crown + side coverage
-      ctx.beginPath();
-      ctx.arc(hx, gy - 67, 9.0, Math.PI * 0.92, Math.PI * 2.08);
-      ctx.fill();
-      // Side locks
-      ctx.beginPath();
-      ctx.ellipse(hx - 7*f, gy - 62, 3.0, 7.5, -0.15*f, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(hx + 5.5*f, gy - 63, 2.4, 6.5, 0.2*f, 0, Math.PI*2);
-      ctx.fill();
-      // Swinging ponytail
-      ctx.fillStyle = hairHi;
-      const tx = hx - 10*f + ponytailSwing * 0.35;
-      const ty = gy - 52 + Math.abs(ponytailSwing) * 0.15;
-      ctx.beginPath();
-      ctx.moveTo(hx - 4*f, gy - 70);
-      ctx.quadraticCurveTo(hx - 12*f + ponytailSwing*0.2, gy - 62, tx, ty);
-      ctx.quadraticCurveTo(hx - 11*f + ponytailSwing*0.3, gy - 48, hx - 5*f, gy - 68);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(tx, ty + 4, 3.4, 7.5, 0.2*f + ponytailSwing*0.04, 0, Math.PI*2);
-      ctx.fill();
-    } else {
-      // Alice: shoulder-length bob with soft bangs
-      ctx.beginPath();
-      ctx.arc(hx, gy - 66, 9.6, Math.PI * 0.78, Math.PI * 2.22);
-      ctx.fill();
-      // Full side bob (covers ears / jaw)
-      ctx.beginPath();
-      ctx.ellipse(hx - 7.5, gy - 60, 4.2, 10, -0.08, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(hx + 7.5, gy - 60, 4.2, 10, 0.08, 0, Math.PI*2);
-      ctx.fill();
-      // Bangs
-      ctx.fillStyle = hairHi;
-      ctx.beginPath();
-      ctx.ellipse(hx, gy - 71, 8.2, 4.2, 0, Math.PI, Math.PI*2);
-      ctx.fill();
-      // Soft curl at ends
-      ctx.fillStyle = hairCol;
-      ctx.beginPath();
-      ctx.ellipse(hx - 8.5, gy - 52, 3.5, 4.5, -0.3, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(hx + 8.5, gy - 52, 3.5, 4.5, 0.3, 0, Math.PI*2);
-      ctx.fill();
-    }
-
-    // Eyes facing travel direction
-    ctx.fillStyle = 'rgba(40,30,20,0.65)';
-    ctx.beginPath(); ctx.arc(hx + 2.4*f, gy - 66.2, 1.15, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(hx + 5.0*f, gy - 66.2, 1.15, 0, Math.PI*2); ctx.fill();
-    // Soft cheek hint
-    ctx.fillStyle = 'rgba(232,140,120,0.28)';
-    ctx.beginPath(); ctx.arc(hx + 4.5*f, gy - 63.5, 1.8, 0, Math.PI*2); ctx.fill();
-
-    // Name tag (optional — L12 often draws spread labels separately)
-    if(showName){
-      ctx.fillStyle = color;
-      ctx.font = '700 12px ' + FONT_STACK;
-      const label = name + (opts.arrow != null ? opts.arrow : (walking ? (f > 0 ? ' →' : ' ←') : ''));
-      ctx.fillText(label, hx - ctx.measureText(label).width / 2, gy - 86);
-    }
-
+    // head with a rim highlight
+    const hx = x + lean*1.5, hy = y-24;
+    ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI*2); ctx.fill();
+    ctx.save();
+    ctx.globalAlpha = 0.45; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(hx - 2.5, hy - 2.8, 2.6, 0, Math.PI*2); ctx.fill();
     ctx.restore();
-  }
-
-  // Adapter: existing call sites pass midY as the figure "center"; L11 sprites
-  // are foot-anchored at floorY (= midY + 36, matching sceneMetrics.floorLine).
-  function drawFigure(x, y, color, name, pose, dir, phase, T){
-    drawPerson(x, y + 36, color, name, {
-      walking: pose === 'running',
-      facing: dir || 1,
-      hair: name === 'Bella' ? 'bella' : 'alice',
-      showName: false
-    });
   }
 
   function drawChip(x, y, txt, fg, T){
@@ -1314,6 +1158,33 @@ const Shell = (function(){
       ctx.fillStyle = T.muted; ctx.font = '10.5px ' + FONT_STACK;
       ctx.fillText(sub, 33, top+32);
     }
+  }
+
+  function drawProgress(T, left, right){
+    if(H < 320) return;
+    const y = H - 16;
+    const total = state.frame==='alice' ? state.dtA : tauBTotal();
+    const cur   = state.frame==='alice' ? state.tA  : state.tauB;
+    const frac  = total > 0 ? Math.min(1, cur/total) : 0;
+    const len = right - left;
+    ctx.fillStyle = T.grid;
+    roundRect(ctx, left, y, len, 5, 2.5); ctx.fill();
+    if(frac > 0){
+      ctx.fillStyle = T.accent;
+      roundRect(ctx, left, y, Math.max(5, len*frac), 5, 2.5); ctx.fill();
+    }
+    // turnaround midpoint diamond
+    const mx = left + len*0.5;
+    ctx.save();
+    ctx.translate(mx, y+2.5); ctx.rotate(Math.PI/4);
+    ctx.fillStyle = frac >= 0.5 ? T.warnLine : T.faint;
+    ctx.fillRect(-3.2, -3.2, 6.4, 6.4);
+    ctx.restore();
+    ctx.fillStyle = T.faint; ctx.font = '9.5px ' + FONT_STACK;
+    ctx.textAlign = 'left';  ctx.fillText('trip progress', left, y-5);
+    ctx.textAlign = 'right';
+    ctx.font = '9.5px ' + NUM_STACK;
+    ctx.fillText(Math.round(frac*100)+'%', right, y-5);
   }
 
   /* ================= REALISTIC CORRIDOR BACKDROP (full-canvas) =========
@@ -1684,69 +1555,6 @@ const Shell = (function(){
     }
   }
 
-  function drawNumberLine(T, P){
-    const {originX, scale, contract, left, right, midY} = P;
-    const SM = sceneMetrics(midY);
-    const floorLine = SM.floorLine;
-    const uRest = scale;
-    const wUnit = scale * contract;
-    const stepLy = pickStepLy(uRest);
-    const stepPx = stepLy * wUnit;
-
-    // ---- floor number line: clean axis, ticks below the name/chip rows ----
-    const axisY = Math.min(floorLine + 46, H - 34);
-    const roomForLabels = (axisY + 18) <= (H - 8);
-    const lineCol = T.isLight ? 'rgba(51,65,85,.55)' : 'rgba(148,163,184,.45)';
-    const tickCol = T.isLight ? 'rgba(51,65,85,.48)' : 'rgba(148,163,184,.38)';
-    const labCol  = T.isLight ? 'rgba(51,65,85,.82)' : 'rgba(180,194,210,.88)';
-    ctx.strokeStyle = lineCol; ctx.lineWidth = 1.5;
-    line(left, axisY, right - 3, axisY);
-    drawArrowHead(right, axisY, 1, 5.5, lineCol);
-
-    // decimate labels so neighbours can never collide
-    ctx.font = '10.5px ' + NUM_STACK;
-    const maxLabW = ctx.measureText('10.5').width;
-    const labelEvery = Math.max(1, Math.ceil((maxLabW + 18)/stepPx));
-
-    // minor ticks at half-steps
-    const halfPx = stepPx/2;
-    if(halfPx >= 14){
-      ctx.strokeStyle = tickCol; ctx.lineWidth = 1;
-      for(let m = Math.ceil((left + 4 - originX)/halfPx); ; m++){
-        const x = originX + m*halfPx;
-        if(x > right - 6) break;
-        if(((m % 2) + 2) % 2 === 0) continue;
-        line(x, axisY - 3, x, axisY + 3);
-      }
-    }
-    // major ticks + labels ("0" at the start line highlighted)
-    ctx.textAlign = 'center';
-    for(let m = Math.ceil((left + 4 - originX)/stepPx); ; m++){
-      const x = originX + m*stepPx;
-      if(x > right - 10) break;
-      const isOrigin = (m === 0);
-      ctx.strokeStyle = isOrigin ? T.okLine : tickCol;
-      ctx.lineWidth = isOrigin ? 2 : 1.2;
-      line(x, axisY - 5, x, axisY + 5);
-      if(!roomForLabels) continue;
-      if(((m % labelEvery) + labelEvery) % labelEvery !== 0) continue;
-      const v = m*stepLy;
-      const lab = (Math.abs(v - Math.round(v)) > 1e-9) ? v.toFixed(1) : String(Math.round(v));
-      ctx.fillStyle = isOrigin ? T.ok : labCol;
-      ctx.font = (isOrigin ? 'bold ' : '') + '10.5px ' + NUM_STACK;
-      ctx.fillText(lab, x, axisY + 17);
-    }
-    // amber tick where the turnaround pylon stands
-    if(P.markerX !== undefined && P.markerX > left + 4 && P.markerX < right - 6){
-      ctx.strokeStyle = T.warnLine; ctx.lineWidth = 2;
-      line(P.markerX, axisY - 6, P.markerX, axisY + 6);
-    }
-    // unit tag by the arrowhead
-    ctx.fillStyle = labCol; ctx.textAlign = 'right';
-    ctx.font = '10px ' + FONT_STACK;
-    ctx.fillText(P.inBella ? 'x′ (ly)' : 'x (ly)', right - 6, axisY - 9);
-  }
-
   function drawBackdrop(T, P){
     const {originX, scale, contract, left, right, midY} = P;
     const SM = sceneMetrics(midY);
@@ -1868,7 +1676,70 @@ const Shell = (function(){
       line(0, ry, W, ry);
     }
 
-    drawNumberLine(T, P);
+    // ---- floor number line: clean axis, ticks below the name/chip rows ----
+    const axisY = Math.min(floorLine + 46, H - 34);
+    const roomForLabels = (axisY + 18) <= (H - 8);
+    const lineCol = T.isLight ? 'rgba(51,65,85,.55)' : 'rgba(148,163,184,.45)';
+    const tickCol = T.isLight ? 'rgba(51,65,85,.48)' : 'rgba(148,163,184,.38)';
+    const labCol  = T.isLight ? 'rgba(51,65,85,.82)' : 'rgba(180,194,210,.88)';
+    ctx.strokeStyle = lineCol; ctx.lineWidth = 1.5;
+    line(left, axisY, right - 3, axisY);
+    drawArrowHead(right, axisY, 1, 5.5, lineCol);
+
+    // decimate labels so neighbours can never collide
+    ctx.font = '10.5px ' + NUM_STACK;
+    const maxLabW = ctx.measureText('10.5').width;
+    const labelEvery = Math.max(1, Math.ceil((maxLabW + 18)/stepPx));
+
+    // minor ticks at half-steps
+    const halfPx = stepPx/2;
+    if(halfPx >= 14){
+      ctx.strokeStyle = tickCol; ctx.lineWidth = 1;
+      for(let m = Math.ceil((left + 4 - originX)/halfPx); ; m++){
+        const x = originX + m*halfPx;
+        if(x > right - 6) break;
+        if(((m % 2) + 2) % 2 === 0) continue;
+        line(x, axisY - 3, x, axisY + 3);
+      }
+    }
+    // major ticks + labels ("0" at the start line highlighted)
+    ctx.textAlign = 'center';
+    for(let m = Math.ceil((left + 4 - originX)/stepPx); ; m++){
+      const x = originX + m*stepPx;
+      if(x > right - 10) break;
+      const isOrigin = (m === 0);
+      ctx.strokeStyle = isOrigin ? T.okLine : tickCol;
+      ctx.lineWidth = isOrigin ? 2 : 1.2;
+      line(x, axisY - 5, x, axisY + 5);
+      if(!roomForLabels) continue;
+      if(((m % labelEvery) + labelEvery) % labelEvery !== 0) continue;
+      const v = m*stepLy;
+      const lab = (Math.abs(v - Math.round(v)) > 1e-9) ? v.toFixed(1) : String(Math.round(v));
+      ctx.fillStyle = isOrigin ? T.ok : labCol;
+      ctx.font = (isOrigin ? 'bold ' : '') + '10.5px ' + NUM_STACK;
+      ctx.fillText(lab, x, axisY + 17);
+    }
+    // amber tick where the turnaround pylon stands
+    if(P.markerX !== undefined && P.markerX > left + 4 && P.markerX < right - 6){
+      ctx.strokeStyle = T.warnLine; ctx.lineWidth = 2;
+      line(P.markerX, axisY - 6, P.markerX, axisY + 6);
+    }
+    // unit tag by the arrowhead
+    ctx.fillStyle = labCol; ctx.textAlign = 'right';
+    ctx.font = '10px ' + FONT_STACK;
+    ctx.fillText(P.inBella ? 'x′ (ly)' : 'x (ly)', right - 6, axisY - 9);
+
+    // ---- captions along the bottom ----
+    if(H >= 320){
+      ctx.fillStyle = T.faint; ctx.font = '10px ' + FONT_STACK;
+      ctx.textAlign = 'left';
+      ctx.fillText(P.inBella ? 'corridor number line (ly) — length-contracted ×1/γ, sliding past Bella'
+                             : 'corridor number line (ly) — at rest in this frame', left, H - 30);
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 11px ' + FONT_STACK;
+      ctx.fillStyle = T.muted;
+      ctx.fillText(P.inBella ? "axis: x′ (Bella's frame)" : 'axis: x (frame S)', right, H - 30);
+    }
   }
 
   function drawVignette(T){
@@ -1881,17 +1752,11 @@ const Shell = (function(){
 
   function drawCorridor(){
     const T = theme();
-    const hideBg = state.hideBackground;
 
-    // backdrop: solid black/white when hidden; otherwise corridor gradient
-    if(hideBg){
-      ctx.fillStyle = T.isLight ? '#ffffff' : '#000000';
-      ctx.fillRect(0, 0, W, H);
-    } else {
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, T.bgTop); bg.addColorStop(1, T.bgBot);
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    }
+    // backdrop
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, T.bgTop); bg.addColorStop(1, T.bgBot);
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
     const midY = H*0.62;
     const corridorLeft = 60, corridorRight = W - 60;
@@ -1936,7 +1801,8 @@ const Shell = (function(){
     // name-label positions (spread apart when the twins stand together)
     const [aNameX, bNameX] = spreadPair(aliceDrawX, bellaDrawX, 62);
 
-    const sceneP = {
+    // ---- realistic corridor scene (all rigid with Alice's rest frame) ----
+    drawBackdrop(T, {
       originX,
       scale: scale_px_per_ly,
       contract,
@@ -1945,22 +1811,14 @@ const Shell = (function(){
       originStatic: aliceScreenX_alice,
       inBella,
       markerX
-    };
+    });
 
-    if(hideBg){
-      // bare view: number line + turnaround only (no corridor scenery)
-      drawNumberLine(T, sceneP);
-    } else {
-      // ---- realistic corridor scene (all rigid with Alice's rest frame) ----
-      drawBackdrop(T, sceneP);
-
-      // ---- distance measure (start ↔ turnaround), along the ceiling fascia ----
-      const SM = sceneMetrics(midY);
-      const measLabel = inBella
-        ? 'L/γ = ' + (xFar/g).toFixed(2) + ' ly'
-        : 'L = ' + xFar.toFixed(2) + ' ly';
-      drawMeasure(originX, markerX, SM.wallTop + 22, measLabel, T.faint);
-    }
+    // ---- distance measure (start ↔ turnaround), along the ceiling fascia ----
+    const SM = sceneMetrics(midY);
+    const measLabel = inBella
+      ? 'L/γ = ' + (xFar/g).toFixed(2) + ' ly'
+      : 'L = ' + xFar.toFixed(2) + ' ly';
+    drawMeasure(originX, markerX, SM.wallTop + 22, measLabel, T.faint);
 
     // ---- turnaround pylon (foreground object standing in the corridor) ----
     drawPylon(markerX, midY, T, inBella && state.legPhase === 1, false, contract);
@@ -1980,22 +1838,19 @@ const Shell = (function(){
     drawFigure(aliceDrawX, midY, ALICE_COL, 'Alice', alicePose, corridorDir || 1, state.animT, T);
     drawFigure(bellaDrawX, midY, BELLA_COL, 'Bella', bellaPose, bellaDir || 1, state.animT, T);
 
-    if(!hideBg){
-      // ---- polished-floor reflections of the figures (pylon excluded — its
-      //      mirrored beacon/dashes read as a weird smudge at the frame bottom) ----
-      const SM = sceneMetrics(midY);
-      ctx.save();
-      ctx.beginPath(); ctx.rect(0, SM.floorLine, W, H - SM.floorLine); ctx.clip();
-      ctx.globalAlpha = 0.14;
-      ctx.translate(0, SM.floorLine*1.85);
-      ctx.scale(1, -0.85);
-      drawFigure(aliceDrawX, midY, ALICE_COL, 'Alice', alicePose, corridorDir || 1, state.animT, T);
-      drawFigure(bellaDrawX, midY, BELLA_COL, 'Bella', bellaPose, bellaDir || 1, state.animT, T);
-      ctx.restore();
+    // ---- polished-floor reflections of the figures (pylon excluded — its
+    //      mirrored beacon/dashes read as a weird smudge at the frame bottom) ----
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, SM.floorLine, W, H - SM.floorLine); ctx.clip();
+    ctx.globalAlpha = 0.14;
+    ctx.translate(0, SM.floorLine*1.85);
+    ctx.scale(1, -0.85);
+    drawFigure(aliceDrawX, midY, ALICE_COL, 'Alice', alicePose, corridorDir || 1, state.animT, T);
+    drawFigure(bellaDrawX, midY, BELLA_COL, 'Bella', bellaPose, bellaDir || 1, state.animT, T);
+    ctx.restore();
 
-      // ---- cinematic vignette (under the UI layer) ----
-      drawVignette(T);
-    }
+    // ---- cinematic vignette (under the UI layer) ----
+    drawVignette(T);
 
     // ---- name labels (positions were spread earlier, before the backdrop) ----
     ctx.font = 'bold 12.5px ' + FONT_STACK; ctx.textAlign = 'center';
@@ -2099,6 +1954,9 @@ const Shell = (function(){
       }
     }
     drawStatusChip(main, sub, T);
+
+    // ---- trip progress ----
+    drawProgress(T, corridorLeft, corridorRight);
   }
 
   function draw(){
@@ -2140,11 +1998,6 @@ const Shell = (function(){
   document.getElementById('t-slider').addEventListener('input', e=>{
     state.dtA = parseFloat(e.target.value);
     reset();
-  });
-
-  document.getElementById('hide-bg').addEventListener('change', e=>{
-    state.hideBackground = e.target.checked;
-    draw();
   });
 
   document.querySelectorAll('.frame-tab').forEach(tab=>{

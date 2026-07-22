@@ -380,7 +380,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #aside-controls .ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
 #aside-controls .ctrl-row label{min-width:96px;color:var(--ink-mid);font-size:12px;}
 #aside-controls .ctrl-row .shell-range{flex:1;min-width:0;width:auto;}
-#aside-controls #toggle-compare{width:100%;justify-content:center;margin-bottom:8px;}
+#aside-controls #toggle-compare,
+#aside-controls #toggle-energy{width:100%;justify-content:center;margin-bottom:8px;}
 #aside-controls .qrow{display:flex;flex-wrap:wrap;gap:4px;}
 #betaCtrl.hl{outline:2px solid rgba(96,165,250,.7);outline-offset:3px;border-radius:8px;}
 #toggle-compare.hl{outline:2px solid rgba(96,165,250,.7);outline-offset:3px;animation:hlpulse 1.4s infinite;}
@@ -409,6 +410,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <dt>Inquiry</dt><dd>Predict the photon's Δs² and Δτ between E₁ and E₂; predict what happens to a massive particle's proper time as you push v/c toward 1.</dd>
           <dt>Misconception</dt><dd>"If I travel fast enough I can catch up with a photon and see it at rest" — addressed structurally (slider cannot reach v/c = 1, prediction option (d), and the friend persona prompt).</dd>
         </dl>
+        <h3>Reading the simulation</h3>
+        <p>The massive particle ages by proper time <b>Δτ</b> along its worldline while the photon ages <b>0</b>. Proper time is set by the worldline, not the mass.</p>
+        <p><b>Δτ</b> = proper time along the worldline; <b>E = γmc²</b> = total relativistic energy, with <b>γ = 1/√(1−(v/c)²)</b>, c = 1. Energy and mass are in arbitrary units (a.u.). A photon is <b>massless</b>: Δτ = 0, and its energy <b>E = hν</b> is set by frequency, not mass.</p>
+        <p>When <b>Show energies</b> is on, the photon energy is <b>E = hν</b> (eV) at the chosen frequency (and wavelength λ = c/ν). The massive particle’s total energy is <b>E = γmc²</b> (a.u.). Push v/c → 1: Δτ → 0 while E → ∞, so a massive particle can never reach c; the photon is massless, so E = γmc² does not apply.</p>
         <h3>Pedagogy principles applied</h3>
         <table class="shell-info-table">
           <thead><tr><th>ID</th><th>Principle</th><th>How it shows up here</th></tr></thead>
@@ -547,7 +552,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <input id="mass" type="range" class="shell-range" min="0.1" max="5" step="0.1" value="1">
             <span id="m-read" class="shell-readout">1.0</span>
           </div>
+          <div class="ctrl-row" id="freqCtrl" style="display:none">
+            <label>ν (photon freq)</label>
+            <input id="freq" type="range" class="shell-range" min="400" max="789" step="1" value="540">
+            <span id="freq-read" class="shell-readout">540 THz</span>
+          </div>
           <button id="toggle-compare" class="shell-btn">▦ Show comparison</button>
+          <button id="toggle-energy" class="shell-btn">⚡ Show energies</button>
           <p style="margin:8px 0 4px;color:var(--ink-mid);font-size:12px;">Jump to a speed:</p>
           <div class="qrow">
             <span class="qbtn" data-beta="0.5">v/c = 0.50</span><span class="qbtn" data-beta="0.8">v/c = 0.80</span><span class="qbtn" data-beta="0.95">v/c = 0.95</span><span class="qbtn" data-beta="0.99">v/c = 0.99</span><span class="qbtn" data-beta="0.995">v/c = 0.995</span>
@@ -563,13 +574,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <thead><tr><th>Quantity</th><th class="ph">Photon<br><span>E₁→E₂</span></th><th class="ma">Massive<br><span>E₁→E₂′</span></th></tr></thead>
               <tbody>
                 <tr class="ro-inv"><td>Proper time Δτ <span class="inv-tag">invariant</span></td><td>0.00 s</td><td id="m-dtau">3.46 s</td></tr>
-                <tr><td>Energy E = γmc²</td><td>— <span class="inv-tag">massless</span></td><td id="m-E">1.15</td></tr>
+                <tr id="energyRow" style="display:none"><td>Energy E</td><td id="ph-E">— <span class="inv-tag">massless</span></td><td id="m-E">1.15</td></tr>
               </tbody>
             </table>
-            <div class="ro-conv">
-              <b>Δτ</b> = proper time along the worldline; <b>E = γmc²</b> = total relativistic energy, with <b>γ = 1/√(1−(v/c)²)</b>, c = 1. Energy and mass in arbitrary units. A photon is <b>massless</b>: Δτ = 0, and its energy E = pc is set by frequency, not mass.
-            </div>
-            <div class="ro-note" id="ro-note"></div>
           </div>
         </div>
       </div>
@@ -804,9 +811,27 @@ let beta = 0.5;
 let m = 1;   // particle rest mass (arb. units) — sets the energy scale E = γmc²
 let p = 0, finished = false;
 let showCompare = false;
+let showEnergy = false;
+let freqTHz = 540;                 // photon frequency, visible range 400–789 THz
 let G = {W:0,H:0,scale:1,ox:0,oy:0,xMax:5};
 
 function gammaOf(b){ return 1/Math.sqrt(1-b*b); }
+const C_NM_THZ = 299792.458;       // c in nm·THz  → λ(nm) = C/ν(THz)
+const H_EV_THZ = 4.135667696e-3;   // Planck constant in eV per THz → E(eV) = h·ν
+function photonLambda(){ return C_NM_THZ / freqTHz; }     // nm
+function photonEnergyEV(){ return H_EV_THZ * freqTHz; }   // eV  (= 1239.84/λ)
+function wavelengthToRGB(nm){
+  let r=0,g=0,b=0;
+  if(nm>=380&&nm<440){ r=-(nm-440)/60; b=1; }
+  else if(nm<490){ g=(nm-440)/50; b=1; }
+  else if(nm<510){ g=1; b=-(nm-510)/20; }
+  else if(nm<580){ r=(nm-510)/70; g=1; }
+  else if(nm<645){ r=1; g=-(nm-645)/65; }
+  else if(nm<=780){ r=1; }
+  const to=x=>Math.round(255*Math.max(0,Math.min(1,x)));
+  return `rgb(${to(r)},${to(g)},${to(b)})`;   // full intensity → stays vivid on the dark diagram
+}
+function photonColor(){ return showEnergy ? wavelengthToRGB(photonLambda()) : '#fde047'; }
 function PX(x){ return G.ox + x*G.scale; }
 function PY(ct){ return G.oy - ct*G.scale; }
 
@@ -915,10 +940,11 @@ function draw(){
   ctx.beginPath(); ctx.moveTo(PX(DX),PY(DX)); ctx.lineTo(PX(DX),PY(Math.min(Tend,CTR))); ctx.stroke();
   ctx.restore();
 
-  // ----- photon worldline -----
+  // ----- photon worldline (colour tracks wavelength when energies shown) -----
+  const pc = photonColor();
   ctx.lineCap='round';
-  ctx.strokeStyle='#fde047'; ctx.lineWidth=3.5;
-  ctx.shadowColor='rgba(253,224,71,.55)'; ctx.shadowBlur=8;
+  ctx.strokeStyle=pc; ctx.lineWidth=3.5;
+  ctx.shadowColor=pc; ctx.shadowBlur=8;
   ctx.beginPath(); ctx.moveTo(PX(0),PY(0)); ctx.lineTo(PX(DX),PY(DX)); ctx.stroke();
   ctx.shadowBlur=0;
 
@@ -931,7 +957,7 @@ function draw(){
   }
 
   // ----- worldline labels -----
-  labelL('photon  (45°, null)', PX(3.0)+8, PY(3.0)+15, '#fde047','12px Inter,sans-serif');
+  labelL('photon  (45°, null)', PX(3.0)+8, PY(3.0)+15, pc,'12px Inter,sans-serif');
   {
     const mlCt=Math.min(mEndCt,CTR)*0.52, mlX=beta*mlCt;
     ctx.font='12px Inter,sans-serif';
@@ -942,8 +968,8 @@ function draw(){
   // ----- event markers -----
   dot(0,0,'#e2e8f0',5);
   labelL('E₁ (emission)', PX(0)+10, PY(0)-13, '#e2e8f0','12px Inter,sans-serif');
-  dot(DX,DX,'#fde047',5);
-  labelL('E₂ (absorption)', PX(DX)+10, PY(DX)-12, '#fde047','12px Inter,sans-serif');
+  dot(DX,DX,pc,5);
+  labelL('E₂ (absorption)', PX(DX)+10, PY(DX)-12, pc,'12px Inter,sans-serif');
   if(!mOff){
     dot(DX,Tend,'#22d3ee',5);
     labelL("E₂′  (ct = "+Tend.toFixed(1)+")", PX(DX)+10, PY(Tend), '#22d3ee','12px Inter,sans-serif');
@@ -997,15 +1023,14 @@ function updateReadout(){
   const Tend=DX/beta, root=Math.sqrt(1-beta*beta);
   const g=gammaOf(beta);
   const dtau=Tend*root;   // proper time along the massive worldline (mass-independent)
-  const E=g*m;            // total relativistic energy E = γmc² (c = 1, m in arb. units)
+  const E=g*m;            // massive total relativistic energy E = γmc² (c = 1, arb. units)
+  const Eph=photonEnergyEV();   // photon energy E = hν (eV)
   document.getElementById('beta-read').textContent=beta.toFixed(3);
   document.getElementById('m-read').textContent=m.toFixed(1);
   document.getElementById('m-dtau').textContent=dtau.toFixed(2)+' s';
-  document.getElementById('m-E').textContent=E.toFixed(2);
-  document.getElementById('ro-note').innerHTML=
-    'The massive particle ages <b>Δτ = '+dtau.toFixed(2)+' s</b> over the trip while the photon ages <b>0</b>. '+
-    'Its total energy is <b>E = γmc² = '+E.toFixed(2)+'</b> (arb.). Raising the mass increases the energy but leaves Δτ unchanged — proper time is set by the worldline, not the mass. '+
-    'Push v/c → 1: Δτ → 0 while E → ∞, which is why a massive particle can never reach c. A photon is massless, so E = γmc² does not apply — its energy comes from its frequency.';
+  document.getElementById('m-E').textContent=E.toFixed(2)+' a.u.';
+  document.getElementById('ph-E').innerHTML=Eph.toFixed(2)+' eV';
+  const fr=document.getElementById('freq-read'); if(fr) fr.textContent=freqTHz.toFixed(0)+' THz';
 }
 
 /* ----- prediction feedback ----- */
@@ -1045,6 +1070,15 @@ massEl.addEventListener('input',e=>{ m=parseFloat(e.target.value); updateReadout
 document.getElementById('toggle-compare').addEventListener('click',function(){
   showCompare=!showCompare; this.classList.toggle('active',showCompare); draw();
 });
+document.getElementById('toggle-energy').addEventListener('click',function(){
+  showEnergy=!showEnergy; this.classList.toggle('active',showEnergy);
+  document.getElementById('freqCtrl').style.display = showEnergy ? '' : 'none';
+  document.getElementById('energyRow').style.display = showEnergy ? '' : 'none';
+  updateReadout(); draw();
+});
+document.getElementById('freq').addEventListener('input',e=>{
+  freqTHz=parseFloat(e.target.value); updateReadout(); draw();
+});
 document.querySelectorAll('.qbtn').forEach(b=>b.addEventListener('click',()=>{
   beta=parseFloat(b.dataset.beta); betaEl.value=beta; updateReadout(); draw();
 }));
@@ -1065,6 +1099,11 @@ function onReset(){
   beta=0.5; m=1; p=0; finished=false; showCompare=false;
   betaEl.value=0.5; massEl.value=1;
   document.getElementById('toggle-compare').classList.remove('active');
+  showEnergy=false; freqTHz=540;
+  document.getElementById('freq').value=540;
+  document.getElementById('toggle-energy').classList.remove('active');
+  document.getElementById('freqCtrl').style.display='none';
+  document.getElementById('energyRow').style.display='none';
   document.querySelectorAll('.choice').forEach(b=>b.classList.remove('sel','correct','wrong'));
   document.querySelectorAll('.feedback').forEach(f=>{ f.style.display='none'; });
   document.getElementById('friend-reveal').style.display='none';
