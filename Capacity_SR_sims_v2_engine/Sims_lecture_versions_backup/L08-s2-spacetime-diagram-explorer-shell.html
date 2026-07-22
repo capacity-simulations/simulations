@@ -791,14 +791,43 @@ function fit(c,cx){
 function defaultEvents(){
   return [
     {id:1, name:'E'+sub(1), x:0, ct:0, color:'#2dd4bf'},
-    {id:2, name:'E'+sub(2), x:3, ct:1, color:'#f97362'},
-    {id:3, name:'E'+sub(3), x:1, ct:3, color:'#fbbf24'},
-    {id:4, name:'E'+sub(4), x:2, ct:2, color:'#ffffff', outline:'#fde047'}
+    {id:2, name:'E'+sub(2), x:3, ct:1, color:'#f97362'}
   ];
+}
+const INQUIRY_E3 = {id:3, name:'E'+sub(3), x:1, ct:3, color:'#fbbf24'};
+const INQUIRY_E4 = {id:4, name:'E'+sub(4), x:2, ct:2, color:'#ffffff', outline:'#fde047'};
+function ensureInquiryEvent(id){
+  let ev = getEv(id);
+  if(ev) return ev;
+  const def = id === 3 ? INQUIRY_E3 : INQUIRY_E4;
+  ev = {...def};
+  S.events.push(ev);
+  S.events.sort((a,b)=>a.id-b.id);
+  if(S.nextId <= id) S.nextId = id + 1;
+  return ev;
+}
+function removeInquiryEvent(id){
+  S.events = S.events.filter(e => e.id !== id);
+  S.selection = S.selection.filter(x => x !== id);
+}
+function removeInquiryEvents(){
+  removeInquiryEvent(3);
+  removeInquiryEvent(4);
+  if(!S.selection.length) S.selection = [1];
+}
+function isInquiryDone(){
+  const shell = document.getElementById('shell');
+  return shell && shell.classList.contains('inquiry-collapsed');
+}
+function nextUserId(){
+  let id = Math.max(S.nextId, 5);
+  while(getEv(id)) id++;
+  S.nextId = id + 1;
+  return id;
 }
 const S = {
   events: defaultEvents(),
-  nextId: 5,
+  nextId: 3,
   selection: [1],
   showSignals: false,
   animPhase: 0,
@@ -1100,7 +1129,7 @@ function updateEventsList(){
       '<span class="ev-swatch" style="background:'+ev.color+';'+(ev.outline?'border:1px solid '+ev.outline:'')+'"></span>'+
       '<button class="ev-pick shell-btn" data-id="'+ev.id+'" style="padding:2px 7px;font-size:11px">'+ev.name+'</button>'+
       '<span>('+ev.x.toFixed(2)+', '+ev.ct.toFixed(2)+') ls'+mark+'</span>'+
-      (ev.id>=5? '<button class="ev-del shell-btn" data-id="'+ev.id+'" style="padding:2px 7px;font-size:11px;margin-left:auto">✕</button>' : '')+
+      (ev.user ? '<button class="ev-del shell-btn" data-id="'+ev.id+'" style="padding:2px 7px;font-size:11px;margin-left:auto">✕</button>' : '')+
       '</div>';
   }).join('');
 }
@@ -1122,12 +1151,12 @@ function toggleSelect(id){
   updatePairInfo(); updateEventsList(); drawAll();
 }
 function addEvent(){
-  const id=S.nextId++;
+  const id = nextUserId();
   const palette=['#a78bfa','#34d399','#f472b6','#38bdf8','#facc15','#22d3ee'];
   const positions=[[-2,1.5],[-3,-1],[-1.5,-2.5],[-4,2],[2.5,-2],[-2.5,3]];
-  const k=id-5;
+  const k = S.events.filter(e => e.user).length;
   S.events.push({id, name:'E'+sub(id), x:positions[k%positions.length][0], ct:positions[k%positions.length][1],
-    color:palette[k%palette.length]});
+    color:palette[k%palette.length], user:true});
   updateEventsList(); updatePairInfo(); drawAll();
 }
 
@@ -1213,6 +1242,16 @@ function updateStepHL(){
   if(pp) pp.classList.toggle('hl', !done && Shell.step===2);
 }
 
+function onInquiryCollapsed(){
+  removeInquiryEvents();
+  const e2=getEv(2);
+  if(e2){ e2.x=3; e2.ct=1; }
+  S.selection=[1];
+  updatePairInfo(); updateEventsList();
+  updateStepHL();
+  drawAll();
+}
+
 function syncSignalsBtn(){
   const t=document.getElementById('toggle-signals');
   if(t) t.classList.toggle('active', S.showSignals);
@@ -1248,10 +1287,22 @@ function applyStepDefaults(i){
   const wantSignals=(i>=3);
   if(S.showSignals!==wantSignals){ S.showSignals=wantSignals; syncSignalsBtn(); }
 
+  if(isInquiryDone()){
+    removeInquiryEvents();
+    const e2=getEv(2);
+    if(e2){ e2.x=3; e2.ct=1; }
+    S.selection=[1];
+    updatePairInfo(); updateEventsList();
+    return;
+  }
+
   /* Event layout so each card is ready on entry:
      cards 1 & 5 → a same-ct pair (E₂,E₃) at different distances (reception/simultaneity);
      card 4 → distinct reception times (green ≠ orange, no overlap);
      cards 2–3 → classification layout (E2/E3/E4 outside / inside / on E1's cone). */
+  if(i>=0) ensureInquiryEvent(3);
+  if(i>=1) ensureInquiryEvent(4);
+  else removeInquiryEvent(4);
   const e2=getEv(2), e3=getEv(3), e4=getEv(4);
   if(i===0 || i===4){
     /* two simultaneous flashes on OPPOSITE sides of the observer (labels point away, no overlap) */
@@ -1278,7 +1329,7 @@ function onReset(){
   Object.keys(stepSnapshots).forEach(k=>delete stepSnapshots[k]);
   prevInqStep=null;
   S.events=defaultEvents();
-  S.nextId=5; S.selection=[1]; S.showSignals=false; S.animPhase=0; S.prediction=null;
+  S.nextId=3; S.selection=[1]; S.showSignals=false; S.animPhase=0; S.prediction=null;
   syncSignalsBtn();
   updatePairInfo(); updateEventsList();
   applyStepDefaults(Shell.step);
@@ -1319,8 +1370,19 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
   }));
 });
 
-Shell.init({ onFrame, onReset, onResize, onStep, onInquiryCollapsed: updateStepHL });
+Shell.init({ onFrame, onReset, onResize, onStep, onInquiryCollapsed });
 Shell.setLectureMode(true);
+
+window.__audit = {
+  interval: (a,b) => (b.ct-a.ct)**2 - (b.x-a.x)**2,
+  classify: ds2 => Math.abs(ds2)<0.06 ? 'lightlike' : (ds2>0?'timelike':'spacelike'),
+  reception: ev => ev.ct + Math.abs(ev.x),
+  boostInvariant: (a,b,beta) => {
+    const g=1/Math.sqrt(1-beta*beta), L=e=>({ct:g*(e.ct-beta*e.x), x:g*(e.x-beta*e.ct)});
+    const i0=(b.ct-a.ct)**2-(b.x-a.x)**2, A=L(a), B=L(b), i1=(B.ct-A.ct)**2-(B.x-A.x)**2;
+    return {before:i0, after:i1, invariant: Math.abs(i0-i1)<1e-9};
+  }
+};
 
 </script>
 </body>

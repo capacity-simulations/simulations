@@ -273,7 +273,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong{col
       </div>
       <canvas id="room"></canvas>
     </div>
-    <div class="plot-box" style="flex:1;">
+    <div class="plot-box" style="flex:1;display:none;">
       <div class="plot-title">Space diagram <span class="plot-inline" id="space-frame-label">— events in active frame</span></div>
       <canvas id="space"></canvas>
     </div>
@@ -368,7 +368,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong{col
             <button class="measure-btn" id="measure-alice">⚡ Measure endpoints — Alice</button>
             <button class="measure-btn" id="measure-bella">⚡ Measure endpoints — Bella</button>
           </div>
-          <button id="toggle-space" class="shell-btn active" title="Show/hide the spacetime diagram" style="width:100%;margin-top:8px;">▦ Spacetime diagram</button>
+          <button id="toggle-space" class="shell-btn" title="Show/hide the spacetime diagram" style="width:100%;margin-top:8px;">▦ Spacetime diagram</button>
         </div>
       </div>
 
@@ -608,7 +608,7 @@ const Shell = (function(){
     // Measurement events (recorded in Alice's frame first, then transformed)
     animT: 0,          // walk-cycle clock (cosmetic)
     measureBy: null,   // null | 'alice' | 'bella' — who took the measurement
-    showSpace: true,
+    showSpace: false,
     // Alice frame: two events (t=0, x1) and (t=0, x2) — simultaneous
     ev: null,     // {aliceT1, aliceT2, aliceX1, aliceX2, bellaT1, bellaT2, bellaX1, bellaX2}
     flash: null   // transient marker-flash: { start, app1, app2, dur }  (ms; app-times relative to start)
@@ -627,8 +627,8 @@ const Shell = (function(){
     bg: () => getComputedStyle(document.documentElement).getPropertyValue('--panel-bg').trim() || '#060E11'
   };
 
-  const FLASH_MS       = 550;   // how long each flash stays visible (ms) — Bella's staggered pair
-  const FLASH_MS_ALICE = 1600;  // Alice's frame: both pop at once, so let them linger to be seen
+  const FLASH_MS       = 550;   // how long each flash stays visible (ms) — staggered pair
+  const FLASH_MS_SIMUL = 1600;  // simultaneous in the viewing frame: both pop at once, so let them linger
   const GAP_SCALE_MS   = 900;   // ms of animation per 1 m-of-light of |Δt| between the two events
 
   function gamma(v){ return 1/Math.sqrt(1 - v*v); }
@@ -698,7 +698,9 @@ const Shell = (function(){
       start: performance.now(),
       app1: (t1 - tMin) * GAP_SCALE_MS,
       app2: (t2 - tMin) * GAP_SCALE_MS,
-      dur:  (state.frame === 'alice') ? FLASH_MS_ALICE : FLASH_MS
+      // Simultaneous in THIS frame → both pop together and linger; otherwise
+      // two short flashes whose stagger shows the time gap.
+      dur:  Math.abs(t1 - t2) < 1e-9 ? FLASH_MS_SIMUL : FLASH_MS
     };
   }
 
@@ -818,32 +820,38 @@ const Shell = (function(){
       const t1  = inAlice ? ev.aliceT1 : ev.bellaT1, t2  = inAlice ? ev.aliceT2 : ev.bellaT2;
       const simulHere = Math.abs(t1 - t2) < 1e-9;
       const m1X = worldToX(x1w), m2X = worldToX(x2w);
+      // Persistent marks + measured-length bracket live in the MEASURER's rest
+      // frame: Alice's marks are scratches on the room floor, so in Bella's
+      // view they slide backward with the room (just like Alice does).
+      const roomAnchored = !inAlice && ev.measurer === 'alice';
+      const mk1X = roomAnchored ? worldToX(ev.aliceX1) - roomOffset : m1X;
+      const mk2X = roomAnchored ? worldToX(ev.aliceX2) - roomOffset : m2X;
       const fontNums = getComputedStyle(document.documentElement).getPropertyValue('--font-nums').trim();
       const fontSans = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim();
       const mColor = ev.measurer === 'alice' ? C.alice : C.bella;
       const mName  = ev.measurer === 'alice' ? 'Alice' : 'Bella';
 
-      // Persistent ground marks at each event x
+      // Persistent ground marks at each mark position
       rctx.strokeStyle = C.flash; rctx.lineWidth = 2; rctx.setLineDash([2,3]);
-      [m1X, m2X].forEach(mx=>{ rctx.beginPath(); rctx.moveTo(mx, floorY); rctx.lineTo(mx, floorY-60); rctx.stroke(); });
+      [mk1X, mk2X].forEach(mx=>{ rctx.beginPath(); rctx.moveTo(mx, floorY); rctx.lineTo(mx, floorY-60); rctx.stroke(); });
       rctx.setLineDash([]);
 
       // Measured-length bracket (the measurer's result)
       rctx.strokeStyle = mColor; rctx.lineWidth = 2;
       rctx.beginPath();
-      rctx.moveTo(m1X, floorY+30); rctx.lineTo(m1X, floorY+38);
-      rctx.lineTo(m2X, floorY+38); rctx.lineTo(m2X, floorY+30);
+      rctx.moveTo(mk1X, floorY+30); rctx.lineTo(mk1X, floorY+38);
+      rctx.lineTo(mk2X, floorY+38); rctx.lineTo(mk2X, floorY+30);
       rctx.stroke();
       rctx.fillStyle = mColor; rctx.font = '700 13px ' + fontNums;
       const lbl = mName + "'s measurement: L = " + ev.measuredL.toFixed(2) + ' m';
-      rctx.fillText(lbl, (m1X+m2X)/2 - rctx.measureText(lbl).width/2, floorY+55);
+      rctx.fillText(lbl, (mk1X+mk2X)/2 - rctx.measureText(lbl).width/2, floorY+55);
 
       // Caption when marks are NOT simultaneous in this viewing frame
       if(!simulHere){
         rctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--warn').trim() || '#f59e0b';
         rctx.font = '600 12px ' + fontSans;
         const cap = '⚠ marks made at different times in this frame — not the rod\u2019s length here';
-        rctx.fillText(cap, (m1X+m2X)/2 - rctx.measureText(cap).width/2, floorY+74);
+        rctx.fillText(cap, (mk1X+mk2X)/2 - rctx.measureText(cap).width/2, floorY+74);
       }
 
       // Transient flashes on top, at the mark positions, timed by state.flash
@@ -1006,70 +1014,116 @@ const Shell = (function(){
     }
     rctx.stroke();
 
-    // Head
-    rctx.fillStyle = '#f5c9a8';
-    rctx.beginPath(); rctx.arc(hx, gy - 66, who === 'alice' ? 8.2 : 7.8, 0, Math.PI*2); rctx.fill();
-
-    // Hair — clearly feminine & distinct
+    // --- Hair, back layer (behind head & neck) — single silhouette paths, no
+    //     detached blobs, so the hair hugs the skull and reads naturally ---
+    const headR = who === 'alice' ? 8.2 : 7.8;
+    const headY = gy - 66;
     rctx.fillStyle = hairCol;
-    if(who === 'bella'){
-      // Crown + side coverage
+    if(who === 'alice'){
+      // Shoulder-length bob: one smooth sheet flowing from the crown down both
+      // sides of the face, tapering inward at the ends.
       rctx.beginPath();
-      rctx.arc(hx, gy - 67, 9.0, Math.PI * 0.92, Math.PI * 2.08);
-      rctx.fill();
-      // Side locks
-      rctx.beginPath();
-      rctx.ellipse(hx - 7*f, gy - 62, 3.0, 7.5, -0.15*f, 0, Math.PI*2);
-      rctx.fill();
-      rctx.beginPath();
-      rctx.ellipse(hx + 5.5*f, gy - 63, 2.4, 6.5, 0.2*f, 0, Math.PI*2);
-      rctx.fill();
-      // Swinging ponytail
-      rctx.fillStyle = hairHi;
-      const tx = hx - 10*f + ponytailSwing * 0.35;
-      const ty = gy - 52 + Math.abs(ponytailSwing) * 0.15;
-      rctx.beginPath();
-      rctx.moveTo(hx - 4*f, gy - 70);
-      rctx.quadraticCurveTo(hx - 12*f + ponytailSwing*0.2, gy - 62, tx, ty);
-      rctx.quadraticCurveTo(hx - 11*f + ponytailSwing*0.3, gy - 48, hx - 5*f, gy - 68);
-      rctx.fill();
-      rctx.beginPath();
-      rctx.ellipse(tx, ty + 4, 3.4, 7.5, 0.2*f + ponytailSwing*0.04, 0, Math.PI*2);
+      rctx.moveTo(hx, headY - 10);
+      rctx.bezierCurveTo(hx - 10, headY - 10.5, hx - 11.2, headY - 2, hx - 11, headY + 6);
+      rctx.bezierCurveTo(hx - 10.8, headY + 12, hx - 8.5, headY + 15.5, hx - 5, headY + 16);
+      rctx.quadraticCurveTo(hx - 1.5, headY + 15.8, hx - 1, headY + 13);
+      rctx.lineTo(hx + 1, headY + 13);
+      rctx.quadraticCurveTo(hx + 1.5, headY + 15.8, hx + 5, headY + 16);
+      rctx.bezierCurveTo(hx + 8.5, headY + 15.5, hx + 10.8, headY + 12, hx + 11, headY + 6);
+      rctx.bezierCurveTo(hx + 11.2, headY - 2, hx + 10, headY - 10.5, hx, headY - 10);
+      rctx.closePath();
       rctx.fill();
     } else {
-      // Alice: shoulder-length bob with soft bangs
+      // Bella: tapered ponytail swinging behind her (opposite the run direction),
+      // attached high at the back of the head.
+      const swing = ponytailSwing;
+      const bx0 = hx - 6.2*f, by0 = headY - 4.5;                            // attachment
+      const cx1 = hx - 13.5*f + swing*0.5, cy1 = headY;                     // outward bow
+      const tx  = hx - 12.5*f + swing,     ty  = headY + 16 + Math.abs(swing)*0.25; // tip
       rctx.beginPath();
-      rctx.arc(hx, gy - 66, 9.6, Math.PI * 0.78, Math.PI * 2.22);
+      rctx.moveTo(bx0, by0 - 2.2);
+      rctx.bezierCurveTo(hx - 12*f + swing*0.3, headY - 6.5, cx1 - 1.5*f, cy1 - 3, tx - 1.2*f, ty - 2);
+      rctx.quadraticCurveTo(tx + 0.5*f, ty + 2.5, tx + 2.8*f + swing*0.15, ty - 3.5);
+      rctx.bezierCurveTo(cx1 + 4*f, cy1 - 1, hx - 8.5*f, headY - 2.5, bx0, by0 + 2.4);
+      rctx.closePath();
       rctx.fill();
-      // Full side bob (covers ears / jaw)
+      // strand highlight along the tail
+      rctx.strokeStyle = hairHi;
+      rctx.lineWidth = 1.2;
       rctx.beginPath();
-      rctx.ellipse(hx - 7.5, gy - 60, 4.2, 10, -0.08, 0, Math.PI*2);
-      rctx.fill();
-      rctx.beginPath();
-      rctx.ellipse(hx + 7.5, gy - 60, 4.2, 10, 0.08, 0, Math.PI*2);
-      rctx.fill();
-      // Bangs
-      rctx.fillStyle = hairHi;
-      rctx.beginPath();
-      rctx.ellipse(hx, gy - 71, 8.2, 4.2, 0, Math.PI, Math.PI*2);
-      rctx.fill();
-      // Soft curl at ends
-      rctx.fillStyle = hairCol;
-      rctx.beginPath();
-      rctx.ellipse(hx - 8.5, gy - 52, 3.5, 4.5, -0.3, 0, Math.PI*2);
-      rctx.fill();
-      rctx.beginPath();
-      rctx.ellipse(hx + 8.5, gy - 52, 3.5, 4.5, 0.3, 0, Math.PI*2);
-      rctx.fill();
+      rctx.moveTo(bx0 - f, by0);
+      rctx.quadraticCurveTo(cx1 + 1.5*f, cy1 - 2, tx + 0.5*f, ty - 2.5);
+      rctx.stroke();
     }
 
-    // Eyes facing travel direction
-    rctx.fillStyle = 'rgba(40,30,20,0.65)';
-    rctx.beginPath(); rctx.arc(hx + 2.4*f, gy - 66.2, 1.15, 0, Math.PI*2); rctx.fill();
-    rctx.beginPath(); rctx.arc(hx + 5.0*f, gy - 66.2, 1.15, 0, Math.PI*2); rctx.fill();
+    // Neck
+    rctx.fillStyle = '#e8b48c';
+    rctx.fillRect(hx - 2.2, gy - 60, 4.4, 5);
+
+    // Head — softly shaded skin
+    const skin = rctx.createRadialGradient(hx + 2*f, headY - 3, 1, hx, headY, headR + 1.5);
+    skin.addColorStop(0, '#fbd9b4');
+    skin.addColorStop(1, '#e9b183');
+    rctx.fillStyle = skin;
+    rctx.beginPath(); rctx.arc(hx, headY, headR, 0, Math.PI*2); rctx.fill();
+
+    // --- Hair, front layer (crown over the head) ---
+    rctx.fillStyle = hairCol;
+    if(who === 'alice'){
+      // Crown with a soft hairline swept toward the facing side
+      rctx.beginPath();
+      rctx.arc(hx, headY - 0.5, headR + 0.6, Math.PI, Math.PI*2);
+      rctx.quadraticCurveTo(hx + 1.5*f, headY - 4.5, hx - (headR + 0.6), headY - 0.5);
+      rctx.closePath();
+      rctx.fill();
+      // glossy shine on the crown
+      rctx.strokeStyle = hairHi;
+      rctx.lineWidth = 1.4;
+      rctx.beginPath();
+      rctx.arc(hx, headY - 0.5, headR - 1.6, Math.PI*1.22, Math.PI*1.55);
+      rctx.stroke();
+    } else {
+      // Sporty pulled-back cap hugging the skull
+      rctx.beginPath();
+      rctx.arc(hx, headY - 0.3, headR + 0.4, Math.PI, Math.PI*2);
+      rctx.quadraticCurveTo(hx + 1.5*f, headY - 4, hx - (headR + 0.4), headY - 0.3);
+      rctx.closePath();
+      rctx.fill();
+      // small sideburn wisps tight to the head
+      rctx.beginPath();
+      rctx.ellipse(hx - 7.2, headY + 2, 1.4, 3, -0.15, 0, Math.PI*2);
+      rctx.fill();
+      rctx.beginPath();
+      rctx.ellipse(hx + 7.2, headY + 2, 1.4, 3, 0.15, 0, Math.PI*2);
+      rctx.fill();
+      // shine + hair tie at the ponytail base
+      rctx.strokeStyle = hairHi;
+      rctx.lineWidth = 1.2;
+      rctx.beginPath();
+      rctx.arc(hx, headY - 0.3, headR - 1.5, Math.PI*1.25, Math.PI*1.55);
+      rctx.stroke();
+      rctx.fillStyle = shade(color, 1.25);
+      rctx.save();
+      rctx.translate(hx - 6.2*f, headY - 4.5);
+      rctx.rotate(-0.5*f);
+      rctx.fillRect(-1.4, -2.6, 2.8, 5.2);
+      rctx.restore();
+    }
+
+    // Face — eyes, brows and a light smile toward the travel direction
+    rctx.fillStyle = 'rgba(45,32,22,0.85)';
+    rctx.beginPath(); rctx.arc(hx + 2.6*f, headY - 0.2, 1.05, 0, Math.PI*2); rctx.fill();
+    rctx.beginPath(); rctx.arc(hx + 5.3*f, headY - 0.2, 1.05, 0, Math.PI*2); rctx.fill();
+    rctx.strokeStyle = 'rgba(45,32,22,0.5)';
+    rctx.lineWidth = 0.9;
+    rctx.beginPath(); rctx.moveTo(hx + 1.6*f, headY - 2.4); rctx.lineTo(hx + 3.6*f, headY - 2.9); rctx.stroke();
+    rctx.beginPath(); rctx.moveTo(hx + 4.4*f, headY - 2.9); rctx.lineTo(hx + 6.2*f, headY - 2.5); rctx.stroke();
+    rctx.strokeStyle = 'rgba(158,74,58,0.75)';
+    rctx.lineWidth = 1;
+    rctx.beginPath(); rctx.arc(hx + 3.8*f, headY + 3.4, 1.7, 0.15*Math.PI, 0.85*Math.PI); rctx.stroke();
     // Soft cheek hint
     rctx.fillStyle = 'rgba(232,140,120,0.28)';
-    rctx.beginPath(); rctx.arc(hx + 4.5*f, gy - 63.5, 1.8, 0, Math.PI*2); rctx.fill();
+    rctx.beginPath(); rctx.arc(hx + 5.6*f, headY + 2.4, 1.7, 0, Math.PI*2); rctx.fill();
 
     // Name tag
     rctx.fillStyle = color;
@@ -1358,13 +1412,14 @@ const Shell = (function(){
   function step(dt){
     state.animT += dt; // cosmetic walk-cycle clock
     // Bella walks/room moves ~ position (visual only — doesn't influence physics events which are computed at Measure time)
-    if(state.frame === 'alice' && !state.measureBy){
-      // rod slides right; loop — frozen while a measurement is shown so the
-      // marks/flashes stay on the rod's ends
+    if(state.frame === 'alice'){
+      // rod slides right; loop. Motion continues even while a measurement is
+      // shown — the marks stay put in the room where the endpoints were tagged,
+      // and Bella runs on past them.
       const speed = 0.35 * state.v; // dimensionless phase per second
       state.aliceRodX += speed * dt;
       if(state.aliceRodX > 1) state.aliceRodX = -1;
-    } else if(state.frame !== 'alice'){
+    } else {
       // room slides left (rod fixed at centre) — slow loop; shift in metres (old cm values ÷10)
       state.bellaSceneShift += 0.13 * state.v * dt;
       if(state.bellaSceneShift > 0.8) state.bellaSceneShift -= 1.6;
@@ -1392,7 +1447,7 @@ const Shell = (function(){
     state.measureBy = null;
     state.ev = null;
     state.flash = null;
-    state.showSpace = true;
+    state.showSpace = false;
 
     // reset DOM controls
     document.getElementById('v-slider').value = '0.80';
@@ -1403,9 +1458,9 @@ const Shell = (function(){
     document.getElementById('room-frame-label').textContent = "— Alice's frame (rod moves →)";
     document.getElementById('space-frame-label').textContent = '— events in active frame';
     const spaceBtn = document.getElementById('toggle-space');
-    if(spaceBtn) spaceBtn.classList.add('active');
+    if(spaceBtn) spaceBtn.classList.remove('active');
     const spaceBox = spaceCv.closest('.plot-box');
-    if(spaceBox) spaceBox.style.display = '';
+    if(spaceBox) spaceBox.style.display = 'none';
     document.getElementById('measure-alice')?.classList.remove('active');
     document.getElementById('measure-bella')?.classList.remove('active');
 

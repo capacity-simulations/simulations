@@ -499,8 +499,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="tip">
           Drag the <b>m₀</b> slider and the <b>your point v</b> slider; hover anywhere on the plot to read off (v, p, γ). Try:
           <ul>
-            <li>Set v near <b>0.1c</b> — do the blue and grey curves agree?</li>
-            <li>Push v toward <b>c</b> — where does the blue curve go?</li>
+            <li>Turn on <b>View low velocity</b> — do the blue and grey curves agree for v/c ≤ 0.1?</li>
+            <li>Push v toward <b>c</b> (full range) — where does the blue curve go?</li>
             <li>Set v = <b>0.5c</b>, note p; then <b>double m₀</b> and read p again.</li>
           </ul>
         </div>
@@ -555,6 +555,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <span class="ctrl-box-label">Plot layers</span>
             <div class="layer-btns">
               <button id="btn-ratio" class="shell-btn">△ Show ratio layer</button>
+              <button id="btn-lowv" class="shell-btn">⊙ View low velocity</button>
             </div>
           </div>
         </div>
@@ -786,11 +787,13 @@ const ctx = cv.getContext('2d');
 
 const VMAX = 0.9995;          // sampling cap for the curve (v in units of c)
 const RATIO_V = 0.9;          // marked sample velocity for the γ ratio call-out
+const LOW_VMAX = 0.1;         // x-range when "view low velocity" is on
 
 const state = {
   m0: 1.0,
   vSel: 0.6,
   showRatio: false,
+  showLowV: false,
   hoverV: null,
   ymax: 10
 };
@@ -834,14 +837,20 @@ function draw(){
   const mL=66, mR=30, mT=24, mB=48;
   const X0=mL, Y0=mT, PW=Math.max(40,w-mL-mR), PH=Math.max(40,h-mT-mB);
   const X1=X0+PW, Y1=Y0+PH;
-  geom={X0,X1,Y0,Y1,PW,PH};
 
-  const ymax=state.ymax, m0=state.m0;
-  const VX = v => X0 + Math.min(Math.max(v,0),1)*PW;     // v in 0..1 -> px
-  const PYr = p => Y1 - (p/ymax)*PH;                      // raw (may exceed top)
+  const xmax = state.showLowV ? LOW_VMAX : 1;
+  /* Low-v y-range: just above p_class(0.1) at m₀=1 so the linear
+     overlap fills the plot; fixed so changing m₀ still scales the curves. */
+  const ymax = state.showLowV ? 0.15 : state.ymax;
+  const m0=state.m0;
+  const vSampleMax = Math.min(VMAX, xmax);
+  geom={X0,X1,Y0,Y1,PW,PH,xmax};
+
+  const VX = v => X0 + Math.min(Math.max(v,0),xmax)/xmax*PW;  // v in 0..xmax -> px
+  const PYr = p => Y1 - (p/ymax)*PH;                          // raw (may exceed top)
 
   /* grid */
-  const xticks=[0,0.2,0.4,0.6,0.8,1.0];
+  const xticks=[]; for(let i=0;i<=5;i++) xticks.push(i*xmax/5);
   const yticks=[]; for(let i=0;i<=5;i++) yticks.push(i*ymax/5);
   ctx.lineWidth=1; ctx.strokeStyle='rgba(148,163,184,.15)';
   xticks.forEach(v=>{ ctx.beginPath(); ctx.moveTo(VX(v),Y0); ctx.lineTo(VX(v),Y1); ctx.stroke(); });
@@ -854,9 +863,11 @@ function draw(){
   /* tick labels */
   ctx.fillStyle='#94a3b8'; ctx.font='12px ui-monospace,monospace';
   ctx.textAlign='center'; ctx.textBaseline='top';
-  xticks.forEach(v=>{ ctx.fillText(v.toFixed(1), VX(v), Y1+6); });
+  const xDig = state.showLowV ? 2 : 1;
+  const yDig = state.showLowV ? 2 : 0;
+  xticks.forEach(v=>{ ctx.fillText(v.toFixed(xDig), VX(v), Y1+6); });
   ctx.textAlign='right'; ctx.textBaseline='middle';
-  yticks.forEach(p=>{ ctx.fillText(p.toFixed(0), X0-8, PYr(p)); });
+  yticks.forEach(p=>{ ctx.fillText(p.toFixed(yDig), X0-8, PYr(p)); });
 
   /* axis titles */
   ctx.fillStyle='#cbd5e1'; ctx.font='13px Inter,sans-serif';
@@ -865,19 +876,21 @@ function draw(){
   ctx.save(); ctx.translate(15, Y0+PH/2); ctx.rotate(-Math.PI/2);
   ctx.textBaseline='middle'; ctx.fillText('p / c', 0, 0); ctx.restore();
 
-  /* v = c boundary */
-  ctx.strokeStyle='rgba(245,158,11,.7)'; ctx.lineWidth=1.4; ctx.setLineDash([5,4]);
-  ctx.beginPath(); ctx.moveTo(X1,Y0); ctx.lineTo(X1,Y1); ctx.stroke(); ctx.setLineDash([]);
-  ctx.save(); ctx.fillStyle='rgba(245,158,11,.92)'; ctx.font='12px Inter,sans-serif';
-  ctx.translate(X1-18, Y1-10); ctx.rotate(-Math.PI/2);
-  ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('v = c (speed limit)', 0, 0); ctx.restore();
+  /* v = c boundary (full-range view only — off-scale when zoomed) */
+  if(!state.showLowV){
+    ctx.strokeStyle='rgba(245,158,11,.7)'; ctx.lineWidth=1.4; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(X1,Y0); ctx.lineTo(X1,Y1); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.fillStyle='rgba(245,158,11,.92)'; ctx.font='12px Inter,sans-serif';
+    ctx.translate(X1-18, Y1-10); ctx.rotate(-Math.PI/2);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('v = c (speed limit)', 0, 0); ctx.restore();
+  }
 
   /* ratio shading */
   if(state.showRatio){
     ctx.save();
     ctx.beginPath(); ctx.rect(X0,Y0,PW,PH); ctx.clip();
-    const n=200, vEnd=VMAX;
+    const n=200, vEnd=vSampleMax;
     ctx.beginPath();
     for(let i=0;i<=n;i++){ const v=vEnd*i/n; ctx.lineTo(VX(v), PYr(pClass(v,m0))); }
     for(let i=n;i>=0;i--){ const v=vEnd*i/n; ctx.lineTo(VX(v), PYr(Math.min(pRel(v,m0),ymax))); }
@@ -888,7 +901,7 @@ function draw(){
 
   /* classical line */
   ctx.strokeStyle='rgba(148,163,184,.65)'; ctx.lineWidth=1.6; ctx.setLineDash([6,5]);
-  ctx.beginPath(); ctx.moveTo(VX(0),PYr(0)); ctx.lineTo(VX(1),PYr(Math.min(m0,ymax))); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(VX(0),PYr(0)); ctx.lineTo(VX(xmax),PYr(Math.min(m0*xmax,ymax))); ctx.stroke();
   ctx.setLineDash([]);
 
   /* relativistic curve (clipped) */
@@ -896,14 +909,14 @@ function draw(){
   ctx.beginPath(); ctx.rect(X0,Y0,PW,PH); ctx.clip();
   ctx.strokeStyle='#60a5fa'; ctx.lineWidth=2.6; ctx.beginPath();
   const N=800;
-  for(let i=0;i<=N;i++){ const v=VMAX*i/N; const x=VX(v), y=PYr(pRel(v,m0));
+  for(let i=0;i<=N;i++){ const v=vSampleMax*i/N; const x=VX(v), y=PYr(pRel(v,m0));
     if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
   ctx.stroke();
   ctx.restore();
 
   /* divergence arrow where curve exits the top */
   let vCross=null;
-  for(let i=0;i<=N;i++){ const v=VMAX*i/N; if(pRel(v,m0)>=ymax){ vCross=v; break; } }
+  for(let i=0;i<=N;i++){ const v=vSampleMax*i/N; if(pRel(v,m0)>=ymax){ vCross=v; break; } }
   if(vCross!==null){
     const xc=VX(vCross);
     ctx.strokeStyle='#60a5fa'; ctx.fillStyle='#60a5fa'; ctx.lineWidth=2.2;
@@ -955,7 +968,7 @@ function draw(){
   /* slider-bound static marker ("your point") — vanishes when it runs off the top of the plot */
   {
     const v=state.vSel, p=pRel(v,m0), x=VX(v);
-    if(p<=ymax){                        // out of frame ⇒ draw nothing (curve's "p → ∞" arrow shows the blow-up)
+    if(v<=xmax && p<=ymax){             // out of frame ⇒ draw nothing (curve's "p → ∞" arrow shows the blow-up)
       const y = PYr(p);
       ctx.strokeStyle='rgba(167,139,250,.55)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.moveTo(x,Y1); ctx.lineTo(x,y); ctx.stroke();
@@ -1037,17 +1050,51 @@ document.querySelectorAll('#inq-cards .choice').forEach(btn=>{
 });
 
 /* ---- controls ---- */
+const slV = document.getElementById('sl-v');
+const V_SLIDER_MAX = 0.999;
+let vSelBeforeLowV = null;   // restore when leaving low-velocity view
+
+function syncVSliderRange(){
+  if(state.showLowV){
+    slV.max = String(LOW_VMAX);
+    slV.step = '0.001';
+    if(state.vSel > LOW_VMAX){
+      if(vSelBeforeLowV === null) vSelBeforeLowV = state.vSel;
+      state.vSel = LOW_VMAX;
+    }
+  } else {
+    slV.max = String(V_SLIDER_MAX);
+    if(vSelBeforeLowV !== null){
+      state.vSel = vSelBeforeLowV;
+      vSelBeforeLowV = null;
+    }
+  }
+  slV.value = state.vSel;
+}
+
 document.getElementById('sl-m0').addEventListener('input', e=>{
   state.m0=parseFloat(e.target.value); updateReadouts(); draw();
 });
-document.getElementById('sl-v').addEventListener('input', e=>{
-  state.vSel=parseFloat(e.target.value); updateReadouts(); draw();
+slV.addEventListener('input', e=>{
+  state.vSel=parseFloat(e.target.value);
+  if(state.showLowV) vSelBeforeLowV = null;  // user chose a low-v value intentionally
+  updateReadouts(); draw();
 });
 document.getElementById('btn-ratio').addEventListener('click', e=>{
   state.showRatio=!state.showRatio;
   const b=e.currentTarget;
   b.classList.toggle('active', state.showRatio);
   b.textContent = state.showRatio ? '\u25B2 Hide ratio layer' : '\u25B3 Show ratio layer';
+  draw();
+});
+document.getElementById('btn-lowv').addEventListener('click', e=>{
+  state.showLowV=!state.showLowV;
+  const b=e.currentTarget;
+  b.classList.toggle('active', state.showLowV);
+  b.textContent = state.showLowV ? '\u25C9 Full velocity range' : '\u2299 View low velocity';
+  syncVSliderRange();
+  if(state.hoverV!==null && state.hoverV>LOW_VMAX) state.hoverV=null;
+  updateReadouts();
   draw();
 });
 
@@ -1059,8 +1106,8 @@ cv.addEventListener('mousemove', e=>{
     if(state.hoverV!==null){ state.hoverV=null; draw(); }
     return;
   }
-  let v=(mx-geom.X0)/geom.PW;
-  v=Math.min(Math.max(v,0),VMAX);
+  let v=(mx-geom.X0)/geom.PW * geom.xmax;
+  v=Math.min(Math.max(v,0), Math.min(VMAX, geom.xmax));
   state.hoverV=v; draw();
 });
 cv.addEventListener('mouseleave', ()=>{ if(state.hoverV!==null){ state.hoverV=null; draw(); } });
@@ -1086,11 +1133,15 @@ else renderFormal();
 
 /* ---- shell callbacks ---- */
 function syncControls(){
+  syncVSliderRange();
   document.getElementById('sl-m0').value=state.m0;
-  document.getElementById('sl-v').value=state.vSel;
+  slV.value=state.vSel;
   const br=document.getElementById('btn-ratio');
   br.classList.toggle('active', state.showRatio);
   br.textContent = state.showRatio ? '\u25B2 Hide ratio layer' : '\u25B3 Show ratio layer';
+  const bl=document.getElementById('btn-lowv');
+  bl.classList.toggle('active', state.showLowV);
+  bl.textContent = state.showLowV ? '\u25C9 Full velocity range' : '\u2299 View low velocity';
   updateReadouts();
 }
 
@@ -1105,18 +1156,19 @@ function updateStepHL(){
 
 function applyInquiryStep(i){
   state.hoverV=null;
+  vSelBeforeLowV = null;
   if(i===0){
-    state.m0=1.0; state.vSel=0.1; state.showRatio=false;
+    state.m0=1.0; state.vSel=0.1; state.showRatio=false; state.showLowV=false;
   } else if(i===1){
-    state.m0=1.0; state.vSel=0.95; state.showRatio=false;
+    state.m0=1.0; state.vSel=0.95; state.showRatio=false; state.showLowV=false;
   } else if(i===2){
-    state.m0=1.0; state.vSel=0.5; state.showRatio=false;
+    state.m0=1.0; state.vSel=0.5; state.showRatio=false; state.showLowV=false;
   } else if(i===3){
-    state.m0=1.0; state.vSel=0.6; state.showRatio=false;
+    state.m0=1.0; state.vSel=0.6; state.showRatio=false; state.showLowV=false;
   } else if(i===4){
-    state.m0=1.0; state.vSel=RATIO_V; state.showRatio=true;
+    state.m0=1.0; state.vSel=RATIO_V; state.showRatio=true; state.showLowV=false;
   } else if(i===5){
-    state.m0=1.0; state.vSel=0.6; state.showRatio=true;
+    state.m0=1.0; state.vSel=0.6; state.showRatio=true; state.showLowV=false;
   }
   syncControls();
   updateStepHL();

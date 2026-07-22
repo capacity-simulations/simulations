@@ -329,6 +329,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
    ========================================================================== */
 .clock-wrap{position:relative;width:100%;height:100%;min-height:0;}
 #clock{display:block;width:100%;height:100%;}
+.canvas-hint{position:absolute;left:12px;bottom:10px;z-index:4;pointer-events:none;
+  padding:4px 8px;border-radius:5px;background:rgba(6,14,17,.72);color:var(--ink-mute);
+  font-size:11px;font-weight:600;letter-spacing:.01em;}
 .eq-overlay{position:absolute;top:12px;right:12px;z-index:5;pointer-events:none;
   background:rgba(12,15,21,.86);border:1px solid rgba(167,139,250,.32);border-radius:8px;
   padding:10px 12px;max-width:min(46%,360px);color:#e2e8f0;font-size:13px;line-height:1.75;}
@@ -430,6 +433,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="plot-box" style="flex:1;min-height:0;display:flex;flex-direction:column;">
       <div class="clock-wrap">
         <canvas id="clock"></canvas>
+        <div class="canvas-hint" id="zoom-hint">Scroll to zoom · double-click to reset</div>
         <div id="eq-overlay" class="eq-overlay" style="display:none">
           <div class="eq-cap">Pythagoras on the light triangle → result</div>
           <div id="eq-pyth"></div>
@@ -783,7 +787,8 @@ const Shell = (function(){
   const eqOverlay=document.getElementById('eq-overlay');
 
   const T0=2.2;                       // rest-frame round-trip duration (seconds at 1x)
-  const state={tAnim:0, beta:0.6, stage:1};
+  const ZOOM_MIN=0.22, ZOOM_MAX=1;  // scroll-wheel scene zoom (1 = default auto-fit; no zoom-in past start)
+  const state={tAnim:0, beta:0.6, stage:1, userZoom:1};
 
   function gammaOf(b){ return 1/Math.sqrt(1-b*b); }
 
@@ -823,7 +828,7 @@ const Shell = (function(){
     return {w:r.width, h:r.height};
   }
 
-  /* ---- layout (uniform scale → never clips) ---- */
+  /* ---- layout (uniform scale → never clips at userZoom=1) ---- */
   function layout(w,h){
     const pad=16, rightMargin=64;
     const beta=state.beta, gamma=gammaOf(beta);
@@ -831,32 +836,41 @@ const Shell = (function(){
     const rx=w*0.13, divX=w*0.255, A_x=w*0.30;
     const maxTravel=(w-pad-rightMargin)-A_x;     // room for one round-trip width = 2*beta*gamma*h
     const bg2=2*beta*gamma;
-    let h_px=h*0.40;
-    if(bg2>0) h_px=Math.min(h_px, maxTravel/bg2);
-    h_px=Math.max(8,h_px);
+    // Auto-fit: prefer 40% of height, but shrink so one Bella round-trip fits the width.
+    let hAuto=h*0.40;
+    if(bg2>0) hAuto=Math.min(hAuto, maxTravel/bg2);
+    hAuto=Math.max(8,hAuto);
+    // User scroll-zoom multiplies the auto-fit size (zoom out → more ticks visible in stage 1).
+    let h_px=Math.max(6, Math.min(h*0.62, hAuto*state.userZoom));
     const base=beta*gamma*h_px;                  // horizontal distance per half-trip = vt/2
     const mw=Math.max(46, h_px*0.62);
-    return {pad,rightMargin,beta,gamma,cy,rx,divX,A_x,h_px,base,mw,y_b:cy+h_px/2,y_t:cy-h_px/2};
+    return {pad,rightMargin,beta,gamma,cy,rx,divX,A_x,h_px,hAuto,base,mw,y_b:cy+h_px/2,y_t:cy-h_px/2};
   }
 
   /* ---- pulse kinematics (both move at the same pixel-speed c) ---- */
+  function bellaEndX(L,w){
+    // Mirror centre may travel until its right tip reaches the padded edge.
+    return w - L.pad - L.mw/2;
+  }
+  function bellaMaxCyc(L,w){
+    // How many half-trips fit before the mirror hits the end of the window.
+    // Zooming out shrinks L.base → more cycles (ticks) are visible.
+    return Math.max(0.05, (bellaEndX(L,w) - L.A_x) / Math.max(1e-6, L.base));
+  }
   function restY(L){
     const half=T0/2, cyc=(state.tAnim/half)%2, k=Math.floor(cyc), f=cyc-k;
     return k===0 ? (L.y_b-f*L.h_px) : (L.y_t+f*L.h_px);
   }
-  function movePos(L){
-    const half=L.gamma*T0/2;                     // moving half-trip takes gamma times longer
-    let cyc, k, f, x, y;
-    if(state.stage===1){
-      cyc=state.tAnim/half;                      // stage 1: free-run across the frame
-      k=Math.floor(cyc); f=cyc-k;
-      x=L.A_x + L.base*cyc;
-      y=(k%2===0) ? (L.y_b-f*L.h_px) : (L.y_t+f*L.h_px);
-    } else {
-      cyc=(state.tAnim/half)%2; k=Math.floor(cyc); f=cyc-k;
-      x=L.A_x + L.base*cyc;
-      y=k===0 ? (L.y_b-f*L.h_px) : (L.y_t+f*L.h_px);
-    }
+  // Bella's live clock always free-runs across the window (all stages). Zoom
+  // changes L.base, so a zoomed-out view fits more photon ticks before wrap.
+  function movePos(L,w){
+    const half=L.gamma*T0/2;
+    const maxCyc=bellaMaxCyc(L, w!=null?w:1e9);
+    let cyc=state.tAnim/half;
+    if(cyc>maxCyc) cyc=maxCyc;
+    const k=Math.floor(cyc), f=cyc-k;
+    const x=L.A_x + L.base*cyc;
+    const y=(k%2===0) ? (L.y_b-f*L.h_px) : (L.y_t+f*L.h_px);
     return {x,y,cyc};
   }
 
@@ -885,12 +899,16 @@ const Shell = (function(){
       ctx.restore();
     }
     const zoom=(h*0.40)/L.h_px;
-    if(zoom>1.02){
+    const userZ=state.userZoom;
+    if(zoom>1.02 || Math.abs(userZ-1)>0.02){
       ctx.save();
       ctx.font='600 11px Inter,sans-serif';
       ctx.textAlign='right'; ctx.textBaseline='top';
       ctx.fillStyle='rgba(148,163,184,.45)';
-      ctx.fillText('⊕ view ×'+zoom.toFixed(1), w-12, 10);
+      const parts=[];
+      if(zoom>1.02) parts.push('fit ×'+zoom.toFixed(1));
+      if(Math.abs(userZ-1)>0.02) parts.push('zoom ×'+userZ.toFixed(2));
+      ctx.fillText(parts.join(' · '), w-12, 10);
       ctx.restore();
     }
 
@@ -900,7 +918,7 @@ const Shell = (function(){
     ctx.fillStyle='#fbbf24'; ctx.fillText('BELLA · clock moving at v →', L.A_x, 24);
 
     drawRest(L,st,w);
-    drawMove(L,st);
+    drawMove(L,st,w);
     ctx.textBaseline='alphabetic';
   }
 
@@ -934,13 +952,33 @@ const Shell = (function(){
     ctx.fillText('proper time · one clock', L.rx, L.y_b+52);
   }
 
-  function drawMove(L,st){
-    const mp=movePos(L);
+  function drawMove(L,st,w){
+    const mp=movePos(L,w);
     const lightPath='#fb7185';   // rose — distinct from mirror amber (#fbbf24)
     const A={x:L.A_x, y:L.y_b};
     const B={x:L.A_x+L.base, y:L.y_t};
     const C={x:L.A_x+2*L.base, y:L.y_b};
     const D={x:L.A_x+L.base, y:L.y_b};   // bottom-right corner of the labelled right triangle
+
+    // Free-run zig-zag of the live photon (all completed half-trips so far).
+    // Zooming out shrinks L.base → more ticks appear before the mirror hits the edge.
+    function strokeLiveTrail(color, width){
+      if(mp.cyc<=0.02) return;
+      ctx.strokeStyle=color; ctx.lineWidth=width;
+      ctx.beginPath(); ctx.moveTo(A.x,A.y);
+      const done=Math.floor(mp.cyc);
+      for(let i=1;i<=done;i++){
+        const x=L.A_x + L.base*i;
+        const y=(i%2===1) ? L.y_t : L.y_b;
+        ctx.lineTo(x,y);
+      }
+      ctx.lineTo(mp.x,mp.y);
+      ctx.stroke();
+    }
+
+    if(st===1){
+      strokeLiveTrail('rgba(251,113,133,.42)', 2);
+    }
 
     // baseline track (mirror's path)
     if(st>=2){
@@ -949,13 +987,10 @@ const Shell = (function(){
     }
 
     if(st===2){
-      // accumulating diagonal trace up to the current pulse
-      ctx.strokeStyle=lightPath; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(A.x,A.y);
-      if(mp.cyc<=1) ctx.lineTo(mp.x,mp.y);
-      else { ctx.lineTo(B.x,B.y); ctx.lineTo(mp.x,mp.y); }
-      ctx.stroke();
+      // Accumulating diagonal — continues for as many ticks as fit in the window.
+      strokeLiveTrail(lightPath, 2.5);
     } else if(st>=3){
-      // complete tent — two diagonal light paths (ct/2 each)
+      // complete tent — geometric construction for the first round-trip (fixed)
       ctx.strokeStyle=lightPath; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.lineTo(C.x,C.y); ctx.stroke();
       // right-triangle base A→D (vt/2)
@@ -969,6 +1004,8 @@ const Shell = (function(){
         const s=11; ctx.strokeStyle='rgba(226,232,240,.7)'; ctx.lineWidth=1.4;
         ctx.beginPath(); ctx.moveTo(D.x-s,D.y); ctx.lineTo(D.x-s,D.y-s); ctx.lineTo(D.x,D.y-s); ctx.stroke();
       }
+      // Live free-run trail beyond the first tick (when zoomed out enough to fit more)
+      if(mp.cyc>2.02) strokeLiveTrail('rgba(251,113,133,.35)', 2);
     }
 
     // live mirrors + pulse
@@ -1007,6 +1044,28 @@ const Shell = (function(){
   document.querySelectorAll('#stageGroup .stage-btn').forEach(b =>
     b.addEventListener('click', () => setStage(parseInt(b.dataset.stage,10))));
 
+  // Scroll-wheel zoom — works in every construction stage.
+  // ZOOM_RESET_ON_SCROLL: when the user zooms mid-flight, restart from t=0 at
+  // the new scale. Set to false (and restore x-preserve below) to revert.
+  const ZOOM_RESET_ON_SCROLL = true;
+  function setUserZoom(z){
+    const next=Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    if(Math.abs(next - state.userZoom) < 1e-6) return;
+    state.userZoom=next;
+    if(ZOOM_RESET_ON_SCROLL){
+      state.tAnim=0;
+    }
+    draw();
+  }
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    // Trackpad/mouse: scroll up → zoom in, scroll down → zoom out.
+    const factor=Math.exp(-e.deltaY * 0.0015);
+    setUserZoom(state.userZoom * factor);
+  }, {passive:false});
+  // Double-click resets zoom to the auto-fit default.
+  cv.addEventListener('dblclick', ()=>{ setUserZoom(1); });
+
 document.getElementById('reveal-btn').addEventListener('click',()=>{
     document.getElementById('rebuttal').classList.toggle('show');
   });
@@ -1014,17 +1073,16 @@ document.getElementById('reveal-btn').addEventListener('click',()=>{
   /* ---- shell callbacks ---- */
   function onFrame(dt){
     state.tAnim+=dt;
-    if(state.stage===1){
-      const {w,h}=fit();
-      const L=layout(w,h);
-      const half=L.gamma*T0/2;
-      const x=L.A_x + L.base*(state.tAnim/half);
-      if(x > w - L.rightMargin) state.tAnim=0;
-    }
+    const {w,h}=fit();
+    const L=layout(w,h);
+    const half=L.gamma*T0/2;
+    // Photon keeps oscillating until the mirror reaches the right end of the
+    // window — at every stage, and at whatever the current zoom is.
+    if(state.tAnim/half >= bellaMaxCyc(L,w)) state.tAnim=0;
     draw();
   }
   function onReset(){
-    state.tAnim=0; state.beta=0.6; state.stage=1;
+    state.tAnim=0; state.beta=0.6; state.stage=1; state.userZoom=1;
     sV.value=0.6;
     document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
       delete card.dataset.answered;

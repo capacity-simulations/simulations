@@ -1,5 +1,5 @@
 ---
-description: Add a "Lecture display mode" button to an SR shell sim — a top-bar button (beside the theme button) that hides the guided inquiry and jumps the sim to its complete, post-Finish state; toggling it back (or the restore bar) re-initiates the guided inquiry from step 1. Also removes the old "Skip ✕" button. Chrome/runtime only — NEVER touch physics, canvas, or controls.
+description: Add a "Lecture display mode" button to an SR shell sim — a top-bar button (beside the theme button) that hides the guided inquiry and jumps the sim to its complete, post-Finish state; toggling it back (or the restore bar) re-initiates the guided inquiry from step 1. Also removes the old "Skip ✕" button, and (if missing) adds the ‹ › guided-inquiry pager buttons for free back/forward navigation across cards while preserving each card's simulation state. Chrome/runtime only — NEVER touch physics, canvas, or controls.
 globs: ["L*.html"]
 alwaysApply: false
 ---
@@ -21,6 +21,15 @@ button, that toggles a *lecture display mode*:
 
 It also **removes the old `Skip ✕` button** — the header Lecture button now owns
 the "hide the inquiry" affordance.
+
+**And it ensures the guided inquiry has `‹ ›` pager buttons** (Edit 5): a small
+Previous / Next pair beside the main `Next →` button that lets a student move
+**freely back and forth across the inquiry cards**. Many older/generated sims are
+missing these. Adding them must NOT change the guided-inquiry content, the dots, or
+the `Next →`/`Finish` gating — it only adds free navigation. Crucially, the pager
+reuses the existing `inqShow(n)` (which calls `onStep(n)`), so **each card's tied
+simulation state is restored exactly as the `Next →` button already does** — no new
+state logic, and a student's already-answered gated cards stay answered.
 
 ## THE #1 RULE — do not touch the science, visuals, or controls
 - **NEVER change physics, numerical methods, draw/render functions, equations,
@@ -131,6 +140,91 @@ if(skip) skip.addEventListener('click',()=>setInquiryCollapsed(true));   // dele
 (Leave `setInquiryCollapsed` itself and the restore lookup in place — they are
 still used.)
 
+## Edit 5 — Add the `‹ ›` guided-inquiry pager (ONLY if missing)
+
+Goal: give the student free back/forward navigation across the inquiry cards.
+
+**FIRST check if it already exists.** If the file already contains
+`id="inq-prev"` AND `id="inq-pager-next"`, the pager is already present —
+**skip Edit 5 entirely** (do NOT duplicate it). Otherwise apply all four parts
+below. The reference is byte-identical to the already-shipped sims (e.g.
+`L02-s1-inner-product-shell.html`) — copy exactly.
+
+### 5a — CSS (add to the SIM's `<style>`, next to the existing `.inq-nav` rule)
+Find the existing `.inq-nav{…}` rule. Ensure it has `justify-content:space-between`
+(it already should), then add the two pager rules right after it:
+
+```css
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
+```
+Also confirm `#inq-next` has `margin-left:auto;` so it stays pinned to the right
+(the reference rule is `#inq-next{min-width:96px;justify-content:center;margin-left:auto;}`).
+Do not touch `.inq-dots`, `.inq-step`, or any other inquiry CSS.
+
+### 5b — Markup (wrap the pager buttons inside the existing `.inq-nav`)
+The current nav usually looks like:
+```html
+<div class="inq-nav">
+  <button id="inq-next" class="shell-btn primary">Next →</button>
+</div>
+```
+Change it to (add the `.inq-pager` group BEFORE `#inq-next`; leave `#inq-next`
+exactly as-is):
+```html
+<div class="inq-nav">
+  <div class="inq-pager">
+    <button id="inq-prev" class="shell-btn primary inq-pager-btn" title="Previous step" aria-label="Previous step" disabled>&lt;</button>
+    <button id="inq-pager-next" class="shell-btn primary inq-pager-btn" title="Next step" aria-label="Next step">&gt;</button>
+  </div>
+  <button id="inq-next" class="shell-btn primary">Next →</button>
+</div>
+```
+
+### 5c — Runtime: pager helpers + one call inside `inqShow` (inside the `Shell` IIFE)
+Next to `inqShow`/`inqCards`, add the pager-state updater and the two navigation
+functions (all use only in-scope `inqStep`, `inqCards`, `inqShow`):
+```js
+function inqUpdatePager(){
+  const cards=inqCards();
+  const prev=document.getElementById('inq-prev');
+  const pnext=document.getElementById('inq-pager-next');
+  if(prev) prev.disabled = inqStep<=0;
+  if(pnext) pnext.disabled = inqStep>=cards.length-1;
+}
+function inqPrev(){
+  if(inqStep>0) inqShow(inqStep-1);
+}
+function inqPagerNext(){
+  const cards=inqCards();
+  if(inqStep<cards.length-1) inqShow(inqStep+1);
+}
+```
+Then, inside `inqShow(n)`, add a single call to `inqUpdatePager();` **immediately
+before the existing `onStep(inqStep);` line** (so the arrows' disabled state tracks
+the current card). Do NOT otherwise modify `inqShow` — leave the dots, the
+`data-gate`/`Next`/`Finish` logic, and `onStep(inqStep)` untouched.
+
+> **State preservation (do NOT deviate):** the pager buttons must call ONLY
+> `inqShow(inqStep±1)`. Because `inqShow` already calls `onStep()`, the scene for
+> the target card is restored identically to the `Next →` path. Do NOT add
+> `onReset()`, do NOT clear `data-ready`, and do NOT wipe student answers on pager
+> navigation — going back then forward must land on the same state.
+
+### 5d — Wiring (in `wire()`, next to the `inq-next` listener)
+After the existing `inq-next` listener, add:
+```js
+const inqPrevBtn=document.getElementById('inq-prev');
+if(inqPrevBtn) inqPrevBtn.addEventListener('click',inqPrev);
+const inqPagerNextBtn=document.getElementById('inq-pager-next');
+if(inqPagerNextBtn) inqPagerNextBtn.addEventListener('click',inqPagerNext);
+```
+
+**Note on gating vs. the pager:** the main `Next →` button stays gated on
+`data-gate` cards (unchanged). The `‹ ›` pager is deliberately free navigation
+(review-friendly) — this matches the shipped reference. Do not add gating to the
+pager unless explicitly asked.
+
 ---
 
 ## Notes / edge cases
@@ -153,10 +247,17 @@ still used.)
 - Click `🎓 Lecture` again → inquiry re-opens at **step 1**.
 - Click the `▸ Guided inquiry` restore bar (while in lecture mode) → also re-opens
   at step 1 and clears the button's active state.
+- **Guided-inquiry pager:** `‹` and `›` appear beside `Next →`; `‹` is disabled on
+  the first card and `›` on the last; clicking them steps the card AND repaints the
+  scene to that card's state. Navigate forward a few cards, then back with `‹`, then
+  forward again with `›` — the simulation state for each card is identical each time
+  (no reset, answered gated cards stay answered). Inquiry text/dots/`Next`-gating
+  unchanged. If the sim already had a pager, confirm it was NOT duplicated.
 - **Physics/draw code is byte-for-byte unchanged; `simulation-shell.css` untouched.**
 
 ## Report
-End with a short **LECTURE-MODE REPORT**: (1) the four edits applied with line
-anchors, (2) whether the default last-step jump gave the complete scene or the
-incremental fallback was needed, (3) an explicit line confirming
-"physics/draw code and CSS unchanged."
+End with a short **LECTURE-MODE REPORT**: (1) the edits applied with line anchors
+(Edits 1–4 lecture mode + Edit 5 pager), (2) whether the default last-step jump
+gave the complete scene or the incremental fallback was needed, (3) whether Edit 5
+was applied or skipped-because-already-present, (4) an explicit line confirming
+"physics/draw code and CSS unchanged; guided-inquiry content/gating unchanged."
