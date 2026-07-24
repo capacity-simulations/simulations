@@ -688,9 +688,9 @@ const Shell = (function(){
     }
   }
 
-  // Simultaneous in THIS frame → both marks flash together each left→right pass.
-  // Non-simultaneous → flash when the rod's front hits the first (left) mark line,
-  // then when the rear hits the second (right). Measure always restarts from the left.
+  // Simultaneous in THIS frame → both endpoint events flash together.
+  // In a cross-frame view, preserve event identity: E1 is always the rear/back
+  // endpoint event and E2 is always the front/leading endpoint event.
   function viewIsSimultaneous(){
     if(!state.ev) return false;
     const t1 = (state.frame === 'alice') ? state.ev.aliceT1 : state.ev.bellaT1;
@@ -703,17 +703,32 @@ const Shell = (function(){
     state.flash2 = null;
   }
 
-  function popFlash(which, dur){
-    const stamp = { start: performance.now(), dur: dur };
+  function popFlash(which, dur, worldX){
+    const stamp = { start: performance.now(), dur: dur, worldX: worldX };
     if(which === 1 || which === 'both') state.flash1 = stamp;
-    if(which === 2 || which === 'both') state.flash2 = { start: stamp.start, dur: dur };
+    if(which === 2 || which === 'both'){
+      state.flash2 = { start: stamp.start, dur: dur, worldX: worldX };
+    }
+  }
+
+  // Scene half-width in the active frame. Include transformed event positions so
+  // high-γ measurements remain visible at the slider limits.
+  function sceneWorldHalf(){
+    let half = Math.max(state.L0 + 0.8, 1.5);
+    if(state.ev){
+      const inAlice = state.frame === 'alice';
+      const x1 = inAlice ? state.ev.aliceX1 : state.ev.bellaX1;
+      const x2 = inAlice ? state.ev.aliceX2 : state.ev.bellaX2;
+      half = Math.max(half, Math.abs(x1) + 0.3, Math.abs(x2) + 0.3);
+    }
+    return half;
   }
 
   // Travel half-width (m) used by Alice's aliceRodX ∈ [-1,1] phase.
   function animRange(){
     const g = gamma(state.v);
     const Lmeas = state.L0 / g;
-    const worldHalf = Math.max(state.L0 + 0.8, 1.5);
+    const worldHalf = sceneWorldHalf();
     return Math.max(worldHalf - Lmeas/2 - 0.1, 0.1);
   }
 
@@ -738,7 +753,9 @@ const Shell = (function(){
         hit1: false,
         hit2: false,
         prevFront: null,
-        prevBack: null
+        prevBack: null,
+        prevMark1: null,
+        prevMark2: null
       };
     }
   }
@@ -749,7 +766,7 @@ const Shell = (function(){
     const g = gamma(state.v);
     const L0 = state.L0;
     const Lcontr = L0 / g;
-    const worldHalf = Math.max(L0 + 0.8, 1.5);
+    const worldHalf = sceneWorldHalf();
     const tr = state.flashTrack;
 
     if(state.frame === 'alice'){
@@ -761,7 +778,6 @@ const Shell = (function(){
       // Dotted measurement lines live at Alice-frame event positions
       const mL = Math.min(state.ev.aliceX1, state.ev.aliceX2);
       const mR = Math.max(state.ev.aliceX1, state.ev.aliceX2);
-      const leftIs1 = state.ev.aliceX1 <= state.ev.aliceX2;
 
       if(tr.mode === 'simul'){
         // Both ends coincide with the two mark lines when the rod is centred on them
@@ -769,16 +785,16 @@ const Shell = (function(){
         if(aligned && !tr.wasAligned) popFlash('both', FLASH_MS_SIMUL);
         tr.wasAligned = aligned;
       } else {
-        if(tr.prevFront != null){
-          // Front tip crosses the first (left) measurement line → flash that line
-          if(!tr.hit1 && tr.prevFront < mL && rodFront >= mL){
+        if(tr.prevFront != null && tr.prevBack != null){
+          // Bella measured simultaneously in S'. In Alice's frame E1 occurs
+          // when the rear reaches x1; E2 occurs later when the front reaches x2.
+          if(!tr.hit1 && tr.prevBack < state.ev.aliceX1 && rodBack >= state.ev.aliceX1){
             tr.hit1 = true;
-            popFlash(leftIs1 ? 1 : 2, FLASH_MS);
+            popFlash(1, FLASH_MS);
           }
-          // Rear tip crosses the second (right) measurement line → flash that line
-          if(!tr.hit2 && tr.prevBack < mR && rodBack >= mR){
+          if(!tr.hit2 && tr.prevFront < state.ev.aliceX2 && rodFront >= state.ev.aliceX2){
             tr.hit2 = true;
-            popFlash(leftIs1 ? 2 : 1, FLASH_MS);
+            popFlash(2, FLASH_MS);
           }
         }
         tr.prevFront = rodFront;
@@ -789,12 +805,10 @@ const Shell = (function(){
       const rodBack = -L0/2;
       const rodFront = L0/2;
       const shift = state.bellaSceneShift;
-      // Room-anchored Alice marks: world position relative to fixed rod = aliceX − shift
-      const m1 = state.ev.aliceX1 - shift;
-      const m2 = state.ev.aliceX2 - shift;
-      const mL = Math.min(m1, m2);
-      const mR = Math.max(m1, m2);
-      const leftIs1 = m1 <= m2;
+      // Alice-rest positions transform on a Bella simultaneity slice as
+      // x' = x/γ - vt'. Here shift represents vt'.
+      const m1 = state.ev.aliceX1/g - shift;
+      const m2 = state.ev.aliceX2/g - shift;
 
       if(tr.mode === 'simul'){
         // One simultaneous flash per left→right pass as relative motion crosses centre
@@ -803,15 +817,20 @@ const Shell = (function(){
         }
         tr.prevShift = shift;
       } else {
-        // Level checks (not edges): wrap can jump past a tip in one frame
-        if(!tr.hit1 && mL <= rodFront){
-          tr.hit1 = true;
-          popFlash(leftIs1 ? 1 : 2, FLASH_MS);
+        if(tr.prevMark1 != null && tr.prevMark2 != null){
+          // Alice measured simultaneously in S. In Bella's frame E2 occurs
+          // first at the front, followed by E1 at the rear.
+          if(!tr.hit2 && tr.prevMark2 > rodFront && m2 <= rodFront){
+            tr.hit2 = true;
+            popFlash(2, FLASH_MS, rodFront);
+          }
+          if(!tr.hit1 && tr.prevMark1 > rodBack && m1 <= rodBack){
+            tr.hit1 = true;
+            popFlash(1, FLASH_MS, rodBack);
+          }
         }
-        if(!tr.hit2 && mR <= rodBack){
-          tr.hit2 = true;
-          popFlash(leftIs1 ? 2 : 1, FLASH_MS);
-        }
+        tr.prevMark1 = m1;
+        tr.prevMark2 = m2;
       }
     }
   }
@@ -823,6 +842,8 @@ const Shell = (function(){
       state.flashTrack.hit2 = false;
       state.flashTrack.prevFront = null;
       state.flashTrack.prevBack = null;
+      state.flashTrack.prevMark1 = null;
+      state.flashTrack.prevMark2 = null;
     } else {
       state.flashTrack.wasAligned = false;
       state.flashTrack.prevShift = null;
@@ -842,17 +863,20 @@ const Shell = (function(){
     // View half-width is the old cm formula ÷10 so the rod keeps the same on-screen size.
     const margin = 40;
     const usableW = w - 2*margin;
-    const worldHalf = Math.max(state.L0 + 0.8, 1.5);
+    const worldHalf = sceneWorldHalf();
     const pxPerM = Math.min(usableW/(2*worldHalf), 340);
     const cx = w/2, cy = h*0.62;
     const worldToX = (x) => cx + x*pxPerM;
+    const g = gamma(state.v);
+    const roomWorldX = (x) => state.frame === 'bella'
+      ? x/g - state.bellaSceneShift
+      : x;
 
     // ---- Room (floor + walls) ----
-    // In Alice's frame the room is fixed. In Bella's frame the room slides left.
-    const roomOffset = (state.frame === 'bella') ? state.bellaSceneShift * pxPerM : 0;
+    // In Bella's frame the room is Lorentz-contracted and slides left.
     const floorY = cy + 30;
-    const roomLeft  = cx - (worldHalf+0.2)*pxPerM - roomOffset;
-    const roomRight = cx + (worldHalf+0.2)*pxPerM - roomOffset;
+    const roomLeft  = worldToX(roomWorldX(-(worldHalf+0.2)));
+    const roomRight = worldToX(roomWorldX( worldHalf+0.2));
 
     // Floor line
     rctx.strokeStyle = document.body.classList.contains('light-theme') ? 'rgba(51,65,85,0.75)' : 'rgba(226,232,240,0.55)';
@@ -871,7 +895,7 @@ const Shell = (function(){
     const i0 = Math.ceil(-worldHalf / 0.2), i1 = Math.floor(worldHalf / 0.2);
     for(let i = i0; i <= i1; i++){
       const x = i * 0.2;
-      const px = worldToX(x) - roomOffset;
+      const px = worldToX(roomWorldX(x));
       rctx.fillRect(px-0.75, floorY, 1.5, 7);
       if(i % 2 === 0){
         const s = (Math.abs(x) < 1e-9 ? '0' : x.toFixed(1)) + ' m';
@@ -882,7 +906,7 @@ const Shell = (function(){
     // ---- Alice ----
     // In Alice's frame Alice sits at x=0 (screen centre). In Bella's frame Alice moves left with the room.
     const aliceX_world = 0;
-    const aliceScreenX = worldToX(aliceX_world) - roomOffset;
+    const aliceScreenX = worldToX(roomWorldX(aliceX_world));
     drawPerson(aliceScreenX, floorY, C.alice, 'Alice', {
       walking: false,
       facing: state.frame === 'bella' ? -1 : 1,
@@ -894,7 +918,6 @@ const Shell = (function(){
     // In Alice's frame: rod length = L0/γ, moves rightward at v.
     // In Bella's frame: rod length = L0, stationary at world centre.
     let rodX1, rodX2, bellaX_world;
-    const g = gamma(state.v);
     if(state.frame === 'alice'){
       const Lmeas = state.L0/g;
       // animate rod's centre from left to right, looping
@@ -947,10 +970,10 @@ const Shell = (function(){
       const m1X = worldToX(x1w), m2X = worldToX(x2w);
       // Persistent marks + measured-length bracket live in the MEASURER's rest
       // frame: Alice's marks are scratches on the room floor, so in Bella's
-      // view they slide backward with the room (just like Alice does).
+      // view they contract and slide backward with the room (just like Alice).
       const roomAnchored = !inAlice && ev.measurer === 'alice';
-      const mk1X = roomAnchored ? worldToX(ev.aliceX1) - roomOffset : m1X;
-      const mk2X = roomAnchored ? worldToX(ev.aliceX2) - roomOffset : m2X;
+      const mk1X = roomAnchored ? worldToX(roomWorldX(ev.aliceX1)) : m1X;
+      const mk2X = roomAnchored ? worldToX(roomWorldX(ev.aliceX2)) : m2X;
       const fontNums = getComputedStyle(document.documentElement).getPropertyValue('--font-nums').trim();
       const fontSans = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim();
       const mColor = ev.measurer === 'alice' ? C.alice : C.bella;
@@ -983,12 +1006,14 @@ const Shell = (function(){
       const now = performance.now();
       if(state.flash1){
         const a1 = now - state.flash1.start;
-        if(a1 >= 0 && a1 <= state.flash1.dur) drawFlash(mk1X, rodY, 1 - a1/state.flash1.dur);
+        const fx1 = Number.isFinite(state.flash1.worldX) ? worldToX(state.flash1.worldX) : mk1X;
+        if(a1 >= 0 && a1 <= state.flash1.dur) drawFlash(fx1, rodY, 1 - a1/state.flash1.dur);
         else state.flash1 = null;
       }
       if(state.flash2){
         const a2 = now - state.flash2.start;
-        if(a2 >= 0 && a2 <= state.flash2.dur) drawFlash(mk2X, rodY, 1 - a2/state.flash2.dur);
+        const fx2 = Number.isFinite(state.flash2.worldX) ? worldToX(state.flash2.worldX) : mk2X;
+        if(a2 >= 0 && a2 <= state.flash2.dur) drawFlash(fx2, rodY, 1 - a2/state.flash2.dur);
         else state.flash2 = null;
       }
     }
