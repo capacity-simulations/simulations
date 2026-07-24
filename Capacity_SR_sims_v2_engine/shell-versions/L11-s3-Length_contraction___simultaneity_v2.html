@@ -611,7 +611,11 @@ const Shell = (function(){
     showSpace: false,
     // Alice frame: two events (t=0, x1) and (t=0, x2) — simultaneous
     ev: null,     // {aliceT1, aliceT2, aliceX1, aliceX2, bellaT1, bellaT2, bellaX1, bellaX2}
-    flash: null   // transient marker-flash: { start, app1, app2, dur }  (ms; app-times relative to start)
+    // Transient flashes at the two dotted measurement lines (independent timers)
+    flash1: null, // { start, dur } at mark 1 (x₁ / back)
+    flash2: null, // { start, dur } at mark 2 (x₂ / front)
+    // Loop-driven flash scheduler — armed while a Measure button is active
+    flashTrack: null  // { mode:'simul'|'stagger', ...edge-detect fields }
   };
 
   // color helpers
@@ -629,7 +633,6 @@ const Shell = (function(){
 
   const FLASH_MS       = 550;   // how long each flash stays visible (ms) — staggered pair
   const FLASH_MS_SIMUL = 1600;  // simultaneous in the viewing frame: both pop at once, so let them linger
-  const GAP_SCALE_MS   = 900;   // ms of animation per 1 m-of-light of |Δt| between the two events
 
   function gamma(v){ return 1/Math.sqrt(1 - v*v); }
 
@@ -685,23 +688,145 @@ const Shell = (function(){
     }
   }
 
-  // Arm the two endpoint flashes. Their relative appearance times come straight from the
-  // measurement-event times in the ACTIVE frame: equal when the marks are simultaneous here,
-  // staggered when they aren't. Physics is unchanged — this only sets timing.
-  function fireFlashes(){
-    if(!state.measureBy || !state.ev) return;
-    const ev = state.ev;
-    const t1 = (state.frame === 'alice') ? ev.aliceT1 : ev.bellaT1;   // x1 / back end
-    const t2 = (state.frame === 'alice') ? ev.aliceT2 : ev.bellaT2;   // x2 / front end
-    const tMin = Math.min(t1, t2);
-    state.flash = {
-      start: performance.now(),
-      app1: (t1 - tMin) * GAP_SCALE_MS,
-      app2: (t2 - tMin) * GAP_SCALE_MS,
-      // Simultaneous in THIS frame → both pop together and linger; otherwise
-      // two short flashes whose stagger shows the time gap.
-      dur:  Math.abs(t1 - t2) < 1e-9 ? FLASH_MS_SIMUL : FLASH_MS
-    };
+  // Simultaneous in THIS frame → both marks flash together each left→right pass.
+  // Non-simultaneous → flash when the rod's front hits the first (left) mark line,
+  // then when the rear hits the second (right). Measure always restarts from the left.
+  function viewIsSimultaneous(){
+    if(!state.ev) return false;
+    const t1 = (state.frame === 'alice') ? state.ev.aliceT1 : state.ev.bellaT1;
+    const t2 = (state.frame === 'alice') ? state.ev.aliceT2 : state.ev.bellaT2;
+    return Math.abs(t1 - t2) < 1e-9;
+  }
+
+  function clearFlashes(){
+    state.flash1 = null;
+    state.flash2 = null;
+  }
+
+  function popFlash(which, dur){
+    const stamp = { start: performance.now(), dur: dur };
+    if(which === 1 || which === 'both') state.flash1 = stamp;
+    if(which === 2 || which === 'both') state.flash2 = { start: stamp.start, dur: dur };
+  }
+
+  // Travel half-width (m) used by Alice's aliceRodX ∈ [-1,1] phase.
+  function animRange(){
+    const g = gamma(state.v);
+    const Lmeas = state.L0 / g;
+    const worldHalf = Math.max(state.L0 + 0.8, 1.5);
+    return Math.max(worldHalf - Lmeas/2 - 0.1, 0.1);
+  }
+
+  // Put Bella+rod at the left end of a left→right pass (no mid-scene teleport).
+  function resetAnimToLeft(){
+    state.aliceRodX = -1;
+    state.bellaSceneShift = -animRange();
+  }
+
+  // Arm loop-driven flashes. resetPos (default true) restarts from the left —
+  // use false when only rebinding flash mode (frame switch / slider) so motion
+  // does not jump.
+  function armMeasureFlashes(resetPos){
+    clearFlashes();
+    if(!state.measureBy || !state.ev){ state.flashTrack = null; return; }
+    if(resetPos !== false) resetAnimToLeft();
+    if(viewIsSimultaneous()){
+      state.flashTrack = { mode: 'simul', wasAligned: false, prevShift: null };
+    } else {
+      state.flashTrack = {
+        mode: 'stagger',
+        hit1: false,
+        hit2: false,
+        prevFront: null,
+        prevBack: null
+      };
+    }
+  }
+
+  // Called every frame after step() — drives flash timing from rod/mark geometry.
+  function tickMeasureFlashes(){
+    if(!state.measureBy || !state.ev || !state.flashTrack) return;
+    const g = gamma(state.v);
+    const L0 = state.L0;
+    const Lcontr = L0 / g;
+    const worldHalf = Math.max(L0 + 0.8, 1.5);
+    const tr = state.flashTrack;
+
+    if(state.frame === 'alice'){
+      const Lrod = Lcontr;
+      const range = worldHalf - Lrod/2 - 0.1;
+      const rodCentre = state.aliceRodX * range;
+      const rodBack = rodCentre - Lrod/2;   // rear (left) tip
+      const rodFront = rodCentre + Lrod/2;  // leading (right) tip
+      // Dotted measurement lines live at Alice-frame event positions
+      const mL = Math.min(state.ev.aliceX1, state.ev.aliceX2);
+      const mR = Math.max(state.ev.aliceX1, state.ev.aliceX2);
+      const leftIs1 = state.ev.aliceX1 <= state.ev.aliceX2;
+
+      if(tr.mode === 'simul'){
+        // Both ends coincide with the two mark lines when the rod is centred on them
+        const aligned = Math.abs(rodCentre - (mL+mR)/2) < 0.05 * Math.max(range, 0.25);
+        if(aligned && !tr.wasAligned) popFlash('both', FLASH_MS_SIMUL);
+        tr.wasAligned = aligned;
+      } else {
+        if(tr.prevFront != null){
+          // Front tip crosses the first (left) measurement line → flash that line
+          if(!tr.hit1 && tr.prevFront < mL && rodFront >= mL){
+            tr.hit1 = true;
+            popFlash(leftIs1 ? 1 : 2, FLASH_MS);
+          }
+          // Rear tip crosses the second (right) measurement line → flash that line
+          if(!tr.hit2 && tr.prevBack < mR && rodBack >= mR){
+            tr.hit2 = true;
+            popFlash(leftIs1 ? 2 : 1, FLASH_MS);
+          }
+        }
+        tr.prevFront = rodFront;
+        tr.prevBack = rodBack;
+      }
+    } else {
+      // Bella's frame: rod fixed at ±L0/2. Marks from Alice's measure slide with the room.
+      const rodBack = -L0/2;
+      const rodFront = L0/2;
+      const shift = state.bellaSceneShift;
+      // Room-anchored Alice marks: world position relative to fixed rod = aliceX − shift
+      const m1 = state.ev.aliceX1 - shift;
+      const m2 = state.ev.aliceX2 - shift;
+      const mL = Math.min(m1, m2);
+      const mR = Math.max(m1, m2);
+      const leftIs1 = m1 <= m2;
+
+      if(tr.mode === 'simul'){
+        // One simultaneous flash per left→right pass as relative motion crosses centre
+        if(tr.prevShift != null && tr.prevShift < 0 && shift >= 0){
+          popFlash('both', FLASH_MS_SIMUL);
+        }
+        tr.prevShift = shift;
+      } else {
+        // Level checks (not edges): wrap can jump past a tip in one frame
+        if(!tr.hit1 && mL <= rodFront){
+          tr.hit1 = true;
+          popFlash(leftIs1 ? 1 : 2, FLASH_MS);
+        }
+        if(!tr.hit2 && mR <= rodBack){
+          tr.hit2 = true;
+          popFlash(leftIs1 ? 2 : 1, FLASH_MS);
+        }
+      }
+    }
+  }
+
+  function onMeasureLoopWrap(kind){
+    if(!state.flashTrack) return;
+    if(state.flashTrack.mode === 'stagger'){
+      state.flashTrack.hit1 = false;
+      state.flashTrack.hit2 = false;
+      state.flashTrack.prevFront = null;
+      state.flashTrack.prevBack = null;
+    } else {
+      state.flashTrack.wasAligned = false;
+      state.flashTrack.prevShift = null;
+    }
   }
 
   // ============ Room canvas drawing ============
@@ -854,13 +979,17 @@ const Shell = (function(){
         rctx.fillText(cap, (mk1X+mk2X)/2 - rctx.measureText(cap).width/2, floorY+74);
       }
 
-      // Transient flashes on top, at the mark positions, timed by state.flash
-      if(state.flash){
-        const age = performance.now() - state.flash.start;
-        const a1 = age - state.flash.app1, a2 = age - state.flash.app2;
-        if(a1>=0 && a1<=state.flash.dur) drawFlash(m1X, rodY, 1 - a1/state.flash.dur);
-        if(a2>=0 && a2<=state.flash.dur) drawFlash(m2X, rodY, 1 - a2/state.flash.dur);
-        if(age > Math.max(state.flash.app1, state.flash.app2) + state.flash.dur) state.flash = null;
+      // Transient flashes on the dotted measurement lines (loop-driven via flashTrack)
+      const now = performance.now();
+      if(state.flash1){
+        const a1 = now - state.flash1.start;
+        if(a1 >= 0 && a1 <= state.flash1.dur) drawFlash(mk1X, rodY, 1 - a1/state.flash1.dur);
+        else state.flash1 = null;
+      }
+      if(state.flash2){
+        const a2 = now - state.flash2.start;
+        if(a2 >= 0 && a2 <= state.flash2.dur) drawFlash(mk2X, rodY, 1 - a2/state.flash2.dur);
+        else state.flash2 = null;
       }
     }
 
@@ -1409,26 +1538,39 @@ const Shell = (function(){
   }
 
   // ============ Frame animation ============
+  // Shared rod↔room relative speed (m/s) so the same v looks equally fast in both frames.
+  // Alice uses a phase aliceRodX ∈ [-1,1] over ±range; Bella uses bellaSceneShift in metres.
+  function relativeSpeedMps(){
+    const range = animRange();
+    // Keep Alice's prior phase rate (0.35·v); convert to m/s via the same range used in drawRoom.
+    return { vel: 0.35 * state.v * range, range };
+  }
+
   function step(dt){
     state.animT += dt; // cosmetic walk-cycle clock
     // Bella walks/room moves ~ position (visual only — doesn't influence physics events which are computed at Measure time)
+    const { vel, range } = relativeSpeedMps();
     if(state.frame === 'alice'){
-      // rod slides right; loop. Motion continues even while a measurement is
-      // shown — the marks stay put in the room where the endpoints were tagged,
-      // and Bella runs on past them.
-      const speed = 0.35 * state.v; // dimensionless phase per second
-      state.aliceRodX += speed * dt;
-      if(state.aliceRodX > 1) state.aliceRodX = -1;
+      // rod slides right; one loop = left end (−1) → right end (+1), then restart left.
+      state.aliceRodX += (vel / range) * dt; // = 0.35·v phase/s (unchanged)
+      if(state.aliceRodX > 1){
+        state.aliceRodX = -1;
+        onMeasureLoopWrap('alice');
+      }
     } else {
-      // room slides left (rod fixed at centre) — slow loop; shift in metres (old cm values ÷10)
-      state.bellaSceneShift += 0.13 * state.v * dt;
-      if(state.bellaSceneShift > 0.8) state.bellaSceneShift -= 1.6;
+      // room slides left at the same m/s; one loop = left (−range) → right (+range).
+      state.bellaSceneShift += vel * dt;
+      if(state.bellaSceneShift > range){
+        state.bellaSceneShift = -range;
+        onMeasureLoopWrap('bella');
+      }
     }
   }
 
   // ============ Main callbacks ============
   function onFrame(dt){
     step(dt);
+    tickMeasureFlashes();
     drawRoom();
     drawSpace();
   }
@@ -1446,7 +1588,9 @@ const Shell = (function(){
     state.bellaSceneShift = 0;
     state.measureBy = null;
     state.ev = null;
-    state.flash = null;
+    state.flash1 = null;
+    state.flash2 = null;
+    state.flashTrack = null;
     state.showSpace = false;
 
     // reset DOM controls
@@ -1479,7 +1623,8 @@ const Shell = (function(){
     document.getElementById('space-frame-label').textContent = f==='alice'
       ? '— Alice frame (t, x)' : "— Bella frame (t', x')";
     updateReadouts();
-    if(state.measureBy) fireFlashes();
+    // Rebind flash mode for the new view without teleporting mid-run
+    if(state.measureBy) armMeasureFlashes(false);
     Shell.refit();
   }
 
@@ -1489,31 +1634,31 @@ const Shell = (function(){
     const lecture = document.getElementById('shell')?.classList.contains('lecture-mode');
     if(i===0){
       // Stage 1 — Bella's frame: rod at rest, read L′ = L₀ at leisure (no timing, no marks).
-      state.measureBy=null; state.ev=null;
+      state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes();
       selectFrame('bella'); updateReadouts();
     } else if(i===1){
       // Predict length — Alice's frame, not yet measured (L hidden).
-      state.measureBy=null; state.ev=null;
+      state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes();
       selectFrame('alice'); updateReadouts();
     } else if(i===2){
       // Measure (Alice): show the two simultaneous marks → L = L₀/γ.
       selectFrame('alice');
-      if(lecture){ state.measureBy=null; state.ev=null; }
-      else { state.measureBy='alice'; state.aliceRodX = 0; computeEv(); fireFlashes(); }
+      if(lecture){ state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes(); }
+      else { state.measureBy='alice'; computeEv(); armMeasureFlashes(); }
       updateReadouts();
     } else if(i===3){
       // Predict simultaneity — STAY in Alice's frame so Bella's Δt′ isn't pre-revealed.
-      if(lecture){ state.measureBy=null; state.ev=null; }
-      else if(!state.measureBy){ state.measureBy='alice'; computeEv(); }
+      if(lecture){ state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes(); }
+      else if(!state.measureBy){ state.measureBy='alice'; computeEv(); armMeasureFlashes(); }
       selectFrame('alice'); updateReadouts();
     } else if(i===4){
       // Switch frames — reveal the same two events in Bella's frame.
-      if(lecture){ state.measureBy=null; state.ev=null; }
+      if(lecture){ state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes(); }
       else if(!state.measureBy){ state.measureBy='alice'; computeEv(); }
       selectFrame('bella');
     } else {
       // Evaluate — keep the Bella reveal.
-      if(lecture){ state.measureBy=null; state.ev=null; }
+      if(lecture){ state.measureBy=null; state.ev=null; state.flashTrack=null; clearFlashes(); }
       else if(!state.measureBy){ state.measureBy='alice'; computeEv(); }
       selectFrame('bella');
     }
@@ -1524,20 +1669,26 @@ const Shell = (function(){
     state.v = parseFloat(e.target.value);
     document.getElementById('v-val').textContent = state.v.toFixed(2);
     // If already measured, recompute so events remain consistent with new v
-    if(state.measureBy){ computeEv(); state.flash = null; }
+    if(state.measureBy){ computeEv(); armMeasureFlashes(false); }
     updateReadouts();
     renderFormal();
   });
   document.getElementById('l0-slider').addEventListener('input', e=>{
     state.L0 = parseFloat(e.target.value);
     document.getElementById('l0-val').textContent = state.L0.toFixed(2) + ' m';
-    if(state.measureBy){ computeEv(); state.flash = null; }
+    if(state.measureBy){ computeEv(); armMeasureFlashes(false); }
     updateReadouts();
     renderFormal();
   });
   function setMeasurer(who){
-    if(state.measureBy === who){ state.measureBy = null; state.flash = null; }
-    else { state.measureBy = who; state.aliceRodX = 0; computeEv(); fireFlashes(); }
+    if(state.measureBy === who){
+      state.measureBy = null; state.ev = null;
+      state.flashTrack = null; clearFlashes();
+    } else {
+      state.measureBy = who;
+      computeEv();
+      armMeasureFlashes(true); // always restart Bella from the left on Measure
+    }
     updateReadouts(); drawRoom(); drawSpace();
   }
   document.getElementById('measure-alice').addEventListener('click', ()=> setMeasurer('alice'));

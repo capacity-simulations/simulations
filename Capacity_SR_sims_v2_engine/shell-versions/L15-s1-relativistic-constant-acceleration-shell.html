@@ -353,10 +353,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .cap{font-size:11.5px;color:var(--ink-mid);margin-top:5px;line-height:1.4;}
 @media(max-width:1000px){.formal-grid{grid-template-columns:1fr;}}
 #layerGroup.ctrl-box--stacked{gap:18px;}
-#layerGroup .layer-btns{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:6px;}
+#layerGroup .layer-btns{display:flex;flex-direction:column;gap:10px;width:100%;margin-top:10px;}
 #layerGroup .layer-btns .shell-btn{width:100%;justify-content:flex-start;text-align:left;font-size:12px;line-height:1.35;padding:8px 10px;}
 #layerGroup.hl{outline:2px solid rgba(96,165,250,.7);outline-offset:3px;border-radius:8px;}
 .ctrl-box.hl{outline:2px solid rgba(96,165,250,.7);outline-offset:3px;border-radius:8px;}
+.ctrl-check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-muted);user-select:none;}
+.ctrl-check input{accent-color:var(--accent,#60a5fa);width:15px;height:15px;cursor:pointer;flex-shrink:0;}
+#layerGroup #show-energy-row{margin-top:6px;padding-top:12px;border-top:1px solid var(--ctrl-border,rgba(148,163,184,.18));}
 .sl-mini{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);}
 .sl-mini label{min-width:28px;font-weight:600;}
 .sl-mini .shell-range{flex:1;min-width:0;}
@@ -542,6 +545,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <button id="layer2" class="shell-btn">② Connect to energy</button>
               <button id="layer-lowv" class="shell-btn">⊙ View low velocity</button>
             </div>
+            <label class="ctrl-check" id="show-energy-row"><input type="checkbox" id="show-energy" checked> Show energy plot</label>
           </div>
         </div>
       </div>
@@ -780,16 +784,15 @@ const Shell = (function(){
     ink:'#e2e8f0', mid:'#94a3b8', mute:'#64748b'
   };
 
-  const S={a0:0.5,t:0,Tmax:30,rate:2.3,Emax:1,layer1:false,layer2:false,lowV:false,prediction:null};
+  const S={a0:0.5,t:0,Tmax:30,rate:2.3,Emax:1,layer1:false,layer2:false,lowV:false,showEnergy:true,prediction:null};
   let GEO={padL:64,plotW:100};
 
-  /* Low-velocity view: a FIXED early time-window (independent of force). Sized so the
-     maximum force (A0_MAX) just reaches β≈LOW_BETA at the right edge; smaller forces then
-     show visibly shallower slopes on the SAME axes, all still in the linear/low-β regime
-     where the classical and relativistic curves coincide. */
-  const LOW_BETA = 0.1;
-  const A0_MAX   = 1.0;                       // force slider max (min 0.2 … max 1.0)
-  function tLowView(){ return LOW_BETA / A0_MAX; }   // fixed window (does NOT depend on S.a0)
+  /* Low-velocity view: shorter time window (Newtonian exits at Vmax) with full v-scale.
+     Relativistic v-trace and energy both stop at β = LOW_BETA; Newtonian v continues.
+     Energy (if shown) shares the same time axis with a Y scale zoomed to E(β). */
+  const LOW_BETA = 0.4;
+  function tRelCap(){ return (LOW_BETA / Math.sqrt(1 - LOW_BETA*LOW_BETA)) / S.a0; }
+  function tLowView(){ return 1.2 / S.a0; }  // Newtonian reaches Vmax=1.2 at the right edge
 
   /* ----- physics (exact analytic solutions; c=1, m=1) ----- */
   function gammaFromBeta(b){ return 1/Math.sqrt(1-b*b); }      // used by audit + invariant
@@ -800,9 +803,10 @@ const Shell = (function(){
   function recomputeAxis(){ S.Emax = gammaOfT(S.Tmax)*1.05; }        // fixed once per force
   function viewLimits(){
     if(!S.lowV) return {T:S.Tmax, Vmax:1.2, Emax:S.Emax};
-    const T = tLowView();                          // fixed window
-    const gMax = Math.sqrt(1 + (A0_MAX*T)**2);     // γ at MAX force, window end → fixed, force-independent axes
-    return {T, Vmax:0.12, Emax: 1 + (gMax-1)*1.4}; // fixed v/E axes so the slope tracks force
+    const T = tLowView();
+    /* Zoom energy Y to the E at β = LOW_BETA (same stop as the relativistic v-trace). */
+    const gCap = gammaFromBeta(LOW_BETA);
+    return {T, Vmax:1.2, Emax: 1 + (gCap - 1)*1.6};
   }
 
   /* ----- canvas helpers ----- */
@@ -872,15 +876,26 @@ const Shell = (function(){
     ctx.fillStyle=COL.bg; ctx.fillRect(0,0,w,h);
 
     const padL=64,padR=64,padTop=24,padBot=58,gap=40;
-    let plotH=(h-padTop-padBot-gap)/2; if(plotH<40)plotH=40;
     const plotW=Math.max(40,w-padL-padR);
-    const vTop=padTop, vBot=padTop+plotH;
-    const eTop=vBot+gap, eBot=eTop+plotH;
+    const showE = S.showEnergy;
+    /* Energy off → v/c fills the window; energy on → split with energy below. */
+    let plotH, vTop, vBot, eTop, eBot;
+    if(showE){
+      plotH=(h-padTop-padBot-gap)/2; if(plotH<40)plotH=40;
+      vTop=padTop; vBot=padTop+plotH;
+      eTop=vBot+gap; eBot=eTop+plotH;
+    } else {
+      plotH=Math.max(40, h-padTop-padBot);
+      vTop=padTop; vBot=padTop+plotH;
+      eTop=eBot=vBot; // unused when energy hidden
+    }
     GEO={padL,plotW};
 
     const lim=viewLimits();
     const Tview=lim.T, Vmax=lim.Vmax, Emax=lim.Emax;
     const tDraw=Math.min(S.t, Tview);
+    /* In low-v mode the relativistic v-trace stops at β = LOW_BETA; Newtonian keeps going. */
+    const tRel = S.lowV ? Math.min(tDraw, tRelCap()) : tDraw;
 
     const xOfT=t=>padL+(t/Tview)*plotW;
     const vY=vc=>vTop+(1-vc/Vmax)*plotH;
@@ -890,13 +905,16 @@ const Shell = (function(){
     ctx.font='12px Inter,sans-serif';ctx.lineWidth=1;
     const tStep=niceStep(Tview);
     const tDig = Tview < 2 ? 2 : (Tview < 10 ? 1 : 0);
+    const tickBot = showE ? eBot : vBot;
     for(let tt=0;tt<=Tview+1e-9;tt+=tStep){
       const x=xOfT(tt);
       ctx.strokeStyle=COL.grid;
       ctx.beginPath();ctx.moveTo(x,vTop);ctx.lineTo(x,vBot);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(x,eTop);ctx.lineTo(x,eBot);ctx.stroke();
+      if(showE){
+        ctx.beginPath();ctx.moveTo(x,eTop);ctx.lineTo(x,eBot);ctx.stroke();
+      }
       ctx.fillStyle=COL.mid;ctx.textAlign='center';ctx.textBaseline='top';
-      ctx.fillText(tt.toFixed(tDig),x,eBot+6);
+      ctx.fillText(tt.toFixed(tDig),x,tickBot+6);
     }
 
     /* ===== VELOCITY PLOT ===== */
@@ -909,94 +927,96 @@ const Shell = (function(){
     }
     ctx.strokeStyle=COL.box;ctx.lineWidth=1;ctx.strokeRect(padL,vTop,plotW,plotH);
 
-    /* Layer1 shaded gap */
-    if(S.layer1 && tDraw>0){
+    /* Layer1 shaded gap (only where both traces exist) */
+    if(S.layer1 && tRel>0){
       ctx.save();ctx.beginPath();ctx.rect(padL,vTop,plotW,plotH);ctx.clip();
       const N=200;ctx.beginPath();
-      for(let i=0;i<=N;i++){const tt=tDraw*i/N;const x=xOfT(tt);const y=vY(vNewtonOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
-      for(let i=N;i>=0;i--){const tt=tDraw*i/N;const x=xOfT(tt);const y=vY(vOfT(tt));ctx.lineTo(x,y);}
+      for(let i=0;i<=N;i++){const tt=tRel*i/N;const x=xOfT(tt);const y=vY(vNewtonOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+      for(let i=N;i>=0;i--){const tt=tRel*i/N;const x=xOfT(tt);const y=vY(vOfT(tt));ctx.lineTo(x,y);}
       ctx.closePath();ctx.fillStyle=COL.fill;ctx.fill();ctx.restore();
     }
 
-    /* Newtonian dashed (clipped) */
+    /* Newtonian dashed (clipped) — continues for full tDraw */
     ctx.save();ctx.beginPath();ctx.rect(padL,vTop,plotW,plotH);ctx.clip();
     ctx.setLineDash([7,5]);ctx.strokeStyle=COL.newton;ctx.lineWidth=1.7;ctx.beginPath();
     {const N=160;for(let i=0;i<=N;i++){const tt=tDraw*i/N;const x=xOfT(tt);const y=vY(vNewtonOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}}
     ctx.stroke();ctx.setLineDash([]);ctx.restore();
     const tExit=Vmax/S.a0;
-    if(!S.lowV && tExit<=S.t && tExit<=Tview){
+    if(tExit<=S.t && tExit<=Tview){
       const ex=xOfT(tExit);
       ctx.fillStyle=COL.newton;ctx.beginPath();ctx.moveTo(ex,vTop+2);ctx.lineTo(ex-5,vTop+11);ctx.lineTo(ex+5,vTop+11);ctx.closePath();ctx.fill();
     }
 
-    /* dashed v=c line (full-range only — off-scale when zoomed) */
-    if(!S.lowV && Vmax >= 1){
+    /* dashed v=c line */
+    if(Vmax >= 1){
       ctx.setLineDash([6,5]);ctx.strokeStyle=COL.climit;ctx.lineWidth=1.4;
       ctx.beginPath();ctx.moveTo(padL,vY(1));ctx.lineTo(padL+plotW,vY(1));ctx.stroke();ctx.setLineDash([]);
       rightLabel('v = c  (speed limit)', padL+plotW-6, vY(1)-12, '#fecdd3');
     }
 
-    /* relativistic curve */
+    /* relativistic curve (truncated at LOW_BETA in low-v mode) */
     ctx.save();ctx.beginPath();ctx.rect(padL,vTop,plotW,plotH);ctx.clip();
     ctx.strokeStyle=COL.rel;ctx.lineWidth=2.4;ctx.beginPath();
-    {const N=240;for(let i=0;i<=N;i++){const tt=tDraw*i/N;const x=xOfT(tt);const y=vY(vOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}}
+    {const N=240;for(let i=0;i<=N;i++){const tt=tRel*i/N;const x=xOfT(tt);const y=vY(vOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}}
     ctx.stroke();ctx.restore();
-    {const x=xOfT(tDraw),y=vY(Math.min(vOfT(tDraw),Vmax));ctx.fillStyle=COL.rel;ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill();}
+    {const x=xOfT(tRel),y=vY(Math.min(vOfT(tRel),Vmax));ctx.fillStyle=COL.rel;ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill();}
 
-    if(S.layer1 && tDraw>0){
+    if(S.layer1 && tRel>0){
       const lt=Math.min(Tview*0.16, tExit*0.55);
       labelPill('Δv: relativistic vs Newtonian', xOfT(lt), vY(Vmax*0.72), '#67e8f9');
     }
-    badge(padL+8, vTop+8, 'v = '+vOfT(S.t).toFixed(3)+' c  (lab frame)', COL.rel, w);
+    const vBadge = S.lowV ? Math.min(vOfT(S.t), LOW_BETA) : vOfT(S.t);
+    badge(padL+8, vTop+8, 'v = '+vBadge.toFixed(3)+' c  (lab frame)', COL.rel, w);
     velLegend(padL,plotW,vBot);
     yTitle('v / c   (lab frame)', vTop+plotH/2);
 
-    /* ===== ENERGY PLOT ===== */
-    const st=niceStep(Emax-1);
-    const eDig = (Emax-1) < 0.5 ? 2 : ((Emax-1) < 5 ? 1 : 0);
-    for(let E=1+st;E<=Emax+1e-9;E+=st){
-      const y=eY(E);
-      ctx.strokeStyle=COL.grid;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+plotW,y);ctx.stroke();
-      ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(E.toFixed(eDig),padL-8,y);
+    /* ===== ENERGY PLOT (optional; zoomed Y in low-v, same T as v/c) ===== */
+    if(showE){
+      const st=niceStep(Emax-1);
+      const eDig = (Emax-1) < 0.5 ? 2 : ((Emax-1) < 5 ? 1 : 0);
+      for(let E=1+st;E<=Emax+1e-9;E+=st){
+        const y=eY(E);
+        ctx.strokeStyle=COL.grid;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+plotW,y);ctx.stroke();
+        ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(E.toFixed(eDig),padL-8,y);
+      }
+      ctx.strokeStyle=COL.box;ctx.lineWidth=1;ctx.strokeRect(padL,eTop,plotW,plotH);
+
+      /* rest energy reference line at E=1 */
+      ctx.setLineDash([4,4]);ctx.strokeStyle=COL.rest;ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(padL,eY(1));ctx.lineTo(padL+plotW,eY(1));ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('1',padL-8,eY(1));
+
+      /* energy curve — in low-v, stop at the same t as relativistic v (β = LOW_BETA) */
+      ctx.save();ctx.beginPath();ctx.rect(padL,eTop,plotW,plotH);ctx.clip();
+      ctx.strokeStyle=COL.energy;ctx.lineWidth=2.4;ctx.beginPath();
+      {const N=240;for(let i=0;i<=N;i++){const tt=tRel*i/N;const x=xOfT(tt);const y=eY(eOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}}
+      ctx.stroke();ctx.restore();
+      {const x=xOfT(tRel),y=eY(Math.min(eOfT(tRel),Emax));ctx.fillStyle=COL.energy;ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill();}
+
+      /* E -> infinity marker (full-range only — off-scale when low-v zoomed) */
+      if(!S.lowV){
+        ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.textBaseline='middle';ctx.font='12px Inter,sans-serif';
+        ctx.fillText('E → ∞ (unbounded)', padL+plotW-8, eTop+12);
+        ctx.beginPath();ctx.moveTo(padL+plotW-6,eTop+22);ctx.lineTo(padL+plotW-10,eTop+30);ctx.lineTo(padL+plotW-2,eTop+30);ctx.closePath();ctx.fill();
+      }
+
+      labelPlain('E = mc²  (rest energy)', padL+8, eY(1)-9, COL.rest, 'left','bottom');
+      labelPlain('E = γmc²  (relativistic)', padL+plotW-8, eBot-8, COL.energy, 'right','bottom');
+      const eBadge = S.lowV ? eOfT(tRel) : eOfT(S.t);
+      const gBadge = S.lowV ? gammaOfT(tRel) : gammaOfT(S.t);
+      badge(padL+8, eTop+8, 'E = '+eBadge.toFixed(S.lowV?3:2)+' mc²  (lab frame)', COL.energy, w);
+
+      if(S.layer2){
+        badge(padL+8, eTop+32, 'γ = '+gBadge.toFixed(S.lowV?3:2), '#fde68a', w);
+        if(!S.lowV) labelPill('Energy keeps growing even though speed doesn\u2019t', padL+plotW*0.42, eTop+plotH*0.30, '#fde68a');
+      }
+      yTitle('E / mc²   (lab frame)', eTop+plotH/2);
     }
-    ctx.strokeStyle=COL.box;ctx.lineWidth=1;ctx.strokeRect(padL,eTop,plotW,plotH);
 
-    /* rest energy reference line at E=1 */
-    ctx.setLineDash([4,4]);ctx.strokeStyle=COL.rest;ctx.lineWidth=1.2;
-    ctx.beginPath();ctx.moveTo(padL,eY(1));ctx.lineTo(padL+plotW,eY(1));ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('1',padL-8,eY(1));
-
-    /* energy curve */
-    ctx.save();ctx.beginPath();ctx.rect(padL,eTop,plotW,plotH);ctx.clip();
-    ctx.strokeStyle=COL.energy;ctx.lineWidth=2.4;ctx.beginPath();
-    {const N=240;for(let i=0;i<=N;i++){const tt=tDraw*i/N;const x=xOfT(tt);const y=eY(eOfT(tt));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}}
-    ctx.stroke();ctx.restore();
-    {const x=xOfT(tDraw),y=eY(Math.min(eOfT(tDraw),Emax));ctx.fillStyle=COL.energy;ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill();}
-
-    /* E -> infinity marker (full-range only) */
-    if(!S.lowV){
-      ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.textBaseline='middle';ctx.font='12px Inter,sans-serif';
-      ctx.fillText('E → ∞ (unbounded)', padL+plotW-8, eTop+12);
-      ctx.beginPath();ctx.moveTo(padL+plotW-6,eTop+22);ctx.lineTo(padL+plotW-10,eTop+30);ctx.lineTo(padL+plotW-2,eTop+30);ctx.closePath();ctx.fill();
-    }
-
-    labelPlain('E = mc²  (rest energy)', padL+8, eY(1)-9, COL.rest, 'left','bottom');
-    labelPlain('E = γmc²  (relativistic)', padL+plotW-8, eBot-8, COL.energy, 'right','bottom');
-    badge(padL+8, eTop+8, 'E = '+eOfT(S.t).toFixed(S.lowV?3:2)+' mc²  (lab frame)', COL.energy, w);
-
-    if(S.layer2){
-      badge(padL+8, eTop+32, 'γ = '+gammaOfT(S.t).toFixed(S.lowV?3:2), '#fde68a', w);
-      if(!S.lowV) labelPill('Energy keeps growing even though speed doesn\u2019t', padL+plotW*0.42, eTop+plotH*0.30, '#fde68a');
-    }
-    yTitle('E / mc²   (lab frame)', eTop+plotH/2);
-
-    /* shared x-axis title + footnote */
+    /* x-axis title */
     ctx.fillStyle=COL.mid;ctx.textAlign='center';ctx.textBaseline='top';ctx.font='12px Inter,sans-serif';
-    ctx.fillText('time  t   (seconds, lab frame)'+(S.lowV?'  ·  low-velocity zoom':''), padL+plotW/2, eBot+24);
-    let foot='natural units: c = 1, m = 1 · F equals a₀ = F/m in c/s · solid = relativistic, dashed grey = Newtonian';
-    if(ctx.measureText(foot).width>plotW) foot='c = 1, m = 1 · solid = relativistic, dashed = Newtonian';
-    if(ctx.measureText(foot).width>plotW) foot='c = 1, m = 1';
-    ctx.fillStyle=COL.mute;ctx.fillText(foot, padL+plotW/2, eBot+40);
+    const axisLabel = 'time  t   (seconds, lab frame)'+(S.lowV?'  ·  low velocity (relativistic to v = 0.4 c)':'');
+    ctx.fillText(axisLabel, padL+plotW/2, tickBot+24);
   }
 
   /* ----- controls ----- */
@@ -1010,23 +1030,33 @@ const Shell = (function(){
 
   const l1=document.getElementById('layer1'), l2=document.getElementById('layer2');
   const lLow=document.getElementById('layer-lowv');
+  const showEnergyEl=document.getElementById('show-energy');
   function syncLayers(){
     l1.classList.toggle('active',S.layer1); l2.classList.toggle('active',S.layer2);
     lLow.classList.toggle('active',S.lowV);
+    if(showEnergyEl) showEnergyEl.checked=!!S.showEnergy;
     document.getElementById('note1').hidden=!S.layer1;
     document.getElementById('note2').hidden=!S.layer2;
   }
   l1.addEventListener('click',()=>{S.layer1=!S.layer1;syncLayers();Shell.refit();});
-  l2.addEventListener('click',()=>{S.layer2=!S.layer2;syncLayers();Shell.refit();});
+  l2.addEventListener('click',()=>{
+    S.layer2=!S.layer2;
+    if(S.layer2) S.showEnergy=true;  /* energy annotations need the energy plot */
+    syncLayers();Shell.refit();
+  });
   lLow.addEventListener('click',()=>{
     S.lowV=!S.lowV;
-    if(S.lowV){
-      const tl=tLowView();
-      if(S.t>tl){ S.t=tl; Shell.setPlaying(false); }
-    }
+    S.t=0;                        /* restart at origin for the new view */
+    Shell.setPlaying(false);      /* wait for Play — do not auto-run */
     syncLayers();
     draw();
   });
+  if(showEnergyEl){
+    showEnergyEl.addEventListener('change',()=>{
+      S.showEnergy=!!showEnergyEl.checked;
+      draw();
+    });
+  }
 
   const feedback={
     A:{cls:'wrong', html:'<b>You predicted (A)</b> — Alex\u2019s view. But F = ma is the <i>Newtonian</i> law. In relativity <b>F = dp/dt</b> with <b>p = γmv</b>. As v → c the Lorentz factor γ grows steeply, so ever more force pours into momentum and energy rather than speed. The dashed Newtonian line (now highlighted) diverges from reality, while the relativistic curve bends and flattens toward c — approaching but <i>never</i> reaching it.'},
@@ -1088,11 +1118,10 @@ const Shell = (function(){
   /* ----- shell callbacks ----- */
   function onFrame(dt){
     const cap = S.lowV ? tLowView() : S.Tmax;
-    /* Pace low-v so filling the short window takes ~same wall time as ~10% of the full run. */
+    /* Pace low-v so filling its shorter window takes ~same wall time as ~10% of the full run. */
     const rate = S.lowV ? S.rate * (cap / Math.max(S.Tmax * 0.1, 1e-6)) : S.rate;
     if(S.t < cap){
       S.t = Math.min(cap, S.t + dt*rate);
-      if(S.lowV && S.t >= cap) Shell.setPlaying(false);  /* pause at low-v end */
     }
     draw();
   }
@@ -1121,25 +1150,25 @@ const Shell = (function(){
     /* Lecture mode: blank axes on load/reset; Play builds traces (like inquiry step 0).
        Inquiry steps that jump to Tmax are for the guided path only. */
     if(shell && shell.classList.contains('lecture-mode')){
-      S.t=0; S.layer1=false; S.layer2=false; S.lowV=false;
+      S.t=0; S.layer1=false; S.layer2=false; S.lowV=false; S.showEnergy=true;
       syncLayers();
       updateStepHL();
       draw();
       return;
     }
     if(i===0){
-      S.t=0; S.layer1=false; S.layer2=false; S.lowV=false;
+      S.t=0; S.layer1=false; S.layer2=false; S.lowV=false; S.showEnergy=true;
     } else if(i===1){
       S.layer1=false; S.layer2=false;
     } else if(i===2){
       S.layer1=false; S.layer2=false;
       if(S.prediction==='A') S.layer1=true;
     } else if(i===3){
-      S.t=S.Tmax; S.layer1=true; S.layer2=false; S.lowV=false;
+      S.t=S.Tmax; S.layer1=true; S.layer2=false; S.lowV=false; S.showEnergy=true;
     } else if(i===4){
-      S.t=S.Tmax; S.layer1=true; S.layer2=true; S.lowV=false;
+      S.t=S.Tmax; S.layer1=true; S.layer2=true; S.lowV=false; S.showEnergy=true;
     } else if(i===5){
-      S.t=S.Tmax; S.layer1=true; S.layer2=true; S.lowV=false;
+      S.t=S.Tmax; S.layer1=true; S.layer2=true; S.lowV=false; S.showEnergy=true;
     }
     syncLayers();
     updateStepHL();

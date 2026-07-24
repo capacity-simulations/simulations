@@ -325,11 +325,18 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .stage-3 .ro-comp-v{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
 .stage-2 .ro-norm-v,.stage-3 .ro-norm-v,.stage-4 .ro-norm-v,.stage-4 .ro-norm-u,.stage-4 .ro-dot{display:flex;}
 .stage-4 .ro-comp-v,.stage-4 .ro-comp-u{display:flex;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid rgba(148,163,184,.18);}
-/* Tail/tip are for off-origin bookkeeping — hide them in the inner-product stage. */
-.stage-4 .ro-tail,.stage-4 .ro-tip{display:none !important;}
 .calc-off .ro-calc{display:none !important;}
 .calc-on .ro-calc{display:flex;}
+/* Tip/tail of V always visible in stages 2–3 — must follow .calc-off so !important wins the cascade.
+   Stage 4 (inner product) keeps tip/tail hidden: only components and invariants matter there. */
+.stage-2 .ro-tail,.stage-2 .ro-tip,
+.stage-3 .ro-tail,.stage-3 .ro-tip{display:flex !important;}
+.stage-4 .ro-tail,.stage-4 .ro-tip{display:none !important;}
 /* .ro-comp-v / .ro-comp-u deliberately omit .ro-calc so components stay visible with Include calculation off. */
+/* Unchecking "Show projection" hides tip/tail coordinates and frame-dependent
+   components; only invariants remain. Must follow the stage tip/tail show rules. */
+.proj-off .ro-tail,.proj-off .ro-tip,
+.proj-off .ro-comp-v,.proj-off .ro-comp-u{display:none !important;}
 .ro-line b{font-family:var(--font-nums);color:var(--text);font-weight:700;}
 .tag{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
   border-radius:4px;font-weight:800;font-size:11px;color:#0b0e14;}
@@ -471,7 +478,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <span>(<b id="S_tipx">–</b>, <b id="S_tipy">–</b>)</span>
             </div>
             <div class="ro-line ro-comp-v">
-              <span class="ro-frame-note">components in Frame S</span>
               <span class="tag tagV">V</span>
               <span>V<sub>x</sub>=<b id="S_Vx">–</b></span>
               <span>V<sub>y</sub>=<b id="S_Vy">–</b></span>
@@ -522,7 +528,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <span>(<b id="S2_tipx">–</b>, <b id="S2_tipy">–</b>)</span>
             </div>
             <div class="ro-line ro-comp-v">
-              <span class="ro-frame-note">components in Frame S′</span>
               <span class="tag tagV">V</span>
               <span>V<sub>x′</sub>=<b id="S2_Vx">–</b></span>
               <span>V<sub>y′</sub>=<b id="S2_Vy">–</b></span>
@@ -941,7 +946,9 @@ const Shell = (function(){
   const slTx = el('slTx'), slTy = el('slTy');
 
   function applyStage(){
-    simRoot.className = 'sim-wrap stage-' + stage + (includeCalc ? ' calc-on' : ' calc-off');
+    simRoot.className = 'sim-wrap stage-' + stage
+      + (includeCalc ? ' calc-on' : ' calc-off')
+      + (showProjection ? ' proj-on' : ' proj-off');
     document.querySelectorAll('.stage-btn').forEach(b =>
       b.classList.toggle('active', parseInt(b.dataset.stage, 10) === stage));
     const inv = document.getElementById('aside-invariants');
@@ -962,6 +969,13 @@ const Shell = (function(){
     if (Math.abs(x) < 0.005) x = 0;
     let s = x.toFixed(2);
     if (s === '-0.00') s = '0.00';
+    return s;
+  }
+
+  function fmt1(x){
+    if (Math.abs(x) < 0.05) x = 0;
+    let s = x.toFixed(1);
+    if (s === '-0.0') s = '0.0';
     return s;
   }
 
@@ -1190,10 +1204,10 @@ const Shell = (function(){
     setText('S_Px', fmt(state.P.x)); setText('S_Py', fmt(state.P.y));
     setText('S2_Px', fmt(P2.x)); setText('S2_Py', fmt(P2.y));
 
-    setText('S_tailx', fmt(tail.x)); setText('S_taily', fmt(tail.y));
-    setText('S_tipx', fmt(tip.x)); setText('S_tipy', fmt(tip.y));
-    setText('S2_tailx', fmt(tail2.x)); setText('S2_taily', fmt(tail2.y));
-    setText('S2_tipx', fmt(tip2.x)); setText('S2_tipy', fmt(tip2.y));
+    setText('S_tailx', fmt1(tail.x)); setText('S_taily', fmt1(tail.y));
+    setText('S_tipx', fmt1(tip.x)); setText('S_tipy', fmt1(tip.y));
+    setText('S2_tailx', fmt1(tail2.x)); setText('S2_taily', fmt1(tail2.y));
+    setText('S2_tipx', fmt1(tip2.x)); setText('S2_tipy', fmt1(tip2.y));
 
     setText('S_Vx', fmt(Vx)); setText('S_Vy', fmt(Vy));
     setText('S2_Vx', fmt(V2.x)); setText('S2_Vy', fmt(V2.y));
@@ -1362,7 +1376,7 @@ const Shell = (function(){
   if (projChk){
     projChk.addEventListener('change', () => {
       showProjection = projChk.checked;
-      render();
+      applyStage(); render();
     });
   }
 
