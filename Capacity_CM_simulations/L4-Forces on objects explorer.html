@@ -500,25 +500,34 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="ctrl-box-head"><span class="ctrl-box-label">incline θ</span><span id="thetaVal" class="slider-val">30°</span></div>
       <div class="ctrl-slider-row"><input type="range" id="theta" min="0" max="60" step="1" value="30"></div>
     </div>
-    <div class="sim-ctrl-row">
-      <button id="frictionBtn" class="shell-btn" style="display:none">friction μ = 0.30: off</button>
+    <div class="ctrl-box" id="frictionWrap" style="display:none">
+      <div class="ctrl-box-head"><span class="ctrl-box-label">friction</span></div>
+      <div class="sim-ctrl-row" style="margin-bottom:0">
+        <button id="frictionBtn" class="shell-btn" style="flex:1">μ = 0.30: off</button>
+      </div>
     </div>
-    <div class="sim-ctrl-row">
-      <button id="addForce" class="shell-btn">+ Force</button>
-      <button id="replaceBtn" class="shell-btn" title="reset position & velocity, keep forces">⟲ Re-place block</button>
+    <div class="ctrl-box">
+      <div class="ctrl-box-head"><span class="ctrl-box-label">actions</span></div>
+      <div class="sim-ctrl-row" style="margin-bottom:0">
+        <button id="addForce" class="shell-btn" style="flex:1">+ Force</button>
+        <button id="replaceBtn" class="shell-btn" style="flex:1" title="reset position & velocity, keep forces">⟲ Re-place block</button>
+      </div>
     </div>
-    <div class="sim-ctrl-row">
-      <label class="chk"><input type="checkbox" id="showNet"> F_net &amp; a</label>
-      <label class="chk"><input type="checkbox" id="tipTail"> tip-to-tail</label>
+    <div class="ctrl-box">
+      <div class="ctrl-box-head"><span class="ctrl-box-label">display</span></div>
+      <div class="sim-ctrl-row" style="margin-bottom:0">
+        <label class="chk" id="showCompWrap" style="display:none"><input type="checkbox" id="showComp"> show components</label>
+        <label class="chk"><input type="checkbox" id="showNet"> show net force</label>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="shell-panel">
+<div class="shell-panel collapsed">
   <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
   <div class="shell-panel-body">
     <div class="ctrl-box">
-      <div class="stat-row"><span class="stat-label">net force</span><span class="shell-readout" id="roF">|F_net| = ?</span></div>
+      <div class="stat-row"><span class="stat-label">net force</span><span class="shell-readout" id="roF">|F<sub>net</sub>| = ?</span></div>
       <div class="stat-row"><span class="stat-label">acceleration</span><span class="shell-readout" id="roA">|a| = ?</span></div>
     </div>
   </div>
@@ -762,7 +771,7 @@ const Shell = (function(){
 
 (function(){
 'use strict';
-const g=9.81, MU=0.30, WORLD_W=14, PXN_FLAT=16, PXN_INC=4.6, PXA=20, PXV=7, S_INC=60;
+const g=9.81, MU=0.30, WORLD_W=14, PXN_FLAT=21, PXN_INC=4.6, PXA=20, PXV=7, S_INC=60;
 const F_COLORS=['#fb923c','#38bdf8','#f472b6','#a3e635','#facc15','#c084fc'];
 
 const canvas=document.getElementById('cv'), ctx=canvas.getContext('2d');
@@ -772,7 +781,9 @@ const viewTag=document.getElementById('viewTag'), toastEl=document.getElementByI
 const massEl=document.getElementById('mass'), thetaEl=document.getElementById('theta');
 const massVal=document.getElementById('massVal'), thetaVal=document.getElementById('thetaVal');
 const thetaWrap=document.getElementById('thetaWrap'), frictionBtn=document.getElementById('frictionBtn');
-const showNetEl=document.getElementById('showNet'), tipTailEl=document.getElementById('tipTail');
+const frictionWrap=document.getElementById('frictionWrap');
+const showNetEl=document.getElementById('showNet');
+const showCompEl=document.getElementById('showComp'), showCompWrap=document.getElementById('showCompWrap');
 const formalLive=document.getElementById('formalLive');
 const playBtn=document.getElementById('shell-play');
 
@@ -780,6 +791,8 @@ let view={w:800,h:500};
 let nextId=1;
 function mkF(x,y){return {x:x,y:y,id:nextId++};}
 function sub(n){return String(n).split('').map(d=>'₀₁₂₃₄₅₆₇₈₉'[+d]).join('');}
+const FNET='F_{net}';           /* canvas marker → drawn as real subscript */
+const FNET_HTML='F<sub>net</sub>'; /* DOM/legend */
 function colorOf(f){return F_COLORS[(f.id-1)%F_COLORS.length];}
 
 const state={
@@ -873,10 +886,41 @@ function rrPath(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w
 
 /* [visuals] D5: label collision avoidance */
 let _lrects=[];
+/* Split "F_{net} = …" into main/subscript runs so canvas can draw a level subscript
+   (Unicode ₙₑₜ glyphs sit on uneven baselines in most fonts). */
+function labelParts(txt){
+  const parts=[]; const re=/_\{([^}]+)\}/g; let last=0, m;
+  while((m=re.exec(txt))){
+    if(m.index>last) parts.push({t:txt.slice(last,m.index),sub:false});
+    parts.push({t:m[1],sub:true});
+    last=m.index+m[0].length;
+  }
+  if(last<txt.length) parts.push({t:txt.slice(last),sub:false});
+  return parts.length?parts:[{t:txt,sub:false}];
+}
+function labelFonts(size,bold){
+  const w=bold?'600 ':'';
+  return {main:w+size+'px Inter, sans-serif', sub:w+(size*0.72)+'px Inter, sans-serif', drop:size*0.28};
+}
+function measureLabel(txt,size,bold){
+  const parts=labelParts(txt), f=labelFonts(size,bold); let w=0;
+  for(const p of parts){ctx.font=p.sub?f.sub:f.main; w+=ctx.measureText(p.t).width;}
+  return w;
+}
+function fillLabel(txt,lx,ly,color,size,bold){
+  const parts=labelParts(txt), f=labelFonts(size,bold); let x=lx;
+  ctx.fillStyle=color;
+  for(const p of parts){
+    ctx.font=p.sub?f.sub:f.main;
+    ctx.fillText(p.t,x, p.sub?ly+f.drop:ly);
+    x+=ctx.measureText(p.t).width;
+  }
+}
 function label(txt,x,y,color,opts){
   opts=opts||{};
-  ctx.save(); ctx.font=(opts.bold?'600 ':'')+(opts.size||12.5)+'px Inter, sans-serif';
-  const w=ctx.measureText(txt).width;
+  const size=opts.size||12.5, bold=!!opts.bold;
+  ctx.save();
+  const w=measureLabel(txt,size,bold);
   const lx0=opts.align==='center'?x-w/2:opts.align==='right'?x-w:x;
   const ly0=y;
   // collision avoidance — clamp within canvas, then probe a small set of
@@ -931,7 +975,7 @@ function label(txt,x,y,color,opts){
   }
   _lrects.push({l:lx-3,t:ly-12,r:lx+w+3,b:ly+3});
   if(opts.bg!==false){ctx.fillStyle='rgba(8,10,14,.82)';ctx.fillRect(lx-3,ly-11,w+6,15);}
-  ctx.fillStyle=color; ctx.fillText(txt,lx,ly); ctx.restore();
+  fillLabel(txt,lx,ly,color,size,bold); ctx.restore();
 }
 /* Reserve a screen rectangle (e.g. the block itself) so no label is placed over it. */
 function reserveRect(x,y,hw,hh){_lrects.push({l:x-hw,t:y-hh,r:x+hw,b:y+hh});}
@@ -951,7 +995,7 @@ function labelAt(txt,anchor,tip,color,opts){
   label(txt,bx,ly,color,Object.assign({},opts,{align:align,dir:{x:ux,y:uy}}));
 }
 
-function arrow(x0,y0,dx,dy,color,w,dash,alpha){
+function arrow(x0,y0,dx,dy,color,w,dash,alpha,headScale){
   const len=Math.hypot(dx,dy); if(len<1)return null;
   const M=6;
   function tFor(p0,d,lo,hi){if(d>1e-9)return (hi-p0)/d; if(d<-1e-9)return (lo-p0)/d; return Infinity;}
@@ -960,7 +1004,7 @@ function arrow(x0,y0,dx,dy,color,w,dash,alpha){
   ctx.save(); if(alpha!==undefined)ctx.globalAlpha=alpha;
   ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=w; if(dash)ctx.setLineDash(dash);
   ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
-  const a=Math.atan2(ey-y0,ex-x0), hs=6+w*1.5;
+  const a=Math.atan2(ey-y0,ex-x0), hs=(6+w*1.5)*(headScale!=null?headScale:1);
   ctx.beginPath();ctx.moveTo(ex,ey);
   ctx.lineTo(ex-hs*Math.cos(a-0.42),ey-hs*Math.sin(a-0.42));
   ctx.lineTo(ex-hs*Math.cos(a+0.42),ey-hs*Math.sin(a+0.42));
@@ -972,16 +1016,16 @@ function arrow(x0,y0,dx,dy,color,w,dash,alpha){
   ctx.restore();
   return {ex,ey,clipped};
 }
-function drawSquare(p,rot,role){
-  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(rot);const s=17;
+function drawSquare(p,rot,role,half){
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(rot);const s=half!=null?half:17;
   if(role==='heroN'||role==='heroV'){
     const gr=ctx.createLinearGradient(-s,-s,s,s);gr.addColorStop(0,'#46586f');gr.addColorStop(1,'#232d3c');
     ctx.fillStyle=gr;ctx.strokeStyle=role==='heroV'?'#fbbf24':'#cbd5e1';ctx.lineWidth=2;
-    rrPath(-s,-s,s*2,s*2,5);ctx.fill();ctx.stroke();
+    rrPath(-s,-s,s*2,s*2,Math.min(8,s*0.3));ctx.fill();ctx.stroke();
     if(role==='heroV'){ctx.fillStyle='#fbbf24';ctx.font='bold 12px Inter, sans-serif';ctx.textAlign='center';ctx.fillText('⚠',0,4);ctx.textAlign='left';}
   }else{
     ctx.setLineDash([5,4]);ctx.strokeStyle=role==='ghostV'?'#fbbf24':'#a78bfa';ctx.lineWidth=1.8;
-    rrPath(-s,-s,s*2,s*2,5);ctx.stroke();
+    rrPath(-s,-s,s*2,s*2,Math.min(8,s*0.3));ctx.stroke();
   }
   ctx.restore();
 }
@@ -1081,25 +1125,33 @@ function setViewTag(){
 function updateLegend(){
   const L=[];
   const showGhost=state.mode==='naive'||state.ghostExplored;
-  const bar=(px,txt)=>'<div class="lg-row"><span class="lg-bar" style="width:'+Math.round(px)+'px"></span>'+txt+'</div>';
   const sw=(c,txt,dash)=>'<div class="lg-row"><span class="lg-sw'+(dash?' dash':'')+'" style="border-color:'+c+'"></span>'+txt+'</div>';
+  const showNet=state.revealed&&showNetEl.checked;
   if(state.scene==='flat'){
-    const S=view.w/WORLD_W;
-    L.push(bar(S,'1 m'), bar(2*PXN_FLAT,'2 N (force arrows)'));
-    L.push(sw('#fb923c','applied force (drag tip)'));
-    if(state.revealed){
-      L.push(sw('#a78bfa','F_net = ΣF'), sw('#34d399','a = F_net/m'), sw('#22d3ee','v (velocity)'));
+    if(state.flat.forces.length)L.push(sw('#fb923c','applied force (drag tip)'));
+    if(showNet){
+      const sum=sumF(state.flat.forces), mag=Math.hypot(sum.x,sum.y);
+      const hero=state.mode==='newton'?state.flat.N:state.flat.V;
+      const sp=Math.hypot(hero.vx,hero.vy);
+      L.push(sw('#a78bfa',FNET_HTML+' = ΣF'));
+      if(mag/state.m>0.02)L.push(sw('#34d399','a = '+FNET_HTML+'/m'));
+      if(sp>0.05)L.push(sw('#22d3ee','v (velocity)'));
       if(showGhost)
         L.push(sw(state.mode==='newton'?'#fbbf24':'#a78bfa',
           state.mode==='newton'?'ghost: "biggest force" model':'ghost: reality a = ΣF/m', true));
     }
   }else{
-    L.push(bar(S_INC,'1 m'), bar(10*PXN_INC,'10 N (force arrows)'));
-    L.push(sw('#f87171','gravity mg'), sw('#60a5fa','normal N'), sw('#94a3b8','mg components',true));
-    if(state.friction)L.push(sw('#fb7185','friction f'));
+    const r=incNetOn(state.inc.N);
+    /* Mirror newtonArrows / appliedArrows: only list what is drawn now. */
+    L.push(sw('#f87171','gravity mg'));
+    if(r.N>0.02)L.push(sw('#60a5fa','normal N'));
+    if(showCompEl.checked&&r.fr.thL>0.06)L.push(sw('#94a3b8','mg components',true));
+    if(state.friction&&Math.abs(r.f)>0.02)L.push(sw('#fb7185',r.staticHold?'friction fₛ':'friction f'));
     if(state.inc.forces.length)L.push(sw('#fb923c','applied force'));
-    if(state.revealed){
-      L.push(sw('#a78bfa','F_net (along slope)'), sw('#34d399','a'), sw('#22d3ee','v'));
+    if(showNet){
+      L.push(sw('#a78bfa',FNET_HTML+' (along slope)'));
+      if(Math.abs(r.aS)>0.02)L.push(sw('#34d399','a'));
+      if(Math.abs(state.inc.N.v)>0.05)L.push(sw('#22d3ee','v'));
       if(showGhost)
         L.push(sw(state.mode==='newton'?'#fbbf24':'#a78bfa',
           state.mode==='newton'?'ghost: "biggest force" model':'ghost: reality (slides)', true));
@@ -1108,11 +1160,11 @@ function updateLegend(){
   legendEl.innerHTML=L.join('');
 }
 function updateReadouts(){
-  if(!state.revealed){roF.textContent='|F_net| = ?';roA.textContent='|a| = ?';return;}
+  if(!state.revealed){roF.innerHTML='|'+FNET_HTML+'| = ?';roA.textContent='|a| = ?';return;}
   const d=displayNet();
   /* [physics] J2: clarify readouts in naive mode */
   const suffix=state.mode==='naive'?' (ΣF)':'';
-  roF.textContent='|F_net| = '+d.mag.toFixed(2)+' N'+suffix;
+  roF.innerHTML='|'+FNET_HTML+'| = '+d.mag.toFixed(2)+' N'+suffix;
   roA.textContent='|a| = '+d.a.toFixed(3)+' m/s²'+suffix;
   if(state.mode==='naive'){
     roF.classList.add('danger'); roA.classList.add('danger');
@@ -1136,7 +1188,7 @@ function updateFormalLive(){
 /* ---------- reveal (shows F_net & a once the block starts) ---------- */
 function reveal(){
   if(state.revealed)return;
-  state.revealed=true; showNetEl.checked=true;
+  state.revealed=true;
   banner.style.display='none'; playBtn.classList.remove('primary');
   updateLegend();
 }
@@ -1203,19 +1255,6 @@ function physics(dt){
 }
 
 /* ---------- drawing ---------- */
-function drawChainList(anchor,list,k){
-  let cx=anchor.x, cy=anchor.y;
-  ctx.save(); ctx.globalAlpha=.5;
-  for(const f of list){
-    const nx=cx+f.x*k, ny=cy-f.y*k;
-    arrow(cx,cy,nx-cx,ny-cy,f.c,2.5);
-    ctx.fillStyle='#e2e8f0'; ctx.beginPath(); ctx.arc(nx,ny,2.4,0,7); ctx.fill();
-    cx=nx; cy=ny;
-  }
-  ctx.restore();
-  if(state.revealed&&showNetEl.checked&&Math.hypot(cx-anchor.x,cy-anchor.y)>2)
-    arrow(anchor.x,anchor.y,cx-anchor.x,cy-anchor.y,'#a78bfa',3,[7,5]);
-}
 function dragTooltip(){
   if(!drag)return;
   const f=drag.f; let lines;
@@ -1258,34 +1297,36 @@ function drawFlat(){
 
   /* [pedagogy] G4b: ghost only after explicit opt-in */
   if(state.revealed&&showGhost){
-    drawSquare(gPx,0,state.mode==='newton'?'ghostV':'ghostN');
-    reserveRect(gPx.x,gPx.y,22,22);
+    drawSquare(gPx,0,state.mode==='newton'?'ghostV':'ghostN',26);
+    reserveRect(gPx.x,gPx.y,32,32);
     const ga=state.mode==='newton'?(bb?{x:bb.x/state.m,y:bb.y/state.m}:null):{x:sum.x/state.m,y:sum.y/state.m};
     if(ga&&Math.hypot(ga.x,ga.y)>0.02){const d=pv(ga,PXA*0.9);arrow(gPx.x,gPx.y,d.x,d.y,state.mode==='newton'?'#fbbf24':'#34d399',2,[5,4]);}
     /* [visuals] D8: shortened ghost label */
     label(state.mode==='newton'?'⚠ biggest-F model':'ΣF/m model',
-      gPx.x,gPx.y+36,state.mode==='newton'?'#fbbf24':'#c4b5fd',{align:'center',dir:{x:0,y:1}});
+      gPx.x,gPx.y+44,state.mode==='newton'?'#fbbf24':'#c4b5fd',{align:'center',dir:{x:0,y:1}});
   }
-  if(tipTailEl.checked)drawChainList(hPx,state.flat.forces.map(f=>({x:f.x,y:f.y,c:colorOf(f)})),PXN_FLAT);
-
-  drawSquare(hPx,0,state.mode==='newton'?'heroN':'heroV');
-  reserveRect(hPx.x,hPx.y,22,22);
-  label('m = '+state.m.toFixed(2)+' kg',hPx.x,hPx.y-30,'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
+  drawSquare(hPx,0,state.mode==='newton'?'heroN':'heroV',26);
+  reserveRect(hPx.x,hPx.y,32,32);
+  /* Park mass label beside the block so it doesn't collide with force arrows. */
+  label('m = '+state.m.toFixed(2)+' kg',hPx.x-38,hPx.y+4,'#e2e8f0',{align:'right',dir:{x:-1,y:0}});
 
   for(const f of state.flat.forces){
-    const d=pv(f,PXN_FLAT), e=arrow(hPx.x,hPx.y,d.x,d.y,colorOf(f),3);
-    if(e){ctx.fillStyle='#0b0d12';ctx.strokeStyle=colorOf(f);ctx.lineWidth=2;
-      ctx.beginPath();ctx.arc(e.ex,e.ey,5,0,7);ctx.fill();ctx.stroke();
-      labelAt('F'+sub(f.id)+' = '+Math.hypot(f.x,f.y).toFixed(2)+' N',hPx,e,colorOf(f),{off:18});}
+    const d=pv(f,PXN_FLAT), c=colorOf(f);
+    ctx.save();ctx.shadowColor=c;ctx.shadowBlur=7;
+    const e=arrow(hPx.x,hPx.y,d.x,d.y,c,2.8,null,1,1.4);
+    ctx.restore();
+    if(e){ctx.fillStyle='#0b0d12';ctx.strokeStyle=c;ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(e.ex,e.ey,5.5,0,7);ctx.fill();ctx.stroke();
+      labelAt('F'+sub(f.id)+' = '+Math.hypot(f.x,f.y).toFixed(2)+' N',hPx,e,c,{off:18,bold:true});}
   }
   if(state.revealed&&showNetEl.checked){
     const mag=Math.hypot(sum.x,sum.y);
     if(mag>0.03){
       const d=pv(sum,PXN_FLAT);
-      ctx.save();ctx.shadowColor='#a78bfa';ctx.shadowBlur=10;
-      const e=arrow(hPx.x,hPx.y,d.x,d.y,'#a78bfa',5); ctx.restore();
-      if(e)labelAt('F_net = '+mag.toFixed(2)+' N',hPx,e,'#c4b5fd',{bold:true});
-    }else label('F_net = 0',hPx.x,hPx.y+46,'#c4b5fd',{align:'center',dir:{x:0,y:1}});
+      ctx.save();ctx.shadowColor='#a78bfa';ctx.shadowBlur=5;
+      const e=arrow(hPx.x,hPx.y,d.x,d.y,'#a78bfa',3); ctx.restore();
+      if(e)labelAt(FNET+' = '+mag.toFixed(2)+' N',hPx,e,'#c4b5fd',{bold:true});
+    }else label(FNET+' = 0',hPx.x,hPx.y+46,'#c4b5fd',{align:'center',dir:{x:0,y:1}});
     const aN={x:sum.x/state.m,y:sum.y/state.m}, am=Math.hypot(aN.x,aN.y);
     if(am>0.02){
       const d=pv(aN,PXA), L2=Math.hypot(d.x,d.y), ox=-d.y/L2*13, oy=d.x/L2*13;
@@ -1348,44 +1389,49 @@ function drawIncline(){
   }
   function newtonArrows(px,asGhost){
     const mg=state.m*g;
-    const eG=arrow(px.x,px.y,0,mg*k,'#f87171',asGhost?2:3,asGhost?[5,4]:null);
-    if(eG&&!asGhost)labelAt('mg = '+mg.toFixed(2)+' N',px,eG,'#fca5a5');
-    if(!asGhost&&fr.thL>0.06){
-      const aV=pv(fr.sd,r.mgS*k), eA=arrow(px.x,px.y,aV.x,aV.y,'#94a3b8',2,[6,5]);
-      if(eA)labelAt('mg·sinθ = '+r.mgS.toFixed(2)+' N',px,eA,'#cbd5e1');
-      const pV={x:-fr.n.x,y:-fr.n.y}, pVc=pv(pV,r.mgN*k), eP=arrow(px.x,px.y,pVc.x,pVc.y,'#94a3b8',2,[6,5]);
-      if(eP)labelAt('mg·cosθ = '+r.mgN.toFixed(2)+' N',px,eP,'#94a3b8');
-      if(eA&&eP){ctx.save();ctx.strokeStyle='rgba(148,163,184,.25)';ctx.setLineDash([4,4]);ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(eA.ex,eA.ey);ctx.lineTo(px.x,px.y+mg*k);
-        ctx.moveTo(eP.ex,eP.ey);ctx.lineTo(px.x,px.y+mg*k);ctx.stroke();ctx.restore();}
-    }
+    const showComp=showCompEl.checked;
+    const showNet=state.revealed&&showNetEl.checked;
+    const forceW=asGhost?1.8:2.8, forceDash=asGhost?[5,4]:null, forceA=asGhost?0.45:1;
+    /* Weight mg — crisp stroke + light glow (same family as F_net / a). */
+    if(!asGhost){ctx.save();ctx.shadowColor='#f87171';ctx.shadowBlur=5;}
+    const eG=arrow(px.x,px.y,0,mg*k,'#f87171',forceW,forceDash,forceA);
+    if(!asGhost)ctx.restore();
+    if(eG&&!asGhost)labelAt('mg',px,eG,'#fca5a5',{bold:true});
+    /* Normal N — crisp stroke + light glow. */
     if(r.N>0.02){
-      const nV=pv(fr.n,r.N*k), eN=arrow(px.x,px.y,nV.x,nV.y,'#60a5fa',asGhost?2:3,asGhost?[5,4]:null);
-      if(eN&&!asGhost){
-        const hasAppPerp=Math.abs(r.appN)>0.01;
-        labelAt(fr.thL>0.01?(hasAppPerp?('N = '+r.N.toFixed(2)+' N'):('N = mg·cosθ = '+r.N.toFixed(2)+' N'))
-                        :(hasAppPerp?('N = '+r.N.toFixed(2)+' N'):('N = mg = '+r.N.toFixed(2)+' N')),
-          px,eN,'#93c5fd');
-      }
+      const nV=pv(fr.n,r.N*k);
+      if(!asGhost){ctx.save();ctx.shadowColor='#60a5fa';ctx.shadowBlur=5;}
+      const eN=arrow(px.x,px.y,nV.x,nV.y,'#60a5fa',forceW,forceDash,forceA);
+      if(!asGhost)ctx.restore();
+      if(eN&&!asGhost)labelAt('N',px,eN,'#93c5fd',{bold:true});
     }
     /* [visuals] D8: shortened lift-off label */
     if(r.lift)label('N = 0 — lift-off',px.x,px.y-46,'#fda4af',{align:'center',bold:true,dir:{x:0,y:-1}});
-    if(!asGhost&&state.friction&&Math.abs(r.f)>0.02){
-      const fV=pv(fr.sd,r.f*k), eF=arrow(px.x,px.y,fV.x,fV.y,'#fb7185',3);
-      if(eF)labelAt((r.staticHold?'f_s = ':'f = μN = ')+Math.abs(r.f).toFixed(2)+' N',px,eF,'#fda4af');
+    /* Friction f — same bold style as mg / N; along-slope, opposite motion (or impending slip). */
+    if(state.friction&&Math.abs(r.f)>0.02){
+      const fV=pv(fr.sd,r.f*k);
+      if(!asGhost){ctx.save();ctx.shadowColor='#fb7185';ctx.shadowBlur=5;}
+      const eF=arrow(px.x,px.y,fV.x,fV.y,'#fb7185',forceW,forceDash,forceA);
+      if(!asGhost)ctx.restore();
+      if(eF&&!asGhost)labelAt(r.staticHold?'fₛ':'f',px,eF,'#fda4af',{bold:true});
     }
-    if(state.revealed&&showNetEl.checked){
+    if(showNet){
       if(Math.abs(r.netAlong)>0.05){
         const fV=pv(fr.sd,r.netAlong*k);
-        ctx.save();if(!asGhost){ctx.shadowColor='#a78bfa';ctx.shadowBlur=10;}
-        const e=arrow(px.x,px.y,fV.x,fV.y,'#a78bfa',asGhost?3:5,asGhost?[7,5]:null);ctx.restore();
-        if(e)labelAt('F_net = '+Math.abs(r.netAlong).toFixed(2)+' N '+(r.netAlong>0?'↓slope':'↑slope'),px,e,'#c4b5fd',{bold:!asGhost});
-      }else if(!asGhost)label('F_net = 0',px.x,px.y-60,'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
+        ctx.save();if(!asGhost){ctx.shadowColor='#a78bfa';ctx.shadowBlur=5;}
+        const e=arrow(px.x,px.y,fV.x,fV.y,'#a78bfa',asGhost?2:3,asGhost?[7,5]:null);ctx.restore();
+        if(e)labelAt(FNET+' = '+Math.abs(r.netAlong).toFixed(2)+' N '+(r.netAlong>0?'↓slope':'↑slope'),px,e,'#c4b5fd',{bold:!asGhost});
+      }else if(!asGhost)label(FNET+' = 0',px.x,px.y-60,'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
       if(Math.abs(r.aS)>0.02){
-        const aV=pv(fr.sd,r.aS*PXA), L2=Math.hypot(aV.x,aV.y), ox=-aV.y/L2*13, oy=aV.x/L2*13;
-        const anch={x:px.x+ox,y:px.y+oy};
-        const e=arrow(anch.x,anch.y,aV.x,aV.y,'#34d399',asGhost?2:3,asGhost?[5,4]:null);
-        if(e&&!asGhost)labelAt('a = '+Math.abs(r.aS).toFixed(3)+' m/s²',anch,e,'#6ee7b7');
+        /* Park a just above the block (along the outward normal) so it
+           doesn't stack on F_net / the square — keep the lift modest. */
+        const aV=pv(fr.sd,r.aS*PXA);
+        const nScr=pv(fr.n,1), nL=Math.hypot(nScr.x,nScr.y)||1;
+        const lift=32;
+        const anch={x:px.x+nScr.x/nL*lift, y:px.y+nScr.y/nL*lift};
+        ctx.save();if(!asGhost){ctx.shadowColor='#34d399';ctx.shadowBlur=5;}
+        const e=arrow(anch.x,anch.y,aV.x,aV.y,'#34d399',asGhost?1.8:2.8,asGhost?[5,4]:null);ctx.restore();
+        if(e&&!asGhost)labelAt('a = '+Math.abs(r.aS).toFixed(3)+' m/s²',anch,e,'#6ee7b7',{bold:true,off:12});
       }
       if(!asGhost&&Math.abs(state.inc.N.v)>0.05){
         let vV=pv(fr.sd,state.inc.N.v*PXV); const L2=Math.hypot(vV.x,vV.y); let clip=false;
@@ -1394,13 +1440,35 @@ function drawIncline(){
         if(e)labelAt('v = '+Math.abs(state.inc.N.v).toFixed(1)+' m/s',px,e,'#67e8f9');
       }
     }
+    /* Components last so dashed arrows aren’t buried under F_net (same direction as mg·sinθ). */
+    if(!asGhost&&showComp&&fr.thL>0.06){
+      const aV=pv(fr.sd,r.mgS*k);
+      const pVc=pv({x:-fr.n.x,y:-fr.n.y},r.mgN*k);
+      const tipMg={x:px.x,y:px.y+mg*k};
+      const tipSin={x:px.x+aV.x,y:px.y+aV.y}, tipCos={x:px.x+pVc.x,y:px.y+pVc.y};
+      /* Nudge parallel component off F_net along the outward normal. */
+      const nScr=pv(fr.n,1), nL=Math.hypot(nScr.x,nScr.y)||1;
+      const ox=nScr.x/nL*10, oy=nScr.y/nL*10;
+      const eA=arrow(px.x+ox,px.y+oy,aV.x,aV.y,'#cbd5e1',2.2,[6,5]);
+      if(eA)labelAt('mg·sinθ = '+r.mgS.toFixed(2)+' N',{x:px.x+ox,y:px.y+oy},eA,'#e2e8f0');
+      const eP=arrow(px.x,px.y,pVc.x,pVc.y,'#94a3b8',2,[6,5]);
+      if(eP)labelAt('mg·cosθ = '+r.mgN.toFixed(2)+' N',px,eP,'#94a3b8');
+      ctx.save();ctx.strokeStyle='rgba(148,163,184,.45)';ctx.setLineDash([4,4]);ctx.lineWidth=1.2;
+      ctx.beginPath();
+      ctx.moveTo(tipSin.x,tipSin.y);ctx.lineTo(tipMg.x,tipMg.y);
+      ctx.moveTo(tipCos.x,tipCos.y);ctx.lineTo(tipMg.x,tipMg.y);
+      ctx.stroke();ctx.restore();
+    }
   }
   function appliedArrows(anchor){
     for(const f of state.inc.forces){
-      const d=pv(f,k), e=arrow(anchor.x,anchor.y,d.x,d.y,colorOf(f),3);
-      if(e){ctx.fillStyle='#0b0d12';ctx.strokeStyle=colorOf(f);ctx.lineWidth=2;
-        ctx.beginPath();ctx.arc(e.ex,e.ey,5,0,7);ctx.fill();ctx.stroke();
-        labelAt('F'+sub(f.id)+' = '+Math.hypot(f.x,f.y).toFixed(2)+' N',anchor,e,colorOf(f),{off:18});}
+      const d=pv(f,k), c=colorOf(f);
+      ctx.save();ctx.shadowColor=c;ctx.shadowBlur=7;
+      const e=arrow(anchor.x,anchor.y,d.x,d.y,c,2.8,null,1,1.4);
+      ctx.restore();
+      if(e){ctx.fillStyle='#0b0d12';ctx.strokeStyle=c;ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(e.ex,e.ey,5.5,0,7);ctx.fill();ctx.stroke();
+        labelAt('F'+sub(f.id)+' = '+Math.hypot(f.x,f.y).toFixed(2)+' N',anchor,e,c,{off:18,bold:true});}
     }
   }
 
@@ -1413,13 +1481,6 @@ function drawIncline(){
       /* [visuals] D8: shortened ghost label */
       label('⚠ biggest-F model',vPx.x,vPx.y-30,'#fbbf24',{align:'center',dir:{x:0,y:-1}});
       if(pen)naiveWarn(vPx);
-    }
-    if(tipTailEl.checked){
-      const list=[{x:0,y:-state.m*g,c:'#f87171'}];
-      if(r.N>0.02)list.push({x:fr.n.x*r.N,y:fr.n.y*r.N,c:'#60a5fa'});
-      if(state.friction&&Math.abs(r.f)>0.02)list.push({x:fr.sd.x*r.f,y:fr.sd.y*r.f,c:'#fb7185'});
-      for(const f of state.inc.forces)list.push({x:f.x,y:f.y,c:colorOf(f)});
-      drawChainList(nPx,list,k);
     }
     drawSquare(nPx,-fr.thL,'heroN');
     reserveRect(nPx.x,nPx.y,22,22);
@@ -1436,10 +1497,13 @@ function drawIncline(){
     reserveRect(vPx.x,vPx.y,22,22);
     label('m = '+state.m.toFixed(2)+' kg',vPx.x,vPx.y-30,'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
     const mg=state.m*g;
-    const eG=arrow(vPx.x,vPx.y,0,mg*k,'#f87171',3);
-    if(eG)labelAt('mg = '+mg.toFixed(2)+' N',vPx,eG,'#fca5a5');
-    if(!pen&&r.N>0.02){const nV=pv(fr.n,r.N*k);const eN=arrow(vPx.x,vPx.y,nV.x,nV.y,'#60a5fa',3);
-      if(eN)labelAt('N = '+r.N.toFixed(2)+' N',vPx,eN,'#93c5fd');}
+    ctx.save();ctx.shadowColor='#f87171';ctx.shadowBlur=5;
+    const eG=arrow(vPx.x,vPx.y,0,mg*k,'#f87171',2.8);ctx.restore();
+    if(eG)labelAt('mg',vPx,eG,'#fca5a5',{bold:true});
+    if(!pen&&r.N>0.02){const nV=pv(fr.n,r.N*k);
+      ctx.save();ctx.shadowColor='#60a5fa';ctx.shadowBlur=5;
+      const eN=arrow(vPx.x,vPx.y,nV.x,nV.y,'#60a5fa',2.8);ctx.restore();
+      if(eN)labelAt('N',vPx,eN,'#93c5fd',{bold:true});}
     appliedArrows(vPx);
     if(bf.mag>0.02){const d=pv({x:bf.x/state.m,y:bf.y/state.m},PXA);
       const e=arrow(vPx.x,vPx.y,d.x,d.y,'#fbbf24',3);
@@ -1453,18 +1517,38 @@ function drawIncline(){
 function draw(){
   view=fit(canvas,ctx);
   if(state.scene==='flat')drawFlat(); else drawIncline();
-  updateReadouts(); updateFormalLive();
+  updateLegend(); updateReadouts(); updateFormalLive();
 }
 
 /* ---------- controls ---------- */
 function syncLabels(){massVal.textContent=state.m.toFixed(2)+' kg';thetaVal.textContent=state.theta+'°';}
-massEl.addEventListener('input',()=>{state.m=parseFloat(massEl.value);syncLabels();if(!Shell.playing)draw();});
-thetaEl.addEventListener('input',()=>{state.theta=parseInt(thetaEl.value,10);syncLabels();replaceInc();setViewTag();if(!Shell.playing)draw();});
+function rePlaceBlock(){
+  if(state.scene==='flat') placeFlat(); else replaceInc();
+}
+/* Mid-run control change: zero kinematics and continue with the new params. */
+function restartMotionFromControls(){
+  rePlaceBlock();
+  if(Shell.playing){
+    Shell.setPlaying(true); // refresh clock so the next frame has a small dt
+    playBtn.classList.remove('primary');
+  }
+  draw();
+}
+massEl.addEventListener('input',()=>{
+  state.m=parseFloat(massEl.value);syncLabels();
+  if(Shell.playing) restartMotionFromControls();
+  else draw();
+});
+thetaEl.addEventListener('input',()=>{
+  state.theta=parseInt(thetaEl.value,10);syncLabels();setViewTag();
+  restartMotionFromControls();
+});
 frictionBtn.addEventListener('click',()=>{
   state.friction=!state.friction;
   frictionBtn.classList.toggle('active',state.friction);
-  frictionBtn.textContent='friction μ = 0.30: '+(state.friction?'ON':'off');
-  updateLegend();setViewTag();if(!Shell.playing)draw();
+  frictionBtn.textContent='μ = 0.30: '+(state.friction?'ON':'off');
+  updateLegend();setViewTag();
+  restartMotionFromControls();
 });
 function setScene(s){
   if(state.scene===s)return;
@@ -1472,9 +1556,11 @@ function setScene(s){
   document.getElementById('scene-flat').classList.toggle('active',s==='flat');
   document.getElementById('scene-inc').classList.toggle('active',s!=='flat');
   thetaWrap.style.display=s==='flat'?'none':'flex';
-  frictionBtn.style.display=s==='flat'?'none':'inline-flex';
-  if(s==='flat')placeFlat(); else replaceInc();
-  setViewTag();updateLegend();if(!Shell.playing)draw();
+  frictionWrap.style.display=s==='flat'?'none':'block';
+  showCompWrap.style.display=s==='flat'?'none':'inline-flex';
+  if(s==='flat'){ showCompEl.checked=false; showNetEl.checked=false; }
+  setViewTag();updateLegend();
+  restartMotionFromControls();
 }
 document.getElementById('scene-flat').addEventListener('click',()=>setScene('flat'));
 document.getElementById('scene-inc').addEventListener('click',()=>setScene('inc'));
@@ -1485,9 +1571,9 @@ function setMode(m){
   if(m==='naive') state.ghostExplored=true;
   document.getElementById('mode-newton').classList.toggle('active',m==='newton');
   document.getElementById('mode-naive').classList.toggle('active',m==='naive');
-  if(state.scene==='flat')placeFlat(); else replaceInc();
   toast(m==='naive'?'⚠ solid block now follows ONLY the biggest force':'✓ real physics: a = ΣF/m');
-  updateLegend();if(!Shell.playing)draw();
+  updateLegend();
+  restartMotionFromControls();
 }
 document.getElementById('mode-newton').addEventListener('click',()=>setMode('newton'));
 document.getElementById('mode-naive').addEventListener('click',()=>setMode('naive'));
@@ -1507,9 +1593,13 @@ document.getElementById('replaceBtn').addEventListener('click',()=>{
 });
 showNetEl.addEventListener('change',()=>{
   if(showNetEl.checked&&!state.revealed)reveal();
-  if(!Shell.playing)draw();
+  updateLegend();
+  draw();
 });
-tipTailEl.addEventListener('change',()=>{if(!Shell.playing)draw();});
+showCompEl.addEventListener('change',()=>{
+  updateLegend();
+  draw();
+});
 
 /* ---------- shell hooks ---------- */
 function onFrame(dt){
@@ -1534,13 +1624,13 @@ function onReset(){
   state.flat.forces=[mkF(5,0),mkF(0,4),mkF(-2,-1)];
   state.inc.forces=[];
   massEl.value='2'; thetaEl.value='30'; syncLabels();
-  showNetEl.checked=false; tipTailEl.checked=false;
+  showNetEl.checked=false; showCompEl.checked=false;
   document.getElementById('scene-flat').classList.add('active');
   document.getElementById('scene-inc').classList.remove('active');
   document.getElementById('mode-newton').classList.add('active');
   document.getElementById('mode-naive').classList.remove('active');
-  thetaWrap.style.display='none'; frictionBtn.style.display='none';
-  frictionBtn.classList.remove('active'); frictionBtn.textContent='friction μ = 0.30: off';
+  thetaWrap.style.display='none'; frictionWrap.style.display='none'; showCompWrap.style.display='none';
+  frictionBtn.classList.remove('active'); frictionBtn.textContent='μ = 0.30: off';
   banner.style.display=''; playBtn.classList.add('primary');
   roF.classList.remove('danger'); roA.classList.remove('danger');
   placeFlat(); replaceInc();
@@ -1590,15 +1680,16 @@ function applyInquiryScene(cfg){
   thetaEl.value = String(state.theta);
   syncLabels();
   showNetEl.checked = !!cfg.showNet;
-  tipTailEl.checked = !!cfg.tipTail;
+  showCompEl.checked = !!cfg.showComp;
   document.getElementById('scene-flat').classList.toggle('active', state.scene==='flat');
   document.getElementById('scene-inc').classList.toggle('active', state.scene!=='flat');
   document.getElementById('mode-newton').classList.toggle('active', state.mode==='newton');
   document.getElementById('mode-naive').classList.toggle('active', state.mode==='naive');
   thetaWrap.style.display = state.scene==='flat' ? 'none' : 'flex';
-  frictionBtn.style.display = state.scene==='flat' ? 'none' : 'inline-flex';
+  frictionWrap.style.display = state.scene==='flat' ? 'none' : 'block';
+  showCompWrap.style.display = state.scene==='flat' ? 'none' : 'inline-flex';
   frictionBtn.classList.toggle('active', state.friction);
-  frictionBtn.textContent = 'friction μ = 0.30: '+(state.friction?'ON':'off');
+  frictionBtn.textContent = 'μ = 0.30: '+(state.friction?'ON':'off');
   if(state.revealed){
     banner.style.display = 'none';
     playBtn.classList.remove('primary');
@@ -1618,17 +1709,17 @@ function onStep(i){
   if(i===0) applyInquiryScene({ scene:'flat', mode:'newton', m:2, revealed:false, showNet:false, playing:false });
   // 1 Predict — same setup, still paused
   else if(i===1) applyInquiryScene({ scene:'flat', mode:'newton', m:2, revealed:false, showNet:false, playing:false });
-  // 2 Observe — play with F_net & a revealed
-  else if(i===2) applyInquiryScene({ scene:'flat', mode:'newton', m:2, revealed:true, showNet:true, playing:true });
+  // 2 Observe — play; net force stays optional (off by default in flat)
+  else if(i===2) applyInquiryScene({ scene:'flat', mode:'newton', m:2, revealed:true, showNet:false, playing:true });
   // 3 Cancel demo — two smaller erase the 5 N
   else if(i===3) applyInquiryScene({
-    scene:'flat', mode:'newton', m:2, revealed:true, showNet:true, playing:false,
+    scene:'flat', mode:'newton', m:2, revealed:true, showNet:false, playing:false,
     forcesFlat:[[5,0],[-2.5,3],[-2.5,-3]]
   });
   // 4 Incline — a = g sinθ
   else if(i===4) applyInquiryScene({ scene:'inc', mode:'newton', m:2, theta:30, revealed:true, showNet:true, playing:true });
   // 5 Resolve — incline with F_net visible (invariant: a ∥ F_net)
-  else if(i===5) applyInquiryScene({ scene:'inc', mode:'newton', m:2, theta:30, revealed:true, showNet:true, tipTail:true, playing:true });
+  else if(i===5) applyInquiryScene({ scene:'inc', mode:'newton', m:2, theta:30, revealed:true, showNet:true, playing:true });
 }
 function onComplete(){
   draw();

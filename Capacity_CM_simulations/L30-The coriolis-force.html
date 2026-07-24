@@ -336,6 +336,20 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .inq-step p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--muted);}
 .inq-step .predict-eval{display:none;}
 .inq-step .predict-eval.show{display:block;}
+
+/* Stacked slider controls — long Earth Ω readout must not crush the label. */
+.ctrl-stack{display:flex;flex-direction:column;gap:8px;}
+.ctrl-stack .ctrl-box-label{white-space:nowrap;}
+.ctrl-readout{
+  display:block;width:100%;box-sizing:border-box;
+  font-family:var(--font-nums);font-variant-numeric:tabular-nums;
+  font-size:12px;font-weight:600;line-height:1.35;color:var(--accent);
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);
+  padding:6px 9px;border-radius:5px;
+  white-space:normal;overflow-wrap:anywhere;word-break:break-word;
+}
+.ctrl-readout .ro-main{display:block;}
+.ctrl-readout .ro-meta{display:block;margin-top:2px;font-size:11px;color:var(--ink-mid);font-weight:600;}
 </style>
 </head>
 <body>
@@ -481,12 +495,18 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">Ω rotation rate</span><span id="omega-val" class="shell-readout"></span></div>
-      <div class="ctrl-slider-row"><input id="omega" type="range" min="-2" max="2" step="0.05" value="1"></div>
+      <div class="ctrl-stack">
+        <span class="ctrl-box-label">Rotation rate</span>
+        <div id="omega-val" class="ctrl-readout" aria-live="polite"></div>
+        <div class="ctrl-slider-row"><input id="omega" type="range" min="-2" max="2" step="0.05" value="1" title="Rotation rate Ω (table: rad/s; Earth: multiples of Ω⊕)"></div>
+      </div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label"><span id="v-label">launch v</span></span><span id="v-val" class="shell-readout"></span></div>
-      <div class="ctrl-slider-row"><input id="vlaunch" type="range" min="0.5" max="3" step="0.1" value="2"></div>
+      <div class="ctrl-stack">
+        <span class="ctrl-box-label" id="v-label">Launch speed</span>
+        <div id="v-val" class="ctrl-readout" aria-live="polite"></div>
+        <div class="ctrl-slider-row"><input id="vlaunch" type="range" min="0.5" max="3" step="0.1" value="2" title="Launch / wind speed"></div>
+      </div>
     </div>
     <div class="ctrl-box">
       <button id="btn-launch" class="shell-btn primary" style="width:100%;justify-content:center;" title="Fire the ball from the table-mounted launcher (it co-rotates, so the muzzle carries the rim speed and aims straight at the target in the table frame)">🚀 Launch</button>
@@ -1167,13 +1187,19 @@ function dirGlyph(){ return S.Omega>1e-12?'↺ CCW':(S.Omega<-1e-12?'↻ CW':'·
 function readSliders(){
   S.omSlider=parseFloat($('omega').value); S.vLaunch=parseFloat($('vlaunch').value);
   S.Omega=(S.mode==='table')? S.omSlider : S.omSlider*OM_E;
-  /* [pedagogy C1] removed unused °/s from readout */
-  $('omega-val').textContent=(S.mode==='table')
-    ? '\u03A9 '+(S.Omega>=0?'+':'')+S.Omega.toFixed(2)+' rad/s '+dirGlyph()
-    : '\u03A9 '+(S.Omega/1e-5).toFixed(2)+'\u00D710\u207B\u2075 rad/s '+dirGlyph()+' ('+S.omSlider.toFixed(2)+' \u03A9\u2295)';
-  $('v-val').textContent=(S.mode==='table')
-    ? 'v '+S.vLaunch.toFixed(1)+' m/s (vs table)'
-    : 'v '+S.vLaunch.toFixed(0)+' m/s wind';
+  /* [pedagogy C1] stacked readout: main value + direction/meta on a second line */
+  const omEl=$('omega-val'), vEl=$('v-val');
+  if(S.mode==='table'){
+    omEl.innerHTML='<span class="ro-main">\u03A9 '+(S.Omega>=0?'+':'')+S.Omega.toFixed(2)+' rad/s</span>'
+      +'<span class="ro-meta">'+dirGlyph()+'</span>';
+    vEl.innerHTML='<span class="ro-main">v '+S.vLaunch.toFixed(1)+' m/s</span>'
+      +'<span class="ro-meta">relative to table</span>';
+  } else {
+    omEl.innerHTML='<span class="ro-main">\u03A9 '+(S.Omega/1e-5).toFixed(2)+'\u00D710\u207B\u2075 rad/s</span>'
+      +'<span class="ro-meta">'+dirGlyph()+' · '+S.omSlider.toFixed(2)+' \u03A9\u2295</span>';
+    vEl.innerHTML='<span class="ro-main">v '+S.vLaunch.toFixed(0)+' m/s</span>'
+      +'<span class="ro-meta">wind speed</span>';
+  }
   if(aimArrow) aimArrow.setLength(Math.max(0.12,Math.min(0.8,S.kVel*S.vLaunch)),0.09,0.05);
 }
 function setMode(m,force){
@@ -1186,12 +1212,12 @@ function setMode(m,force){
     S.Rphys=1; S.lapse=1; S.kCor=0.11; S.kVel=0.16;
     om.min=-2; om.max=2; om.step=0.05; om.value=1;
     vl.min=0.5; vl.max=3; vl.step=0.1; vl.value=2;
-    $('v-label').textContent='launch v';
+    $('v-label').textContent='Launch speed';
   } else {
     S.Rphys=1e6; S.lapse=3600; S.kCor=30; S.kVel=0.0032;
     om.min=-2; om.max=2; om.step=0.05; om.value=1;   // slider = multiples of Ω⊕ (1.00 = Earth)
     vl.min=20; vl.max=200; vl.step=5; vl.value=100;
-    $('v-label').textContent='wind v';
+    $('v-label').textContent='Wind speed';
     completeStep(5);
   }
   S.ws=TR/S.Rphys;
