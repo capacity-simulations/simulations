@@ -301,7 +301,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #curve-box{display:none;}
 #hero-wrap.show-curve #curve-box{display:block;}
 
-#hud{position:absolute;top:8px;right:8px;z-index:5;display:flex;flex-direction:column;
+#hud{position:absolute;top:10px;right:10px;z-index:5;display:flex;flex-direction:column;
   gap:6px;align-items:flex-end;pointer-events:none;}
 .hud-badge{background:rgba(10,15,22,.8);border:1px solid var(--border);border-radius:6px;
   padding:5px 9px;font-size:12px;color:var(--muted);backdrop-filter:blur(2px);white-space:nowrap;}
@@ -310,7 +310,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .hud-badge em{font-style:normal;color:var(--text-muted);font-size:11.5px;}
 .hud-badge.b-drag{border-color:rgba(245,158,11,.5);}
 .hud-badge.b-vac{border-color:rgba(34,211,238,.5);}
-.hud-badge.hud-lite{padding:3px 8px;font-size:12px;background:rgba(10,15,22,.66);}
+.hud-badge.hud-lite{padding:6px 10px;font-size:12px;background:rgba(8,10,15,.86);
+  border-color:rgba(148,163,184,.35);line-height:1.55;}
+#panel-readouts .readout-stack{display:flex;flex-direction:column;gap:8px;}
+#panel-readouts .hud-badge{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  width:100%;box-sizing:border-box;white-space:normal;pointer-events:auto;backdrop-filter:none;}
+#panel-readouts .hud-badge b{margin-left:0;}
 
 .c-drag{color:#fbbf24;}
 .c-vac{color:#67e8f9;}
@@ -402,8 +407,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="canvas-box" id="field-box">
     <canvas id="field"></canvas>
     <div id="hud">
-      <div class="hud-badge" id="hud-range"></div>
-      <div class="hud-badge" id="hud-best"></div>
       <div class="hud-badge hud-lite" id="hud-legend"></div>
     </div>
   </div>
@@ -492,6 +495,16 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     </div>
     <div class="ctrl-box">
       <button id="btn-curve" class="shell-btn" style="width:100%;justify-content:center;" title="Open the range-vs-angle plot with the computed ★ optimum">📈 Range vs angle</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell-panel" id="panel-readouts">
+  <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
+  <div class="shell-panel-body">
+    <div class="readout-stack">
+      <div class="hud-badge" id="hud-range"></div>
+      <div class="hud-badge" id="hud-best"></div>
     </div>
   </div>
 </div>
@@ -908,15 +921,15 @@ function recompute(reason){
 function updateHUD(){
   const isD = P.mode==='drag';
   hudRange.className = 'hud-badge ' + (isD ? 'b-drag' : 'b-vac');
-  hudRange.innerHTML = `Range <em>(${isD?'with drag':'vacuum'})</em><b>${actF.R.toFixed(2)} m</b>`;
-  hudBest.innerHTML  = `Best so far<b>${best.R.toFixed(2)} m</b> <em>@ ${best.deg}°</em>`;
+  hudRange.innerHTML = `<span>Range <em>(${isD?'with drag':'vacuum'})</em></span><b>${actF.R.toFixed(2)} m</b>`;
+  hudBest.innerHTML  = `<span>Best so far</span><b>${best.R.toFixed(2)} m <em>@ ${best.deg}°</em></b>`;
   let lg;
   if(!ghostOn){
-    lg = isD ? '<span class="c-drag">— with drag (k = 0 → vacuum)</span>'
+    lg = isD ? '<span class="c-drag">— with drag</span>'
              : '<span class="c-vac">— vacuum</span>';
   } else {
-    lg = isD ? '<span class="c-drag">— with drag</span>&ensp;<span class="c-vac">┄ vacuum ghost</span>'
-             : '<span class="c-vac">— vacuum</span>&ensp;<span class="c-drag">┄ with drag (real)</span>';
+    lg = isD ? '<span class="c-drag">— with drag</span><br><span class="c-vac">┄ vacuum ghost</span>'
+             : '<span class="c-vac">— vacuum</span><br><span class="c-drag">┄ with drag</span>';
   }
   hudLegend.innerHTML = lg;
 }
@@ -925,9 +938,7 @@ function updateHUD(){
 function drawField(){
   const r = fit(fieldC, fctx), w=r.w, h=r.h, ctx=fctx;
   if(w<40||h<40) return;
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0,'#0c1322'); grad.addColorStop(1,'#0a0f16');
-  ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+  const light = document.body.classList.contains('light-theme');
 
   const gy = h-30, x0 = 46;
   // STABLE scale: depends only on v0 (worst-case vacuum extent), never on θ, k, m.
@@ -937,22 +948,80 @@ function drawField(){
   if(!(s>0)) return;
   const X = xm => x0 + xm*s, Y = ym => gy - ym*s;
 
-  // ground + ruler
-  ctx.fillStyle='#101826'; ctx.fillRect(0,gy,w,h-gy);
-  ctx.strokeStyle='rgba(148,163,184,.5)';
-  ctx.beginPath(); ctx.moveTo(0,gy+0.5); ctx.lineTo(w,gy+0.5); ctx.stroke();
+  /* sky — migrated from L4 projectile scene */
+  const sky = ctx.createLinearGradient(0,0,0,gy);
+  if(light){ sky.addColorStop(0,'#79c1ee'); sky.addColorStop(.7,'#b6ddf6'); sky.addColorStop(1,'#ddeffb'); }
+  else     { sky.addColorStop(0,'#070c1a'); sky.addColorStop(.7,'#101a30'); sky.addColorStop(1,'#182338'); }
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,gy);
+
+  if(!light){
+    /* stars + moon (deterministic — no frame jitter) */
+    const frac=v=>v-Math.floor(v);
+    ctx.fillStyle='#e2e8f0';
+    for(let i=0;i<70;i++){
+      const sx=frac(Math.sin(i*12.9898)*43758.5453)*w;
+      const sy=frac(Math.sin(i*78.233)*12543.217)*gy*.8;
+      ctx.globalAlpha=.2+.5*frac(Math.sin(i*3.7)*911.13);
+      ctx.fillRect(sx,sy,1.4,1.4);
+    }
+    ctx.globalAlpha=1;
+    const mx=w*.30, my=h*.15;
+    const glow=ctx.createRadialGradient(mx,my,4,mx,my,34);
+    glow.addColorStop(0,'rgba(226,232,240,.3)'); glow.addColorStop(1,'rgba(226,232,240,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx,my,34,0,7); ctx.fill();
+    ctx.fillStyle='#d7dfeb'; ctx.beginPath(); ctx.arc(mx,my,11,0,7); ctx.fill();
+    ctx.fillStyle='rgba(148,163,184,.5)';
+    ctx.beginPath(); ctx.arc(mx-3,my-2,2.4,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx+4,my+3,1.7,0,7); ctx.fill();
+  }
+
+  /* clouds */
+  function cloud(cx,cy,sc,a){
+    ctx.fillStyle = light ? 'rgba(255,255,255,'+a+')' : 'rgba(203,213,235,'+(a*.12)+')';
+    ctx.beginPath();
+    ctx.ellipse(cx,cy,34*sc,12*sc,0,0,7);
+    ctx.ellipse(cx-22*sc,cy+4*sc,20*sc,9*sc,0,0,7);
+    ctx.ellipse(cx+24*sc,cy+5*sc,22*sc,9*sc,0,0,7);
+    ctx.ellipse(cx+4*sc,cy-8*sc,18*sc,10*sc,0,0,7);
+    ctx.fill();
+  }
+  cloud(w*.16, h*.14, 1.05, .85);
+  cloud(w*.46, h*.08, .8, .7);
+  cloud(w*.60, h*.30, .6, .5);
+  cloud(w*.85, h*.22, .9, .75);
+
+  /* distant hills on the horizon */
+  ctx.fillStyle = light ? 'rgba(126,168,104,.6)' : 'rgba(30,48,36,.85)';
+  ctx.beginPath(); ctx.moveTo(0,gy);
+  ctx.quadraticCurveTo(w*.18, gy-h*.09, w*.38, gy);
+  ctx.quadraticCurveTo(w*.56, gy-h*.13, w*.78, gy);
+  ctx.quadraticCurveTo(w*.90, gy-h*.07, w, gy);
+  ctx.closePath(); ctx.fill();
+
+  /* grass ground */
+  const grass = ctx.createLinearGradient(0,gy,0,h);
+  if(light){ grass.addColorStop(0,'#6aa84f'); grass.addColorStop(1,'#43772f'); }
+  else     { grass.addColorStop(0,'#22391b'); grass.addColorStop(1,'#152510'); }
+  ctx.fillStyle=grass; ctx.fillRect(0, gy, w, h-gy);
+  ctx.strokeStyle = light ? '#3c6b2b' : '#3d5c2c'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke();
+
+  /* distance ticks + labels (theme-aware) */
   const step = pickStep(s);
+  const gridCol = light ? 'rgba(30,41,59,.13)' : 'rgba(148,163,184,.14)';
+  const tickCol = light ? 'rgba(51,65,85,.55)' : 'rgba(148,163,184,.55)';
+  const labCol = light ? '#334155' : '#7d8aa0';
   ctx.font='12px Inter, system-ui, sans-serif'; ctx.textBaseline='top';
   for(let i=0;;i++){
     const xm=i*step, px=X(xm);
     if(px>w-6) break;
-    ctx.strokeStyle='rgba(148,163,184,.07)';
+    ctx.strokeStyle=gridCol;
     ctx.beginPath(); ctx.moveTo(px,14); ctx.lineTo(px,gy); ctx.stroke();
-    ctx.strokeStyle='rgba(148,163,184,.55)';
+    ctx.strokeStyle=tickCol;
     ctx.beginPath(); ctx.moveTo(px,gy); ctx.lineTo(px,gy+5); ctx.stroke();
-    if(px < w-92){ ctx.fillStyle='#7d8aa0'; ctx.textAlign='center'; ctx.fillText(fmtTick(xm), px, gy+9); }
+    if(px < w-92){ ctx.fillStyle=labCol; ctx.textAlign='center'; ctx.fillText(fmtTick(xm), px, gy+9); }
   }
-  ctx.fillStyle='#64748b'; ctx.textAlign='right'; ctx.fillText('distance (m)', w-8, gy+9);
+  ctx.fillStyle=light?'#475569':'#64748b'; ctx.textAlign='right'; ctx.fillText('distance (m)', w-8, gy+9);
 
   const isD = P.mode==='drag';
   const actCol = isD?COL.drag:COL.vac, ghoCol = isD?COL.vac:COL.drag;
@@ -1202,7 +1271,7 @@ function onReset(){
 }
 function onResize(){ drawAll(); }
 // Completed / skipped inquiry: open live with trajectories visible (nothing is gated).
-function onComplete(){ activated = true; drawAll(); }
+function onComplete(){ activated = true; setCurve(false); drawAll(); }
 
 /* ---------------- guided-inquiry scene driver ----------------
    Deterministic + self-contained: each call fully sets the state for card i so
@@ -1233,8 +1302,8 @@ function onStep(i){
   else if(i===2) applyInquiryScene({ mode:'drag', theta:45, k:0.30, curve:false, playing:true });
   // 3 Curve — open the plot near the computed optimum (~39° at defaults)
   else if(i===3) applyInquiryScene({ mode:'drag', theta:39, k:0.30, curve:true, playing:true });
-  // 4 Resolve — stronger drag, ★ clearly below 45°; student can snap k→0
-  else if(i===4) applyInquiryScene({ mode:'drag', theta:32, k:0.60, curve:true, playing:true });
+  // 4 Resolve — stronger drag, ★ clearly below 45°; curve stays closed until student opens it
+  else if(i===4) applyInquiryScene({ mode:'drag', theta:32, k:0.60, curve:false, playing:true });
 }
 
 /* ---------------- guided-inquiry prediction feedback ---------------- */

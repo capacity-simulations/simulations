@@ -351,7 +351,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <tbody>
     <tr><td class="pid">A1</td><td>One concept, one sentence</td><td>Everything serves one claim: x and y motions of a projectile are independent.</td></tr>
     <tr><td class="pid">A3/A4</td><td>Formal tools off by default</td><td>All equations sit behind the ∑ Formal toggle (off on load); the sim is fully playable pre-formalism.</td></tr>
-    <tr><td class="pid">C1/C2</td><td>Readout discipline</td><td>Two result badges only (t and R), each used by the predict/explore prompts; v components, T, H live in the collapsed Data panel; the speed selector is hidden.</td></tr>
+    <tr><td class="pid">C1/C2</td><td>Readout discipline</td><td>Two result badges only (t and R), each used by the predict/explore prompts; v components, T, H live in the collapsed Data panel. Speed sits beside Formal in the top bar like the other shell sims.</td></tr>
     <tr><td class="pid">D6/D7</td><td>Stepwise disclosure, never gating</td><td>Twin ball, 90°−θ comparison, range plot and ⚠ mode are additive reveals via always-enabled controls; nothing is locked behind steps or predictions.</td></tr>
     <tr><td class="pid">E1/J2/J5</td><td>Animation honesty</td><td>Exact closed-form kinematics (no integrator); repeat passes are fresh launches, never reversed; naive θ=0 "glide" clips with a → ∞ label; range-plot axes are fixed; the scene scale only grows automatically (Fit/Clear re-frame on demand).</td></tr>
     <tr><td class="pid">G4b</td><td>Explicit reveal control</td><td>The prediction's answer (the twin race) appears only when the student flips ⇅ Twin ball — one always-available click.</td></tr>
@@ -482,7 +482,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="btn-clear" class="shell-btn" title="Clear ghost trails">🧹 Clear</button>
       </div>
     </div>
-    <div class="ctrl-box">
+    <div class="ctrl-box" id="physics-model-box" style="display:none" aria-hidden="true">
       <div class="stat-row"><span class="stat-label">Physics model</span></div>
       <div style="display:flex;gap:6px;margin-top:4px;">
         <button id="mode-real" class="shell-btn mode-btn on-real" title="Real physics: a_y = −g for every ball, a_x = 0">✓ Independent</button>
@@ -913,7 +913,7 @@ function pushGhosts(){
     S.ghosts.push({ key, v0:b.v0, thDeg:b.thDeg, mode:b.mode, vx:b.vx, vy:b.vy, gEff:b.gEff,
                     T:b.T, R:b.R, H:b.H, ci:(ghostCI++) % GHOST_COLORS.light.length,
                     label: fmt(b.thDeg)+'° · '+fmt(b.v0)+' m/s' });
-    while(S.ghosts.length>6) S.ghosts.shift();
+    while(S.ghosts.length>4) S.ghosts.shift();
   });
   updateLegend();
 }
@@ -1160,9 +1160,11 @@ function drawScene(){
       const fx=X(b.id==='B'?0:b.R);
       ctx.fillStyle=b.color;
       ctx.beginPath(); ctx.moveTo(fx,gy); ctx.lineTo(fx-5,gy-9); ctx.lineTo(fx+5,gy-9); ctx.closePath(); ctx.fill();
-      const by=gy-22-SLOT[b.id]*30;
-      lab(b.id+'  '+b.T.toFixed(2)+' s', fx, by, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
-      if(b.id!=='B') lab(b.R.toFixed(2)+' m', fx, by+14, {align:'center', color: light?'#475569':'#94a3b8'});
+      /* stacked above the ball: id, time, then range — clear of each other and the sphere */
+      const by=gy-48-SLOT[b.id]*44;
+      lab(b.id, fx, by, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
+      lab(b.T.toFixed(2)+' s', fx, by+16, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
+      if(b.id!=='B') lab(b.R.toFixed(2)+' m', fx, by+32, {align:'center', color: light?'#475569':'#94a3b8'});
     }
     if(b.glide && b.everEnded){
       lab('⚠ never falls (this model) → ∞', X(b.stopX), gy-22, {align:'right', color: light?'#b45309':'#fbbf24', font:'bold 12px Inter,system-ui,sans-serif'});
@@ -1174,8 +1176,8 @@ function drawScene(){
   if(Ab && Mb && Ab.everLanded && Mb.everLanded && Math.abs(Ab.R-Mb.R)<0.05){
     const fx=X(Ab.R);
     ctx.strokeStyle = light ? 'rgba(4,120,87,.4)' : 'rgba(110,231,183,.35)'; ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(fx,gy); ctx.lineTo(fx,gy-118); ctx.stroke(); ctx.setLineDash([]);
-    lab('equal range — both '+Ab.R.toFixed(2)+' m', fx, gy-124,
+    ctx.beginPath(); ctx.moveTo(fx,gy); ctx.lineTo(fx,gy-152); ctx.stroke(); ctx.setLineDash([]);
+    lab('equal range — both '+Ab.R.toFixed(2)+' m', fx, gy-158,
         {align:'center', color: light?'#047857':'#6ee7b7', font:'bold 12px Inter,system-ui,sans-serif'});
   }
 
@@ -1235,12 +1237,23 @@ function drawScene(){
     ctx.setLineDash([]);
     arrow(ctx, ox, oy, tx, ty, light?'rgba(30,41,59,.92)':'rgba(226,232,240,.92)', 2);                   /* v0 */
     if(P.theta>2){
+      /* arc + angle label seated in the open wedge (near ground), clear of the v₀ arrow */
+      const arcR=22;
       ctx.strokeStyle = light ? 'rgba(51,65,85,.55)' : 'rgba(148,163,184,.5)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.arc(ox,oy,20,-th,0); ctx.stroke();
-      const bis=th/2;
-      lab(P.theta+'°', ox+Math.cos(bis)*34, oy-Math.sin(bis)*34+4, {align:'center', color: light?'#1e293b':'#e2e8f0'});
+      ctx.beginPath(); ctx.arc(ox,oy,arcR,-th,0); ctx.stroke();
+      const angA=th*0.28;                       /* bias toward the horizontal axis */
+      const angR=arcR+26;
+      lab(P.theta+'°', ox+Math.cos(angA)*angR, oy-Math.sin(angA)*angR+3,
+          {align:'center', color: light?'#1e293b':'#e2e8f0', font:'bold 12px Inter,system-ui,sans-serif'});
     }
-    lab('v₀', tx+7, ty, {color: light?'#1e293b':'#e2e8f0'});
+    /* v₀ past the tip, nudged above the trajectory (outside the angle wedge) */
+    {
+      const along=14, out=11;
+      const vx=Math.cos(th), vy=-Math.sin(th);
+      const nx=-Math.sin(th), ny=-Math.cos(th);  /* sky-side normal */
+      lab('v₀', tx+vx*along+nx*out, ty+vy*along+ny*out,
+          {align:'center', color: light?'#1e293b':'#e2e8f0', font:'bold 13px Inter,system-ui,sans-serif'});
+    }
   })();
 
   /* balls (draw B, M, then A on top) + A's velocity arrows + letter labels */
@@ -1266,8 +1279,10 @@ function drawScene(){
         if(Math.abs(vyNow)>0.5) arrow(ctx,bx,by,bx,by-vyNow*k,'rgba(96,165,250,.95)',2);
       }
     }
-    /* D3: letter label above each ball */
-    lab(id, bx, by - (id==='B' ? 15 : 13), {align:'center', color:b.color, font:'bold 11px Inter,system-ui,sans-serif'});
+    /* D3: letter label above each ball — omit on ground so landing-flag stack owns the name */
+    if(!(b.everLanded && p.y < 0.05)){
+      lab(id, bx, by - (id==='B' ? 15 : 13), {align:'center', color:b.color, font:'bold 11px Inter,system-ui,sans-serif'});
+    }
   });
 }
 
@@ -1374,23 +1389,20 @@ function updateLegend(){
 }
 function applyBanner(){
   const el=$('mode-banner');
-  if(!S.firstLaunched){ el.style.display='none'; return; }
+  /* Always show Independent status — Coupled UI is hidden; mode stays real. */
   el.style.display='';
-  if(P.mode==='real'){
-    el.className='hero-chip ok';
-    el.textContent='✓ Independent — aₓ = 0, aᵧ = −g';
-  } else {
-    el.className='hero-chip warn';
-    el.textContent='⚠ Coupled — aᵧ = −g sin θ';
-  }
+  el.className='hero-chip ok';
+  el.textContent='✓ Independent — aₓ = 0, aᵧ = −g';
 }
 function setMode(m){
-  if(P.mode===m) return;
+  /* Physics-model section is hidden; keep the sim locked to Independent. */
+  m = 'real';
+  if(P.mode===m){ applyBanner(); return; }
   P.mode=m;
-  $('mode-real').classList.toggle('on-real', m==='real');
-  $('mode-naive').classList.toggle('on-naive', m==='naive');
+  $('mode-real').classList.toggle('on-real', true);
+  $('mode-naive').classList.toggle('on-naive', false);
   applyBanner();
-  $('data-wrap').classList.toggle('show-naive', m==='naive');
+  $('data-wrap').classList.remove('show-naive');
   updateData(); drawPlot(); commit();
 }
 function toggleTwin(){
@@ -1429,11 +1441,6 @@ function onReset(){
 
 /* ---------- wiring ---------- */
 function init(){
-  /* speed selector is an implementation detail — hidden per readout discipline */
-  const sp=$('shell-speed');
-  if(sp){ sp.style.display='none';
-    const l=sp.previousElementSibling; if(l && l.tagName==='LABEL') l.style.display='none'; }
-
   $('v0').addEventListener('input', e=>{
     P.v0=parseFloat(e.target.value);
     $('v0-val').textContent=P.v0.toFixed(1)+' m/s';
@@ -1478,7 +1485,7 @@ function onComplete(){ drawScene(); drawPlot(); }
 function applyInquiryScene(cfg){
   P.v0 = cfg.v0 != null ? cfg.v0 : 25;
   P.theta = cfg.theta != null ? cfg.theta : 40;
-  P.mode = cfg.mode || 'real';
+  P.mode = 'real';   /* Physics-model UI hidden — always Independent */
   P.twin = !!cfg.twin;
   P.mirror = !!cfg.mirror;
   $('v0').value = P.v0;
@@ -1489,11 +1496,10 @@ function applyInquiryScene(cfg){
   $('btn-mirror').classList.toggle('active', P.mirror);
   if(P.mirror){ hasUsedMirror=true; $('btn-mirror').classList.remove('ctl-muted'); }
   else if(!hasUsedMirror) $('btn-mirror').classList.add('ctl-muted');
-  $('mode-real').classList.toggle('on-real', P.mode==='real');
-  $('mode-naive').classList.toggle('on-naive', P.mode==='naive');
-  if(P.mode==='naive'){ hasUsedNaive=true; $('mode-naive').classList.remove('ctl-muted'); }
-  else if(!hasUsedNaive) $('mode-naive').classList.add('ctl-muted');
-  $('data-wrap').classList.toggle('show-naive', P.mode==='naive');
+  $('mode-real').classList.toggle('on-real', true);
+  $('mode-naive').classList.toggle('on-naive', false);
+  if(!hasUsedNaive) $('mode-naive').classList.add('ctl-muted');
+  $('data-wrap').classList.remove('show-naive');
   S.ghosts=[]; ghostCI=0; S.lastTwin=null; S.realRef=null;
   S.phase='idle'; S.balls=[]; S.t=0; S.holdT=0;
   S.firstLaunched=false;
