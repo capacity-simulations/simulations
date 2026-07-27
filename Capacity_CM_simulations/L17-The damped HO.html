@@ -341,7 +341,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
 #predict-eval{display:none;flex:1 1 100%;margin-top:8px;font-size:14px;line-height:1.5;border-left:3px solid var(--accent);padding:7px 9px;background:rgba(167,139,250,.07);border-radius:4px;color:var(--text);}
 
-#lamCanvas{width:100%;height:150px;max-height:150px;display:block;background:#0a0d13;border:1px solid var(--border);border-radius:6px;}
+#lamCanvas{width:100%;height:240px;max-height:240px;display:block;background:#0a0d13;border:1px solid var(--border);border-radius:6px;}
 
 .formal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;}
 .eq-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;}
@@ -371,6 +371,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <dt>Serves</dt><dd>Regime classification (underdamped / critical / overdamped); exact closed-form solutions in all three regimes; the non-monotonic settling-rate peak λ_max = ω₀ at α = ω₀.</dd>
   <dt>Inquiry</dt><dd>Before dragging, predict which reaches rest first — the critical mass or the most heavily damped — then run the race and watch the decay-rate readout climb to its peak at critical and drop past it.</dd>
   <dt>Misconception</dt><dd>"More damping always settles faster" — past critical the mass returns SLOWER; the fastest non-oscillatory return is at α = ω₀ exactly.</dd>
+  <dt>Decay-rate map</dt><dd>λ(α) = α − √(max(0, α² − ω₀²)) — the rate of the slowest surviving exponential. The white dot on the map tracks your slider’s α.</dd>
 </dl>
         <h3>Pedagogy principles applied</h3>
 <table class="shell-info-table">
@@ -479,7 +480,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <!-- 6 · RESOLVE -->
         <div class="inq-step">
           <h4>6 · λ peaks at α = ω₀</h4>
-          <p>Back on one mass at critical: λ = ω₀ is the summit of λ(α). Underdamped: more α kills ringing faster. Overdamped: more α makes the slow exponential crawl. Drag α across the tick and watch the λ meter climb, then fall.</p>
+          <p>Back on one mass, underdamped (α = 0.60): watch it ring while λ = α. Drag α across the green tick — λ climbs to ω₀ at critical, then falls as you go overdamped. Underdamped: more α kills ringing faster. Overdamped: more α makes the slow exponential crawl.</p>
         </div>
       </div>
       <div class="inq-nav">
@@ -532,7 +533,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="shell-panel-head"><h3>Decay-rate map λ(α)</h3><span class="shell-caret">▾</span></div>
   <div class="shell-panel-body">
     <canvas id="lamCanvas"></canvas>
-    <p style="margin:6px 0 0;color:var(--ink-mid);">λ(α) = α − √(max(0, α² − ω₀²)) — the rate of the slowest surviving exponential. The white dot is your slider's α.</p>
   </div>
 </div>
     </div>
@@ -786,7 +786,19 @@ const Shell = (function(){
 'use strict';
 
 /* ---------------- exact physics (matches the math kernel) ---------------- */
-const W0=3, X0=1, EPS=0.02, TW=8;   // ω0 [rad/s], x0 [m], rest band [m], chart window [s]
+const W0=3, X0=1, EPS=0.02, TW=8;   // ω0 [rad/s], x0 [m], rest band [m], default chart span [s]
+const SPAN_MIN=8, SPAN_MAX=20;         // zoom-in floor = default 0–8 s; zoom-out ceiling = 0–20 s
+const view={ t0:0, span:TW };         // always anchored at t = 0
+let chartGeom=null;                   // last chart pixel bounds (for wheel zoom)
+
+function resetView(){ view.t0=0; view.span=TW; }
+function niceTimeStep(span){
+  if(span<=10) return 1;
+  if(span<=25) return 2;
+  if(span<=50) return 5;
+  if(span<=100) return 10;
+  return 20;
+}
 
 function xOfT(a,t){
   if(t<=0) return X0;
@@ -848,6 +860,16 @@ const lamR=$('lambda-readout'), lamFill=$('lam-fill');
 const strip=$('race-strip'), stripMsg=$('strip-msg'), stripChoices=$('strip-choices');
 const evalBox=$('predict-eval');
 const btnSingle=$('mode-single'), btnRace=$('mode-race');
+
+/* Wheel zoom on the time axis — always 0 → span.
+   Scroll in → closer (down to 0–8 s). Scroll out → wider (up to 0–20 s). */
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const factor=e.deltaY<0?0.85:1.18;
+  view.t0=0;
+  view.span=Math.min(SPAN_MAX,Math.max(SPAN_MIN, view.span*factor));
+  draw();
+},{passive:false});
 
 /* ---------------- helpers ---------------- */
 function fit(canvas,ctx){
@@ -924,8 +946,14 @@ function draw(){
   const rigW=laneW*nL;
   const chartX0=rulerX+rigW+18, chartX1=w-12, chartW=chartX1-chartX0;
   if(chartW<80) return;
-  const tStart=Math.max(0,S.t-TW);
-  const tToPx=tt=>chartX0+((tt-tStart)/TW)*chartW;
+  /* Fixed origin + zoomable span — never slide the window with S.t (that dragged the
+     rest flag leftward). Zoom out to see a longer range; zoom in for detail. */
+  const tStart=view.t0, tSpan=view.span, tRight=tStart+tSpan;
+  const tToPx=tt=>chartX0+((tt-tStart)/tSpan)*chartW;
+  chartGeom={ chartX0, chartX1, chartW, tStart, tSpan };
+  const tDrawEnd=Math.min(S.t, tRight);
+  const tipInView=S.t>=tStart-1e-9 && S.t<=tRight+1e-9;
+  const tipPx=tipInView ? tToPx(S.t) : (S.t>tRight ? chartX1 : chartX0);
 
   /* rest band + gridlines + equilibrium */
   sctx.fillStyle='rgba(52,211,153,0.12)';
@@ -963,7 +991,7 @@ function draw(){
     const my=yOf(x);
     /* guide from mass to trace head (same y — the trace IS the mass height) */
     sctx.setLineDash([2,4]); sctx.strokeStyle=hexA(ln.color,0.25); sctx.lineWidth=1;
-    sctx.beginPath(); sctx.moveTo(cx+mw/2+4,my); sctx.lineTo(tToPx(S.t),my); sctx.stroke(); sctx.setLineDash([]);
+    sctx.beginPath(); sctx.moveTo(cx+mw/2+4,my); sctx.lineTo(tipPx,my); sctx.stroke(); sctx.setLineDash([]);
     drawSpring(sctx,cx,yCeil,my-mh/2,Math.min(14,laneW*0.16),'rgba(203,213,225,0.8)');
     sctx.fillStyle=ln.color;
     rr(sctx,cx-mw/2,my-mh/2,mw,mh,6); sctx.fill();
@@ -976,10 +1004,12 @@ function draw(){
     if(S.mode==='race') txt(ln.label,cx,plotBottom-6,{align:'center',col:ln.color,bold:true});
   });
 
-  /* chart frame + time grid (every 1 s; label = real seconds since release) */
+  /* chart frame + time grid (tick step grows when zoomed out) */
   sctx.strokeStyle='rgba(203,213,225,0.4)'; sctx.lineWidth=1;
   sctx.strokeRect(chartX0,plotTop,chartW,H);
-  for(let s0=Math.ceil(tStart); s0<=Math.floor(tStart+TW+1e-9); s0++){
+  const tStep=niceTimeStep(tSpan);
+  const tFirst=Math.ceil(tStart/tStep)*tStep;
+  for(let s0=tFirst; s0<=tRight+1e-9; s0+=tStep){
     const px=tToPx(s0); if(px<chartX0-1||px>chartX1+1) continue;
     sctx.strokeStyle='rgba(203,213,225,0.22)';
     sctx.beginPath(); sctx.moveTo(px,plotTop); sctx.lineTo(px,plotBottom); sctx.stroke();
@@ -989,11 +1019,12 @@ function draw(){
   /* traces (exact solutions), clipped to the chart */
   sctx.save(); sctx.beginPath(); sctx.rect(chartX0,plotTop,chartW,H); sctx.clip();
   const steps=Math.max(2,Math.floor(chartW/2));
+  const tLo=tStart, tHi=Math.max(tLo, tDrawEnd);
   if(S.alpha>W0+1e-9){                       /* ⚠ naive model, math done right: x = e^(−αt) */
     sctx.setLineDash([6,5]); sctx.strokeStyle='rgba(244,63,94,0.55)'; sctx.lineWidth=1.6;
     sctx.beginPath();
     for(let i=0;i<=steps;i++){
-      const tt=tStart+(S.t-tStart)*i/steps;
+      const tt=tLo+(tHi-tLo)*i/steps;
       const px=tToPx(tt), py=yOf(Math.exp(-S.alpha*tt));
       if(i) sctx.lineTo(px,py); else sctx.moveTo(px,py);
     }
@@ -1003,20 +1034,22 @@ function draw(){
     sctx.strokeStyle=ln.color; sctx.lineWidth=S.mode==='single'?2.2:2;
     sctx.beginPath();
     for(let i=0;i<=steps;i++){
-      const tt=tStart+(S.t-tStart)*i/steps;
+      const tt=tLo+(tHi-tLo)*i/steps;
       const px=tToPx(tt), py=yOf(xOfT(ln.a,tt));
       if(i) sctx.lineTo(px,py); else sctx.moveTo(px,py);
     }
     sctx.stroke();
-    sctx.fillStyle=ln.color;
-    sctx.beginPath(); sctx.arc(tToPx(S.t),yOf(xOfT(ln.a,S.t)),3.5,0,6.2832); sctx.fill();
+    if(tipInView){
+      sctx.fillStyle=ln.color;
+      sctx.beginPath(); sctx.arc(tToPx(S.t),yOf(xOfT(ln.a,S.t)),3.5,0,6.2832); sctx.fill();
+    }
   });
   sctx.restore();
 
-  /* settle-time flags (appear only when a lane actually reaches rest) */
+  /* settle-time flags — pinned in time; only drawn while inside the view */
   L.forEach((ln,i)=>{
     const st=settleTime(ln.a);
-    if(!isFinite(st)||S.t<st||st<tStart-0.001) return;
+    if(!isFinite(st)||S.t<st||st<tStart-0.001||st>tRight+0.001) return;
     const px=tToPx(st), fy=yOf(0)-14-15*i;
     sctx.strokeStyle=hexA(ln.color,0.9); sctx.lineWidth=1.5;
     sctx.beginPath(); sctx.moveTo(px,yOf(EPS)); sctx.lineTo(px,fy+4); sctx.stroke();
@@ -1027,6 +1060,19 @@ function draw(){
 
   /* band label */
   txt('±2 cm rest band',chartX1-6,yOf(EPS)-5,{align:'right',col:'rgba(52,211,153,0.8)'});
+
+  /* scroll / zoom hint — bottom-left of the chart */
+  {
+    const note='Scroll to zoom time  ·  in = 0–8 s  ·  out = up to 0–20 s';
+    sctx.font='600 11px Inter,-apple-system,sans-serif';
+    const nw=sctx.measureText(note).width;
+    const padX=8, padY=5, nh=18, nx=chartX0+8, ny=plotBottom-nh-6;
+    sctx.fillStyle='rgba(8,9,12,0.72)';
+    sctx.strokeStyle='rgba(203,213,225,0.45)'; sctx.lineWidth=1;
+    rr(sctx,nx,ny,nw+padX*2,nh,5); sctx.fill(); sctx.stroke();
+    sctx.fillStyle='#cbd5e1'; sctx.textAlign='left'; sctx.textBaseline='middle';
+    sctx.fillText(note, nx+padX, ny+nh/2);
+  }
 
   /* legend */
   let rows=null;
@@ -1225,7 +1271,7 @@ function setMode(m){
 
 slider.addEventListener('input',()=>{
   S.alpha=parseFloat(slider.value)||0;
-  S._lastMsg=null;
+  S.t=0; S._lastMsg=null;
 
   /* discovery tracking */
   revealReadouts();
@@ -1233,6 +1279,7 @@ slider.addEventListener('input',()=>{
 
   if(S.evaluated) evalBox.innerHTML=longEval(settleTime(3),settleTime(S.alpha));
   updateReadouts(); updateStrip(); renderChoices(); drawLam(); draw();
+  Shell.setPlaying(true);
 });
 $('go-critical').addEventListener('click',()=>{ slider.value='3'; slider.dispatchEvent(new Event('input')); });
 btnSingle.addEventListener('click',()=>setMode('single'));
@@ -1260,9 +1307,14 @@ function onFrame(dt){
 }
 function onReset(){
   S.t=0; S.evaluated=false; S._lastMsg=null;
-  S.alpha=(S.mode==='race')?6:0.6;
+  if(S.mode!=='race'){ S.mode='single'; S.alpha=0.6; }
+  else S.alpha=6;
+  resetView();
   slider.value=String(S.alpha);
+  btnSingle.classList.toggle('active', S.mode==='single');
+  btnRace.classList.toggle('active', S.mode==='race');
   updateReadouts(); renderChoices(); updateStrip(); drawLam(); draw();
+  Shell.setPlaying(true);
 }
 function onResize(){ draw(); drawLam(); }
 /* Completed state: unlock every progressively-revealed readout/control so the
@@ -1270,7 +1322,7 @@ function onResize(){ draw(); drawLam(); }
 function onComplete(){
   revealReadouts();
   revealCritical();
-  applyInquiryScene({ mode:'single', alpha:W0, playing:true, revealReadouts:true, revealCritical:true });
+  applyInquiryScene({ mode:'single', alpha:0.6, playing:true, revealReadouts:true, revealCritical:true });
 }
 
 /* ---------- guided-inquiry scene driver (deterministic; chrome only) ---------- */
@@ -1280,6 +1332,7 @@ function applyInquiryScene(cfg){
   S.t = 0;
   S.evaluated = false;
   S._lastMsg = null;
+  resetView();
   if(cfg.clearPredict) S.predicted = null;
   slider.value = String(S.alpha);
   btnSingle.classList.toggle('active', S.mode==='single');
@@ -1304,8 +1357,8 @@ function onStep(i){
   else if(i===3) applyInquiryScene({ mode:'race', alpha:6, playing:false, clearPredict:true, revealReadouts:true, revealCritical:true });
   // 4 Run the race
   else if(i===4) applyInquiryScene({ mode:'race', alpha:6, playing:true, revealReadouts:true, revealCritical:true });
-  // 5 Resolve — back at critical summit
-  else if(i===5) applyInquiryScene({ mode:'single', alpha:W0, playing:true, revealReadouts:true, revealCritical:true });
+  // 5 Resolve / lecture default — one mass underdamped, playing
+  else if(i===5) applyInquiryScene({ mode:'single', alpha:0.6, playing:true, revealReadouts:true, revealCritical:true });
 }
 
 /* ---------- guided-inquiry prediction feedback ---------- */

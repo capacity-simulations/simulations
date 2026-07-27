@@ -309,10 +309,21 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .badge{background:rgba(8,11,17,.82);border:1px solid var(--line);border-radius:8px;padding:6px 10px;max-width:270px;}
 #badge-lab{top:10px;left:10px;border-color:rgba(34,211,238,.5);color:#a5f3fc;}
 #badge-rot{top:10px;left:10px;border-color:rgba(245,158,11,.55);color:#fde68a;}
-#tr-stack{top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+#tr-stack{top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;max-width:min(280px,48%);}
 #badge-naive{border-color:rgba(244,63,94,.5);color:#fecdd3;display:none;}
-#badge-lapse{border-color:rgba(56,189,248,.5);color:#bae6fd;display:none;}
-#bl-stack{bottom:10px;left:10px;display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+#stage-legend{
+  display:flex;flex-direction:column;gap:5px;align-items:stretch;
+  background:rgba(6,9,14,.86);border:1px solid rgba(148,163,184,.4);border-radius:8px;
+  padding:8px 10px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  color:#e2e8f0;font-size:12px;line-height:1.4;width:max-content;max-width:100%;
+}
+#stage-legend .lg-title{
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;margin:0 0 1px;
+}
+#stage-legend .lg-row{display:flex;align-items:center;gap:7px;color:#e2e8f0;}
+#stage-legend .lg-row.dim{color:#94a3b8;font-size:11px;}
+#stage-legend .lg-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;}
+#bl-stack{display:none;} /* legends moved into #stage-legend (top-right) */
 .chip{background:rgba(8,11,17,.75);border:1px solid var(--line);border-radius:6px;padding:3px 8px;color:#94a3b8;font-size:12px;}
 #status{bottom:12px;left:50%;transform:translateX(-50%);background:rgba(8,11,17,.86);border:1px solid rgba(148,163,184,.25);border-radius:999px;padding:6px 14px;color:#e2e8f0;font-size:12.5px;white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis;}
 #hint{bottom:10px;right:10px;color:#64748b;background:rgba(8,11,17,.6);padding:3px 8px;border-radius:6px;}
@@ -425,13 +436,14 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="badge-rot" class="hud badge"></div>
     <div id="tr-stack" class="hud">
       <div id="badge-naive" class="badge">⚠ REAL-PUSH MODE</div>
-      <div id="badge-lapse" class="badge">⏱ ×3600 TIME-LAPSE</div>
+      <div id="stage-legend">
+        <div class="lg-title">Legend</div>
+        <div class="lg-row"><span class="lg-swatch" style="background:#22d3ee"></span>smoke = path seen from LAB</div>
+        <div class="lg-row"><span class="lg-swatch" style="background:#fbbf24"></span>chalk = path drawn ON the table</div>
+        <div class="lg-row dim" id="scalechip"></div>
+      </div>
     </div>
-    <div id="bl-stack" class="hud">
-      <div class="chip"><span style="color:#22d3ee">●</span> smoke = path seen from LAB &nbsp;<span style="color:#fbbf24">●</span> chalk = path drawn ON the table</div>
-      <div class="chip" id="scalechip"></div>
-    </div>
-    <div id="status" class="hud"></div>
+    <div id="bl-stack" class="hud" aria-hidden="true"></div>    <div id="status" class="hud"></div>
     <div id="hint" class="hud">🖱 drag to orbit · scroll to zoom</div>
     <div id="split-divider" class="hud"></div>
   </div>
@@ -984,7 +996,7 @@ function stepPhysics(h){
 }
 function doLaunch(){
   clearTrails();
-  S.phase='flying'; S.tFlight=0; S.hasLaunched=true; S.autoCycle=true;
+  S.phase='flying'; S.tFlight=0; S.hasLaunched=true; S.autoCycle=false;
   S.thetaLaunch=S.theta;
   const th=S.theta;
   const r0=rot2([-PL*S.Rphys,0],th);                 // muzzle position (lab coords)
@@ -1009,6 +1021,7 @@ function doLaunch(){
   ghostLine.geometry.dispose();
   ghostLine.geometry=new THREE.BufferGeometry().setFromPoints([p1,p2]);
   ghostLine.computeLineDistances();
+  Shell.setPlaying(true);
   repaint();
 }
 function finishRun(reason){
@@ -1151,7 +1164,7 @@ function updateHUD(){
   /* badge-lab: neutral until first launch, then reveal physics note */
   H.bl.style.display=(S.frame!=='rot')?'block':'none';
   H.bl.innerHTML = S.hasLaunched
-    ? '<b>🎥 LAB FRAME</b> (inertial) · no sideways force'
+    ? '<b>🎥 LAB FRAME</b> (inertial)<br>no sideways force'
     : '<b>🎥 LAB FRAME</b> (inertial)';
 
   H.br.style.display=(S.frame!=='lab')?'block':'none';
@@ -1164,7 +1177,6 @@ function updateHUD(){
   }
   H.br.innerHTML=rotTxt;
   H.bn.style.display=(S.model==='naive')?'block':'none';
-  H.lapse.style.display=(S.mode==='earth')?'block':'none';
   H.divider.style.display=(S.frame==='both')?'block':'none';
   H.scale.textContent=(S.mode==='earth')?'\u27F7 polar cap \u00D8 2,000 km':'\u27F7 turntable \u00D8 2.0 m';
   /* [visuals D8] terse status bar */
@@ -1222,8 +1234,7 @@ function setMode(m,force){
   }
   S.ws=TR/S.Rphys;
   readSliders();
-  clearTrails(); S.phase='armed'; S.tFlight=0; S.endReason='';
-  if(S.hasLaunched) doLaunch(); else repaint();
+  resetToArmed();
 }
 function setModel(m){
   if(S.model===m) return;
@@ -1231,7 +1242,7 @@ function setModel(m){
   $('model-actual').classList.toggle('active',m==='actual');
   $('model-naive').classList.toggle('active',m==='naive');
   if(m==='naive') completeStep(4);
-  if(S.hasLaunched) doLaunch(); else repaint();
+  resetToArmed();
 }
 function setFrame(f){
   if(f===S.frame) return;
@@ -1240,10 +1251,19 @@ function setFrame(f){
   S.frame=f;
   ['lab','rot','both'].forEach(k=>$('frame-'+k).classList.toggle('active',k===f));
   if(f==='rot'||f==='both') completeStep(2);
+  resetToArmed();
+}
+/* Any control change → back to armed, paused; user clicks 🚀 Launch to fire again. */
+function resetToArmed(){
+  clearTrails();
+  S.phase='armed'; S.tFlight=0; S.rearm=0; S.endReason='';
+  S.autoCycle=false;
+  if(ghostLine) ghostLine.visible=false;
+  Shell.setPlaying(false);
   repaint();
 }
 function wireUI(){
-  H.bl=$('badge-lab'); H.br=$('badge-rot'); H.bn=$('badge-naive'); H.lapse=$('badge-lapse');
+  H.bl=$('badge-lab'); H.br=$('badge-rot'); H.bn=$('badge-naive');
   H.status=$('status'); H.scale=$('scalechip'); H.divider=$('split-divider');
   L.launcher=mkLabel('lb-g'); L.target=mkLabel('lb-r'); L.ball=mkLabel('lb-w');
   L.wall=mkLabel('lb-c'); L.cor=mkLabel('lb-f'); L.vel=mkLabel('lb-g'); L.cf=mkLabel('lb-v');
@@ -1251,9 +1271,8 @@ function wireUI(){
   const sp=$('shell-speed');
   if(sp){ sp.style.display='none'; if(sp.previousElementSibling) sp.previousElementSibling.style.display='none'; }
 
-  $('omega').addEventListener('input',()=>{ readSliders(); if(!Shell.playing) repaint(); else updateHUD(); });
-  $('vlaunch').addEventListener('input',()=>{ readSliders(); if(!Shell.playing) repaint(); else updateHUD(); });
-  $('vlaunch').addEventListener('change',()=>{ if(S.hasLaunched&&S.phase!=='armed') doLaunch(); });
+  $('omega').addEventListener('input',()=>{ readSliders(); resetToArmed(); });
+  $('vlaunch').addEventListener('input',()=>{ readSliders(); resetToArmed(); });
   $('btn-launch').addEventListener('click',doLaunch);
   $('preset-table').addEventListener('click',()=>setMode('table'));
   $('preset-earth').addEventListener('click',()=>setMode('earth'));
@@ -1262,7 +1281,7 @@ function wireUI(){
   $('frame-lab').addEventListener('click',()=>setFrame('lab'));
   $('frame-rot').addEventListener('click',()=>setFrame('rot'));
   $('frame-both').addEventListener('click',()=>setFrame('both'));
-  $('cf-check').addEventListener('change',e=>{ S.cfShow=e.target.checked; repaint(); });
+  $('cf-check').addEventListener('change',e=>{ S.cfShow=e.target.checked; resetToArmed(); });
 
   // clamped orbit camera: drag to orbit, scroll to zoom
   let drag=null;
@@ -1364,15 +1383,17 @@ function applyInquiryScene(cfg){
   if(cfg.playing != null) Shell.setPlaying(!!cfg.playing);
 }
 function onComplete(){
-  applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'both', model:'actual', launch:true, advance:0.6, playing:true });
+  /* Lecture / finished inquiry: armed and waiting for 🚀 Launch */
+  applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'lab', model:'actual', launch:false, playing:false });
 }
 function onStep(i){
-  if(i===0) applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'lab',  model:'actual', launch:true, advance:0.6, playing:false });
+  if(i===0) applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'lab',  model:'actual', launch:false,            playing:false });
   else if(i===1) applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'lab',  model:'actual', launch:false,            playing:false });
   else if(i===2) applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'both', model:'actual', launch:true, advance:0.6, playing:false });
   else if(i===3) applyInquiryScene({ mode:'table', omega:-1, vLaunch:2, frame:'rot',  model:'actual', launch:true, advance:0.6, playing:false });
   else if(i===4) applyInquiryScene({ mode:'table', omega:1, vLaunch:2, frame:'both', model:'naive',  launch:true, advance:0.6, playing:false });
-  else if(i===5) applyInquiryScene({ mode:'earth', omega:1, vLaunch:100, frame:'rot', model:'actual', launch:true, advance:14400, playing:false });
+  /* 5 · Earth resolve / lecture default — armed, ready to launch */
+  else if(i===5) applyInquiryScene({ mode:'earth', omega:1, vLaunch:100, frame:'rot', model:'actual', launch:false, playing:false });
 }
 
 /* ---------- guided-inquiry prediction feedback ---------- */
