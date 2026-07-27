@@ -323,6 +323,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   border:1px solid var(--border);border-radius:6px;color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;cursor:pointer;
   transition:border-color .15s,background .15s;}
 .choice:hover{border-color:var(--accent-soft);}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;font-weight:600;}
+.chk input{accent-color:var(--accent);cursor:pointer;width:15px;height:15px;}
 
 .led-grid{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:5px 8px;
   font-family:var(--font-nums);font-size:12px;align-items:center;color:var(--text);}
@@ -411,7 +413,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <canvas id="cv-well"></canvas>
   <div class="preplay-hint" id="preplay-hint">▶&ensp;Press Play — both balls release from rest, same instant</div>
 </div>
-<div class="plot-box" style="flex:0 0 172px;">
+<div class="plot-box" id="plot-rec" style="flex:0 0 220px;">
   <canvas id="cv-rec"></canvas>
 </div>
   </main>
@@ -490,19 +492,19 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">spring constant k</span><span class="slider-val" id="val-k">20 N/m</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label">Spring constant k</span><span class="slider-val" id="val-k">20 N/m</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-k" min="5" max="40" step="1" value="20"></div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">mass m (both balls)</span><span class="slider-val" id="val-m">0.50 kg</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label">Mass m (both balls)</span><span class="slider-val" id="val-m">0.50 kg</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-m" min="0.2" max="2" step="0.05" value="0.5"></div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label b1">amplitude A₁ (ball 1)</span><span class="slider-val" id="val-a1">0.30 m</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label b1">Amplitude A₁ (ball 1)</span><span class="slider-val" id="val-a1">0.30 m</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-a1" min="0.15" max="0.7" step="0.05" value="0.3"></div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label b2">amplitude A₂ (ball 2)</span><span class="slider-val" id="val-a2">0.60 m</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label b2">Amplitude A₂ (ball 2)</span><span class="slider-val" id="val-a2">0.60 m</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-a2" min="0.15" max="0.7" step="0.05" value="0.6"></div>
     </div>
     <div class="ctrl-box">
@@ -510,6 +512,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <span class="shell-readout ro-b1" id="ro-t1">T₁ = — s</span>
         <span class="shell-readout ro-b2" id="ro-t2">T₂ = — s</span>
       </div>
+    </div>
+    <div class="ctrl-box">
+      <label class="chk"><input type="checkbox" id="show-rec" checked> Show x(t) chart</label>
     </div>
   </div>
 </div>
@@ -522,7 +527,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="b1" style="font-weight:700;">● 1</div><div id="ke1">—</div><div id="pe1">—</div><div id="e1">—</div>
       <div class="b2" style="font-weight:700;">● 2</div><div id="ke2">—</div><div id="pe2">—</div><div id="e2">—</div>
     </div>
-    <p id="led-note" style="margin:9px 0 0;"></p>
   </div>
 </div>
     </div>
@@ -825,24 +829,41 @@ function diamond(ctx,x,y,r,col){ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r
 function drawWell(s1,s2){
   const {w,h}=fit(cvW,cxW);
   cxW.clearRect(0,0,w,h);
-  const L=50, R=w-14, TOP=52, Y0=h-74, AX=h-36;
+  /* Single shared baseline: V = 0 and the ball track are the same horizontal line. */
+  const L=50, R=w-14, TOP=52, Y0=h-48, AX=Y0;
   if(R-L<60||Y0-TOP<36) return;
   const cx=(L+R)/2, sx=(R-L)/2/XVIEW;
   const px=x=>cx+x*sx, py=E=>Y0-(E/EMAX)*(Y0-TOP);
   const E1=Eof(P.A1), E2=Eof(P.A2);
   cxW.font='12px Inter,sans-serif';
 
-  /* energy axis + baseline */
-  cxW.strokeStyle='rgba(148,163,184,.3)'; cxW.lineWidth=1;
+  /* energy axis + shared baseline (also the ball track / x-axis) */
+  cxW.strokeStyle='rgba(203,213,225,.85)'; cxW.lineWidth=1.6;
   cxW.beginPath(); cxW.moveTo(L,TOP-8); cxW.lineTo(L,Y0); cxW.lineTo(R,Y0); cxW.stroke();
-  cxW.fillStyle=MUTE; cxW.textAlign='right';
+  cxW.fillStyle='#cbd5e1'; cxW.textAlign='right';
+  cxW.strokeStyle='rgba(203,213,225,.7)'; cxW.lineWidth=1.2;
   for(const e of[0,2,4,6,8,10]){
     const y=py(e);
-    cxW.beginPath(); cxW.moveTo(L-4,y); cxW.lineTo(L,y); cxW.stroke();
+    cxW.beginPath(); cxW.moveTo(L-5,y); cxW.lineTo(L,y); cxW.stroke();
     cxW.fillText(e===10?'10 J':String(e), L-7, y+4);
   }
+
+  /* background grid — energy (horizontal) × position (vertical) */
+  cxW.save();
+  cxW.beginPath(); cxW.rect(L+1,TOP-8,R-L-1,Y0-TOP+9); cxW.clip();
+  cxW.strokeStyle='rgba(148,163,184,.28)'; cxW.lineWidth=1;
+  for(const e of[0,2,4,6,8,10]){
+    const y=py(e);
+    cxW.beginPath(); cxW.moveTo(L,y); cxW.lineTo(R,y); cxW.stroke();
+  }
+  for(const xv of[-0.7,-0.6,-0.3,0,0.3,0.6,0.7]){
+    const X=px(xv);
+    cxW.beginPath(); cxW.moveTo(X,TOP-8); cxW.lineTo(X,Y0); cxW.stroke();
+  }
+  cxW.restore();
+
   /* equilibrium guide */
-  cxW.setLineDash([2,4]); cxW.strokeStyle='rgba(148,163,184,.15)';
+  cxW.setLineDash([2,4]); cxW.strokeStyle='rgba(203,213,225,.4)';
   cxW.beginPath(); cxW.moveTo(cx,TOP); cxW.lineTo(cx,AX); cxW.stroke(); cxW.setLineDash([]);
 
   /* clipped plot region: curves + E-lines */
@@ -905,20 +926,15 @@ function drawWell(s1,s2){
       }
       cxW.beginPath(); cxW.arc(X,py(Vof(st.x)),4.5,0,TAU);
       cxW.fillStyle=col; cxW.fill(); cxW.lineWidth=1.5; cxW.strokeStyle=BG; cxW.stroke();
-      cxW.setLineDash([3,3]); cxW.strokeStyle=col; cxW.globalAlpha=.35; cxW.lineWidth=1;
-      cxW.beginPath(); cxW.moveTo(X,Y0+1); cxW.lineTo(X,AX-r-2); cxW.stroke();
-      cxW.setLineDash([]); cxW.globalAlpha=1;
     }
   }
 
-  /* position axis: the particle's real 1-D world */
-  cxW.strokeStyle='rgba(148,163,184,.45)'; cxW.lineWidth=1.2;
-  cxW.beginPath(); cxW.moveTo(L,AX); cxW.lineTo(R,AX); cxW.stroke();
-  cxW.fillStyle=MUTE; cxW.textAlign='center'; cxW.font='12px Inter,sans-serif';
+  /* position ticks / labels on the shared baseline */
+  cxW.fillStyle='#cbd5e1'; cxW.textAlign='center'; cxW.font='12px Inter,sans-serif';
   for(const xv of[-0.7,-0.6,-0.3,0,0.3,0.6,0.7]){
     const X=px(xv);
-    cxW.strokeStyle='rgba(148,163,184,.45)';
-    cxW.beginPath(); cxW.moveTo(X,AX); cxW.lineTo(X,AX+4); cxW.stroke();
+    cxW.strokeStyle='rgba(203,213,225,.75)';
+    cxW.beginPath(); cxW.moveTo(X,AX); cxW.lineTo(X,AX+5); cxW.stroke();
     const lab=xv===0.7?'0.7 m':(xv===0?'0':(xv<0?'−':'')+Math.abs(xv).toFixed(1));
     cxW.fillText(lab,X,AX+18);
   }
@@ -956,40 +972,67 @@ function drawWell(s1,s2){
     cxW.fillText(label,X,AX-r-5);
   }
 
-  /* KE⇄PE capsules — only after first play */
+  /* KE ⇄ PE — whole-system energy bars (KE and PE summed over both balls) */
   if(hasPlayed){
-    const bx=L+8, by=10, bw=190, bh=52;
+    // Combined energies: PE = V(x) per ball; KE = E − PE per ball; sum both balls.
+    const PEtot = Vof(s1.x) + Vof(s2.x);
+    const Etot  = Eof(P.A1) + Eof(P.A2);           // total system energy — constant
+    const KEtot = Math.max(0, Etot - PEtot);
+    const denom = Etot > 0 ? Etot : 1;             // both bars scaled to fixed Etot
+
+    const KE_COL='#5eead4', KE_TRK='rgba(94,234,212,.18)';   // teal  — distinct from ball colours
+    const PE_COL='#c4b5fd', PE_TRK='rgba(196,181,252,.18)';  // violet
+
+    /* Uniform centered layout: equal padding around a fixed 3-column row. */
+    const padX=14, padY=12, rowGap=10;
+    const labW=26, barW=104, ch=10, valW=46, colGap=8;
+    const contentW=labW+colGap+barW+colGap+valW;
+    const contentH=ch*2+rowGap;
+    const bw=contentW+padX*2, bh=contentH+padY*2;
+    const bx=L+8, by=10;
+    const ox=bx+padX, oy=by+padY;
+
     cxW.fillStyle='rgba(13,16,23,.88)'; rr(cxW,bx,by,bw,bh,6); cxW.fill();
-    cxW.strokeStyle='rgba(148,163,184,.18)'; cxW.lineWidth=1; rr(cxW,bx,by,bw,bh,6); cxW.stroke();
-    cxW.fillStyle=INKM; cxW.textAlign='left'; cxW.font='12px Inter,sans-serif';
-    cxW.fillText('KE ⇄ PE — each total fixed',bx+8,by+14);
-    const caps=[[keFrac(s1,P.A1),C1,C1D,by+22,'E₁'],[keFrac(s2,P.A2),C2,C2D,by+36,'E₂']];
-    for(const [fr,col2,colD2,y,lab] of caps){
-      cxW.fillStyle=col2; cxW.fillText('●',bx+8,y+9);
-      const cxx=bx+22, cw=118, ch=9;
-      cxW.fillStyle=colD2; cxW.fillRect(cxx,y,cw,ch);
-      cxW.fillStyle=col2;  cxW.fillRect(cxx,y,cw*fr,ch);
-      cxW.strokeStyle='rgba(226,232,240,.35)'; cxW.strokeRect(cxx+.5,y+.5,cw-1,ch-1);
-      cxW.fillStyle=col2; cxW.fillText(lab,cxx+cw+6,y+9);
-    }
+    cxW.strokeStyle='rgba(203,213,225,.55)'; cxW.lineWidth=1.4; rr(cxW,bx,by,bw,bh,6); cxW.stroke();
+
+    cxW.font='12px Inter,sans-serif';
+    const rows=[['KE',KEtot,KE_COL,KE_TRK],[ 'PE',PEtot,PE_COL,PE_TRK]];
+    rows.forEach(([lab,val,col,trk],i)=>{
+      const y=oy+i*(ch+rowGap);
+      const barX=ox+labW+colGap;
+      const valX=barX+barW+colGap+valW;
+      cxW.textAlign='left'; cxW.fillStyle=col; cxW.fillText(lab, ox, y+ch-1);
+      cxW.fillStyle=trk; cxW.fillRect(barX, y, barW, ch);
+      cxW.fillStyle=col; cxW.fillRect(barX, y, barW*Math.min(1, val/denom), ch);
+      cxW.strokeStyle='rgba(226,232,240,.35)'; cxW.strokeRect(barX+.5, y+.5, barW-1, ch-1);
+      cxW.textAlign='right'; cxW.fillStyle=INKM; cxW.fillText(val.toFixed(1)+' J', valX, y+ch-1);
+    });
   }
 
-  /* mode block, top-right (bounds-checked; drops detail lines on narrow canvases) */
+  /* Curve legend — parabolic spring well + dashed V-shaped constant-force well */
   cxW.font='12px Inter,sans-serif';
-  let lines=P.mode==='spring'
-    ? [[w<680?'✓ V(x) = ½kx²':'✓ spring well   V(x) = ½kx²','#6ee7b7'],['F = −kx — pull grows with x',INKM],['dashed: constant-force well (⚠)',MUTE]]
-    : [[w<680?'⚠ V(x) = F₀|x|':'⚠ constant-force well   V(x) = F₀|x|','#fcd34d'],['|F| = F₀ — pull capped',INKM],['dashed: spring well (✓)',MUTE]];
-  if(w<680) lines=[lines[0]];
-  /* suppress ghost-curve reference line when ghost not drawn yet */
-  if(!hasPlayed && lines.length>2) lines=lines.slice(0,2);
-  let mw=0; for(const l of lines) mw=Math.max(mw,cxW.measureText(l[0]).width);
+  const legendRows=[
+    {sw:'solid', col:CURVE, label:'Parabola  V = ½kx²  (spring)'},
+    {sw:'dash',  col:'rgba(203,213,225,.75)', label:'V-shape  V = F₀|x|  (const. F)'}
+  ];
+  let mw=0; for(const r of legendRows) mw=Math.max(mw, cxW.measureText(r.label).width);
+  const swW=22, padX=10, padY=10, rowH=18;
+  const lw=swW+8+mw+padX*2, lh=legendRows.length*rowH+padY*2;
   const bxR_=L+8, byR_=10;
-  let mx=R-8-(mw+16), my=10;
-  if(hasPlayed && mx<bxR_+198) my=byR_+60;
-  cxW.fillStyle='rgba(13,16,23,.88)'; rr(cxW,mx,my,mw+16,lines.length*16+8,6); cxW.fill();
-  cxW.strokeStyle='rgba(148,163,184,.18)'; rr(cxW,mx,my,mw+16,lines.length*16+8,6); cxW.stroke();
-  cxW.textAlign='left';
-  lines.forEach(([s,c],i)=>{cxW.fillStyle=c;cxW.fillText(s,mx+8,my+16+i*16);});
+  let mx=R-8-lw, my=10;
+  if(hasPlayed && mx<bxR_+230) my=byR_+60;
+  cxW.fillStyle='rgba(13,16,23,.88)'; rr(cxW,mx,my,lw,lh,6); cxW.fill();
+  cxW.strokeStyle='rgba(203,213,225,.55)'; cxW.lineWidth=1.4; rr(cxW,mx,my,lw,lh,6); cxW.stroke();
+  legendRows.forEach((r,i)=>{
+    const cy=my+padY+i*rowH+rowH/2;
+    const sx0=mx+padX, sx1=sx0+swW;
+    cxW.strokeStyle=r.col; cxW.lineWidth=2.2; cxW.lineCap='round';
+    if(r.sw==='dash') cxW.setLineDash([5,4]); else cxW.setLineDash([]);
+    cxW.beginPath(); cxW.moveTo(sx0,cy); cxW.lineTo(sx1,cy); cxW.stroke();
+    cxW.setLineDash([]); cxW.lineCap='butt';
+    cxW.fillStyle=r.col==='rgba(203,213,225,.75)'?'#cbd5e1':r.col;
+    cxW.textAlign='left'; cxW.fillText(r.label, sx1+8, cy+4);
+  });
 
   /* pre-play hint is now an HTML overlay — toggle it */
   const hintEl=$('preplay-hint');
@@ -1007,22 +1050,29 @@ function drawRec(){
   const mid=(T+B)/2, pyX=x=>mid-(x/XVIEW)*(B-T)/2;
   cxR.font='12px Inter,sans-serif';
 
-  cxR.strokeStyle='rgba(148,163,184,.3)'; cxR.lineWidth=1;
+  cxR.strokeStyle='rgba(203,213,225,.85)'; cxR.lineWidth=1.6;
   cxR.beginPath(); cxR.moveTo(L,T); cxR.lineTo(L,B); cxR.lineTo(R,B); cxR.stroke();
-  cxR.strokeStyle='rgba(148,163,184,.10)';
+
+  /* background grid — time (vertical, 1 s) × position (horizontal) */
+  cxR.strokeStyle='rgba(148,163,184,.28)'; cxR.lineWidth=1;
   for(let s=Math.ceil(tStart);s<=Math.floor(tEnd);s++){
     if(s<0) continue;
     const X=pxT(s);
     cxR.beginPath(); cxR.moveTo(X,T); cxR.lineTo(X,B); cxR.stroke();
   }
-  cxR.fillStyle=MUTE; cxR.textAlign='right';
   for(const v of[-0.6,-0.3,0,0.3,0.6]){
     const y=pyX(v);
-    cxR.strokeStyle='rgba(148,163,184,.3)';
-    cxR.beginPath(); cxR.moveTo(L-4,y); cxR.lineTo(L,y); cxR.stroke();
+    cxR.beginPath(); cxR.moveTo(L,y); cxR.lineTo(R,y); cxR.stroke();
+  }
+
+  cxR.fillStyle='#cbd5e1'; cxR.textAlign='right';
+  for(const v of[-0.6,-0.3,0,0.3,0.6]){
+    const y=pyX(v);
+    cxR.strokeStyle='rgba(203,213,225,.7)';
+    cxR.beginPath(); cxR.moveTo(L-5,y); cxR.lineTo(L,y); cxR.stroke();
     cxR.fillText(v===0.6?'0.6 m':(v===0?'0':(v<0?'−':'')+Math.abs(v).toFixed(1)),L-7,y+4);
   }
-  cxR.strokeStyle='rgba(148,163,184,.25)'; cxR.setLineDash([4,4]);
+  cxR.strokeStyle='rgba(203,213,225,.45)'; cxR.setLineDash([4,4]);
   cxR.beginPath(); cxR.moveTo(L,mid); cxR.lineTo(R,mid); cxR.stroke(); cxR.setLineDash([]);
   /* amplitude envelopes (current ±A₁, ±A₂) */
   for(const [A,col] of [[P.A1,C1],[P.A2,C2]]) for(const sgn of[-1,1]){
@@ -1067,7 +1117,7 @@ function drawRec(){
   }
   /* captions */
   const sp=Shell.speed;
-  cxR.fillStyle=MUTE; cxR.textAlign='left';
+  cxR.fillStyle='#94a3b8'; cxR.textAlign='left';
   cxR.fillText(w<560?'x(t) — last 6 s':`x(t) chart recorder — last 6 s · ${sp===1?'real time (1×)':sp+'× time'}`,L,h-8);
   cxR.textAlign='right'; cxR.fillText('grid: 1 s',R,h-8);
 }
@@ -1098,8 +1148,6 @@ function updateTexts(){
   $('val-m').textContent=P.m.toFixed(2)+' kg';
   $('val-a1').textContent=P.A1.toFixed(2)+' m';
   $('val-a2').textContent=P.A2.toFixed(2)+' m';
-  $('led-note').innerHTML=
-    `Turning points where V(x) = E ⇒ x = ±A: ball 1 reverses at ±${P.A1.toFixed(2)} m (E₁ = ${Eof(P.A1).toFixed(2)} J), ball 2 at ±${P.A2.toFixed(2)} m (E₂ = ${Eof(P.A2).toFixed(2)} J). At a turning point KE = 0 — the whole budget is potential. Amplitude sets the energy, not the clock.`;
   renderFormal();
 }
 let formalTimer=null;
@@ -1144,7 +1192,9 @@ function onFirstPlay(){
 /* ---------- render / frame / reset ---------- */
 function render(s1,s2){
   s1=s1||ballState(1); s2=s2||ballState(2);
-  drawWell(s1,s2); drawRec(); updateReadouts(); updateLedger(s1,s2); updatePhase();
+  drawWell(s1,s2);
+  if($('show-rec').checked) drawRec();
+  updateReadouts(); updateLedger(s1,s2); updatePhase();
 }
 function onFrame(dt){
   if(!hasPlayed){ hasPlayed=true; onFirstPlay(); }
@@ -1184,6 +1234,11 @@ for(const [id,key] of [['in-k','k'],['in-m','m'],['in-a1','A1'],['in-a2','A2']])
     updateTexts(); render();
   });
 }
+$('show-rec').addEventListener('change',()=>{
+  $('plot-rec').style.display=$('show-rec').checked?'':'none';
+  Shell.refit();
+  render();
+});
 
 /* ---------- guided-inquiry scene driver (deterministic; chrome only) ---------- */
 function applyInquiryScene(cfg){

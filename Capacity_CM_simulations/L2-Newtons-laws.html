@@ -151,7 +151,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .shell-panel-head h3{margin:0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
 .shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
 .shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
-.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel.collapsed .shell-panel-body{display:none !important;}
 .shell-panel-body{padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere;font-family:var(--font-sans);}
 
 /* Design-system control + stat components (use INSIDE panels for sliders/stats). */
@@ -400,8 +400,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
         <label style="font-size:11px;">Speed</label>
         <select id="shell-speed" class="shell-select">
-          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option>
         </select>
       </div>
       <div class="shell-sep"></div>
@@ -494,13 +494,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button class="shell-btn tab" data-scene="3">③ Pairs</button>
       </div>
     </div>
-    <div class="ctrl-box ctrl-box--model">
-      <span class="ctrl-box-label">Model</span>
-      <div class="shell-group">
-        <button class="shell-btn mode" id="mode-naive" title="The counterfactual model">⚠ Aristotle</button>
-        <button class="shell-btn mode on-ok" id="mode-newton" title="The real physics">✓ Newton</button>
-      </div>
-    </div>
     <div class="ctrl-box" id="grp-force">
       <label class="ctl" for="fRange"><b>F (applied)</b><span class="val" id="fVal">+0.0 N</span></label>
       <input id="fRange" type="range" class="shell-range" min="-10" max="10" step="0.5" value="0">
@@ -565,7 +558,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 const Shell = (function(){
   const root = document.getElementById('shell');
   let onFrame=()=>{}, onReset=()=>{}, onResize=()=>{}, onStep=()=>{}, onComplete=()=>{};
-  let playing=true, speed=1, last=performance.now(), started=false;
+  let playing=true, speed=0.5, last=performance.now(), started=false;
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
@@ -800,7 +793,6 @@ const DEFAULTS={1:{F:0,m:1},2:{F:4,m:1},3:{mA:4,mB:1}};
 /* ---------- state ---------- */
 let scene=1, mode='newton', S=null;
 const P={1:{...DEFAULTS[1]},2:{...DEFAULTS[2]},3:{...DEFAULTS[3]}};
-const modeEverToggled={1:false,2:false,3:false};
 const view={w:0,h:0};
 
 /* ---------- format helpers ---------- */
@@ -826,24 +818,9 @@ function makeS3(){
          com0:(P[3].mA*xA+P[3].mB*xB)/(P[3].mA+P[3].mB)};
 }
 
-const MODE_LABELS_FULL={
- naive:{1:'⚠ Aristotle: F sets v',2:'⚠ Aristotle: F sets v',3:'⚠ Heavier pushes harder'},
- newton:{1:'✓ Newton: F sets a',2:'✓ Newton: F sets a',3:'✓ Equal & opposite'}};
-
-function shouldShowFullLabels(){
-  return modeEverToggled[scene] || (S && S.played);
-}
 function syncModeBtns(){
-  const full=shouldShowFullLabels();
-  if(full){
-    $('mode-naive').textContent=MODE_LABELS_FULL.naive[scene];
-    $('mode-newton').textContent=MODE_LABELS_FULL.newton[scene];
-  }else{
-    $('mode-naive').textContent='⚠ Aristotle';
-    $('mode-newton').textContent='✓ Newton';
-  }
-  $('mode-naive').classList.toggle('on-warn',mode==='naive');
-  $('mode-newton').classList.toggle('on-ok',mode==='newton');
+  // The simulation is intentionally locked to the real physics model.
+  mode='newton';
 }
 function syncSliderLabels(){
   if(scene!==3){ $('fVal').textContent=fsgn(P[scene].F)+' N'; $('mVal').textContent=f1(P[scene].m)+' kg'; }
@@ -865,12 +842,20 @@ function armScene(n){
   S = n===3 ? makeS3() : makeS12(n);
   syncControls(); paint();
 }
+function restartScene12(){
+  if(scene===3) return;
+  // Rebuild the scene from its canonical opening state so slider changes restart
+  // the animation with the updated parameters and the original backdrop/logo.
+  S = makeS12(scene);
+  syncSliderLabels();
+  paint();
+}
 
 /* ---------- physics stepping ---------- */
 function step(dt){
   if(scene===3){ step3(dt); return; }
   const p=P[scene];
-  if(!S.played){ S.played=true; syncModeBtns(); }
+  if(!S.played){ S.played=true; }
   if(mode==='newton'){
     const a=newtonAccel(p.F,p.m);
     S.x += S.v*dt + 0.5*a*dt*dt;   // exact for constant force
@@ -884,7 +869,7 @@ function step(dt){
   // No strobe ghosts for the car (scenes ①–②) — outlines looked noisy.
 }
 function step3(dt){
-  if(!S.played){ S.played=true; syncModeBtns(); }
+  if(!S.played){ S.played=true; }
   let rem=dt;
   while(rem>1e-9){                 // segmented so contact impulses are exact
     const t=S.t; let seg=rem;
@@ -899,8 +884,17 @@ function step3(dt){
   const inC = S.t>=T_PRE && S.t<T_PRE+T_CT;
   const f = inC ? pairForces() : {FA:0,FB:0};
   S.FA=f.FA; S.FB=f.FB;
+  // Remove motion trails once the bodies start moving (contact begins at T_PRE).
+  if(S.t>=T_PRE){
+    S.ghosts.length=0;
+    S.gAcc=0;
+    return;
+  }
   S.gAcc+=dt;
-  if(S.gAcc>=0.4){ S.gAcc-=0.4; S.ghosts.push({xA:S.xA,xB:S.xB,t:S.t}); }
+  if(S.gAcc>=0.4){
+    S.gAcc-=0.4;
+    S.ghosts.push({xA:S.xA,xB:S.xB,t:S.t});
+  }
   S.ghosts=S.ghosts.filter(g=>S.t-g.t<5);
   if(S.ghosts.length>16) S.ghosts.shift();
 }
@@ -1047,12 +1041,31 @@ function chip(x,y,text,fg,bg,align){
   ctx.fillStyle=fg; ctx.fillText(text,cx+9,y+16);
 }
 function drawGround(groundY,camX,ppm,numberEvery,hideNearX,hideRadius){
-  // Simple contact line + ruler (scene ③ crates).
+  // Concrete lab floor + ruler (scene ③ crates).
   const grad=ctx.createLinearGradient(0,groundY,0,view.h);
-  grad.addColorStop(0,'#12283a'); grad.addColorStop(1,'#0a1520');
+  grad.addColorStop(0,'#1a2736');
+  grad.addColorStop(0.35,'#121c28');
+  grad.addColorStop(1,'#0a121a');
   ctx.fillStyle=grad; ctx.fillRect(0,groundY,view.w,view.h-groundY);
-  ctx.strokeStyle='#2b4a63'; ctx.lineWidth=2;
+
+  // Subtle floor panel seams
+  ctx.strokeStyle='rgba(71,85,105,0.25)';
+  ctx.lineWidth=1;
+  for(let i=1;i<5;i++){
+    const y=groundY + (view.h-groundY)*(i/5);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(view.w,y); ctx.stroke();
+  }
+  const seamStep=Math.max(80, view.w/8);
+  for(let x=seamStep; x<view.w; x+=seamStep){
+    ctx.beginPath(); ctx.moveTo(x,groundY); ctx.lineTo(x,view.h); ctx.stroke();
+  }
+
+  // Contact line (lab floor edge under crates)
+  ctx.strokeStyle='#64748b'; ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.moveTo(0,groundY+1); ctx.lineTo(view.w,groundY+1); ctx.stroke();
+  ctx.strokeStyle='rgba(226,232,240,0.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,groundY); ctx.lineTo(view.w,groundY); ctx.stroke();
+
   ctx.lineWidth=1;
   const wxStart=Math.floor(camX)-1, wxEnd=Math.ceil(camX+view.w/ppm)+1;
   for(let wx=wxStart;wx<=wxEnd;wx++){
@@ -1065,25 +1078,476 @@ function drawGround(groundY,camX,ppm,numberEvery,hideNearX,hideRadius){
   }
   return {roadH:0, scaleY:groundY};
 }
-/** Road deck UNDER the car: a clear 2D driving surface between wheels and the meter scale. */
+/** Static lab / warehouse backdrop for scene ③ (pairs). Camera is fixed, so no parallax needed. */
+function drawBackdropS3(groundY){
+  // Deep lab interior — cooler than the outdoor flyover, keeps crates readable.
+  const wall=ctx.createLinearGradient(0,0,0,groundY);
+  wall.addColorStop(0,'#0b121c');
+  wall.addColorStop(0.45,'#121c28');
+  wall.addColorStop(1,'#182433');
+  ctx.fillStyle=wall;
+  ctx.fillRect(0,0,view.w,groundY);
+
+  // Ceiling strip with soft overhead light wash.
+  const ceilH=Math.max(28, Math.min(48, groundY*0.12));
+  const ceil=ctx.createLinearGradient(0,0,0,ceilH);
+  ceil.addColorStop(0,'#1a2533');
+  ceil.addColorStop(1,'rgba(18,28,40,0)');
+  ctx.fillStyle=ceil;
+  ctx.fillRect(0,0,view.w,ceilH+20);
+
+  // Overhead panel lights.
+  const lampW=Math.max(70, view.w*0.12);
+  const lampGap=lampW*1.7;
+  for(let x=lampGap*0.35; x<view.w; x+=lampGap){
+    ctx.fillStyle='rgba(226,232,240,0.12)';
+    ctx.fillRect(x, 10, lampW, 8);
+    const glow=ctx.createRadialGradient(x+lampW/2, 18, 2, x+lampW/2, 40, 70);
+    glow.addColorStop(0,'rgba(226,232,240,0.14)');
+    glow.addColorStop(1,'rgba(226,232,240,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath(); ctx.ellipse(x+lampW/2, 48, lampW*0.7, 36, 0, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Back wall brick / panel rhythm.
+  ctx.strokeStyle='rgba(71,85,105,0.18)';
+  ctx.lineWidth=1;
+  const brickH=18, brickW=42;
+  for(let y=ceilH+8; y<groundY-8; y+=brickH){
+    const row=Math.floor((y-ceilH)/brickH);
+    const off=(row%2)* (brickW/2);
+    for(let x=-brickW+off; x<view.w+brickW; x+=brickW){
+      ctx.strokeRect(x, y, brickW-1, brickH-1);
+    }
+  }
+
+  // Tall lab windows — realistic night sky with stars visible through the glass.
+  const winW=Math.max(58, Math.min(84, view.w*0.10));
+  const winH=Math.max(100, Math.min(groundY*0.52, 180));
+  const winTop=ceilH+16;
+  const winGap=winW+40;
+  let winIdx=0;
+  for(let x=36; x+winW<view.w-20; x+=winGap){
+    // Deep wall recess / reveal around the window.
+    const revealD=5;
+    ctx.fillStyle='#0d1520';
+    ctx.fillRect(x-revealD-1, winTop-revealD-1, winW+revealD*2+2, winH+revealD*2+2);
+    ctx.fillStyle='#141e2c';
+    ctx.fillRect(x-revealD, winTop-revealD, winW+revealD*2, winH+revealD*2);
+
+    // Night sky gradient inside the glass.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, winTop, winW, winH);
+    ctx.clip();
+
+    const nightSky=ctx.createLinearGradient(x, winTop, x, winTop+winH);
+    nightSky.addColorStop(0,'#040810');
+    nightSky.addColorStop(0.4,'#08101c');
+    nightSky.addColorStop(0.75,'#0c1624');
+    nightSky.addColorStop(1,'#101c2c');
+    ctx.fillStyle=nightSky;
+    ctx.fillRect(x, winTop, winW, winH);
+
+    // Stars visible through each pane (deterministic per window).
+    ctx.fillStyle='rgba(226,232,240,0.7)';
+    for(let s=0; s<16; s++){
+      const sx=x + 4 + ((s*31 + winIdx*53 + 7) % (winW-8));
+      const sy=winTop + 4 + ((s*19 + winIdx*37 + 3) % (winH-8));
+      const sr=((s+winIdx)%5===0) ? 1.3 : 0.6;
+      ctx.globalAlpha=0.3 + ((s*11+winIdx*7)%5)/10;
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+
+    // Faint moon in one window.
+    if(winIdx===1){
+      const mx=x+winW*0.72, my=winTop+winH*0.18;
+      const moonGlow=ctx.createRadialGradient(mx, my, 2, mx, my, 18);
+      moonGlow.addColorStop(0,'rgba(226,232,240,0.35)');
+      moonGlow.addColorStop(0.5,'rgba(191,219,254,0.12)');
+      moonGlow.addColorStop(1,'rgba(191,219,254,0)');
+      ctx.fillStyle=moonGlow;
+      ctx.beginPath(); ctx.arc(mx, my, 18, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(226,232,240,0.65)';
+      ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Distant city skyline silhouette at the bottom of each window.
+    ctx.fillStyle='rgba(12,20,30,0.85)';
+    const cityBase=winTop+winH;
+    ctx.beginPath();
+    ctx.moveTo(x, cityBase);
+    for(let cx=x; cx<x+winW; cx+=6){
+      const ch=6 + ((cx*7+winIdx*13)%14);
+      ctx.lineTo(cx, cityBase-ch);
+    }
+    ctx.lineTo(x+winW, cityBase);
+    ctx.closePath();
+    ctx.fill();
+    // Tiny city window lights.
+    ctx.fillStyle='rgba(255,200,120,0.55)';
+    for(let i=0;i<8;i++){
+      const lx=x+5+((i*13+winIdx*7)%(winW-10));
+      const ly=cityBase-3-((i*9+winIdx*5)%10);
+      if(((i+winIdx)%3)<2) ctx.fillRect(lx, ly, 1.5, 1.5);
+    }
+
+    ctx.restore();
+
+    // Window frame — thick outer frame with inner sill.
+    ctx.strokeStyle='rgba(100,116,139,0.55)';
+    ctx.lineWidth=3;
+    ctx.strokeRect(x-1, winTop-1, winW+2, winH+2);
+    ctx.strokeStyle='rgba(148,163,184,0.35)';
+    ctx.lineWidth=1.5;
+    ctx.strokeRect(x, winTop, winW, winH);
+
+    // Mullions — vertical center + horizontal at golden ratio.
+    ctx.strokeStyle='rgba(148,163,184,0.4)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(x+winW/2, winTop); ctx.lineTo(x+winW/2, winTop+winH);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, winTop+winH*0.58); ctx.lineTo(x+winW, winTop+winH*0.58);
+    ctx.stroke();
+
+    // Bottom sill.
+    ctx.fillStyle='rgba(71,85,105,0.5)';
+    ctx.fillRect(x-4, winTop+winH, winW+8, 5);
+    ctx.fillStyle='rgba(30,41,59,0.6)';
+    ctx.fillRect(x-4, winTop+winH+5, winW+8, 3);
+
+    // Soft glass reflection highlight (upper-left pane).
+    ctx.fillStyle='rgba(148,163,184,0.05)';
+    ctx.fillRect(x+3, winTop+3, winW*0.3, winH*0.54);
+
+    // Faint moonlight spill onto the wall below the window.
+    if(winIdx===1){
+      const spill=ctx.createLinearGradient(x, winTop+winH, x, winTop+winH+40);
+      spill.addColorStop(0,'rgba(191,219,254,0.06)');
+      spill.addColorStop(1,'rgba(191,219,254,0)');
+      ctx.fillStyle=spill;
+      ctx.fillRect(x-6, winTop+winH+8, winW+12, 40);
+    }
+
+    winIdx++;
+  }
+
+  // Side shelving / equipment silhouettes so the room feels occupied.
+  ctx.fillStyle='rgba(15,23,42,0.85)';
+  // Left rack
+  ctx.fillRect(8, groundY-groundY*0.38, 36, groundY*0.38);
+  for(let s=0;s<4;s++){
+    ctx.fillStyle='rgba(51,65,85,0.55)';
+    ctx.fillRect(12, groundY-groundY*0.36+s*28, 28, 4);
+    ctx.fillStyle='rgba(94,234,212,0.12)';
+    ctx.fillRect(14, groundY-groundY*0.34+s*28, 10, 8);
+    ctx.fillStyle='rgba(251,191,36,0.1)';
+    ctx.fillRect(26, groundY-groundY*0.34+s*28, 10, 8);
+  }
+  // Right rack
+  ctx.fillStyle='rgba(15,23,42,0.85)';
+  ctx.fillRect(view.w-44, groundY-groundY*0.34, 36, groundY*0.34);
+  for(let s=0;s<3;s++){
+    ctx.fillStyle='rgba(51,65,85,0.55)';
+    ctx.fillRect(view.w-40, groundY-groundY*0.32+s*32, 28, 4);
+  }
+
+  // Floor contact shadow / soft vignette so crates sit on a surface.
+  const floorWash=ctx.createLinearGradient(0,groundY-60,0,groundY);
+  floorWash.addColorStop(0,'rgba(8,12,20,0)');
+  floorWash.addColorStop(1,'rgba(8,12,20,0.35)');
+  ctx.fillStyle=floorWash;
+  ctx.fillRect(0,groundY-60,view.w,60);
+}
+function drawBackdropS12(groundY,camX,ppm){
+  // Parallax: camera follows the car, so world layers scroll LEFT as the car moves RIGHT.
+  // Faster factors = more obvious “background going backward.”
+  const wrap=(v,p)=>((v%p)+p)%p;
+  const scrollStars=-camX*ppm*0.08;
+  const scrollFar  =-camX*ppm*0.32;
+  const scrollMid  =-camX*ppm*0.55;
+  const scrollNear =-camX*ppm*0.78;
+
+  // Night sky — clear cool blue-black, no haze overlays.
+  const sky=ctx.createLinearGradient(0,0,0,groundY);
+  sky.addColorStop(0,'#050a12');
+  sky.addColorStop(0.55,'#0a1420');
+  sky.addColorStop(1,'#0d1826');
+  ctx.fillStyle=sky;
+  ctx.fillRect(0,0,view.w,groundY);
+
+  // Stars drift slowly backward with the car (fill most of the sky).
+  ctx.fillStyle='rgba(226,232,240,0.55)';
+  for(let i=0;i<48;i++){
+    const base=((i*97+41)%200)/200*view.w;
+    const sx=wrap(base+scrollStars, view.w);
+    const sy=((i*53+17)%100)/100*(groundY*0.92);
+    const r=(i%5===0)?1.2:0.7;
+    ctx.globalAlpha=0.25+((i*13)%7)/14;
+    ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // Soft distant hills / haze ridge.
+  ctx.beginPath();
+  ctx.moveTo(-40,groundY);
+  for(let x=-40;x<=view.w+40;x+=28){
+    const h=14+8*Math.sin((x-scrollFar)*0.012)+5*Math.cos((x-scrollFar)*0.007);
+    ctx.lineTo(x, groundY-h);
+  }
+  ctx.lineTo(view.w+40,groundY);
+  ctx.closePath();
+  ctx.fillStyle='rgba(18,28,40,0.55)';
+  ctx.fill();
+
+  // Far skyline — muted towers with tiny window lights (loops seamlessly).
+  const farBuildings=[
+    {w:42,h:0.34},{w:28,h:0.22},{w:56,h:0.42},{w:34,h:0.28},{w:48,h:0.36},
+    {w:24,h:0.18},{w:62,h:0.48},{w:30,h:0.26},{w:44,h:0.32},{w:38,h:0.40}
+  ];
+  const farStep=58, farPeriod=farBuildings.length*farStep;
+  const farOrigin=-80+wrap(scrollFar, farPeriod)-farPeriod;
+  for(let x=farOrigin; x<view.w+farPeriod; x+=farStep){
+    const i=Math.floor((x-farOrigin)/farStep);
+    const b=farBuildings[i%farBuildings.length];
+    const bh=groundY*b.h*(0.85+0.15*((i*7)%3)/2);
+    const bx=x;
+    const by=groundY-bh;
+    const g=ctx.createLinearGradient(bx,by,bx,groundY);
+    g.addColorStop(0,'#1c2a3c');
+    g.addColorStop(1,'#101820');
+    ctx.fillStyle=g;
+    ctx.fillRect(bx,by,b.w,bh);
+    ctx.fillStyle='rgba(255,220,150,0.35)';
+    for(let wy=by+6; wy<groundY-8; wy+=7){
+      for(let wx=bx+4; wx<bx+b.w-4; wx+=6){
+        if(((wx+wy+i*3)%11)<4) ctx.fillRect(wx,wy,2,2.5);
+      }
+    }
+    if(i%4===0){
+      ctx.strokeStyle='rgba(148,163,184,0.35)';
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(bx+b.w*0.5,by); ctx.lineTo(bx+b.w*0.5,by-10); ctx.stroke();
+    }
+  }
+
+  // Mid-distance buildings — darker, stronger parallax so they rush past more clearly.
+  const midBuildings=[
+    {w:70,h:0.26},{w:46,h:0.18},{w:88,h:0.30},{w:54,h:0.22},{w:64,h:0.28},{w:40,h:0.16}
+  ];
+  const midStep=92, midPeriod=midBuildings.length*midStep;
+  const midOrigin=-100+wrap(scrollMid, midPeriod)-midPeriod;
+  for(let x=midOrigin; x<view.w+midPeriod; x+=midStep){
+    const i=Math.floor((x-midOrigin)/midStep);
+    const b=midBuildings[i%midBuildings.length];
+    const bh=groundY*b.h;
+    const bx=x;
+    const by=groundY-bh;
+    const g=ctx.createLinearGradient(bx,by,bx,groundY);
+    g.addColorStop(0,'#141e2a');
+    g.addColorStop(1,'#0a1018');
+    ctx.fillStyle=g;
+    ctx.fillRect(bx,by,b.w,bh);
+    ctx.fillStyle='rgba(255,200,120,0.45)';
+    for(let wy=by+8; wy<groundY-10; wy+=9){
+      for(let wx=bx+6; wx<bx+b.w-6; wx+=8){
+        if(((wx*3+wy+i)%13)<5) ctx.fillRect(wx,wy,3,3.5);
+      }
+    }
+    ctx.strokeStyle='rgba(100,120,140,0.25)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+b.w,by); ctx.stroke();
+  }
+
+  // Rooftop projection beam + bat-style sky signal.
+  const sigBaseX=view.w*0.68 + scrollMid*0.18;
+  const sigRoofY=groundY-groundY*0.28;
+  const sigSkyX=view.w*0.54 + scrollFar*0.08;
+  const sigSkyY=groundY*0.22;
+
+  // Projector housing on one roof.
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(sigBaseX-10, sigRoofY-8, 20, 8);
+  ctx.fillStyle='#334155';
+  ctx.fillRect(sigBaseX-7, sigRoofY-12, 14, 4);
+
+  // Light beam cone.
+  ctx.save();
+  const beam=ctx.createLinearGradient(sigBaseX, sigRoofY, sigSkyX, sigSkyY);
+  beam.addColorStop(0,'rgba(226,232,240,0.22)');
+  beam.addColorStop(0.35,'rgba(191,219,254,0.12)');
+  beam.addColorStop(1,'rgba(226,232,240,0.02)');
+  ctx.fillStyle=beam;
+  ctx.beginPath();
+  ctx.moveTo(sigBaseX-5, sigRoofY-10);
+  ctx.lineTo(sigBaseX+5, sigRoofY-10);
+  ctx.lineTo(sigSkyX+54, sigSkyY+18);
+  ctx.lineTo(sigSkyX-54, sigSkyY+18);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Signal glow cloud.
+  const signalGlow=ctx.createRadialGradient(sigSkyX, sigSkyY, 10, sigSkyX, sigSkyY, 72);
+  signalGlow.addColorStop(0,'rgba(226,232,240,0.22)');
+  signalGlow.addColorStop(0.45,'rgba(226,232,240,0.1)');
+  signalGlow.addColorStop(1,'rgba(226,232,240,0)');
+  ctx.fillStyle=signalGlow;
+  ctx.beginPath(); ctx.arc(sigSkyX, sigSkyY, 72, 0, Math.PI*2); ctx.fill();
+
+  // Simple bat silhouette inside the glow.
+  ctx.save();
+  ctx.translate(sigSkyX, sigSkyY);
+  ctx.fillStyle='rgba(8,15,28,0.9)';
+  ctx.beginPath();
+  ctx.moveTo(-30, 3);
+  ctx.quadraticCurveTo(-38, -10, -52, -4);
+  ctx.quadraticCurveTo(-46, -20, -30, -12);
+  ctx.quadraticCurveTo(-22, -26, -10, -14);
+  ctx.lineTo(-5, -22);
+  ctx.lineTo(0, -10);
+  ctx.lineTo(5, -22);
+  ctx.lineTo(10, -14);
+  ctx.quadraticCurveTo(22, -26, 30, -12);
+  ctx.quadraticCurveTo(46, -20, 52, -4);
+  ctx.quadraticCurveTo(38, -10, 30, 3);
+  ctx.quadraticCurveTo(18, 8, 10, 5);
+  ctx.quadraticCurveTo(6, 16, 0, 10);
+  ctx.quadraticCurveTo(-6, 16, -10, 5);
+  ctx.quadraticCurveTo(-18, 8, -30, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Ground-level roadway / park strip visible BELOW the elevated deck (parallax).
+  const streetY=groundY+Math.max(58, Math.min(86, Math.round(view.h*0.12)))+18;
+  const streetGrad=ctx.createLinearGradient(0,groundY,0,view.h);
+  streetGrad.addColorStop(0,'#0b121a');
+  streetGrad.addColorStop(0.45,'#0e1620');
+  streetGrad.addColorStop(1,'#070b10');
+  ctx.fillStyle=streetGrad;
+  ctx.fillRect(0,groundY,view.w,view.h-groundY);
+
+  // Dim ground road with dashed center line (parallax).
+  const groundRoadY=Math.min(view.h-8, streetY);
+  ctx.fillStyle='rgba(30,40,52,0.85)';
+  ctx.fillRect(0,groundRoadY-6,view.w,12);
+  ctx.strokeStyle='rgba(251,191,36,0.25)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([10,14]);
+  ctx.lineDashOffset=-wrap(scrollNear, 24);
+  ctx.beginPath(); ctx.moveTo(0,groundRoadY); ctx.lineTo(view.w,groundRoadY); ctx.stroke();
+  ctx.setLineDash([]); ctx.lineDashOffset=0;
+
+  // Streetlamps on the ground level.
+  const lampSp=190;
+  const lamp0=wrap(scrollNear, lampSp)-lampSp;
+  for(let x=lamp0;x<view.w+lampSp;x+=lampSp){
+    ctx.strokeStyle='rgba(120,130,145,0.35)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(x,groundRoadY);
+    ctx.lineTo(x,groundRoadY-28);
+    ctx.lineTo(x+14,groundRoadY-28);
+    ctx.stroke();
+    const lamp=ctx.createRadialGradient(x+14,groundRoadY-28,1,x+14,groundRoadY-28,36);
+    lamp.addColorStop(0,'rgba(255,220,150,0.35)');
+    lamp.addColorStop(0.4,'rgba(255,200,120,0.1)');
+    lamp.addColorStop(1,'rgba(255,200,120,0)');
+    ctx.fillStyle=lamp;
+    ctx.beginPath(); ctx.arc(x+14,groundRoadY-28,36,0,Math.PI*2); ctx.fill();
+  }
+
+  // Soft tree / shrub silhouettes along the ground verge (nearer parallax).
+  const treeSp=150;
+  const tree0=wrap(scrollNear, treeSp)-treeSp;
+  ctx.fillStyle='rgba(6,12,18,0.92)';
+  for(let x=tree0; x<view.w+treeSp; x+=treeSp){
+    ctx.beginPath();
+    ctx.ellipse(x+20, groundRoadY-4, 18, 12, 0, 0, Math.PI*2);
+    ctx.ellipse(x+40, groundRoadY-8, 24, 16, 0, 0, Math.PI*2);
+    ctx.ellipse(x+62, groundRoadY-5, 16, 11, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+/** Elevated flyover deck + underside structure + meter scale. */
 function drawRoadAndScale(groundY,camX,ppm,numberEvery,hideNearX,hideRadius){
-  // Deck extends downward (toward the viewer) so the car sits ON TOP of a 2D plane.
-  const depth=Math.max(48, Math.min(72, Math.round(view.h*0.1)));
-  const farY=groundY;                 // far curb = wheel contact
-  const nearY=groundY+depth;          // near curb (closer to viewer)
-  const gap=10;
-  const scaleY=nearY+gap;
+  const depth=Math.max(52, Math.min(78, Math.round(view.h*0.11)));
+  const farY=groundY;                 // wheel contact / far curb
+  const nearY=groundY+depth;          // near curb (toward viewer)
+  const deckThick=Math.max(10, Math.min(16, Math.round(depth*0.2)));
+  const gap=12;
+  const scaleY=nearY+deckThick+gap;
   const scroll=-camX*ppm;
   const wxStart=Math.floor(camX)-2, wxEnd=Math.ceil(camX+view.w/ppm)+2;
+  const skew=Math.min(22, depth*0.28);
 
-  // Fill below the contact line
-  const under=ctx.createLinearGradient(0,farY,0,view.h);
-  under.addColorStop(0,'#0a121c'); under.addColorStop(1,'#05080e');
-  ctx.fillStyle=under; ctx.fillRect(0,farY,view.w,view.h-farY);
+  // ——— Support pillars under the flyover ———
+  // Place in world meters (same transform as the number line) so they scroll
+  // backward with the scale as the car moves forward — never opposite to it.
+  const pierEveryM=4; // one pier every 4 m on the ruler
+  const streetFloor=Math.min(view.h-4, nearY+deckThick+Math.max(28, view.h-nearY-40));
+  const pierWx0=Math.floor(camX/pierEveryM)*pierEveryM - pierEveryM;
+  const pierWx1=camX + view.w/ppm + pierEveryM;
+  for(let wx=pierWx0; wx<=pierWx1; wx+=pierEveryM){
+    const px=(wx-camX)*ppm;
+    if(px<-60||px>view.w+60) continue;
+    // Soft ground shadow under pier
+    const sh=ctx.createRadialGradient(px+10, streetFloor, 2, px+10, streetFloor, 36);
+    sh.addColorStop(0,'rgba(0,0,0,0.45)');
+    sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh;
+    ctx.beginPath(); ctx.ellipse(px+10, streetFloor, 34, 7, 0, 0, Math.PI*2); ctx.fill();
 
-  // ——— 2D road DECK (parallelogram-ish band the car drives on) ———
-  // Slight horizontal skew so the plane reads with depth
-  const skew=Math.min(28, depth*0.35);
+    // Pier shaft
+    const pierTop=nearY+deckThick-2;
+    const pierG=ctx.createLinearGradient(px,pierTop,px+22,pierTop);
+    pierG.addColorStop(0,'#1a2330');
+    pierG.addColorStop(0.35,'#3a4a5c');
+    pierG.addColorStop(0.7,'#2a3648');
+    pierG.addColorStop(1,'#121820');
+    ctx.fillStyle=pierG;
+    ctx.beginPath();
+    ctx.moveTo(px, pierTop);
+    ctx.lineTo(px+20, pierTop);
+    ctx.lineTo(px+26, streetFloor);
+    ctx.lineTo(px-4, streetFloor);
+    ctx.closePath();
+    ctx.fill();
+    // Cap / beam under deck
+    ctx.fillStyle='#2c3a4c';
+    ctx.fillRect(px-8, pierTop-3, 36, 6);
+  }
+
+  // ——— Underside / girder thickness of the elevated deck ———
+  const underSlab=ctx.createLinearGradient(0,nearY,0,nearY+deckThick);
+  underSlab.addColorStop(0,'#1e293b');
+  underSlab.addColorStop(0.4,'#0f172a');
+  underSlab.addColorStop(1,'#070b12');
+  ctx.fillStyle=underSlab;
+  ctx.beginPath();
+  ctx.moveTo(-skew, nearY);
+  ctx.lineTo(view.w+skew, nearY);
+  ctx.lineTo(view.w+skew*0.4, nearY+deckThick);
+  ctx.lineTo(-skew*0.4, nearY+deckThick);
+  ctx.closePath();
+  ctx.fill();
+  // Underside longitudinal girders
+  ctx.strokeStyle='rgba(51,65,85,0.7)';
+  ctx.lineWidth=2;
+  for(let g=0.2;g<1;g+=0.25){
+    const gy=nearY+deckThick*g;
+    ctx.beginPath();
+    ctx.moveTo(-skew*(1-g*0.5), gy);
+    ctx.lineTo(view.w+skew*(1-g*0.5), gy);
+    ctx.stroke();
+  }
+
+  // ——— Driving surface (asphalt) ———
   ctx.beginPath();
   ctx.moveTo(0, farY);
   ctx.lineTo(view.w, farY);
@@ -1091,9 +1555,10 @@ function drawRoadAndScale(groundY,camX,ppm,numberEvery,hideNearX,hideRadius){
   ctx.lineTo(-skew, nearY);
   ctx.closePath();
   const surf=ctx.createLinearGradient(0,farY,0,nearY);
-  surf.addColorStop(0,'#4b5563');   // far (under car) a bit darker
-  surf.addColorStop(0.4,'#6b7280');
-  surf.addColorStop(1,'#9ca3af');   // near edge lighter (catches light)
+  surf.addColorStop(0,'#2a323c');
+  surf.addColorStop(0.35,'#3a4450');
+  surf.addColorStop(0.7,'#4a5564');
+  surf.addColorStop(1,'#5a6574');
   ctx.fillStyle=surf; ctx.fill();
 
   ctx.save();
@@ -1102,62 +1567,119 @@ function drawRoadAndScale(groundY,camX,ppm,numberEvery,hideNearX,hideRadius){
   ctx.lineTo(view.w+skew, nearY); ctx.lineTo(-skew, nearY);
   ctx.closePath(); ctx.clip();
 
-  // Horizontal grain
-  for(let i=1;i<5;i++){
-    const t=i/5, y=farY+depth*t;
-    ctx.strokeStyle=`rgba(255,255,255,${0.04*t})`; ctx.lineWidth=1;
+  // Asphalt grain / wear
+  ctx.strokeStyle='rgba(255,255,255,0.03)';
+  ctx.lineWidth=1;
+  for(let i=1;i<8;i++){
+    const y=farY+depth*(i/8);
     ctx.beginPath(); ctx.moveTo(-skew,y); ctx.lineTo(view.w+skew,y); ctx.stroke();
   }
-  // Scrolling seams across the deck
-  ctx.strokeStyle='rgba(15,23,42,0.3)'; ctx.lineWidth=1.2;
-  for(let wx=wxStart;wx<=wxEnd;wx++){
+  // Expansion joints scrolling with the car
+  ctx.strokeStyle='rgba(15,23,42,0.45)';
+  ctx.lineWidth=1.5;
+  for(let wx=wxStart;wx<=wxEnd;wx+=2){
     const sx=(wx-camX)*ppm;
-    const xNear=sx+skew*((sx/view.w)*0+1)*0; // keep vertical-ish with mild skew
     ctx.beginPath();
     ctx.moveTo(sx, farY);
-    ctx.lineTo(sx + skew*0.85, nearY);
+    ctx.lineTo(sx + skew*0.9, nearY);
     ctx.stroke();
   }
-  // Yellow dashes ON the deck surface (midway), scrolling
-  const dash=40, gapDash=24, period=dash+gapDash;
+
+  // Center lane dashes — flat yellow rectangles (not cartoon parallelograms)
+  const dash=36, gapDash=28, period=dash+gapDash;
   const phase=((scroll)%period+period)%period;
-  const midT=0.45;
+  const laneY0=farY+depth*0.42, laneY1=farY+depth*0.52;
   for(let x=-period+phase; x<view.w+period; x+=period){
-    const x0=x, x1=x+dash;
-    const y0=farY+depth*0.32, y1=farY+depth*0.58;
-    const s0=skew*(0.32), s1=skew*(0.58);
-    ctx.fillStyle='#fbbf24';
+    const s0=skew*0.42, s1=skew*0.52;
+    ctx.fillStyle='rgba(250,204,21,0.85)';
     ctx.beginPath();
-    ctx.moveTo(x0+s0, y0);
-    ctx.lineTo(x1+s0, y0);
-    ctx.lineTo(x1+s1, y1);
-    ctx.lineTo(x0+s1, y1);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle='rgba(15,23,42,0.35)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.moveTo(x+s0, laneY0);
+    ctx.lineTo(x+dash+s0, laneY0);
+    ctx.lineTo(x+dash+s1, laneY1);
+    ctx.lineTo(x+s1, laneY1);
+    ctx.closePath();
+    ctx.fill();
   }
-  // White edge lines on the deck
-  ctx.strokeStyle='rgba(248,250,252,0.9)'; ctx.lineWidth=2.5;
+
+  // Edge lines
+  ctx.strokeStyle='rgba(241,245,249,0.75)';
+  ctx.lineWidth=2.2;
   ctx.beginPath();
-  ctx.moveTo(0, farY+depth*0.14); ctx.lineTo(view.w, farY+depth*0.14); ctx.stroke();
+  ctx.moveTo(0, farY+depth*0.12); ctx.lineTo(view.w, farY+depth*0.12); ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(-skew*0.7, farY+depth*0.82); ctx.lineTo(view.w+skew*0.7, farY+depth*0.82); ctx.stroke();
+  ctx.moveTo(-skew*0.75, farY+depth*0.88); ctx.lineTo(view.w+skew*0.75, farY+depth*0.88); ctx.stroke();
   ctx.restore();
 
-  // Far curb (under the tires) — thin bright lip so contact is obvious
-  ctx.strokeStyle='#f8fafc'; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(0,farY+1); ctx.lineTo(view.w,farY+1); ctx.stroke();
-  // Near curb lip
-  ctx.strokeStyle='rgba(226,232,240,0.75)'; ctx.lineWidth=2.5;
-  ctx.beginPath(); ctx.moveTo(-skew,nearY-1); ctx.lineTo(view.w+skew,nearY-1); ctx.stroke();
+  // Far barrier / parapet (behind the car)
+  const farBarrierH=7;
+  const farBar=ctx.createLinearGradient(0,farY-farBarrierH,0,farY);
+  farBar.addColorStop(0,'#94a3b8');
+  farBar.addColorStop(0.5,'#64748b');
+  farBar.addColorStop(1,'#334155');
+  ctx.fillStyle=farBar;
+  ctx.fillRect(0, farY-farBarrierH, view.w, farBarrierH);
+  ctx.strokeStyle='rgba(226,232,240,0.55)';
+  ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,farY-farBarrierH); ctx.lineTo(view.w,farY-farBarrierH); ctx.stroke();
 
-  // Soft contact shadow strip on the deck under the car path (drawn later per-frame would be better;
-  // a general darkening near far curb helps the car “sit”)
-  const shade=ctx.createLinearGradient(0,farY,0,farY+depth*0.35);
-  shade.addColorStop(0,'rgba(0,0,0,0.28)');
+  // Near barrier / crash rail (in front of the deck edge)
+  const nearBarrierH=9;
+  const nearBar=ctx.createLinearGradient(0,nearY-nearBarrierH,0,nearY);
+  nearBar.addColorStop(0,'#cbd5e1');
+  nearBar.addColorStop(0.45,'#94a3b8');
+  nearBar.addColorStop(1,'#475569');
+  ctx.fillStyle=nearBar;
+  ctx.beginPath();
+  ctx.moveTo(-skew, nearY-nearBarrierH);
+  ctx.lineTo(view.w+skew, nearY-nearBarrierH);
+  ctx.lineTo(view.w+skew, nearY);
+  ctx.lineTo(-skew, nearY);
+  ctx.closePath();
+  ctx.fill();
+  // Rail posts
+  ctx.strokeStyle='rgba(226,232,240,0.35)';
+  ctx.lineWidth=1.5;
+  for(let x=((scroll*0.5)%34+34)%34 - 20; x<view.w+40; x+=34){
+    ctx.beginPath();
+    ctx.moveTo(x, nearY-nearBarrierH+1);
+    ctx.lineTo(x+skew*0.15, nearY-1);
+    ctx.stroke();
+  }
+
+  // Contact shadow under the car path
+  const shade=ctx.createLinearGradient(0,farY,0,farY+depth*0.4);
+  shade.addColorStop(0,'rgba(0,0,0,0.32)');
   shade.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=shade; ctx.fillRect(0,farY,view.w,depth*0.35);
+  ctx.fillStyle=shade; ctx.fillRect(0,farY,view.w,depth*0.4);
 
-  // Meter scale below the near curb
+  // Soft drop shadow cast by the elevated deck onto the ground below
+  const drop=ctx.createLinearGradient(0,nearY+deckThick,0,nearY+deckThick+28);
+  drop.addColorStop(0,'rgba(0,0,0,0.4)');
+  drop.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=drop;
+  ctx.fillRect(0,nearY+deckThick,view.w,28);
+
+  // Flyover light poles mounted on the far barrier — scroll with the road so they rush backward.
+  const poleSp=Math.max(170, Math.min(250, view.w*0.24));
+  const pole0=((scroll%poleSp)+poleSp)%poleSp - poleSp;
+  for(let x=pole0; x<view.w+poleSp; x+=poleSp){
+    const top=farY-Math.min(72, groundY*0.32);
+    ctx.strokeStyle='rgba(148,163,184,0.4)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(x, farY-farBarrierH);
+    ctx.lineTo(x, top);
+    ctx.quadraticCurveTo(x+6, top-4, x+22, top);
+    ctx.stroke();
+    const lamp=ctx.createRadialGradient(x+24,top+2,1,x+24,top+2,50);
+    lamp.addColorStop(0,'rgba(255,236,190,0.32)');
+    lamp.addColorStop(0.35,'rgba(255,220,150,0.1)');
+    lamp.addColorStop(1,'rgba(255,220,150,0)');
+    ctx.fillStyle=lamp;
+    ctx.beginPath(); ctx.arc(x+24,top+2,50,0,Math.PI*2); ctx.fill();
+  }
+
+  // Meter scale below the flyover underside
   ctx.strokeStyle='#2b4a63'; ctx.lineWidth=2;
   ctx.beginPath(); ctx.moveTo(0,scaleY+1); ctx.lineTo(view.w,scaleY+1); ctx.stroke();
   ctx.lineWidth=1;
@@ -1354,14 +1876,7 @@ function spring(x1,y,x2){
   ctx.lineTo(x2,y); ctx.stroke();
 }
 function drawModeChip(){
-  /* [pedagogy] H1: only show after first mode toggle */
-  if(!modeEverToggled[scene]) return;
-  /* [visuals] D8/C1: shortened chip labels */
-  const t = mode==='newton' ? '✓ Newton' : '⚠ Aristotle';
-  const t3 = mode==='newton' ? '✓ Newton' : '⚠ Counterfactual';
-  chip(10,10, scene===3?t3:t,
-       mode==='newton'?'#6ee7b7':'#fde68a',
-       mode==='newton'?'rgba(6,78,59,.55)':'rgba(120,53,15,.55)','left');
+  return;
 }
 function drawPauseChip(){
   if(Shell.playing) return;
@@ -1371,14 +1886,15 @@ function drawPauseChip(){
 }
 function drawS12(){
   const p=P[scene];
-  // Leave room above contact for the road surface depth, and below for curb + scale.
-  const groundY=Math.round(view.h*0.58);
+  // Leave room above contact for the elevated flyover depth, and below for underside + scale.
+  const groundY=Math.round(view.h*0.52);
   const ppm=Math.max(26,Math.min(90,view.w/18));
   const camX=S.x-(view.w/ppm)*0.35;
-  const bxPreview=(S.x-camX)*ppm;
-  const cPreview=Math.cbrt(p.m);
-  const hideR=(1.55*cPreview+0.70)*ppm*0.7+70;
-  const {roadH, scaleY}=drawRoadAndScale(groundY,camX,ppm,2,bxPreview,hideR);
+  drawBackdropS12(groundY,camX,ppm);
+  // Scale sits below the road deck, clear of the mg plate — do not hide ticks near the car.
+  const {roadH, scaleY}=drawRoadAndScale(groundY,camX,ppm,2);
+  // The lane center sits below the far curb on the flyover, so drop the car slightly into the deck.
+  const carGroundY=groundY+roadH*0.16;
 
   if(scene===2){ // x = 8 m flag (used by Explore step 2)
     const fx=(8-camX)*ppm;
@@ -1398,14 +1914,14 @@ function drawS12(){
   const bwp=bwm*ppm, bhp=bhm*ppm;
 
   const bx=(S.x-camX)*ppm;
-  bodyShape(bx,groundY,bwp,bhp,false);
+  bodyShape(bx,carGroundY,bwp,bhp,false);
 
-  const cy=groundY-bhp/2;
+  const cy=carGroundY-bhp/2;
   const clear=bwp*0.55+22;
   const sF=6;                                    // px per newton (all force arrows)
   const Wn=p.m*G, rawLen=Wn*sF;
-  const maxUp=Math.max(28, cy-(groundY-bhp)-10);
-  const maxDown=Math.max(28, groundY-cy-18);
+  const maxUp=Math.max(28, cy-(carGroundY-bhp)-10);
+  const maxDown=Math.max(28, carGroundY-cy-18);
   const len=Math.min(rawLen, 56, maxUp, maxDown);
 
   // Weight ↓ and normal ↑ — both originate at the car centre
@@ -1429,7 +1945,7 @@ function drawS12(){
 
   const yv=Math.max(24, cy-len-44);                           // velocity above the N label
   ctx.setLineDash([3,4]); ctx.strokeStyle='rgba(52,211,153,.4)'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.moveTo(bx,groundY-bhp-2); ctx.lineTo(bx,yv+8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx,carGroundY-bhp-2); ctx.lineTo(bx,yv+8); ctx.stroke();
   ctx.setLineDash([]);
   const sv=12; let vlen=S.v*sv;
   vlen=Math.max(-150,Math.min(150,vlen));
@@ -1447,6 +1963,7 @@ function drawS3(){
   const ppm=Math.min(90,view.w/19);
   const camX=-(view.w/ppm)/2;
   const X=wx=>(wx-camX)*ppm;
+  drawBackdropS3(groundY);
   drawGround(groundY,camX,ppm,2);
 
   const cx0=X(S.com0), lineTop=Math.max(26,groundY-170);      // COM start line
@@ -1532,21 +2049,20 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   if(n!==scene){ armScene(n); Shell.setPlaying(false); paint(); }
 }));
 function setMode(m){
-  if(mode===m) return;
-  mode=m;
-  modeEverToggled[scene]=true;
-  if(scene===3) S=makeS3();       // re-arm the push-off under the new model
-  syncModeBtns(); paint();
+  if(m!=='newton' || mode==='newton') return;
+  mode='newton';
+  syncModeBtns();
+  paint();
 }
-$('mode-naive').addEventListener('click',()=>setMode('naive'));
-$('mode-newton').addEventListener('click',()=>setMode('newton'));
 $('fRange').addEventListener('input',e=>{
   if(scene===3) return;
-  P[scene].F=parseFloat(e.target.value); syncSliderLabels(); paint();
+  P[scene].F=parseFloat(e.target.value);
+  restartScene12();
 });
 $('mRange').addEventListener('input',e=>{
   if(scene===3) return;
-  P[scene].m=parseFloat(e.target.value); syncSliderLabels(); paint();
+  P[scene].m=parseFloat(e.target.value);
+  restartScene12();
 });
 $('mARange').addEventListener('input',e=>{
   P[3].mA=parseFloat(e.target.value); syncSliderLabels();
@@ -1629,6 +2145,16 @@ Shell.init({
   onStep,
   onComplete
 });
+// Default view: Lecture mode on (hides guided inquiry), scene stays at ① Inertia.
+requestAnimationFrame(function(){
+  const b=document.getElementById('shell-lecture');
+  const r=document.getElementById('shell');
+  if(b && r && !r.classList.contains('lecture-mode')) b.click();
+  // Ensure "Data (live)" stays collapsed even after lecture-mode boot actions.
+  const dp=document.querySelector('[data-panel="data"]');
+  if(dp) dp.classList.add('collapsed');
+  applyInquiryScene({ scene:1, mode:'newton', F:0, m:1, v0:2, playing:true });
+});
 // Play/pause is owned by onStep during guided inquiry; keep the play-button redraw hook.
 document.getElementById('shell-play').addEventListener('click',()=>paint());
 // Shell.init runs onReset after inqShow(0); re-apply the opening card's scene.
@@ -1643,10 +2169,6 @@ renderMath();
 window.__audit={ at(x){ return { accel: newtonAccel(P[2].F, P[2].m) }; } };
 
 })();
-</script>
-<script>
-/* Open in Lecture mode by default — trigger the shell's lecture toggle once on load. */
-requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),r=document.getElementById('shell');if(b&&r&&!r.classList.contains('lecture-mode'))b.click();});
 </script>
 </body>
 </html>

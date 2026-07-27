@@ -297,7 +297,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #cv{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none;}
 .ov{position:absolute;z-index:5;pointer-events:none;font-size:12px;color:var(--muted);
   background:rgba(8,10,14,.74);border:1px solid var(--border);border-radius:7px;padding:5px 9px;backdrop-filter:blur(2px);}
-#viewTag{top:8px;left:8px;letter-spacing:.05em;font-size:12px;text-transform:uppercase;}
 #banner{top:8px;left:50%;transform:translateX(-50%);font-size:13px;color:#e9d5ff;border-color:rgba(167,139,250,.45);max-width:52%;text-align:center;}
 #legend{top:8px;right:8px;display:flex;flex-direction:column;gap:3px;}
 #hint{bottom:8px;right:8px;font-size:12px;max-width:34%;}
@@ -313,7 +312,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .val{font-family:var(--font-nums);font-size:12px;color:var(--text);min-width:58px;display:inline-block;}
 .chk{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap;}
 .chk input{accent-color:var(--accent);cursor:pointer;}
-#mode-naive.active{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.5);color:#fde68a;}
 
 .shell-panel-body{font-size:14px;}
 .choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);color:var(--text);
@@ -407,7 +405,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="plot-box">
   <div id="stage">
     <canvas id="cv"></canvas>
-    <div class="ov" id="viewTag"></div>
     <div class="ov" id="banner">🔮 Predict in the guided inquiry, then press <b>▶ Play</b></div>
     <div class="ov" id="legend"></div>
     <div class="ov" id="toast"></div>
@@ -485,16 +482,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="scene-inc" class="shell-btn" title="inclined plane, side view">Incline (side)</button>
       </div>
     </div>
-    <div class="ctrl-box">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">model</span></div>
-      <div class="sim-ctrl-row" style="margin-bottom:0">
-        <button id="mode-newton" class="shell-btn active" title="real physics: a = ΣF/m">✓ Vector sum</button>
-        <button id="mode-naive" class="shell-btn" title="counterfactual: follows only the largest single force">⚠ Biggest force</button>
-      </div>
-    </div>
     <div class="ctrl-box ctrl-box--slider">
       <div class="ctrl-box-head"><span class="ctrl-box-label">mass m</span><span id="massVal" class="slider-val">2.00 kg</span></div>
-      <div class="ctrl-slider-row"><input type="range" id="mass" min="0.5" max="5" step="0.25" value="2"></div>
+      <div class="ctrl-slider-row"><input type="range" id="mass" min="2" max="5" step="0.25" value="2"></div>
     </div>
     <div class="ctrl-box ctrl-box--slider" id="thetaWrap" style="display:none">
       <div class="ctrl-box-head"><span class="ctrl-box-label">incline θ</span><span id="thetaVal" class="slider-val">30°</span></div>
@@ -519,6 +509,17 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <label class="chk" id="showCompWrap" style="display:none"><input type="checkbox" id="showComp"> show components</label>
         <label class="chk"><input type="checkbox" id="showNet"> show net force</label>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="shell-panel">
+  <div class="shell-panel-head"><h3>Status</h3><span class="shell-caret">▾</span></div>
+  <div class="shell-panel-body">
+    <div class="ctrl-box">
+      <div class="stat-row"><span class="stat-label">surface</span><span class="stat-value" id="stSurface">Frictionless table</span></div>
+      <div class="stat-row"><span class="stat-label">gravity</span><span class="stat-value" id="stGravity">g ⊥ screen</span></div>
+      <div class="stat-row" id="stFrictionRow"><span class="stat-label">friction</span><span class="stat-value" id="stFriction">—</span></div>
     </div>
   </div>
 </div>
@@ -777,7 +778,10 @@ const F_COLORS=['#fb923c','#38bdf8','#f472b6','#a3e635','#facc15','#c084fc'];
 const canvas=document.getElementById('cv'), ctx=canvas.getContext('2d');
 const roF=document.getElementById('roF'), roA=document.getElementById('roA');
 const banner=document.getElementById('banner'), legendEl=document.getElementById('legend');
-const viewTag=document.getElementById('viewTag'), toastEl=document.getElementById('toast');
+const toastEl=document.getElementById('toast');
+const stSurface=document.getElementById('stSurface');
+const stGravity=document.getElementById('stGravity'), stFriction=document.getElementById('stFriction');
+const stFrictionRow=document.getElementById('stFrictionRow');
 const massEl=document.getElementById('mass'), thetaEl=document.getElementById('theta');
 const massVal=document.getElementById('massVal'), thetaVal=document.getElementById('thetaVal');
 const thetaWrap=document.getElementById('thetaWrap'), frictionBtn=document.getElementById('frictionBtn');
@@ -827,7 +831,17 @@ function posOfS(s,G){
   if(s<=G.sCorner) return {x:(G.sCorner-s)*G.u.x, y:(G.sCorner-s)*G.u.y};
   return {x:-(s-G.sCorner), y:0};
 }
-function centerOf(s,G){const p=posOfS(s,G), fr=localFrame(s,G);return{x:p.x+fr.n.x*0.28,y:p.y+fr.n.y*0.28};}
+/* Incline block half-side in pixels — slightly larger than the old fixed 17,
+   and scales with √m across the 2–5 kg slider (m=2≈23, m=5≈27). */
+function incBlockHalf(m){return 15+5.5*Math.sqrt(Math.max(2,m||2));}
+/* Flat-view block half-side — slightly larger than the old fixed 26,
+   scales with √m across the 2–5 kg slider (m=2≈30, m=5≈34). */
+function flatBlockHalf(m){return 22+5.5*Math.sqrt(Math.max(2,m||2));}
+function centerOf(s,G){
+  const p=posOfS(s,G), fr=localFrame(s,G);
+  const h=incBlockHalf(state.m)/S_INC;
+  return{x:p.x+fr.n.x*h,y:p.y+fr.n.y*h};
+}
 function incToPx(p,G){return {x:G.cx+p.x*S_INC, y:G.fy-p.y*S_INC};}
 function pv(v,k){return {x:v.x*k, y:-v.y*k};}
 
@@ -1118,9 +1132,16 @@ let toastT=null;
 function toast(msg){toastEl.textContent=msg;toastEl.style.display='block';
   clearTimeout(toastT);toastT=setTimeout(()=>toastEl.style.display='none',2400);}
 function setViewTag(){
-  viewTag.innerHTML=state.scene==='flat'
-   ?'TOP-DOWN VIEW · frictionless table (g ⊥ screen) · one run, then pause'
-   :'SIDE VIEW · incline θ = '+state.theta+'° · g = 9.81 m/s² ↓ · '+(state.friction?'μ = 0.30':'frictionless')+' · one run, then pause';
+  if(state.scene==='flat'){
+    stSurface.textContent='Frictionless table';
+    stGravity.textContent='g ⊥ screen';
+    stFrictionRow.style.display='none';
+  }else{
+    stSurface.textContent='Incline θ = '+state.theta+'°';
+    stGravity.textContent='g = 9.81 m/s² ↓';
+    stFrictionRow.style.display='';
+    stFriction.textContent=state.friction?'μ = 0.30':'Frictionless';
+  }
 }
 function updateLegend(){
   const L=[];
@@ -1146,7 +1167,7 @@ function updateLegend(){
     L.push(sw('#f87171','gravity mg'));
     if(r.N>0.02)L.push(sw('#60a5fa','normal N'));
     if(showCompEl.checked&&r.fr.thL>0.06)L.push(sw('#94a3b8','mg components',true));
-    if(state.friction&&Math.abs(r.f)>0.02)L.push(sw('#fb7185',r.staticHold?'friction fₛ':'friction f'));
+    if(state.friction&&Math.abs(r.f)>0.02)L.push(sw('#f59e0b',r.staticHold?'friction fₛ':'friction f'));
     if(state.inc.forces.length)L.push(sw('#fb923c','applied force'));
     if(showNet){
       L.push(sw('#a78bfa',FNET_HTML+' (along slope)'));
@@ -1294,21 +1315,22 @@ function drawFlat(){
   const ghostB=state.mode==='newton'?state.flat.V:state.flat.N;
   const hPx=map(heroB), gPx=map(ghostB);
   const sum=sumF(state.flat.forces), bb=biggestFlat();
+  const half=flatBlockHalf(state.m);
 
   /* [pedagogy] G4b: ghost only after explicit opt-in */
   if(state.revealed&&showGhost){
-    drawSquare(gPx,0,state.mode==='newton'?'ghostV':'ghostN',26);
-    reserveRect(gPx.x,gPx.y,32,32);
+    drawSquare(gPx,0,state.mode==='newton'?'ghostV':'ghostN',half);
+    reserveRect(gPx.x,gPx.y,half+6,half+6);
     const ga=state.mode==='newton'?(bb?{x:bb.x/state.m,y:bb.y/state.m}:null):{x:sum.x/state.m,y:sum.y/state.m};
     if(ga&&Math.hypot(ga.x,ga.y)>0.02){const d=pv(ga,PXA*0.9);arrow(gPx.x,gPx.y,d.x,d.y,state.mode==='newton'?'#fbbf24':'#34d399',2,[5,4]);}
     /* [visuals] D8: shortened ghost label */
     label(state.mode==='newton'?'⚠ biggest-F model':'ΣF/m model',
-      gPx.x,gPx.y+44,state.mode==='newton'?'#fbbf24':'#c4b5fd',{align:'center',dir:{x:0,y:1}});
+      gPx.x,gPx.y+(half+18),state.mode==='newton'?'#fbbf24':'#c4b5fd',{align:'center',dir:{x:0,y:1}});
   }
-  drawSquare(hPx,0,state.mode==='newton'?'heroN':'heroV',26);
-  reserveRect(hPx.x,hPx.y,32,32);
+  drawSquare(hPx,0,state.mode==='newton'?'heroN':'heroV',half);
+  reserveRect(hPx.x,hPx.y,half+6,half+6);
   /* Park mass label beside the block so it doesn't collide with force arrows. */
-  label('m = '+state.m.toFixed(2)+' kg',hPx.x-38,hPx.y+4,'#e2e8f0',{align:'right',dir:{x:-1,y:0}});
+  label('m = '+state.m.toFixed(2)+' kg',hPx.x-(half+12),hPx.y+4,'#e2e8f0',{align:'right',dir:{x:-1,y:0}});
 
   for(const f of state.flat.forces){
     const d=pv(f,PXN_FLAT), c=colorOf(f);
@@ -1326,10 +1348,10 @@ function drawFlat(){
       ctx.save();ctx.shadowColor='#a78bfa';ctx.shadowBlur=5;
       const e=arrow(hPx.x,hPx.y,d.x,d.y,'#a78bfa',3); ctx.restore();
       if(e)labelAt(FNET+' = '+mag.toFixed(2)+' N',hPx,e,'#c4b5fd',{bold:true});
-    }else label(FNET+' = 0',hPx.x,hPx.y+46,'#c4b5fd',{align:'center',dir:{x:0,y:1}});
+    }else label(FNET+' = 0',hPx.x,hPx.y+(half+20),'#c4b5fd',{align:'center',dir:{x:0,y:1}});
     const aN={x:sum.x/state.m,y:sum.y/state.m}, am=Math.hypot(aN.x,aN.y);
     if(am>0.02){
-      const d=pv(aN,PXA), L2=Math.hypot(d.x,d.y), ox=-d.y/L2*13, oy=d.x/L2*13;
+      const d=pv(aN,PXA), L2=Math.hypot(d.x,d.y), ox=-d.y/L2*(half*0.45), oy=d.x/L2*(half*0.45);
       const anch={x:hPx.x+ox,y:hPx.y+oy};
       const e=arrow(anch.x,anch.y,d.x,d.y,'#34d399',3);
       if(e)labelAt('a = '+am.toFixed(3)+' m/s²',anch,e,'#6ee7b7');
@@ -1376,16 +1398,18 @@ function drawIncline(){
   const nPx=incToPx(centerOf(state.inc.N.s,G),G);
   const vPx=incToPx(state.inc.V,G);
   const heroIsN=state.mode==='newton';
+  const half=incBlockHalf(state.m);
+  const halfW=half/S_INC;
   const surfY=x=>x>=0?x*Math.tan(G.th):0;
-  const pen=(state.inc.V.y-0.26)<surfY(state.inc.V.x)-0.02;
+  const pen=(state.inc.V.y-halfW)<surfY(state.inc.V.x)-0.02;
   const bf=biggestInc(r);
 
   function naiveWarn(p){
     ctx.save();ctx.translate(p.x,p.y);ctx.strokeStyle='rgba(244,63,94,.8)';ctx.lineWidth=2;
-    for(let i=-12;i<=12;i+=8){ctx.beginPath();ctx.moveTo(i-6,-17);ctx.lineTo(i+6,17);ctx.stroke();}
+    for(let i=-12;i<=12;i+=8){ctx.beginPath();ctx.moveTo(i-6,-half);ctx.lineTo(i+6,half);ctx.stroke();}
     ctx.restore();
     /* [visuals] D8: shortened ground-clip label */
-    label('⚠ ground clip',p.x,p.y+36,'#fda4af',{align:'center',bold:true,dir:{x:0,y:1}});
+    label('⚠ ground clip',p.x,p.y+half+19,'#fda4af',{align:'center',bold:true,dir:{x:0,y:1}});
   }
   function newtonArrows(px,asGhost){
     const mg=state.m*g;
@@ -1406,14 +1430,14 @@ function drawIncline(){
       if(eN&&!asGhost)labelAt('N',px,eN,'#93c5fd',{bold:true});
     }
     /* [visuals] D8: shortened lift-off label */
-    if(r.lift)label('N = 0 — lift-off',px.x,px.y-46,'#fda4af',{align:'center',bold:true,dir:{x:0,y:-1}});
-    /* Friction f — same bold style as mg / N; along-slope, opposite motion (or impending slip). */
+    if(r.lift)label('N = 0 — lift-off',px.x,px.y-(half+29),'#fda4af',{align:'center',bold:true,dir:{x:0,y:-1}});
+    /* Friction f — amber (distinct from red mg); same arrow size as mg / N. */
     if(state.friction&&Math.abs(r.f)>0.02){
       const fV=pv(fr.sd,r.f*k);
-      if(!asGhost){ctx.save();ctx.shadowColor='#fb7185';ctx.shadowBlur=5;}
-      const eF=arrow(px.x,px.y,fV.x,fV.y,'#fb7185',forceW,forceDash,forceA);
+      if(!asGhost){ctx.save();ctx.shadowColor='#f59e0b';ctx.shadowBlur=5;}
+      const eF=arrow(px.x,px.y,fV.x,fV.y,'#f59e0b',forceW,forceDash,forceA);
       if(!asGhost)ctx.restore();
-      if(eF&&!asGhost)labelAt(r.staticHold?'fₛ':'f',px,eF,'#fda4af',{bold:true});
+      if(eF&&!asGhost)labelAt(r.staticHold?'fₛ':'f',px,eF,'#fcd34d',{bold:true});
     }
     if(showNet){
       if(Math.abs(r.netAlong)>0.05){
@@ -1421,13 +1445,13 @@ function drawIncline(){
         ctx.save();if(!asGhost){ctx.shadowColor='#a78bfa';ctx.shadowBlur=5;}
         const e=arrow(px.x,px.y,fV.x,fV.y,'#a78bfa',asGhost?2:3,asGhost?[7,5]:null);ctx.restore();
         if(e)labelAt(FNET+' = '+Math.abs(r.netAlong).toFixed(2)+' N '+(r.netAlong>0?'↓slope':'↑slope'),px,e,'#c4b5fd',{bold:!asGhost});
-      }else if(!asGhost)label(FNET+' = 0',px.x,px.y-60,'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
+      }else if(!asGhost)label(FNET+' = 0',px.x,px.y-(half+37),'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
       if(Math.abs(r.aS)>0.02){
         /* Park a just above the block (along the outward normal) so it
            doesn't stack on F_net / the square — keep the lift modest. */
         const aV=pv(fr.sd,r.aS*PXA);
         const nScr=pv(fr.n,1), nL=Math.hypot(nScr.x,nScr.y)||1;
-        const lift=32;
+        const lift=half+10;
         const anch={x:px.x+nScr.x/nL*lift, y:px.y+nScr.y/nL*lift};
         ctx.save();if(!asGhost){ctx.shadowColor='#34d399';ctx.shadowBlur=5;}
         const e=arrow(anch.x,anch.y,aV.x,aV.y,'#34d399',asGhost?1.8:2.8,asGhost?[5,4]:null);ctx.restore();
@@ -1475,27 +1499,27 @@ function drawIncline(){
   if(heroIsN){
     /* [pedagogy] G4b: ghost only after explicit opt-in */
     if(state.revealed&&showGhost){
-      drawSquare(vPx,0,'ghostV');
-      reserveRect(vPx.x,vPx.y,22,22);
+      drawSquare(vPx,0,'ghostV',half);
+      reserveRect(vPx.x,vPx.y,half+5,half+5);
       if(bf.mag>0.02){const d=pv({x:bf.x/state.m,y:bf.y/state.m},PXA*0.9);arrow(vPx.x,vPx.y,d.x,d.y,'#fbbf24',2,[5,4]);}
       /* [visuals] D8: shortened ghost label */
-      label('⚠ biggest-F model',vPx.x,vPx.y-30,'#fbbf24',{align:'center',dir:{x:0,y:-1}});
+      label('⚠ biggest-F model',vPx.x,vPx.y-(half+13),'#fbbf24',{align:'center',dir:{x:0,y:-1}});
       if(pen)naiveWarn(vPx);
     }
-    drawSquare(nPx,-fr.thL,'heroN');
-    reserveRect(nPx.x,nPx.y,22,22);
-    label('m = '+state.m.toFixed(2)+' kg',nPx.x,nPx.y-30,'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
+    drawSquare(nPx,-fr.thL,'heroN',half);
+    reserveRect(nPx.x,nPx.y,half+5,half+5);
+    label('m = '+state.m.toFixed(2)+' kg',nPx.x,nPx.y-(half+13),'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
     newtonArrows(nPx,false);
     appliedArrows(nPx);
   }else{
-    drawSquare(nPx,-fr.thL,'ghostN');
-    reserveRect(nPx.x,nPx.y,22,22);
+    drawSquare(nPx,-fr.thL,'ghostN',half);
+    reserveRect(nPx.x,nPx.y,half+5,half+5);
     /* [visuals] D8: shortened ghost label */
-    label('ΣF/m model',nPx.x,nPx.y-30,'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
+    label('ΣF/m model',nPx.x,nPx.y-(half+13),'#c4b5fd',{align:'center',dir:{x:0,y:-1}});
     if(state.revealed)newtonArrows(nPx,true);
-    drawSquare(vPx,0,'heroV');
-    reserveRect(vPx.x,vPx.y,22,22);
-    label('m = '+state.m.toFixed(2)+' kg',vPx.x,vPx.y-30,'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
+    drawSquare(vPx,0,'heroV',half);
+    reserveRect(vPx.x,vPx.y,half+5,half+5);
+    label('m = '+state.m.toFixed(2)+' kg',vPx.x,vPx.y-(half+13),'#e2e8f0',{align:'center',dir:{x:0,y:-1}});
     const mg=state.m*g;
     ctx.save();ctx.shadowColor='#f87171';ctx.shadowBlur=5;
     const eG=arrow(vPx.x,vPx.y,0,mg*k,'#f87171',2.8);ctx.restore();
@@ -1565,18 +1589,12 @@ function setScene(s){
 document.getElementById('scene-flat').addEventListener('click',()=>setScene('flat'));
 document.getElementById('scene-inc').addEventListener('click',()=>setScene('inc'));
 function setMode(m){
-  if(state.mode===m)return;
-  state.mode=m;
-  /* [pedagogy] G4b: mark ghost as explored when user clicks Biggest force */
-  if(m==='naive') state.ghostExplored=true;
-  document.getElementById('mode-newton').classList.toggle('active',m==='newton');
-  document.getElementById('mode-naive').classList.toggle('active',m==='naive');
-  toast(m==='naive'?'⚠ solid block now follows ONLY the biggest force':'✓ real physics: a = ΣF/m');
+  // Simulation is locked to real physics: a = ΣF/m (Vector sum).
+  if(m!=='newton') return;
+  state.mode='newton';
   updateLegend();
   restartMotionFromControls();
 }
-document.getElementById('mode-newton').addEventListener('click',()=>setMode('newton'));
-document.getElementById('mode-naive').addEventListener('click',()=>setMode('naive'));
 document.getElementById('addForce').addEventListener('click',()=>{
   const list=curForces();
   if(list.length>=6){toast('max 6 forces');return;}
@@ -1627,8 +1645,6 @@ function onReset(){
   showNetEl.checked=false; showCompEl.checked=false;
   document.getElementById('scene-flat').classList.add('active');
   document.getElementById('scene-inc').classList.remove('active');
-  document.getElementById('mode-newton').classList.add('active');
-  document.getElementById('mode-naive').classList.remove('active');
   thetaWrap.style.display='none'; frictionWrap.style.display='none'; showCompWrap.style.display='none';
   frictionBtn.classList.remove('active'); frictionBtn.textContent='μ = 0.30: off';
   banner.style.display=''; playBtn.classList.add('primary');
@@ -1665,7 +1681,7 @@ function renderMath(){
 /* ---------- guided-inquiry scene driver (deterministic; chrome only) ---------- */
 function applyInquiryScene(cfg){
   state.scene = cfg.scene;
-  state.mode = cfg.mode || 'newton';
+  state.mode = 'newton';
   state.m = cfg.m != null ? cfg.m : 2;
   state.theta = cfg.theta != null ? cfg.theta : 30;
   state.friction = !!cfg.friction;
@@ -1683,8 +1699,6 @@ function applyInquiryScene(cfg){
   showCompEl.checked = !!cfg.showComp;
   document.getElementById('scene-flat').classList.toggle('active', state.scene==='flat');
   document.getElementById('scene-inc').classList.toggle('active', state.scene!=='flat');
-  document.getElementById('mode-newton').classList.toggle('active', state.mode==='newton');
-  document.getElementById('mode-naive').classList.toggle('active', state.mode==='naive');
   thetaWrap.style.display = state.scene==='flat' ? 'none' : 'flex';
   frictionWrap.style.display = state.scene==='flat' ? 'none' : 'block';
   showCompWrap.style.display = state.scene==='flat' ? 'none' : 'inline-flex';
