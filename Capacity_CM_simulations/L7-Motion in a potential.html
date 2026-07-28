@@ -859,14 +859,32 @@ function release(){
   updateAll();
 }
 
-/* energy-exact integrator: force gives direction/turning; |v| pinned to √(2(E−V)/m)
-   → on the separatrix the approach to the top is a true exponential creep (t → ∞) */
+/* energy-exact integrator: force gives direction/turning; |v| pinned to √(2(E−V)/m).
+   Separatrix (E=V_b): always creep toward the unstable max at x=−1; never reverse.
+   When float precision exhausts KE, stall in place — do NOT bounce (that would fake
+   bound oscillation and break the t→∞ lesson). */
 function physics(dt){
-  const E=Eeff(), H=1/720;
+  const E=Eeff(), H=1/720, edge=isEdge();
   if(!B.escaped){
     let r=dt;
     while(r>1e-9){
       const h=Math.min(H,r); r-=h;
+      if(edge){
+        // Approach crest from the right well only; clamp overshoot; never flip sign.
+        if(!(B.x>-1)){ B.x=-1; B.v=0; B.t+=h; continue; }
+        let k=2*(E-V(B.x))/M;
+        if(k<=0){ B.v=0; B.t+=h; continue; }          // asymptotic stall (float floor)
+        B.v=-Math.sqrt(k);                              // toward x=−1
+        const xTry=B.x+B.v*h;
+        B.t+=h;
+        if(xTry<=-1 || V(xTry)>=E){ B.v=0; }            // would leave allowed region
+        else{
+          B.x=xTry;
+          k=2*(E-V(B.x))/M;
+          B.v=k>0?-Math.sqrt(k):0;
+        }
+        continue;
+      }
       const a=acc(B.x);
       B.v+=a*h; B.x+=B.v*h; B.t+=h;
       const k=2*(E-V(B.x))/M;

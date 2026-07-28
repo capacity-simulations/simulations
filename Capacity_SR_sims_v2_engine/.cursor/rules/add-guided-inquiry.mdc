@@ -1,0 +1,167 @@
+---
+description: Add / rebuild the GUIDED-INQUIRY flow (the sidebar step-card stepper) for a simulation already on the global shell. Mine the sim's OWN standing content dropdowns — Predict, Explore ("things to try"), The Explanation, Reading the Picture, and ANY other dynamic content panel that contributes teaching material — and re-thread them into one coherent 4–6 card spine that exposes the whole sim step by step with strong pedagogy: prerequisites shown before what depends on them, predict-before-reveal, misconceptions as wrong choices. Then REMOVE every content dropdown you folded in (their material now lives in the cards) — keeping only the interactive controls and any live-data panel a card tells the student to open. Chrome/content only — NEVER touch physics or rendering. If the sim is not yet on the shell, run convert-any-sim-to-global-shell first.
+globs: ["*.html"]
+alwaysApply: false
+---
+
+# Add / rebuild a GUIDED-INQUIRY flow — sourced from the sim's own content dropdowns
+
+You are authoring the guided-inquiry stepper for ONE simulation that is **already on
+the global shell** (it has `#aside-inquiry`, `#inq-cards`, and a `Shell` runtime that
+owns the dots, Next/Finish, Skip, restore, and ‹ › pager). You write **only** the step
+cards, the per-step scene evolution (`onStep`), and the prediction-feedback handler.
+Never build the dots/Next/Skip/pager — the shell does. Never touch physics or rendering.
+
+**The cards are not written from scratch, and they replace the standing content dropdowns.**
+The sim ships teaching material in collapsible sidebar panels (Predict, Explore, Explanation,
+Reading the Picture, and sim-specific ones). Your job: (1) **fold that content into the
+card spine**, then (2) **delete every content dropdown you folded in** so nothing is
+duplicated. The guided-inquiry cards become the single place that content lives.
+
+## Reference (read first)
+- `_design-reference/SHELL-DESIGN-GUIDE.md` §6 — card markup, gating, feedback handler, CSS.
+- `_design-reference/reference-converted-sim.html` — copy exact card/handler markup when unsure.
+
+## STEP 1 — Inventory the sim's dropdowns and split content vs. functional
+Before writing a card, list every sidebar panel. **The set is dynamic across sims** — match
+by role, not title. Split them into two groups:
+
+**CONTENT dropdowns → fold into cards, then remove.** Any panel that carries teaching prose,
+a prediction, exploration nudges, or a legend. Typical ones and the card beat each feeds:
+
+| Panel (typical title)            | Role                                   | Feeds which card beat |
+|----------------------------------|----------------------------------------|-----------------------|
+| 🔮 **Predict**                   | the prediction question + choices + per-choice feedback | the **gated predict** card(s) — reuse question, choices, and rebuttals verbatim |
+| 📖 **Reading the Picture**       | how to read the visualization (legend, arrows, axes, colours) | an early **orient** card — dynamic: describe whatever *this* sim draws |
+| 🖊 **Explore ("things to try")** | the ordered hands-on nudges            | the **observe / verify** cards — each "try this" becomes a step tied to the scene |
+| ⚛ **The Explanation**           | the conceptual walkthrough / resolution prose | the **explain / resolve** beats — threaded one idea per card, never dumped whole |
+| 🧪 **Model notes / any prose panel** | domain rules, caveats, exact-model text | fold the load-bearing lines into the relevant card; drop the rest |
+
+**FUNCTIONAL panels → keep untouched.** Do NOT fold or delete these:
+- The **interactive controls** panel (tabs, mode buttons, sliders, live readouts) — the
+  control surface the cards tell the student to operate.
+- Any **live-data panel** a card explicitly tells the student to *open/read* (e.g. 📊 Data,
+  ⚡ Energy Ledger) — it's a live readout, not narrative. Keep the panel; cards reference it.
+
+Reuse the author's exact wording and numbers when folding — this preserves their pedagogy;
+do not reinvent phrasing or invent new physics claims.
+
+## STEP 2 — The one principle: expose the sim in dependency order
+Sequence the cards so the student meets ideas in the order the physics depends on them.
+**Establish each prerequisite — and drive the sim to show it — before the concept that
+builds on it.** Never reveal the payoff before its groundwork.
+
+> **Example — total internal reflection.** Correct order:
+> 1. Ground/orient (from *Reading the Picture*): dense → less-dense medium, ray refracting
+>    away from the normal at a small angle (baseline: Snell / refraction).
+> 2. Predict (from *Predict*): as the incidence angle grows, what does the refracted ray
+>    do? → observe (from *Explore*) it bend toward the surface, approaching 90°.
+> 3. **Critical angle FIRST:** define θc where the refracted ray reaches exactly 90°;
+>    predict its value, drive the sim there, confirm.
+> 4. **Only now TIR:** predict what happens *beyond* θc (wrong-choice misconception:
+>    "it keeps refracting" / "it vanishes") → observe total internal reflection.
+> 5. Resolve (from *The Explanation*): the takeaway + the condition (θ > θc, n₁ > n₂).
+>
+> Critical angle is the boundary that *defines* TIR, so it must be understood and seen
+> before TIR appears. Apply this dependency-ordering to any sim.
+
+## STEP 3 — The arc (4–6 cards), mapped to the dropdowns
+Orient *(Reading the Picture)* → predict, gated *(Predict)* → observe/verify *(Explore)*
+→ introduce next layer (predict first) → observe payoff → resolve *(The Explanation)*.
+**One new idea per card.** Each card's prose ties to what the sim is showing *at that
+step*. A short sim may collapse to 4 cards; a richer one may use 6 — never more.
+
+## STEP 4 — The scene must follow the cards (`onStep(i)`)
+This is what makes it "step by step." In the SIM JS, implement `onStep(i)` to drive the
+simulation into the exact state that card i discusses — set the relevant parameter,
+reveal/hide a layer, pause on a predict card, highlight the quantity in play.
+- Make `onStep(i)` **deterministic and self-contained** — it fully sets the state for
+  step i (don't rely on the previous step). This way the ‹ › pager and revisits restore
+  each card's scene intact.
+- Read `Shell.step` in your draw code where the visuals differ per step.
+- Example (TIR): step 2 → `angle = θc - 8°`; step 3 → `angle = θc`; step 4 → `angle = θc + 12°`.
+- The sim stays fully usable throughout — inquiry gates only its own Next, never the sim.
+
+## Card markup (fill `#inq-cards`)
+    <!-- Gated predict: Next waits until a choice is picked -->
+    <div class="inq-step" data-gate>
+      <h4>3 · Predict the critical angle</h4>
+      <p>Question tied to the current scene…</p>
+      <button class="choice" data-correct="0" data-fb="Rebuttal, shown only if picked…">A) misconception</button>
+      <button class="choice" data-correct="1" data-fb="Why it's right — <strong>the key fact</strong>.">B) correct</button>
+      <div class="predict-eval"></div>
+    </div>
+
+    <!-- Ungated observe: Next enabled immediately -->
+    <div class="inq-step">
+      <h4>4 · Watch total internal reflection</h4>
+      <p>Press ▶ / drag the angle past θc and watch…</p>
+    </div>
+
+- `data-gate` on any card whose Next should wait for an answer (shell enables Next on the
+  first `.choice` click; for a "watch it first" gate, call `Shell.stepReady()` when done).
+- **Encode the misconception as a wrong `.choice`** with its rebuttal in `data-fb` (reuse
+  the Predict panel's own wrong choices + feedback). **Never** write a standing "common
+  misconception" text card — it teaches the error.
+- Keep prose ≥ 14px, a few sentences; the canvas shows, the card explains.
+
+## Prediction-feedback handler + CSS (add once to the SIM JS / SIM CSS)
+    document.querySelectorAll('#inq-cards .inq-step').forEach(card=>{
+      const evalBox=card.querySelector('.predict-eval');
+      const choices=card.querySelectorAll('.choice');
+      choices.forEach(ch=>ch.addEventListener('click',()=>{
+        if(card.dataset.answered) return; card.dataset.answered='1';
+        const correct=ch.dataset.correct==='1';
+        choices.forEach(c=>{ c.disabled=true;
+          if(c.dataset.correct==='1') c.classList.add('correct');
+          else if(c===ch) c.classList.add('wrong'); else c.classList.add('dim'); });
+        if(evalBox){ evalBox.innerHTML=ch.dataset.fb||''; evalBox.classList.add('show', correct?'correct':'wrong'); }
+      }));
+    });
+
+    .inq-step h4{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--text);}
+    .inq-step p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--muted);}
+    .inq-step .predict-eval{display:none;} .inq-step .predict-eval.show{display:block;}
+
+## STEP 5 — Remove EVERY content dropdown you folded in
+Once their material lives in the cards, delete the standing content panels so nothing is
+duplicated — **this includes Predict, Reading the Picture, Explore, Explanation, and any
+other prose panel.** Chrome-only cleanup, done carefully:
+- **Remove the panel markup** for each folded dropdown (its `data-panel="…"` block, its
+  `<h3>` head, and its body containers).
+- **Remove the JS that built/drove it** and every call to it, e.g.:
+  - Predict → `PRED`, `buildPredict()`, `renderEval()`, `updatePredictHeader()`, `#pchoices`/
+    `#pred-eval` refs, and the `pred[scene]` state; then drop now-dead `pred[scene]!==null`
+    terms wherever they were read (readout gates, label gates).
+  - Explore → `STEPS`, `buildSteps()`, `advanceStepTo()`, `#steps` refs.
+  - Explanation / prose → its render/content function and calls.
+- **Remove now-dead CSS** that styled ONLY those panels (e.g. `#pred-eval …`, `.choices`,
+  `.cl`, `.steps`, `.step-*`). Leave any selector still used by the inquiry cards
+  (`.choice` on inq buttons, `.inq-step …`) untouched.
+- **KEEP:** the interactive controls panel, and any live-data panel a card tells the student
+  to open (Data, Energy Ledger). Keep ALL physics / rendering / state code.
+- **Verify no dangling references** — no leftover `$('…')` lookups, builder calls, or
+  handlers for a removed panel; the sim loads with no console errors.
+
+## Do NOT
+- Change physics, equations, or rendering; add/remove sim *controls*; rename shell IDs.
+- Invent new card content — source it from the existing dropdowns; only re-thread and trim.
+- Delete the interactive controls panel or a live-data panel a card tells the student to open.
+- Leave a folded dropdown standing (that's the duplication this rule exists to remove).
+- Build dots/Next/Finish/Skip/pager, or gate the simulation itself.
+- Reveal a concept before its prerequisite; stack two new ideas in one card; write a
+  standing-misconception card.
+
+## Self-check
+- [ ] Cards are **composed from the sim's own content dropdowns** (Predict / Reading-the-
+      Picture / Explore / Explanation / sim-specific), reusing the author's wording and numbers.
+- [ ] 4–6 cards in dependency order; each prerequisite shown before what depends on it;
+      the sequence walks the student through the *entire* sim coherently.
+- [ ] Every predict card is `data-gate` with a wrong-choice misconception + `data-fb`
+      and a `.predict-eval`; the feedback handler + CSS are present.
+- [ ] `onStep(i)` deterministically drives the scene for each card; ‹ › back/forward
+      restores each card's state; the sim is usable from load.
+- [ ] **Every folded content dropdown is removed** (markup + builder JS + dead CSS),
+      including **Predict**; only the interactive controls and cards-referenced live-data
+      panels remain.
+- [ ] No dangling references; physics/render code unchanged; no console errors.

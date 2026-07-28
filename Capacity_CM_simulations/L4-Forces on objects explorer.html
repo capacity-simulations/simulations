@@ -813,8 +813,12 @@ function biggestFlat(){let b=null;for(const f of state.flat.forces){if(!b||Math.
   return b?{x:b.x,y:b.y,name:'F'+sub(b.id),mag:Math.hypot(b.x,b.y)}:null;}
 
 function geo(){
-  const th=state.theta*Math.PI/180, cx=view.w*0.40, fy=view.h-64;
-  const availR=(view.w-28-cx)/S_INC, availT=(fy-34)/S_INC;
+  const th=state.theta*Math.PI/180;
+  // Sit the wedge left of center so component labels (esp. mg·cosθ) fit
+  // on the right-hand side of the vertical face when "show components" is on.
+  const cx=view.w*0.30, fy=view.h-64;
+  const rightPad=130;
+  const availR=(view.w-rightPad-cx)/S_INC, availT=(fy-34)/S_INC;
   let L; if(th<1e-4)L=Math.min(availR,12);
   else L=Math.min(availR/Math.cos(th), availT/Math.max(Math.sin(th),1e-4), 12);
   L=Math.max(L,1.2);
@@ -1166,7 +1170,7 @@ function updateLegend(){
     /* Mirror newtonArrows / appliedArrows: only list what is drawn now. */
     L.push(sw('#f87171','gravity mg'));
     if(r.N>0.02)L.push(sw('#60a5fa','normal N'));
-    if(showCompEl.checked&&r.fr.thL>0.06)L.push(sw('#94a3b8','mg components',true));
+    if(showCompEl.checked&&r.fr.thL>0.06)L.push(sw('#f87171','mg components',true));
     if(state.friction&&Math.abs(r.f)>0.02)L.push(sw('#f59e0b',r.staticHold?'friction fₛ':'friction f'));
     if(state.inc.forces.length)L.push(sw('#fb923c','applied force'));
     if(showNet){
@@ -1416,28 +1420,43 @@ function drawIncline(){
     const showComp=showCompEl.checked;
     const showNet=state.revealed&&showNetEl.checked;
     const forceW=asGhost?1.8:2.8, forceDash=asGhost?[5,4]:null, forceA=asGhost?0.45:1;
-    /* Weight mg — crisp stroke + light glow (same family as F_net / a). */
-    if(!asGhost){ctx.save();ctx.shadowColor='#f87171';ctx.shadowBlur=5;}
-    const eG=arrow(px.x,px.y,0,mg*k,'#f87171',forceW,forceDash,forceA);
-    if(!asGhost)ctx.restore();
-    if(eG&&!asGhost)labelAt('mg',px,eG,'#fca5a5',{bold:true});
-    /* Normal N — crisp stroke + light glow. */
+    /* Individual forces fade under show-net (and mg also under show-components)
+       so violet F_net / dashed components stay visually senior. */
+    const fadeIndiv=!asGhost&&showNet;
+    const indivA=fadeIndiv?0.32:forceA;
+    const mgA=(!asGhost&&showComp)?Math.min(0.28,indivA):indivA;
+    const fadeMgLabel=!asGhost&&(showComp||showNet);
+
+    if(!asGhost&&mgA>=0.9){ctx.save();ctx.shadowColor='#f87171';ctx.shadowBlur=5;}
+    const eG=arrow(px.x,px.y,0,mg*k,'#f87171',forceW,forceDash,mgA);
+    if(!asGhost&&mgA>=0.9)ctx.restore();
+    if(eG&&!asGhost){
+      if(fadeMgLabel){ctx.save();ctx.globalAlpha=0.35;labelAt('mg',px,eG,'#fca5a5',{bold:true});ctx.restore();}
+      else labelAt('mg',px,eG,'#fca5a5',{bold:true});
+    }
+    /* Normal N */
     if(r.N>0.02){
       const nV=pv(fr.n,r.N*k);
-      if(!asGhost){ctx.save();ctx.shadowColor='#60a5fa';ctx.shadowBlur=5;}
-      const eN=arrow(px.x,px.y,nV.x,nV.y,'#60a5fa',forceW,forceDash,forceA);
-      if(!asGhost)ctx.restore();
-      if(eN&&!asGhost)labelAt('N',px,eN,'#93c5fd',{bold:true});
+      if(!asGhost&&indivA>=0.9){ctx.save();ctx.shadowColor='#60a5fa';ctx.shadowBlur=5;}
+      const eN=arrow(px.x,px.y,nV.x,nV.y,'#60a5fa',forceW,forceDash,indivA);
+      if(!asGhost&&indivA>=0.9)ctx.restore();
+      if(eN&&!asGhost){
+        if(fadeIndiv){ctx.save();ctx.globalAlpha=0.35;labelAt('N',px,eN,'#93c5fd',{bold:true});ctx.restore();}
+        else labelAt('N',px,eN,'#93c5fd',{bold:true});
+      }
     }
     /* [visuals] D8: shortened lift-off label */
     if(r.lift)label('N = 0 — lift-off',px.x,px.y-(half+29),'#fda4af',{align:'center',bold:true,dir:{x:0,y:-1}});
-    /* Friction f — amber (distinct from red mg); same arrow size as mg / N. */
+    /* Friction f — amber (distinct from red mg) */
     if(state.friction&&Math.abs(r.f)>0.02){
       const fV=pv(fr.sd,r.f*k);
-      if(!asGhost){ctx.save();ctx.shadowColor='#f59e0b';ctx.shadowBlur=5;}
-      const eF=arrow(px.x,px.y,fV.x,fV.y,'#f59e0b',forceW,forceDash,forceA);
-      if(!asGhost)ctx.restore();
-      if(eF&&!asGhost)labelAt(r.staticHold?'fₛ':'f',px,eF,'#fcd34d',{bold:true});
+      if(!asGhost&&indivA>=0.9){ctx.save();ctx.shadowColor='#f59e0b';ctx.shadowBlur=5;}
+      const eF=arrow(px.x,px.y,fV.x,fV.y,'#f59e0b',forceW,forceDash,indivA);
+      if(!asGhost&&indivA>=0.9)ctx.restore();
+      if(eF&&!asGhost){
+        if(fadeIndiv){ctx.save();ctx.globalAlpha=0.35;labelAt(r.staticHold?'fₛ':'f',px,eF,'#fcd34d',{bold:true});ctx.restore();}
+        else labelAt(r.staticHold?'fₛ':'f',px,eF,'#fcd34d',{bold:true});
+      }
     }
     if(showNet){
       if(Math.abs(r.netAlong)>0.05){
@@ -1464,7 +1483,7 @@ function drawIncline(){
         if(e)labelAt('v = '+Math.abs(state.inc.N.v).toFixed(1)+' m/s',px,e,'#67e8f9');
       }
     }
-    /* Components last so dashed arrows aren’t buried under F_net (same direction as mg·sinθ). */
+    /* Components last — dashed red matching mg (same force, decomposed). */
     if(!asGhost&&showComp&&fr.thL>0.06){
       const aV=pv(fr.sd,r.mgS*k);
       const pVc=pv({x:-fr.n.x,y:-fr.n.y},r.mgN*k);
@@ -1473,11 +1492,11 @@ function drawIncline(){
       /* Nudge parallel component off F_net along the outward normal. */
       const nScr=pv(fr.n,1), nL=Math.hypot(nScr.x,nScr.y)||1;
       const ox=nScr.x/nL*10, oy=nScr.y/nL*10;
-      const eA=arrow(px.x+ox,px.y+oy,aV.x,aV.y,'#cbd5e1',2.2,[6,5]);
-      if(eA)labelAt('mg·sinθ = '+r.mgS.toFixed(2)+' N',{x:px.x+ox,y:px.y+oy},eA,'#e2e8f0');
-      const eP=arrow(px.x,px.y,pVc.x,pVc.y,'#94a3b8',2,[6,5]);
-      if(eP)labelAt('mg·cosθ = '+r.mgN.toFixed(2)+' N',px,eP,'#94a3b8');
-      ctx.save();ctx.strokeStyle='rgba(148,163,184,.45)';ctx.setLineDash([4,4]);ctx.lineWidth=1.2;
+      const eA=arrow(px.x+ox,px.y+oy,aV.x,aV.y,'#f87171',2.2,[6,5]);
+      if(eA)labelAt('mg·sinθ = '+r.mgS.toFixed(2)+' N',{x:px.x+ox,y:px.y+oy},eA,'#fca5a5');
+      const eP=arrow(px.x,px.y,pVc.x,pVc.y,'#f87171',2,[6,5]);
+      if(eP)labelAt('mg·cosθ = '+r.mgN.toFixed(2)+' N',px,eP,'#fca5a5');
+      ctx.save();ctx.strokeStyle='rgba(248,113,113,.55)';ctx.setLineDash([4,4]);ctx.lineWidth=1.2;
       ctx.beginPath();
       ctx.moveTo(tipSin.x,tipSin.y);ctx.lineTo(tipMg.x,tipMg.y);
       ctx.moveTo(tipCos.x,tipCos.y);ctx.lineTo(tipMg.x,tipMg.y);

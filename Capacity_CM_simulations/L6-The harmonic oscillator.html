@@ -411,7 +411,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <main class="shell-hero">
     <div class="plot-box">
   <canvas id="cv-well"></canvas>
-  <div class="preplay-hint" id="preplay-hint">▶&ensp;Press Play — both balls release from rest, same instant</div>
+  <div class="preplay-hint" id="preplay-hint">▶&ensp;Press Play — ball releases from rest</div>
 </div>
 <div class="plot-box" id="plot-rec" style="flex:0 0 220px;">
   <canvas id="cv-rec"></canvas>
@@ -496,21 +496,24 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="ctrl-slider-row"><input type="range" id="in-k" min="5" max="40" step="1" value="20"></div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">Mass m (both balls)</span><span class="slider-val" id="val-m">0.50 kg</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label" id="lbl-m">Mass m</span><span class="slider-val" id="val-m">0.50 kg</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-m" min="0.2" max="2" step="0.05" value="0.5"></div>
     </div>
-    <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label b1">Amplitude A₁ (ball 1)</span><span class="slider-val" id="val-a1">0.30 m</span></div>
-      <div class="ctrl-slider-row"><input type="range" id="in-a1" min="0.15" max="0.7" step="0.05" value="0.3"></div>
+    <div class="ctrl-box">
+      <label class="chk"><input type="checkbox" id="chk-compare"> Compare two masses</label>
     </div>
     <div class="ctrl-box ctrl-box--slider">
+      <div class="ctrl-box-head"><span class="ctrl-box-label b1" id="lbl-a1">Amplitude A</span><span class="slider-val" id="val-a1">0.30 m</span></div>
+      <div class="ctrl-slider-row"><input type="range" id="in-a1" min="0.15" max="0.7" step="0.05" value="0.3"></div>
+    </div>
+    <div class="ctrl-box ctrl-box--slider" id="wrap-a2" style="display:none">
       <div class="ctrl-box-head"><span class="ctrl-box-label b2">Amplitude A₂ (ball 2)</span><span class="slider-val" id="val-a2">0.60 m</span></div>
       <div class="ctrl-slider-row"><input type="range" id="in-a2" min="0.15" max="0.7" step="0.05" value="0.6"></div>
     </div>
     <div class="ctrl-box">
       <div class="stat-row" style="gap:8px;flex-wrap:wrap;">
-        <span class="shell-readout ro-b1" id="ro-t1">T₁ = — s</span>
-        <span class="shell-readout ro-b2" id="ro-t2">T₂ = — s</span>
+        <span class="shell-readout ro-b1" id="ro-t1">T = — s</span>
+        <span class="shell-readout ro-b2" id="ro-t2" style="display:none">T₂ = — s</span>
       </div>
     </div>
     <div class="ctrl-box">
@@ -524,8 +527,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="shell-panel-body">
     <div class="led-grid">
       <div class="led-h"></div><div class="led-h">KE = ½mv²</div><div class="led-h" id="led-peh">PE = ½kx²</div><div class="led-h">E total</div>
-      <div class="b1" style="font-weight:700;">● 1</div><div id="ke1">—</div><div id="pe1">—</div><div id="e1">—</div>
-      <div class="b2" style="font-weight:700;">● 2</div><div id="ke2">—</div><div id="pe2">—</div><div id="e2">—</div>
+      <div class="b1" style="font-weight:700;" id="led-lab1">● 1</div><div id="ke1">—</div><div id="pe1">—</div><div id="e1">—</div>
+      <div class="b2 cmp-only" style="font-weight:700;display:none" id="led-lab2">● 2</div><div class="cmp-only" id="ke2" style="display:none">—</div><div class="cmp-only" id="pe2" style="display:none">—</div><div class="cmp-only" id="e2" style="display:none">—</div>
     </div>
   </div>
 </div>
@@ -782,6 +785,29 @@ const EMAX=10.5;            // fixed energy axis maximum (J) — stable scale
 const WIN=6.0;              // recorder window (s)
 let theta=0, u1=0, u2=0, tSim=0, hasPlayed=false;
 let rec=[];                 // {t, x1, x2} time-series samples
+const compareOn=()=>!!$('chk-compare')?.checked;
+/** Show/hide the second ball (A₂, T₂, ledger row) and sync labels. */
+function setCompare(on,{renderAfter=true}={}){
+  const chk=$('chk-compare');
+  if(chk) chk.checked=!!on;
+  const show=!!on;
+  const a2=$('wrap-a2'); if(a2) a2.style.display=show?'':'none';
+  const t2=$('ro-t2'); if(t2) t2.style.display=show?'':'none';
+  document.querySelectorAll('.cmp-only').forEach(el=>{ el.style.display=show?'':'none'; });
+  const lm=$('lbl-m'); if(lm) lm.textContent=show?'Mass m (both balls)':'Mass m';
+  const la=$('lbl-a1'); if(la){
+    la.textContent=show?'Amplitude A₁ (ball 1)':'Amplitude A';
+    la.classList.toggle('b1', show);
+  }
+  const lab1=$('led-lab1'); if(lab1) lab1.textContent=show?'● 1':'●';
+  const hint=$('preplay-hint');
+  if(hint && !hasPlayed){
+    hint.textContent=show
+      ? '▶\u2002Press Play — both balls release from rest, same instant'
+      : '▶\u2002Press Play — ball releases from rest';
+  }
+  if(renderAfter) render();
+}
 
 /* colors */
 const C1='#22d3ee', C1D='#155e75', C2='#fbbf24', C2D='#92400e',
@@ -835,6 +861,7 @@ function drawWell(s1,s2){
   const cx=(L+R)/2, sx=(R-L)/2/XVIEW;
   const px=x=>cx+x*sx, py=E=>Y0-(E/EMAX)*(Y0-TOP);
   const E1=Eof(P.A1), E2=Eof(P.A2);
+  const two=compareOn();
   cxW.font='12px Inter,sans-serif';
 
   /* energy axis + shared baseline (also the ball track / x-axis) */
@@ -892,7 +919,9 @@ function drawWell(s1,s2){
 
   /* E-lines with turning-point diamonds (V(x)=E) — only after first play */
   if(hasPlayed){
-    for(const [A,E,col] of [[P.A1,E1,C1],[P.A2,E2,C2]]){
+    const eLines=[[P.A1,E1,C1]];
+    if(two) eLines.push([P.A2,E2,C2]);
+    for(const [A,E,col] of eLines){
       const y=py(E);
       cxW.strokeStyle=col; cxW.globalAlpha=.7; cxW.lineWidth=1.4; cxW.setLineDash([6,4]);
       cxW.beginPath(); cxW.moveTo(px(-A),y); cxW.lineTo(px(A),y); cxW.stroke();
@@ -909,14 +938,20 @@ function drawWell(s1,s2){
       if(x<L+30){ x=px(A)+8; align='left'; if(x>R-30) return; }
       cxW.textAlign=align; cxW.fillStyle=col; cxW.fillText(txt,x,y);
     }
-    const sameA=Math.abs(P.A1-P.A2)<1e-9;
-    eLabel(sameA?'E₁ = E₂':'E₁',P.A1,E1,C1);
-    if(!sameA) eLabel('E₂',P.A2,E2,C2);
+    if(two){
+      const sameA=Math.abs(P.A1-P.A2)<1e-9;
+      eLabel(sameA?'E₁ = E₂':'E₁',P.A1,E1,C1);
+      if(!sameA) eLabel('E₂',P.A2,E2,C2);
+    }else{
+      eLabel('E',P.A1,E1,C1);
+    }
   }
 
   /* per-ball energy bars, curve read-off dots, connectors — only after first play */
   if(hasPlayed){
-    for(const [st,A,col,colD,r] of [[s2,P.A2,C2,C2D,9],[s1,P.A1,C1,C1D,6]]){
+    const bars=[[s1,P.A1,C1,C1D,two?6:8]];
+    if(two) bars.unshift([s2,P.A2,C2,C2D,9]);
+    for(const [st,A,col,colD,r] of bars){
       const E=Eof(A), V=Math.min(Vof(st.x),E), X=px(st.x);
       cxW.strokeStyle=colD; cxW.lineWidth=5;
       cxW.beginPath(); cxW.moveTo(X,Y0); cxW.lineTo(X,py(V)); cxW.stroke();
@@ -940,7 +975,9 @@ function drawWell(s1,s2){
   }
   /* turning-point ticks on the axis — only after first play */
   if(hasPlayed){
-    for(const [A,col] of [[P.A1,C1],[P.A2,C2]]) for(const sgn of[-1,1]){
+    const tps=[[P.A1,C1]];
+    if(two) tps.push([P.A2,C2]);
+    for(const [A,col] of tps) for(const sgn of[-1,1]){
       const X=px(sgn*A);
       cxW.fillStyle=col; cxW.globalAlpha=.9;
       cxW.beginPath(); cxW.moveTo(X,AX+2); cxW.lineTo(X-4,AX+9); cxW.lineTo(X+4,AX+9); cxW.closePath(); cxW.fill();
@@ -949,7 +986,9 @@ function drawWell(s1,s2){
   }
   /* force arrows (mechanism: grows vs capped) — only after first play */
   if(hasPlayed){
-    for(const [st,col,r] of [[s2,C2,9],[s1,C1,6]]){
+    const fas=[[s1,C1,two?6:8]];
+    if(two) fas.unshift([s2,C2,9]);
+    for(const [st,col,r] of fas){
       const F=Fof(st.x), len=F*3.0;
       if(Math.abs(len)>=5){
         const x1=px(st.x)+Math.sign(len)*(r+2), x2=x1+len;
@@ -961,22 +1000,24 @@ function drawWell(s1,s2){
       }
     }
   }
-  /* the balls (read-offs of x(t)) — ball 1 smaller so both stay visible when they cross */
-  for(const [st,r,col,edge,label] of [[s2,9,C2,'#8a5a10','2'],[s1,6,C1,'#0e7490','1']]){
+  /* the balls (read-offs of x(t)) — ball 1 smaller when both are visible */
+  const balls=[[s1,two?6:8,C1,'#0e7490',two?'1':'']];
+  if(two) balls.unshift([s2,9,C2,'#8a5a10','2']);
+  for(const [st,r,col,edge,label] of balls){
     const X=px(st.x);
     cxW.beginPath(); cxW.arc(X,AX,r,0,TAU); cxW.fillStyle=col; cxW.fill();
     cxW.lineWidth=1.5; cxW.strokeStyle=edge; cxW.stroke();
     cxW.beginPath(); cxW.arc(X-r*0.3,AX-r*0.35,r*0.28,0,TAU); cxW.fillStyle='rgba(255,255,255,.55)'; cxW.fill();
-    /* ball number label */
-    cxW.fillStyle=col; cxW.textAlign='center'; cxW.font='bold 11px Inter,sans-serif';
-    cxW.fillText(label,X,AX-r-5);
+    if(label){
+      cxW.fillStyle=col; cxW.textAlign='center'; cxW.font='bold 11px Inter,sans-serif';
+      cxW.fillText(label,X,AX-r-5);
+    }
   }
 
-  /* KE ⇄ PE — whole-system energy bars (KE and PE summed over both balls) */
+  /* KE ⇄ PE — energy bars (one ball, or summed over both when comparing) */
   if(hasPlayed){
-    // Combined energies: PE = V(x) per ball; KE = E − PE per ball; sum both balls.
-    const PEtot = Vof(s1.x) + Vof(s2.x);
-    const Etot  = Eof(P.A1) + Eof(P.A2);           // total system energy — constant
+    const PEtot = two ? (Vof(s1.x) + Vof(s2.x)) : Vof(s1.x);
+    const Etot  = two ? (Eof(P.A1) + Eof(P.A2)) : Eof(P.A1);
     const KEtot = Math.max(0, Etot - PEtot);
     const denom = Etot > 0 ? Etot : 1;             // both bars scaled to fixed Etot
 
@@ -1074,8 +1115,10 @@ function drawRec(){
   }
   cxR.strokeStyle='rgba(203,213,225,.45)'; cxR.setLineDash([4,4]);
   cxR.beginPath(); cxR.moveTo(L,mid); cxR.lineTo(R,mid); cxR.stroke(); cxR.setLineDash([]);
-  /* amplitude envelopes (current ±A₁, ±A₂) */
-  for(const [A,col] of [[P.A1,C1],[P.A2,C2]]) for(const sgn of[-1,1]){
+  /* amplitude envelopes (current ±A₁, and ±A₂ when comparing) */
+  const envs=[[P.A1,C1]];
+  if(compareOn()) envs.push([P.A2,C2]);
+  for(const [A,col] of envs) for(const sgn of[-1,1]){
     cxR.strokeStyle=col; cxR.globalAlpha=.22; cxR.setLineDash([3,5]);
     const y=pyX(sgn*A);
     cxR.beginPath(); cxR.moveTo(L,y); cxR.lineTo(R,y); cxR.stroke();
@@ -1099,15 +1142,18 @@ function drawRec(){
     }
     cxR.stroke();
   };
-  seg('x2',C2); seg('x1',C1);
+  if(compareOn()) seg('x2',C2);
+  seg('x1',C1);
   if(rec.length){
     const p=rec[rec.length-1];
-    for(const [k,c,r] of [['x2',C2,4.5],['x1',C1,3.5]]){
+    const tips=[['x1',C1,compareOn()?3.5:4.5]];
+    if(compareOn()) tips.unshift(['x2',C2,4.5]);
+    for(const [k,c,r] of tips){
       cxR.beginPath(); cxR.arc(pxT(p.t),pyX(p[k]),r,0,TAU); cxR.fillStyle=c; cxR.fill();
     }
   }
-  /* status tag — gate on at least one full period elapsed */
-  if(hasPlayed && tSim>=Tspring()){
+  /* status tag — only meaningful when comparing two amplitudes */
+  if(compareOn() && hasPlayed && tSim>=Tspring()){
     const spring=P.mode==='spring';
     const msg=spring?'✓ locked in phase: T₁ = T₂':'⚠ slipping apart: T ∝ √A here';
     cxR.textAlign='right';
@@ -1126,14 +1172,16 @@ function drawRec(){
 const roT1=$('ro-t1'), roT2=$('ro-t2'), ledPanel=$('panel-ledger');
 function updateReadouts(){
   const [T1,T2]=periods();
+  const two=compareOn();
   if(!hasPlayed){
-    roT1.textContent='T₁ = — s'; roT2.textContent='T₂ = — s';
+    roT1.textContent=(two?'T₁':'T')+' = — s';
+    roT2.textContent='T₂ = — s';
     roT1.title=roT2.title='the periods appear at first ▶ Play — predict first!';
     return;
   }
-  roT1.title='period of ball 1 (from the exact solution)';
+  roT1.title=two?'period of ball 1 (from the exact solution)':'period (from the exact solution)';
   roT2.title='period of ball 2 (from the exact solution)';
-  roT1.textContent=`T₁ = ${T1.toFixed(3)} s`;
+  roT1.textContent=`${two?'T₁':'T'} = ${T1.toFixed(3)} s`;
   roT2.textContent=`T₂ = ${T2.toFixed(3)} s ${Math.abs(T1-T2)<1e-9?'(= T₁)':'(≠ T₁)'}`;
 }
 function updateLedger(s1,s2){
@@ -1141,7 +1189,9 @@ function updateLedger(s1,s2){
   $('led-peh').textContent=P.mode==='spring'?'PE = ½kx²':'PE = F₀|x|';
   const set=(id,v)=>{$(id).textContent=v.toFixed(2)+' J';};
   set('ke1',0.5*P.m*s1.v*s1.v); set('pe1',Vof(s1.x)); set('e1',Eof(P.A1));
-  set('ke2',0.5*P.m*s2.v*s2.v); set('pe2',Vof(s2.x)); set('e2',Eof(P.A2));
+  if(compareOn()){
+    set('ke2',0.5*P.m*s2.v*s2.v); set('pe2',Vof(s2.x)); set('e2',Eof(P.A2));
+  }
 }
 function updateTexts(){
   $('val-k').textContent=P.k.toFixed(0)+' N/m';
@@ -1158,9 +1208,14 @@ function renderFormal(){
   const opt={throwOnError:false};
   katex.render(`x(t)=A\\cos(\\omega t),\\qquad \\omega=\\sqrt{k/m}=${wv.toFixed(4)}\\ \\mathrm{rad/s}`,$('eq1'),opt);
   katex.render(`T=\\frac{2\\pi}{\\omega}=2\\pi\\sqrt{\\frac{m}{k}}=${T.toFixed(4)}\\ \\mathrm{s}\\quad(\\text{no }A)`,$('eq2'),opt);
+  const two=compareOn();
   const eq3=P.mode==='spring'
-    ? `E=\\tfrac12 mv^{2}+\\tfrac12 kx^{2}=\\tfrac12 kA^{2}:\\;E_{1}=${E1}\\,\\mathrm{J},\\;E_{2}=${E2}\\,\\mathrm{J}`
-    : `E=\\tfrac12 mv^{2}+F_{0}\\lvert x\\rvert=F_{0}A:\\;E_{1}=${E1}\\,\\mathrm{J},\\;E_{2}=${E2}\\,\\mathrm{J}`;
+    ? (two
+        ? `E=\\tfrac12 mv^{2}+\\tfrac12 kx^{2}=\\tfrac12 kA^{2}:\\;E_{1}=${E1}\\,\\mathrm{J},\\;E_{2}=${E2}\\,\\mathrm{J}`
+        : `E=\\tfrac12 mv^{2}+\\tfrac12 kx^{2}=\\tfrac12 kA^{2}=${E1}\\,\\mathrm{J}`)
+    : (two
+        ? `E=\\tfrac12 mv^{2}+F_{0}\\lvert x\\rvert=F_{0}A:\\;E_{1}=${E1}\\,\\mathrm{J},\\;E_{2}=${E2}\\,\\mathrm{J}`
+        : `E=\\tfrac12 mv^{2}+F_{0}\\lvert x\\rvert=F_{0}A=${E1}\\,\\mathrm{J}`);
   katex.render(eq3,$('eq3'),opt);
   katex.render(`V=F_{0}\\lvert x\\rvert\\;\\Rightarrow\\;T=4\\sqrt{\\frac{2Am}{F_{0}}}\\propto\\sqrt{A},\\qquad F_{0}=${f0.toFixed(2)}\\ \\mathrm{N}`,$('eq4'),opt);
 }
@@ -1213,6 +1268,7 @@ function onReset(){
   $('in-k').value=P.k; $('in-m').value=P.m; $('in-a1').value=P.A1; $('in-a2').value=P.A2;
   $('mode-spring').classList.add('on'); $('mode-const').classList.remove('on');
   theta=0; u1=0; u2=0; tSim=0; rec.length=0;
+  setCompare(false,{renderAfter:false});
   updateTexts(); render();
 }
 function setMode(m){
@@ -1239,6 +1295,11 @@ $('show-rec').addEventListener('change',()=>{
   Shell.refit();
   render();
 });
+$('chk-compare').addEventListener('change',()=>{
+  /* Clear the recorder so a newly revealed second trace starts clean. */
+  theta=0; u1=0; u2=0; tSim=0; rec.length=0;
+  setCompare($('chk-compare').checked);
+});
 
 /* ---------- guided-inquiry scene driver (deterministic; chrome only) ---------- */
 function applyInquiryScene(cfg){
@@ -1257,6 +1318,9 @@ function applyInquiryScene(cfg){
   } else {
     $('shell-play').classList.add('primary');
   }
+  /* Leave compare mode alone unless a scene explicitly sets it — lecture
+     default is one ball (checkbox unchecked). */
+  if(cfg.compare != null) setCompare(!!cfg.compare,{renderAfter:false});
   updateTexts(); render();
   if(cfg.playing != null) Shell.setPlaying(!!cfg.playing);
 }
