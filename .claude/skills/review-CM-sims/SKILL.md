@@ -120,9 +120,12 @@ Apply the ones that fit the sim; verify sign, factor, units, and limits for each
   physics-simulation-reviewer for a second opinion and fold it in.
 
 ## Browser probe (bundled)
-- Script: `browser-probe.mjs` in this skill dir. Runs system Chrome via puppeteer-core
-  (resolved from `Capacity_SR_sims_v2_engine/_review/node_modules`; requires that Chrome and
-  that install to exist — both already present in this repo).
+- Script: `browser-probe.mjs` in this skill dir (`<repo>/.claude/skills/review-CM-sims/`).
+  Runs system Chrome via puppeteer-core. Both are resolved at runtime, no hard-coded repo path:
+  - **puppeteer-core** — first hit among `<repo>/_review/`, `<repo>/Capacity_SR_sims_v2_engine/_review/`
+    (the current install), `<repo>/`. Exits with an install hint if none has it.
+  - **Chrome** — `$CHROME_PATH`, else system Google Chrome, else Chromium. Exits with a hint if none.
+  - The run prints which Chrome and which `node_modules` base it used.
 - It is generic to the shell (drives `#shell-play` + every `input[type=range]`, reads
   `.shell-readout`/`.drow`/`#data-body` and `window.__audit`). No per-sim config needed.
 - If a sim needs a specific interaction the sweep misses (e.g. a mode button, a specific
