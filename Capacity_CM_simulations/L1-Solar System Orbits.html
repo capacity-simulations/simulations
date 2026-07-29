@@ -322,7 +322,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="plot-title">Orbital view — 3D <span class="plot-inline" id="view-label">— Inner system (out to Mars)</span></div>
       <canvas id="gl3d"></canvas>
       <canvas id="sky"></canvas>
-      <div class="orbit-hint">drag to orbit the camera</div>
+      <div class="orbit-hint">drag to orbit · scroll to zoom</div>
     </div>
   </main>
 
@@ -696,7 +696,7 @@ const Shell = (function(){
   const cam = { az: -Math.PI/2, pol: 0.95, dist: 5.0 };
   let _rs = 11;
   function rnd3(){ _rs=(_rs*16807)%2147483647; return _rs/2147483647; }
-  function viewK(){ return state.view === 'inner' ? 0.013 : 0.23; }
+  function viewK(){ return state.view === 'inner' ? 0.013 : 0.10; }
 
   function texCanvas(w,h,draw){
     const c=document.createElement('canvas'); c.width=w; c.height=h;
@@ -890,6 +890,12 @@ const Shell = (function(){
       lx=e.clientX; ly=e.clientY;
       if(!Shell.playing) render(0); });
     ['pointerup','pointercancel'].forEach(ev=>glc.addEventListener(ev,()=>{ dragging=false; glc.style.cursor='grab'; }));
+    /* scroll to zoom — camera distance only, clamped per view */
+    glc.addEventListener('wheel',e=>{ e.preventDefault();
+      const lim = state.view==='inner' ? [2.2,9] : [8,170];
+      cam.dist=Math.min(lim[1],Math.max(lim[0],cam.dist*Math.exp(e.deltaY*0.0012)));
+      if(!Shell.playing) render(0);
+    },{passive:false});
     ready3d=true;
   }
 
@@ -920,7 +926,7 @@ const Shell = (function(){
   /* Display-space radial compression for the Full view ONLY: keeps every
      orbit visible (Mercury→2.8 AU display) while physics stays in true AU.
      Monotonic power law along each ray — Sun stays at the focus, peri<apo. */
-  const R_NEP = 30.061, DISP_P = 0.55;
+  const R_NEP = 30.061, DISP_P = 0.42;
   function dispXY(x,y){
     if(state.view !== 'outer') return [x,y];
     const r = Math.hypot(x,y);
@@ -1214,10 +1220,8 @@ const Shell = (function(){
         ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.arc(x,y,pr+5,0,Math.PI*2); ctx.stroke();
       }
-      // In outer view, suppress inner-planet labels except the selected one
-      const isInner = (i <= 3);
-      const suppress = (state.view === 'outer' && isInner && !sel);
-      if(!suppress){
+      // Compressed spacing keeps orbits apart, so every visible planet gets a label
+      {
         const lbl = p.name;
         const font = (sel ? 'bold ' : '') + '12px var(--font-sans), sans-serif';
         ctx.font = font;
