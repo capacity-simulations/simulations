@@ -6,6 +6,7 @@
 <title>Solar System Orbits — Ellipses & Speeds</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 :root{
   --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
@@ -111,6 +112,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
   position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;width:100%;height:100%;}
+#gl3d{position:absolute;inset:0;z-index:0;cursor:grab;}
+#sky{position:absolute;inset:0;z-index:1;background:transparent;pointer-events:none;}
+.orbit-hint{position:absolute;right:12px;bottom:10px;z-index:2;font-size:11px;color:rgba(255,255,255,.5);
+  background:rgba(6,10,18,.55);padding:3px 10px;border-radius:999px;pointer-events:none;}
 .plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;margin-left:6px;}
@@ -314,8 +319,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
   <main class="shell-hero">
     <div class="plot-box">
-      <div class="plot-title">Top-down view <span class="plot-inline" id="view-label">— Inner system (out to Mars)</span></div>
+      <div class="plot-title">Orbital view — 3D <span class="plot-inline" id="view-label">— Inner system (out to Mars)</span></div>
+      <canvas id="gl3d"></canvas>
       <canvas id="sky"></canvas>
+      <div class="orbit-hint">drag to orbit the camera</div>
     </div>
   </main>
 
@@ -681,18 +688,254 @@ const Shell = (function(){
     state.ghostActive = false;
   }
 
-  function initStars(w,h){
-    // Reduced density and no nebulae; decoration only.
-    state.stars = [];
-    const count = Math.floor((w*h)/5000);
-    for(let i=0;i<count;i++){
-      state.stars.push({
-        x: Math.random()*w,
-        y: Math.random()*h,
-        r: Math.random()<0.94 ? Math.random()*0.8+0.2 : Math.random()*1.4+0.6,
-        a: Math.random()*0.4+0.2
-      });
+  /* ============== 3D scene — rendering layer only, physics untouched ====== */
+  const glc = document.getElementById('gl3d');
+  let renderer3, scene3, camera3, sunMesh, sunGlow, domeMesh, refRing, ghostRing, ghostMesh;
+  const planetMeshes = [], orbitLines = [];
+  let ready3d = false, _pv = null;
+  const cam = { az: -Math.PI/2, pol: 0.95, dist: 5.0 };
+  let _rs = 11;
+  function rnd3(){ _rs=(_rs*16807)%2147483647; return _rs/2147483647; }
+  function viewK(){ return state.view === 'inner' ? 0.013 : 0.23; }
+
+  function texCanvas(w,h,draw){
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    draw(c.getContext('2d'),w,h);
+    const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t;
+  }
+  function paintBands(g,w,h,base,bands){
+    if(base!=='none'){ g.fillStyle=base; g.fillRect(0,0,w,h); }
+    bands.forEach(bd=>{
+      const y0=(bd[0]-bd[1])*h, y1=(bd[0]+bd[1])*h;
+      const grd=g.createLinearGradient(0,y0,0,y1);
+      grd.addColorStop(0,'rgba(0,0,0,0)'); grd.addColorStop(0.5,bd[2]); grd.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=grd; g.fillRect(0,y0,w,y1-y0);
+    });
+  }
+  function paintStreaks(g,w,h,alpha,n){
+    for(let i=0;i<n;i++){ const y=rnd3()*h, len=w*(0.1+0.5*rnd3()), x=rnd3()*w;
+      g.strokeStyle='rgba(255,255,255,'+(alpha*rnd3()).toFixed(3)+')';
+      g.lineWidth=0.8+rnd3()*1.6;
+      g.beginPath(); g.moveTo(x,y);
+      g.bezierCurveTo(x+len*0.3,y+3*(rnd3()-0.5),x+len*0.7,y+3*(rnd3()-0.5),x+len,y);
+      g.stroke(); }
+  }
+  function makePlanetTex(name){
+    _rs = 97 + name.length*131;
+    return texCanvas(512,256,(g,w,h)=>{
+      const TAU=Math.PI*2;
+      if(name==='Mercury'||name==='Mars'){
+        g.fillStyle = name==='Mercury' ? '#8d8578' : '#b5623c';
+        g.fillRect(0,0,w,h);
+        const n = name==='Mercury' ? 950 : 350;
+        for(let i=0;i<n;i++){ const x=rnd3()*w, y=rnd3()*h, r=0.6+rnd3()*(name==='Mercury'?3:6);
+          g.fillStyle='rgba(40,25,18,'+(0.04+0.16*rnd3()).toFixed(2)+')';
+          g.beginPath(); g.arc(x,y,r,0,TAU); g.fill(); }
+        if(name==='Mercury'){
+          for(let i=0;i<260;i++){ const x=rnd3()*w,y=rnd3()*h,r=0.5+rnd3()*1.6;
+            g.fillStyle='rgba(255,245,230,'+(0.05+0.09*rnd3()).toFixed(2)+')';
+            g.beginPath(); g.arc(x,y,r,0,TAU); g.fill(); }
+        } else {
+          [0.035,0.965].forEach(v=>{ const grd=g.createLinearGradient(0,(v-0.05)*h,0,(v+0.05)*h);
+            grd.addColorStop(0,'rgba(255,255,255,0)'); grd.addColorStop(0.5,'rgba(245,240,235,0.9)'); grd.addColorStop(1,'rgba(255,255,255,0)');
+            g.fillStyle=grd; g.fillRect(0,(v-0.05)*h,w,0.1*h); });
+          paintBands(g,w,h,'none',[[0.5,0.18,'rgba(122,58,36,0.35)']]);
+        }
+      } else if(name==='Venus'){
+        paintBands(g,w,h,'#e3c793',[[0.2,0.12,'rgba(214,178,120,0.55)'],[0.45,0.1,'rgba(240,220,175,0.5)'],[0.68,0.14,'rgba(205,168,112,0.5)'],[0.9,0.1,'rgba(228,198,146,0.5)']]);
+        paintStreaks(g,w,h,0.12,120);
+      } else if(name==='Earth'){
+        g.fillStyle='#1d4f8b'; g.fillRect(0,0,w,h);
+        for(let i=0;i<26;i++){ const x=rnd3()*w, y=h*(0.15+0.7*rnd3()), rr=8+rnd3()*30;
+          g.fillStyle='rgba('+(52+Math.floor(40*rnd3()))+','+(105+Math.floor(40*rnd3()))+',60,0.9)';
+          for(let k=0;k<6;k++){ g.beginPath(); g.arc(x+(rnd3()-0.5)*rr*1.6, y+(rnd3()-0.5)*rr, rr*(0.3+0.5*rnd3()),0,TAU); g.fill(); } }
+        [0.03,0.97].forEach(v=>{ g.fillStyle='rgba(245,250,255,0.92)'; g.fillRect(0,(v-0.035)*h,w,0.07*h); });
+        paintStreaks(g,w,h,0.5,150);
+      } else if(name==='Jupiter'){
+        paintBands(g,w,h,'#d8b18a',[[0.14,0.07,'rgba(168,116,84,0.75)'],[0.28,0.05,'rgba(238,216,182,0.8)'],[0.4,0.06,'rgba(158,100,72,0.8)'],[0.52,0.05,'rgba(240,220,190,0.85)'],[0.63,0.06,'rgba(172,112,80,0.8)'],[0.76,0.06,'rgba(232,208,176,0.75)'],[0.88,0.06,'rgba(150,98,72,0.6)']]);
+        paintStreaks(g,w,h,0.16,220);
+        g.save(); g.translate(w*0.31,h*0.62); g.scale(1.7,1);
+        const spot=g.createRadialGradient(0,0,1,0,0,14);
+        spot.addColorStop(0,'rgba(196,90,58,0.95)'); spot.addColorStop(0.75,'rgba(176,80,52,0.85)'); spot.addColorStop(1,'rgba(176,80,52,0)');
+        g.fillStyle=spot; g.beginPath(); g.arc(0,0,14,0,TAU); g.fill(); g.restore();
+      } else if(name==='Saturn'){
+        paintBands(g,w,h,'#ddc596',[[0.18,0.09,'rgba(200,172,124,0.6)'],[0.38,0.08,'rgba(238,222,184,0.7)'],[0.58,0.09,'rgba(196,166,118,0.6)'],[0.8,0.09,'rgba(228,206,162,0.6)']]);
+        paintStreaks(g,w,h,0.1,140);
+      } else if(name==='Uranus'){
+        paintBands(g,w,h,'#a9dbe6',[[0.35,0.16,'rgba(146,206,220,0.5)'],[0.7,0.14,'rgba(170,222,232,0.5)']]);
+      } else {
+        paintBands(g,w,h,'#3f62c9',[[0.25,0.1,'rgba(46,74,168,0.7)'],[0.5,0.08,'rgba(96,132,224,0.6)'],[0.75,0.1,'rgba(40,64,150,0.7)']]);
+        paintStreaks(g,w,h,0.2,80);
+        g.fillStyle='rgba(20,34,90,0.8)';
+        g.save(); g.translate(w*0.62,h*0.42); g.scale(1.6,1);
+        g.beginPath(); g.arc(0,0,9,0,TAU); g.fill(); g.restore();
+      }
+    });
+  }
+  function makeRingTex(faint){
+    return texCanvas(256,256,(g,w)=>{
+      const c=w/2;
+      for(let r=w*0.30;r<w*0.5;r+=1){
+        const t=(r-w*0.30)/(w*0.2);
+        let a = 0.10+0.5*Math.pow(Math.sin(t*22)*0.5+0.5,2)*(1-t*0.5);
+        if(t>0.62&&t<0.70) a*=0.15;
+        if(faint) a*=0.45;
+        g.strokeStyle='rgba(214,198,168,'+a.toFixed(3)+')';
+        g.beginPath(); g.arc(c,c,r,0,Math.PI*2); g.stroke();
+      }
+    });
+  }
+  function makeGlowSprite(){
+    return texCanvas(256,256,(g,w)=>{
+      const c=w/2, grd=g.createRadialGradient(c,c,0,c,c,c);
+      grd.addColorStop(0,'rgba(255,244,214,1)');
+      grd.addColorStop(0.18,'rgba(255,214,140,0.55)');
+      grd.addColorStop(0.5,'rgba(255,166,72,0.16)');
+      grd.addColorStop(1,'rgba(255,140,50,0)');
+      g.fillStyle=grd; g.fillRect(0,0,w,w);
+    });
+  }
+  function makeSpaceTex(){
+    _rs=773;
+    const c=document.createElement('canvas'); c.width=4096; c.height=2048;
+    const g=c.getContext('2d');
+    g.fillStyle='#020308'; g.fillRect(0,0,4096,2048);
+    /* faint horizontal galaxy band — dome mesh is tilted in 3D, so no seam */
+    const gb=g.createLinearGradient(0,860,0,1190);
+    gb.addColorStop(0,'rgba(190,205,235,0)'); gb.addColorStop(0.5,'rgba(190,205,235,0.075)'); gb.addColorStop(1,'rgba(190,205,235,0)');
+    g.fillStyle=gb; g.fillRect(0,860,4096,330);
+    for(let i=0;i<520;i++){ const x=rnd3()*4096, y=880+rnd3()*280;
+      g.fillStyle='rgba(215,225,250,'+(0.05+0.2*rnd3()).toFixed(2)+')';
+      g.fillRect(x,y,1.6,1.6); }
+    for(let i=0;i<3800;i++){ const x=rnd3()*4096, y=rnd3()*2048, t=rnd3();
+      const col = t<0.75?'215,225,255' : (t<0.9?'255,240,220':'255,214,190');
+      g.fillStyle='rgba('+col+','+(0.14+0.6*rnd3()*rnd3()).toFixed(2)+')';
+      const s=rnd3()<0.1?2.6:1.5;
+      g.fillRect(x,y,s,s); }
+    for(let i=0;i<40;i++){ const x=rnd3()*4096, y=rnd3()*2048;
+      g.shadowColor='rgba(230,238,255,0.9)'; g.shadowBlur=5;
+      g.fillStyle='rgba(240,246,255,0.9)'; g.beginPath(); g.arc(x,y,1.6,0,Math.PI*2); g.fill();
+      g.shadowBlur=0; }
+    const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t;
+  }
+
+  function init3d(){
+    if(!window.THREE) return;
+    renderer3=new THREE.WebGLRenderer({canvas:glc,antialias:true});
+    renderer3.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer3.outputEncoding=THREE.sRGBEncoding;
+    renderer3.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer3.toneMappingExposure=1.1;
+    scene3=new THREE.Scene();
+    camera3=new THREE.PerspectiveCamera(45,1.6,0.05,3000);
+    _pv=new THREE.Vector3();
+
+    domeMesh=new THREE.Mesh(new THREE.SphereGeometry(700,48,24),
+      new THREE.MeshBasicMaterial({map:makeSpaceTex(),side:THREE.BackSide,depthWrite:false}));
+    domeMesh.rotation.z=0.45; domeMesh.frustumCulled=false; scene3.add(domeMesh);
+
+    scene3.add(new THREE.AmbientLight(0x2c3444,0.45));
+    scene3.add(new THREE.PointLight(0xfff2d6,1.85,0,0));
+
+    sunMesh=new THREE.Mesh(new THREE.SphereGeometry(1,32,24),
+      new THREE.MeshBasicMaterial({color:0xfff0c4}));
+    scene3.add(sunMesh);
+    sunGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:makeGlowSprite(),color:0xffdf9e,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    scene3.add(sunGlow);
+
+    PLANETS.forEach((p,i)=>{
+      const m=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),
+        new THREE.MeshStandardMaterial({map:makePlanetTex(p.name),roughness:0.95,metalness:0,
+          emissive:new THREE.Color(p.color).multiplyScalar(0.22)}));
+      if(p.name==='Saturn'){
+        m.rotation.z=0.47;
+        const ring=new THREE.Mesh(new THREE.PlaneGeometry(4.6,4.6),
+          new THREE.MeshBasicMaterial({map:makeRingTex(false),transparent:true,side:THREE.DoubleSide,depthWrite:false}));
+        ring.rotation.x=-Math.PI/2; m.add(ring);
+      }
+      if(p.name==='Uranus'){
+        m.rotation.z=1.71;
+        const ring=new THREE.Mesh(new THREE.PlaneGeometry(3.4,3.4),
+          new THREE.MeshBasicMaterial({map:makeRingTex(true),transparent:true,side:THREE.DoubleSide,depthWrite:false,opacity:0.5}));
+        ring.rotation.x=-Math.PI/2; m.add(ring);
+      }
+      scene3.add(m); planetMeshes.push(m);
+      const pts=state.bodies[i].trail.map(q=>new THREE.Vector3(q.x,0,-q.y));
+      const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({color:new THREE.Color(p.color),transparent:true,opacity:0.45}));
+      scene3.add(line); orbitLines.push(line);
+    });
+
+    /* 1 AU reference ring (dashed) */
+    const refPts=[]; for(let k=0;k<=180;k++){ const a=k/180*Math.PI*2; refPts.push(new THREE.Vector3(Math.cos(a),0,Math.sin(a))); }
+    refRing=new THREE.Line(new THREE.BufferGeometry().setFromPoints(refPts),
+      new THREE.LineDashedMaterial({color:0xffffff,transparent:true,opacity:0.16,dashSize:0.05,gapSize:0.05}));
+    refRing.computeLineDistances(); scene3.add(refRing);
+
+    /* ghost Mercury: dashed circular track + marker (misconception rebuttal) */
+    const a0=PLANETS[0].a, gPts=[];
+    for(let k=0;k<=180;k++){ const a=k/180*Math.PI*2; gPts.push(new THREE.Vector3(a0*Math.cos(a),0,a0*Math.sin(a))); }
+    ghostRing=new THREE.Line(new THREE.BufferGeometry().setFromPoints(gPts),
+      new THREE.LineDashedMaterial({color:0xffb4b4,transparent:true,opacity:0.5,dashSize:0.02,gapSize:0.02}));
+    ghostRing.computeLineDistances(); ghostRing.visible=false; scene3.add(ghostRing);
+    ghostMesh=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),
+      new THREE.MeshBasicMaterial({color:0xffb4b4}));
+    ghostMesh.visible=false; scene3.add(ghostMesh);
+
+    /* drag to orbit the camera — view only, never touches sim state */
+    let dragging=false,lx=0,ly=0;
+    glc.addEventListener('pointerdown',e=>{ dragging=true; lx=e.clientX; ly=e.clientY;
+      glc.setPointerCapture(e.pointerId); glc.style.cursor='grabbing'; });
+    glc.addEventListener('pointermove',e=>{ if(!dragging) return;
+      cam.az+=(e.clientX-lx)*0.005;
+      cam.pol=Math.min(1.30,Math.max(0.18,cam.pol+(e.clientY-ly)*0.004));
+      lx=e.clientX; ly=e.clientY;
+      if(!Shell.playing) render(0); });
+    ['pointerup','pointercancel'].forEach(ev=>glc.addEventListener(ev,()=>{ dragging=false; glc.style.cursor='grab'; }));
+    ready3d=true;
+  }
+
+  function applyViewScale(){
+    cam.dist = state.view==='inner' ? 5.0 : 92;
+    if(!ready3d) return;
+    const K=viewK();
+    planetMeshes.forEach((m,i)=>m.scale.setScalar(PLANETS[i].px*K));
+    const sunS = state.view==='inner' ? 9*K : 9*K*0.5;
+    sunMesh.scale.setScalar(sunS);
+    sunGlow.scale.set(sunS*5.5,sunS*5.5,1);
+    ghostMesh.scale.setScalar(3.2*K*0.8);
+  }
+
+  function placeCam(){
+    const d=cam.dist;
+    camera3.position.set(d*Math.sin(cam.pol)*Math.cos(cam.az), d*Math.cos(cam.pol), d*Math.sin(cam.pol)*Math.sin(cam.az));
+    camera3.up.set(0,1,0); camera3.lookAt(0,0,0);
+    camera3.updateMatrixWorld();
+  }
+  function W2S(x,y){
+    _pv.set(x,0,-y).project(camera3);
+    return { x:(_pv.x*0.5+0.5)*state.W, y:(-_pv.y*0.5+0.5)*state.H };
+  }
+  function projRadius(i){
+    const b=state.bodies[i], wr=PLANETS[i].px*viewK();
+    const s0=W2S(b.x,b.y), s1=W2S(b.x+wr,b.y);
+    return Math.max(3, Math.hypot(s1.x-s0.x,s1.y-s0.y));
+  }
+
+  function render3d(dt){
+    const vis=visibleIndices();
+    for(let i=0;i<planetMeshes.length;i++){
+      const m=planetMeshes[i], b=state.bodies[i], on=vis.includes(i);
+      m.visible=on; orbitLines[i].visible=on;
+      m.position.set(b.x,0,-b.y);
+      if(dt) m.rotation.y+=dt*0.35;
+      orbitLines[i].material.opacity=(i===state.selected)?0.9:0.4;
     }
+    const act=!!(state.ghostActive&&state.ghost)&&state.view!=='outer';
+    ghostRing.visible=act; ghostMesh.visible=act;
+    if(act){ const g=state.ghost; ghostMesh.position.set(g.a*Math.cos(g.theta),0,-g.a*Math.sin(g.theta)); }
+    placeCam();
+    renderer3.render(scene3,camera3);
   }
 
   function fit(){
@@ -707,8 +950,12 @@ const Shell = (function(){
     state.cx = r.width/2; state.cy = r.height/2;
     const maxAU = state.view === 'inner' ? 1.8 : 32;
     const halfMin = Math.min(state.W, state.H) * 0.46;
-    state.scale = halfMin / maxAU;
-    initStars(state.W, state.H);
+    state.scale = halfMin / maxAU;   // legacy 2D scale (no longer drives drawing)
+    if(ready3d){
+      renderer3.setSize(state.W, state.H, false);
+      camera3.aspect = state.W / Math.max(1, state.H);
+      camera3.updateProjectionMatrix();
+    }
   }
 
   function accel(x,y){
@@ -757,30 +1004,9 @@ const Shell = (function(){
     }
   }
 
-  function W2X(x){ return state.cx + x * state.scale; }
-  function W2Y(y){ return state.cy - y * state.scale; }
-
   function visibleIndices(){
     if(state.view === 'inner') return [0,1,2,3];
     return [0,1,2,3,4,5,6,7];
-  }
-
-  function drawStars(dt){
-    const g = ctx.createRadialGradient(state.cx, state.cy, 0, state.cx, state.cy, Math.max(state.W, state.H)*0.7);
-    g.addColorStop(0, 'rgba(20,22,44,1)');
-    g.addColorStop(0.6, 'rgba(8,10,20,1)');
-    g.addColorStop(1, 'rgba(2,3,8,1)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,state.W,state.H);
-    // Plain, static, low-density starfield — decorative only.
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    for(const s of state.stars){
-      ctx.globalAlpha = s.a;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
   }
 
   function hexA(hex, a){
@@ -789,54 +1015,6 @@ const Shell = (function(){
     const g = parseInt(h.substring(2,4),16);
     const b = parseInt(h.substring(4,6),16);
     return `rgba(${r},${g},${b},${a})`;
-  }
-
-  function drawReferenceRing(){
-    // Faint 1 AU (Earth orbit) reference ring — stable anchor across zooms
-    ctx.save();
-    ctx.setLineDash([2,4]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(state.cx, state.cy, state.scale, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawSun(){
-    const x = state.cx, y = state.cy;
-    // Corona scaled to zoom: capped so it never swallows Mercury perihelion at inner zoom.
-    const rpMerc = PLANETS[0].a * (1 - PLANETS[0].e);
-    const coronaMax = rpMerc * state.scale * 0.55;
-    const corona = Math.min(42, Math.max(14, coronaMax));
-    const g = ctx.createRadialGradient(x,y,0,x,y,corona);
-    g.addColorStop(0,'rgba(255,236,180,0.95)');
-    g.addColorStop(0.4,'rgba(255,180,80,0.35)');
-    g.addColorStop(1,'rgba(255,140,40,0.0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x,y,corona,0,Math.PI*2); ctx.fill();
-    const dg = ctx.createRadialGradient(x-2,y-2,1,x,y,9);
-    dg.addColorStop(0,'#fff6d5');
-    dg.addColorStop(1,'#f5a623');
-    ctx.fillStyle = dg;
-    ctx.beginPath(); ctx.arc(x,y,9,0,Math.PI*2); ctx.fill();
-  }
-
-  function drawTrails(){
-    const vis = visibleIndices();
-    for(const i of vis){
-      const b = state.bodies[i];
-      const p = PLANETS[i];
-      if(b.trail.length < 2) continue;
-      ctx.lineWidth = (i === state.selected) ? 2 : 1.2;
-      ctx.strokeStyle = hexA(p.color, (i === state.selected) ? 0.85 : 0.55);
-      ctx.beginPath();
-      ctx.moveTo(W2X(b.trail[0].x), W2Y(b.trail[0].y));
-      for(let k=1;k<b.trail.length;k++){
-        ctx.lineTo(W2X(b.trail[k].x), W2Y(b.trail[k].y));
-      }
-      ctx.stroke();
-    }
   }
 
   function drawPerihelionMarkers(labelsOnly){
@@ -849,7 +1027,7 @@ const Shell = (function(){
     for(const i of indices){
       const b = state.bodies[i];
       const p = PLANETS[i];
-      const px = W2X(b.peri.x), py = W2Y(b.peri.y);
+      const sp = W2S(b.peri.x, b.peri.y), px = sp.x, py = sp.y;
       if(!labelsOnly){
         ctx.strokeStyle = hexA(p.color, 0.95);
         ctx.lineWidth = 1.5;
@@ -939,16 +1117,17 @@ const Shell = (function(){
       ctx.setLineDash([4,4]);
       ctx.strokeStyle = hexA(p.color, 0.35);
       ctx.lineWidth = 1;
+      const spp = W2S(b.peri.x, b.peri.y), spa = W2S(b.apo.x, b.apo.y);
       ctx.beginPath();
-      ctx.moveTo(W2X(b.peri.x), W2Y(b.peri.y));
-      ctx.lineTo(W2X(b.apo.x), W2Y(b.apo.y));
+      ctx.moveTo(spp.x, spp.y);
+      ctx.lineTo(spa.x, spa.y);
       ctx.stroke();
       ctx.restore();
 
       // Ellipse geometric centre (Sun is at a focus, offset by a·e from centre)
       const ecx = (b.peri.x + b.apo.x) / 2;
       const ecy = (b.peri.y + b.apo.y) / 2;
-      const sx = W2X(ecx), sy = W2Y(ecy);
+      const sc = W2S(ecx, ecy), sx = sc.x, sy = sc.y;
       const s = 5;
       ctx.strokeStyle = hexA(p.color, 0.9);
       ctx.lineWidth = 1.4;
@@ -962,8 +1141,7 @@ const Shell = (function(){
     const font = 'bold 12px var(--font-sans), sans-serif';
     ctx.font = font;
     const tw = ctx.measureText(lbl).width;
-    const tx = W2X(b.apo.x);
-    const ty = W2Y(b.apo.y);
+    const sap = W2S(b.apo.x, b.apo.y), tx = sap.x, ty = sap.y;
     placeCanvasLabel(tx, ty, lbl, {
       font,
       fillStyle: hexA(p.color, 0.95),
@@ -981,31 +1159,10 @@ const Shell = (function(){
   function drawGhostMercury(labelsOnly){
     if(!state.ghostActive || !state.ghost) return;
     if(state.view === 'outer') return;
-    // A dashed circular "constant-speed" Mercury at r = a, angle = θ_ghost.
+    if(!labelsOnly) return;   // dashed track + marker are rendered in the 3D scene
     const g = state.ghost;
-    const gx = W2X(g.a * Math.cos(g.theta));
-    const gy = W2Y(g.a * Math.sin(g.theta));
-    if(!labelsOnly){
-      ctx.save();
-      ctx.setLineDash([3,4]);
-      ctx.strokeStyle = 'rgba(255,180,180,0.45)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(state.cx, state.cy, g.a * state.scale, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.fillStyle = 'rgba(255,180,180,0.85)';
-      ctx.beginPath();
-      ctx.arc(gx, gy, 3.2, 0, Math.PI*2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,180,180,0.9)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(gx, gy, 6, 0, Math.PI*2);
-      ctx.stroke();
-      return;
-    }
+    const gs = W2S(g.a * Math.cos(g.theta), g.a * Math.sin(g.theta));
+    const gx = gs.x, gy = gs.y;
     const glbl = 'ghost — constant speed';
     const font = '12px var(--font-sans), sans-serif';
     ctx.font = font;
@@ -1025,23 +1182,18 @@ const Shell = (function(){
   }
 
   function drawPlanets(){
+    // Spheres are rendered in 3D; this overlay adds selection ring + labels.
     const vis = visibleIndices();
     for(const i of vis){
       const b = state.bodies[i];
       const p = PLANETS[i];
-      const x = W2X(b.x), y = W2Y(b.y);
+      const s = W2S(b.x, b.y), x = s.x, y = s.y;
       const sel = (i === state.selected);
-      const g = ctx.createRadialGradient(x,y,0,x,y,p.px*2.4);
-      g.addColorStop(0, hexA(p.color, 0.7));
-      g.addColorStop(1, hexA(p.color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x,y,p.px*2.4,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(x,y,p.px,0,Math.PI*2); ctx.fill();
+      const pr = projRadius(i);
       if(sel){
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.arc(x,y,p.px+4,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x,y,pr+5,0,Math.PI*2); ctx.stroke();
       }
       // In outer view, suppress inner-planet labels except the selected one
       const isInner = (i <= 3);
@@ -1055,12 +1207,12 @@ const Shell = (function(){
           font,
           fillStyle: hexA('#ffffff', sel ? 0.95 : 0.72),
           candidates: [
-            [x + p.px + 6, y - p.px - 4],
-            [x - p.px - 6 - tw, y - p.px - 4],
-            [x + p.px + 6, y + p.px + 14],
-            [x - p.px - 6 - tw, y + p.px + 14],
-            [x - tw / 2, y - p.px - 16],
-            [x - tw / 2, y + p.px + 18]
+            [x + pr + 6, y - pr - 4],
+            [x - pr - 6 - tw, y - pr - 4],
+            [x + pr + 6, y + pr + 14],
+            [x - pr - 6 - tw, y + pr + 14],
+            [x - tw / 2, y - pr - 16],
+            [x - tw / 2, y + pr + 18]
           ]
         });
       }
@@ -1070,12 +1222,13 @@ const Shell = (function(){
   function drawHUD(){
     ctx.font = '12px var(--font-sans), sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.68)';
-    const msg = 'distances to scale — planet icons enlarged · stars decorative';
+    const msg = 'distances to scale — planet sizes enlarged · stars decorative';
     ctx.fillText(msg, 14, state.H - 14);
 
-    // Scale bar
+    // Scale bar (projected length of barAU at the Sun's distance)
     const barAU = state.view === 'inner' ? 0.5 : 10;
-    const barPx = barAU * state.scale;
+    const b0 = W2S(0,0), b1 = W2S(barAU,0);
+    const barPx = Math.hypot(b1.x-b0.x, b1.y-b0.y);
     const bx = 14, by = state.H - 32;
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
     ctx.lineWidth = 1.2;
@@ -1111,13 +1264,16 @@ const Shell = (function(){
   function render(dt){
     resetLabelRects();
     ctx.clearRect(0,0,state.W,state.H);
-    drawStars(dt);
-    drawReferenceRing();
+    if(!ready3d){
+      ctx.fillStyle = '#05070e'; ctx.fillRect(0,0,state.W,state.H);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '13px var(--font-sans), sans-serif';
+      ctx.fillText('3D renderer unavailable — three.js failed to load (check network access).', 16, 28);
+      return;
+    }
+    render3d(dt || 0);
     drawEccentricityAnnotation(false);
-    drawTrails();
-    drawGhostMercury(false);
     drawPerihelionMarkers(false);
-    drawSun();
     drawPlanets(); // planet names claim label slots first
     drawEccentricityAnnotation(true);
     drawGhostMercury(true);
@@ -1168,6 +1324,7 @@ const Shell = (function(){
     document.getElementById('zoom-outer').classList.toggle('active', v === 'outer');
     document.getElementById('view-label').textContent =
       (v === 'inner') ? '— Inner system (out to Mars)' : '— Full system (out to Neptune)';
+    applyViewScale();
     fit();
     Shell.refit();
   }
@@ -1313,6 +1470,10 @@ const Shell = (function(){
   buildPlanetList();
   wirePredictions();
   renderFormal();
+
+  initBodies();      // bodies must exist before orbit-line geometry is built
+  init3d();
+  applyViewScale();
 
   Shell.init({ onFrame, onReset, onResize, onStep });
   // Ensure sim starts paused so student can orient before motion
