@@ -691,7 +691,7 @@ const Shell = (function(){
   /* ============== 3D scene — rendering layer only, physics untouched ====== */
   const glc = document.getElementById('gl3d');
   let renderer3, scene3, camera3, sunMesh, sunGlow, domeMesh, refRing, ghostRing, ghostMesh;
-  const planetMeshes = [], orbitLines = [];
+  const planetMeshes = [], orbitLines = [], planetSpins = [];
   let ready3d = false, _pv = null;
   const cam = { az: -Math.PI/2, pol: 0.95, dist: 5.0 };
   let _rs = 11;
@@ -777,7 +777,7 @@ const Shell = (function(){
       const c=w/2;
       for(let r=w*0.30;r<w*0.5;r+=1){
         const t=(r-w*0.30)/(w*0.2);
-        let a = 0.10+0.5*Math.pow(Math.sin(t*22)*0.5+0.5,2)*(1-t*0.5);
+        let a = 0.20+0.62*Math.pow(Math.sin(t*22)*0.5+0.5,2)*(1-t*0.45);
         if(t>0.62&&t<0.70) a*=0.15;
         if(faint) a*=0.45;
         g.strokeStyle='rgba(214,198,168,'+a.toFixed(3)+')';
@@ -844,22 +844,20 @@ const Shell = (function(){
     scene3.add(sunGlow);
 
     PLANETS.forEach((p,i)=>{
-      const m=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),
+      const sphere=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),
         new THREE.MeshStandardMaterial({map:makePlanetTex(p.name),roughness:0.95,metalness:0,
           emissive:new THREE.Color(p.color).multiplyScalar(0.22)}));
-      if(p.name==='Saturn'){
-        m.rotation.z=0.47;
-        const ring=new THREE.Mesh(new THREE.PlaneGeometry(4.6,4.6),
-          new THREE.MeshBasicMaterial({map:makeRingTex(false),transparent:true,side:THREE.DoubleSide,depthWrite:false}));
-        ring.rotation.x=-Math.PI/2; m.add(ring);
+      let holder=sphere;
+      if(p.name==='Saturn'||p.name==='Uranus'){
+        /* tilt lives on the group; ONLY the sphere spins — the ring stays put */
+        holder=new THREE.Group(); holder.add(sphere);
+        holder.rotation.z = (p.name==='Saturn') ? 0.47 : 1.71;
+        const sz = (p.name==='Saturn') ? 4.9 : 3.4;
+        const ring=new THREE.Mesh(new THREE.PlaneGeometry(sz,sz),
+          new THREE.MeshBasicMaterial({map:makeRingTex(p.name==='Uranus'),transparent:true,side:THREE.DoubleSide,depthWrite:false,opacity:(p.name==='Saturn')?1:0.55}));
+        ring.rotation.x=-Math.PI/2; holder.add(ring);
       }
-      if(p.name==='Uranus'){
-        m.rotation.z=1.71;
-        const ring=new THREE.Mesh(new THREE.PlaneGeometry(3.4,3.4),
-          new THREE.MeshBasicMaterial({map:makeRingTex(true),transparent:true,side:THREE.DoubleSide,depthWrite:false,opacity:0.5}));
-        ring.rotation.x=-Math.PI/2; m.add(ring);
-      }
-      scene3.add(m); planetMeshes.push(m);
+      scene3.add(holder); planetMeshes.push(holder); planetSpins.push(sphere);
       const pts=state.bodies[i].trail.map(q=>new THREE.Vector3(q.x,0,-q.y));
       const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
         new THREE.LineBasicMaterial({color:new THREE.Color(p.color),transparent:true,opacity:0.45}));
@@ -902,8 +900,15 @@ const Shell = (function(){
     planetMeshes.forEach((m,i)=>m.scale.setScalar(PLANETS[i].px*K));
     const sunS = state.view==='inner' ? 9*K : 9*K*0.5;
     sunMesh.scale.setScalar(sunS);
-    sunGlow.scale.set(sunS*5.5,sunS*5.5,1);
+    sunGlow.scale.set(sunS*4.2,sunS*4.2,1);
     ghostMesh.scale.setScalar(3.2*K*0.8);
+    /* rebuild display-space geometry for the current view */
+    refRing.scale.setScalar(state.view==='outer' ? Math.pow(1/R_NEP,DISP_P)*R_NEP : 1);
+    for(let i=0;i<orbitLines.length;i++){
+      const pts=state.bodies[i].trail.map(q=>{ const d=dispXY(q.x,q.y); return new THREE.Vector3(d[0],0,-d[1]); });
+      orbitLines[i].geometry.dispose();
+      orbitLines[i].geometry=new THREE.BufferGeometry().setFromPoints(pts);
+    }
   }
 
   function placeCam(){
@@ -912,13 +917,26 @@ const Shell = (function(){
     camera3.up.set(0,1,0); camera3.lookAt(0,0,0);
     camera3.updateMatrixWorld();
   }
-  function W2S(x,y){
+  /* Display-space radial compression for the Full view ONLY: keeps every
+     orbit visible (Mercury→2.8 AU display) while physics stays in true AU.
+     Monotonic power law along each ray — Sun stays at the focus, peri<apo. */
+  const R_NEP = 30.061, DISP_P = 0.55;
+  function dispXY(x,y){
+    if(state.view !== 'outer') return [x,y];
+    const r = Math.hypot(x,y);
+    if(r < 1e-9) return [x,y];
+    const f = Math.pow(r/R_NEP, DISP_P)*R_NEP/r;
+    return [x*f, y*f];
+  }
+  function projPt(x,y){
     _pv.set(x,0,-y).project(camera3);
     return { x:(_pv.x*0.5+0.5)*state.W, y:(-_pv.y*0.5+0.5)*state.H };
   }
+  function W2S(x,y){ const d=dispXY(x,y); return projPt(d[0],d[1]); }
   function projRadius(i){
     const b=state.bodies[i], wr=PLANETS[i].px*viewK();
-    const s0=W2S(b.x,b.y), s1=W2S(b.x+wr,b.y);
+    const d=dispXY(b.x,b.y);
+    const s0=projPt(d[0],d[1]), s1=projPt(d[0]+wr,d[1]);
     return Math.max(3, Math.hypot(s1.x-s0.x,s1.y-s0.y));
   }
 
@@ -927,8 +945,9 @@ const Shell = (function(){
     for(let i=0;i<planetMeshes.length;i++){
       const m=planetMeshes[i], b=state.bodies[i], on=vis.includes(i);
       m.visible=on; orbitLines[i].visible=on;
-      m.position.set(b.x,0,-b.y);
-      if(dt) m.rotation.y+=dt*0.35;
+      const d=dispXY(b.x,b.y);
+      m.position.set(d[0],0,-d[1]);
+      if(dt) planetSpins[i].rotation.y+=dt*0.35;
       orbitLines[i].material.opacity=(i===state.selected)?0.9:0.4;
     }
     const act=!!(state.ghostActive&&state.ghost)&&state.view!=='outer';
@@ -1222,11 +1241,15 @@ const Shell = (function(){
   function drawHUD(){
     ctx.font = '12px var(--font-sans), sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.68)';
-    const msg = 'distances to scale — planet sizes enlarged · stars decorative';
+    const outerV = state.view === 'outer';
+    const msg = outerV
+      ? 'radial spacing compressed so every orbit stays visible — not to scale · planet sizes enlarged'
+      : 'distances to scale — planet sizes enlarged · stars decorative';
     ctx.fillText(msg, 14, state.H - 14);
+    if(outerV) return;   // a linear scale bar would be misleading under compressed spacing
 
     // Scale bar (projected length of barAU at the Sun's distance)
-    const barAU = state.view === 'inner' ? 0.5 : 10;
+    const barAU = 0.5;
     const b0 = W2S(0,0), b1 = W2S(barAU,0);
     const barPx = Math.hypot(b1.x-b0.x, b1.y-b0.y);
     const bx = 14, by = state.H - 32;
