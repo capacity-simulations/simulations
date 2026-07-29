@@ -10,18 +10,44 @@
 //   <outdir>/<sim>__<label>.png        (one per captured state)
 //   <outdir>/<sim>-probe.json          (errors + readouts + audit per state)
 //
-// puppeteer-core is resolved from the SR engine's _review/node_modules via an
-// explicit createRequire base, so this script runs from anywhere.
+// puppeteer-core is resolved from the first candidate node_modules that has it
+// (repo-root install first, then the SR engine's _review install), via an explicit
+// createRequire base — so this script runs from any working directory.
 
 import { createRequire } from 'node:module';
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { resolve, basename } from 'node:path';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { resolve, basename, dirname, join } from 'node:path';
 
-const REQUIRE_BASE = '/Users/admin/Desktop/simulations-1/Capacity_SR_sims_v2_engine/_review/';
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const require = createRequire(REQUIRE_BASE);
-const puppeteer = require('puppeteer-core');
+// This skill lives at <repo>/.claude/skills/review-CM-sims/, so repo root is 3 up.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const REQUIRE_BASES = [
+  join(REPO_ROOT, '_review/'),
+  join(REPO_ROOT, 'Capacity_SR_sims_v2_engine/_review/'),
+  join(REPO_ROOT, '/'),
+];
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+].filter(Boolean);
+
+let puppeteer = null, requireBase = null;
+for (const base of REQUIRE_BASES) {
+  try { puppeteer = createRequire(base)('puppeteer-core'); requireBase = base; break; } catch {}
+}
+if (!puppeteer) {
+  console.error(`puppeteer-core not found. Tried:\n  ${REQUIRE_BASES.join('\n  ')}\n` +
+    `Install it in one of those, e.g.: npm i puppeteer-core --prefix "${REQUIRE_BASES[0]}"`);
+  process.exit(1);
+}
+
+const CHROME = CHROME_CANDIDATES.find(p => existsSync(p));
+if (!CHROME) {
+  console.error(`No Chrome/Chromium found. Tried:\n  ${CHROME_CANDIDATES.join('\n  ')}\n` +
+    `Set CHROME_PATH=/path/to/chrome to override.`);
+  process.exit(1);
+}
 
 const file = resolve(process.cwd(), process.argv[2] || '');
 const outdir = resolve(process.cwd(), process.argv[3] || './_cm-probe');
@@ -93,4 +119,5 @@ for (const s of sliders) {
 
 writeFileSync(`${outdir}/${name}-probe.json`, JSON.stringify(probe, null, 2));
 console.log(`probe: ${probe.states.length} states, ${errors.length} js-errors, ${sliders.length} sliders → ${outdir}`);
+console.log(`       chrome: ${CHROME}  |  puppeteer-core from: ${requireBase}`);
 await browser.close();

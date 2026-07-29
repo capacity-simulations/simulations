@@ -6,7 +6,7 @@
 <title>Coriolis Force on a Rotating Sphere</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="vendor/three.r128.min.js"></script>
 <style>
 :root{
   --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
@@ -394,9 +394,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="shell-panel-head"><h3>Rotation</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box">
-            <div class="stat-row"><span class="stat-label">Visual spin-up factor</span><span class="stat-value" id="omega-factor-val">30,000×</span></div>
-            <div class="stat-row"><span class="stat-label">ω (sim)</span><span class="stat-value" id="omega-si-val">—</span></div>
-            <div class="note-text" style="margin-top:6px;">ω is fixed at 30,000 × Earth's rate so the effect is visible on lecture timescales. Coriolis physics uses this ω consistently for f = 2ω sin φ.</div>
+            <div class="stat-row"><span class="stat-label">Visual spin-up</span><span class="stat-value" id="omega-vis-factor-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">ω (visual)</span><span class="stat-value" id="omega-vis-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">ω<sub>eff</sub> (dynamics)</span><span class="stat-value" id="omega-eff-val">—</span></div>
+            <div class="note-text" style="margin-top:6px;">The globe's on-screen spin is slowed for viewability and is <em>not</em> the ω in the force law. Coriolis uses ω<sub>eff</sub> = gain · ω<sub>sim</sub> in f = 2 ω<sub>eff</sub> sin φ.</div>
           </div>
           <div class="ctrl-box">
             <button id="clear-parcels" class="shell-btn" style="width:100%;justify-content:center;">Clear parcels</button>
@@ -443,7 +444,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="eq-row">
         <div class="eq-label">Earth's true rate (reference)</div>
         <div class="eq-body" id="eq-w"></div>
-        <div class="eq-note">Exaggerated in the sim (ω_sim = 30,000 × ω⊕) so the effect is visible on a lecture timescale.</div>
+        <div class="eq-note">On-screen spin is slowed for viewability (not the ω in the force law). Dynamics use ω<sub>eff</sub> = gain · ω<sub>sim</sub> so the deflection is visible on a lecture timescale.</div>
       </div>
     </div>
   </section>
@@ -621,12 +622,27 @@ const Shell = (function(){
 })();
 
 /* ===== SIM ===== */
+let _threeRetries = 0;
 function initSim(){
-  if(typeof THREE==='undefined'){ setTimeout(initSim,50); return; }
+  if(typeof THREE==='undefined'){
+    if(++_threeRetries > 40){
+      const box = document.getElementById('scene-box') || document.querySelector('.plot-box');
+      if(box && !box.querySelector('.lib-fail')){
+        const msg = document.createElement('div');
+        msg.className = 'lib-fail';
+        msg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:#e2e8f0;background:#02060a;z-index:5;font:600 14px/1.45 system-ui,sans-serif;';
+        msg.textContent = '3-D library failed to load — this simulation needs three.js';
+        box.appendChild(msg);
+      }
+      return;
+    }
+    setTimeout(initSim,50);
+    return;
+  }
 
   const OMEGA_EARTH = 7.29e-5;   // rad/s (true Earth rate)
-  const OMEGA_FACTOR = 30000;    // fixed visual spin-up factor
-  const OMEGA_SIM_PHYS = OMEGA_FACTOR * OMEGA_EARTH; // 2.187 rad/s — the "physical" ω the sim represents
+  const OMEGA_FACTOR = 30000;    // base dynamical exaggeration for ω_sim
+  const OMEGA_SIM_PHYS = OMEGA_FACTOR * OMEGA_EARTH; // ≈2.187 rad/s — base ω before Coriolis gain
   const R = 1.0; // sphere radius (scene units)
   const LOW_STRENGTH = 0.9;
   const CORIOLIS_GAIN = 1.4;
@@ -634,9 +650,21 @@ function initSim(){
   const PARCEL_LIFE = 40; // s
   const DEAD_LAT_DEG = 5;
 
-  // Visual rotation rate (rad/s of on-screen spin), decoupled from the physical ω used for f.
-  // We keep the same value used previously so on-screen motion is unchanged.
+  // Visual rotation rate (rad/s of on-screen spin), decoupled from the ω used for f.
+  // Kept at the previous value so on-screen motion is unchanged.
   const OMEGA_VIS = OMEGA_FACTOR * 4.2e-6; // ≈0.126 rad/s
+  const VISUAL_SPINUP = OMEGA_VIS / OMEGA_EARTH;                 // ≈1,728×
+  const OMEGA_EFF = CORIOLIS_GAIN * OMEGA_SIM_PHYS;              // ≈3.06 rad/s in the force law
+  const DYN_SPINUP = OMEGA_EFF / OMEGA_EARTH;                    // ≈42,000×
+
+  function updateOmegaReadouts(){
+    const visF = document.getElementById('omega-vis-factor-val');
+    const visW = document.getElementById('omega-vis-val');
+    const effW = document.getElementById('omega-eff-val');
+    if(visF) visF.textContent = Math.round(VISUAL_SPINUP).toLocaleString() + '×';
+    if(visW) visW.textContent = OMEGA_VIS.toFixed(3) + ' rad/s';
+    if(effW) effW.textContent = OMEGA_EFF.toFixed(2) + ' rad/s · ' + Math.round(DYN_SPINUP).toLocaleString() + '×';
+  }
 
   const canvas = document.getElementById('scene');
   const container = document.getElementById('scene-box');
@@ -983,23 +1011,20 @@ function initSim(){
     // Use the physical ω the sim represents (30,000 × Earth's rate).
     const omega = OMEGA_SIM_PHYS;
     const f = 2*omega*Math.sin(lat);
-    // Coriolis: a = -f (ẑ × v). With east=+x_local, north=+y_local, ẑ×v = (-vN, +vE),
-    // so -f(ẑ×v) = (+f·vN? ...). Let's derive carefully:
-    //   ẑ × (vE ê + vN n̂) = vE(ẑ×ê) + vN(ẑ×n̂) = vE·n̂ - vN·ê
+    // Coriolis: a = -f (ẑ × v). With east=+x_local, north=+y_local:
+    //   ẑ × (vE ê + vN n̂) = vE·n̂ - vN·ê
     //   ⇒ -f(ẑ×v) = f·vN·ê - f·vE·n̂
     // In NH (f>0) with v=north (vN>0): aE = +f·vN > 0 (deflect east/right). ✓
     // Matches the formal equation a = -f ẑ × v.
-    const aE_cor = CORIOLIS_GAIN * f * vN;
-    const aN_cor = -CORIOLIS_GAIN * f * vE;
-
+    // Exact Coriolis rotation (norm-preserving) — forward Euler on a pure
+    // rotation injects energy ~sqrt(1+f²dt²) each step.
     const aE_pg = pgStrength * pgE;
     const aN_pg = pgStrength * pgN;
-
-    const aE = aE_cor + aE_pg - DRAG*vE;
-    const aN = aN_cor + aN_pg - DRAG*vN;
-
-    const vE_new = vE + aE*dt;
-    const vN_new = vN + aN*dt;
+    const vE1 = vE + (aE_pg - DRAG*vE)*dt;
+    const vN1 = vN + (aN_pg - DRAG*vN)*dt;
+    const th = CORIOLIS_GAIN * f * dt, c = Math.cos(th), s = Math.sin(th);
+    const vE_new =  vE1*c + vN1*s;
+    const vN_new = -vE1*s + vN1*c;
 
     p.vLat = vN_new;
     p.vLon = vE_new / Math.max(0.02, Math.cos(lat));
@@ -1202,9 +1227,8 @@ function initSim(){
   const clearBtn = document.getElementById('clear-parcels');
   clearBtn.addEventListener('click', clearParcels);
 
-  // Rotation readouts
-  document.getElementById('omega-factor-val').textContent = OMEGA_FACTOR.toLocaleString() + '×';
-  document.getElementById('omega-si-val').textContent = OMEGA_SIM_PHYS.toFixed(2) + ' rad/s';
+  // Rotation readouts (derived from constants — do not hardcode)
+  updateOmegaReadouts();
 
   // ---------- Prediction feedback ----------
   function wirePredict(cardIdx, evalId, feedback){
@@ -1289,12 +1313,32 @@ function initSim(){
   }
 
   // ---------- Formal (KaTeX) ----------
+  let _katexRetries = 0;
   function renderFormal(){
-    if(typeof katex==='undefined'){ setTimeout(renderFormal, 60); return; }
-    katex.render('f = 2\\,\\omega\\,\\sin\\phi', document.getElementById('eq-f'), {throwOnError:false});
-    katex.render('\\vec{a}_{\\text{cor}} = -f\\,\\hat{z}\\times\\vec{v}', document.getElementById('eq-a'), {throwOnError:false});
-    katex.render('\\vec{a}_{\\text{pg}} = -\\nabla\\Phi \\;\\propto\\;\\hat{r}_{\\text{low}}', document.getElementById('eq-p'), {throwOnError:false});
-    katex.render('\\omega_{\\oplus} = 7.29\\times10^{-5}\\,\\text{rad/s};\\ \\ \\omega_{\\text{sim}} = 30000\\,\\omega_{\\oplus} \\approx 2.19\\,\\text{rad/s}', document.getElementById('eq-w'), {throwOnError:false});
+    const eqF = document.getElementById('eq-f');
+    const eqA = document.getElementById('eq-a');
+    const eqP = document.getElementById('eq-p');
+    const eqW = document.getElementById('eq-w');
+    const omegaTex =
+      '\\omega_{\\oplus} = 7.29\\times10^{-5}\\,\\text{rad/s};\\;\\;' +
+      '\\omega_{\\text{vis}} \\approx ' + OMEGA_VIS.toFixed(3) + '\\,\\text{rad/s}\\;(' + Math.round(VISUAL_SPINUP).toLocaleString() + '\\times);\\;\\;' +
+      '\\omega_{\\text{eff}} = ' + CORIOLIS_GAIN + '\\,\\omega_{\\text{sim}} \\approx ' + OMEGA_EFF.toFixed(2) + '\\,\\text{rad/s}\\;(' + Math.round(DYN_SPINUP).toLocaleString() + '\\times)';
+    if(typeof katex==='undefined'){
+      if(++_katexRetries > 40){
+        if(eqF) eqF.textContent = 'f = 2 ω sin φ';
+        if(eqA) eqA.textContent = 'a_cor = −f ẑ × v';
+        if(eqP) eqP.textContent = 'a_pg = −∇Φ ∝ r̂_low';
+        if(eqW) eqW.textContent =
+          'ω⊕ = 7.29×10⁻⁵ rad/s; ω_vis ≈ ' + OMEGA_VIS.toFixed(3) + ' rad/s (' + Math.round(VISUAL_SPINUP).toLocaleString() + '×); ω_eff ≈ ' + OMEGA_EFF.toFixed(2) + ' rad/s (' + Math.round(DYN_SPINUP).toLocaleString() + '×)';
+        return;
+      }
+      setTimeout(renderFormal, 60);
+      return;
+    }
+    katex.render('f = 2\\,\\omega\\,\\sin\\phi', eqF, {throwOnError:false});
+    katex.render('\\vec{a}_{\\text{cor}} = -f\\,\\hat{z}\\times\\vec{v}', eqA, {throwOnError:false});
+    katex.render('\\vec{a}_{\\text{pg}} = -\\nabla\\Phi \\;\\propto\\;\\hat{r}_{\\text{low}}', eqP, {throwOnError:false});
+    katex.render(omegaTex, eqW, {throwOnError:false});
   }
   renderFormal();
 
@@ -1348,8 +1392,7 @@ function initSim(){
     fnormEl.textContent = '—';
     document.getElementById('stat-hemi').textContent = '—';
 
-    document.getElementById('omega-factor-val').textContent = OMEGA_FACTOR.toLocaleString() + '×';
-    document.getElementById('omega-si-val').textContent = OMEGA_SIM_PHYS.toFixed(2) + ' rad/s';
+    updateOmegaReadouts();
 
     earth.rotation.y = 0;
     orbit.az = 0; orbit.el = 0.3; orbit.dist = 3.2;
@@ -1377,6 +1420,10 @@ function initSim(){
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initSim);
 else initSim();
+</script>
+<script>
+/* Open in Lecture mode by default — trigger the shell's lecture toggle once on load. */
+requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),r=document.getElementById('shell');if(b&&r&&!r.classList.contains('lecture-mode'))b.click();});
 </script>
 </body>
 </html>

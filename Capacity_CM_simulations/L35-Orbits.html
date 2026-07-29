@@ -6,6 +6,7 @@
 <title>Orbits: The Four Conic Sections</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="vendor/three.r128.min.js"></script>
 <style>
 :root{
   --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
@@ -84,8 +85,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;width:100%;height:100%;}
-.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
-.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+#gl3d{position:absolute;inset:0;z-index:0;cursor:grab;}
+#orbit-canvas{position:absolute;inset:0;z-index:1;background:transparent;pointer-events:none;}
+.orbit-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;
+  font-size:13px;font-weight:600;letter-spacing:.02em;color:rgba(255,255,255,.95);
+  background:rgba(6,10,18,.78);padding:7px 16px;border:1.5px solid rgba(255,255,255,.75);
+  border-radius:6px;pointer-events:none;white-space:nowrap;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
@@ -111,10 +116,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
 .ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
 .slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
-.control-range{font-size:12px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;position:relative;height:14px;}
-.control-range .cr-tick{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;}
-.control-range .cr-left{left:0;transform:none;}
-.control-range .cr-right{right:0;left:auto;transform:none;}
+.e-guide{margin-top:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.45);border-radius:6px;background:rgba(6,14,17,.35);}
+.e-guide-title{display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.88);margin-bottom:6px;letter-spacing:.02em;}
+.e-guide-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px;}
+.e-guide-list li{font-size:12px;line-height:1.4;color:rgba(255,255,255,.92);font-family:var(--font-sans);}
+.e-guide-list strong{color:#fff;font-weight:700;}
+.e-guide-list .e-cond{font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:#7dd3c0;font-weight:600;}
 .stat-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
 .ctrl-box .stat-row:first-child{padding-top:0;}
 .ctrl-box .stat-row:last-child{padding-bottom:0;}
@@ -141,7 +148,9 @@ body.light-theme .choice.wrong,html[data-theme="light"] .choice.wrong{background
 body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,html[data-theme="light"] .predict-eval .answer,html[data-theme="light"] .predict-eval strong{color:#047857;}
 
 .aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
-#aside-controls{flex:1 1 auto;}
+/* Inquiry sizes to its content (no empty gap); Controls take the leftover space. */
+#aside-inquiry{flex:0 1 auto;min-height:0;max-height:50%;overflow:hidden;}
+#aside-controls{flex:1 1 auto;min-height:0;overflow-y:auto;}
 .aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
 .aside-zone-head h3{margin:0;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
 .aside-skip{font-size:11px;padding:4px 9px;color:var(--ink-mid);}
@@ -149,7 +158,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .inq-dots .inq-dot{flex:1;height:4px;border-radius:2px;background:var(--ctrl-border);transition:background .2s;}
 .inq-dots .inq-dot.active{background:var(--accent);}
 .inq-dots .inq-dot.done{background:var(--accent-soft);}
-#inq-cards{flex:1 1 auto;min-height:0;}
+#inq-cards{flex:1 1 auto;min-height:0;overflow-y:auto;}
 .inq-step{display:none;}
 .inq-step.active{display:block;}
 .inq-step h4{margin:0 0 8px;font-size:13px;color:var(--text);font-weight:600;}
@@ -282,8 +291,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
   <main class="shell-hero">
     <div class="plot-box">
-      <div class="plot-title">Orbital plane <span class="plot-inline">— Sun-centred, top-down · natural units (GM = 1)</span></div>
+      <canvas id="gl3d"></canvas>
       <canvas id="orbit-canvas"></canvas>
+      <div class="orbit-hint">Drag to orbit · scroll to zoom</div>
     </div>
   </main>
 
@@ -305,8 +315,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="inq-step" data-gate>
           <h4>2. Investigate</h4>
           <p>Slowly increase <strong>e</strong> using the slider below and watch what happens to the trajectory and to ε. <em>What happens as the orbit gains energy?</em></p>
-          <button class="choice" data-c="a">The orbit gets smaller and tighter.</button>
-          <button class="choice" data-c="b">The orbit stretches out, then eventually stops closing.</button>
+          <button class="choice" data-c="a">The orbit stretches out, then eventually stops closing.</button>
+          <button class="choice" data-c="b">The orbit gets smaller and tighter.</button>
           <button class="choice" data-c="c">The orbit stays the same shape but speeds up.</button>
           <div class="predict-eval" id="eval-2" style="display:none;"></div>
         </div>
@@ -315,8 +325,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <h4>3. Find the boundary</h4>
           <p>Push e up until the orbit <em>first</em> fails to close. Read the ε value on the derived readout at that edge. What is ε there?</p>
           <button class="choice" data-c="a">ε slightly less than 0</button>
-          <button class="choice" data-c="b">ε = 0 exactly</button>
-          <button class="choice" data-c="c">ε slightly greater than 0</button>
+          <button class="choice" data-c="b">ε slightly greater than 0</button>
+          <button class="choice" data-c="c">ε = 0 exactly</button>
           <div class="predict-eval" id="eval-3" style="display:none;"></div>
         </div>
 
@@ -333,7 +343,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <h4>5. Resolve</h4>
           <p><strong>Sign of ε decides bound vs unbound.</strong> Negative → bound; zero → the parabolic edge; positive → unbound.</p>
           <p><strong>e decides which conic.</strong> 0 circle · (0,1) ellipse · 1 parabola · &gt;1 hyperbola.</p>
-          <p style="color:var(--ink-mute);font-size:12px;">Try the four preset buttons in Controls to lock this in.</p>
+          <p style="color:var(--ink-mute);font-size:12px;">Try the preset buttons in Controls to lock this in — including e = 0.99 and e = 1.01 near the parabolic edge.</p>
         </div>
 
       </div>
@@ -362,17 +372,20 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <div class="ctrl-slider-row">
               <input type="range" id="sl-e" min="0" max="2.2" step="0.005" value="0">
             </div>
-            <div class="control-range">
-              <span class="cr-tick cr-left">0 circle</span>
-              <span class="cr-tick" id="tick-parabola">1 parabola</span>
-              <span class="cr-tick cr-right">2.2 hyperbola</span>
+            <div class="e-guide" aria-label="Eccentricity conditions">
+              <span class="e-guide-title">Orbit type by eccentricity</span>
+              <ul class="e-guide-list">
+                <li><strong>Circle</strong> — <span class="e-cond">e = 0</span></li>
+                <li><strong>Ellipse</strong> — <span class="e-cond">0 &lt; e &lt; 1</span></li>
+                <li><strong>Parabola</strong> — <span class="e-cond">e = 1</span></li>
+                <li><strong>Hyperbola</strong> — <span class="e-cond">e &gt; 1</span></li>
+              </ul>
             </div>
           </div>
 
           <div class="ctrl-box" id="box-derived">
             <div class="stat-row"><span class="stat-label">Specific energy ε</span><span class="stat-value highlight" id="val-E">−0.500</span></div>
             <div class="stat-row"><span class="stat-label">sign(ε)</span><span class="stat-value" id="stat-sign">negative</span></div>
-            <div class="units-note">ε is derived from e at fixed angular momentum L² = GM · p₀ (natural units, GM = 1).</div>
           </div>
 
           <div class="ctrl-box ctrl-box-hidden" id="box-presets">
@@ -382,6 +395,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <button data-preset="ellipse">Ellipse</button>
               <button data-preset="parabola">Parabola</button>
               <button data-preset="hyperbola">Hyperbola</button>
+              <button data-preset="e099">e = 0.99</button>
+              <button data-preset="e101">e = 1.01</button>
             </div>
           </div>
 
@@ -612,7 +627,6 @@ const Shell = (function(){
   const boxE = document.getElementById('box-e');
   const boxDerived = document.getElementById('box-derived');
   const boxPresets = document.getElementById('box-presets');
-  const parabolaTick = document.getElementById('tick-parabola');
 
   function classifyConic(e, eps){
     if (e < SNAP_e) return 'circle';
@@ -680,9 +694,11 @@ const Shell = (function(){
       state.periodDone = true;
     }
 
-    // Escape detection for unbound orbits: mark escaped once well out of view
+    // Escape only for unbound orbits (ε ≥ 0) once well out of view.
+    // Bound ellipses can have r_apo ≫ 60 — distance alone is not an escape criterion.
+    // ε = 0 (parabola) still escapes to infinity and must keep the "→ ∞" cue.
     const r = Math.hypot(state.pos.x, state.pos.y);
-    if (r > 60) state.escaped = true;
+    if (state.eps >= 0 && r > 60) state.escaped = true;
   }
 
   // View
@@ -701,8 +717,224 @@ const Shell = (function(){
     view.cx = r.width * (unbound ? 0.35 : 0.5);
     view.cy = r.height * 0.5;
 
-    const maxExtent = 12;
+    // Bound orbits: frame to apoapsis so large-e ellipses stay visible (e=0.99 → r_apo=150).
+    // Unbound: keep the default local framing; escape is handled separately.
+    const rApo = (state.e < 1 - 1e-6) ? P0/(1 - state.e) : Infinity;
+    const maxExtent = isFinite(rApo) ? Math.max(12, rApo * 1.12) : 12;
     view.scale = Math.min(r.width, r.height) / (2.2 * maxExtent);
+
+    // 3-D camera: pull back with maxExtent so the same large ellipses stay in view
+    const targetDist = Math.max(CAM_DEFAULT.dist, maxExtent * (CAM_DEFAULT.dist / 12));
+    CAM_DIST_MAX = Math.max(30, targetDist * 1.5);
+    cam.dist = targetDist;
+
+    // 3D: camera stays locked on the Sun for every conic — no view jump when
+    // e crosses 1 (use drag/scroll to follow an escaping trajectory)
+    camTarget.x = 0;
+    if(ready3d){
+      renderer3.setSize(view.w, view.h, false);
+      camera3.aspect = view.w/Math.max(1,view.h);
+      camera3.updateProjectionMatrix();
+    }
+  }
+
+  /* ============== 3D scene — rendering layer only, physics untouched ====== */
+  const glc = document.getElementById('gl3d');
+  let renderer3, scene3, camera3, sunMesh, sunGlow, bodyMesh, trailLine, ghostLine, domeMesh;
+  let ready3d=false, _pv=null, _lastGhost=null;
+  const cam = { az: -Math.PI/2, pol: 0.95, dist: 14 };
+  const CAM_DEFAULT = { az: -Math.PI/2, pol: 0.95, dist: 14 };
+  const CAM_DIST_MIN = 10;
+  let CAM_DIST_MAX = 30; // raised in fit() for large-e bound orbits
+  const camTarget = { x: 0 };
+  let _rs = 11;
+  function rnd3(){ _rs=(_rs*16807)%2147483647; return _rs/2147483647; }
+  function texCanvas(w,h,drawFn){
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    drawFn(c.getContext('2d'),w,h);
+    const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t;
+  }
+  function makeGlowSprite(){
+    return texCanvas(256,256,(g,w)=>{
+      const cw=w/2, grd=g.createRadialGradient(cw,cw,0,cw,cw,cw);
+      grd.addColorStop(0,'rgba(255,244,214,1)');
+      grd.addColorStop(0.18,'rgba(255,214,140,0.55)');
+      grd.addColorStop(0.5,'rgba(255,166,72,0.16)');
+      grd.addColorStop(1,'rgba(255,140,50,0)');
+      g.fillStyle=grd; g.fillRect(0,0,w,w);
+    });
+  }
+  function makeBodyTex(){
+    _rs=311;
+    return texCanvas(256,128,(g,w,h)=>{
+      g.fillStyle='#7d94b5'; g.fillRect(0,0,w,h);
+      for(let i=0;i<420;i++){ const x=rnd3()*w, y=rnd3()*h, r=0.6+rnd3()*3.2;
+        g.fillStyle='rgba(30,40,60,'+(0.05+0.18*rnd3()).toFixed(2)+')';
+        g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); }
+      for(let i=0;i<160;i++){ const x=rnd3()*w, y=rnd3()*h, r=0.5+rnd3()*1.4;
+        g.fillStyle='rgba(225,235,250,'+(0.06+0.12*rnd3()).toFixed(2)+')';
+        g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); }
+    });
+  }
+  function makeSpaceTex(){
+    _rs=773;
+    const W=4096, H=2048, TAU=Math.PI*2, mid=H*0.5;
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d');
+    function wrapDraw(drawFn){ [0,-W,W].forEach(dx=>drawFn(dx)); }
+    const base=g.createLinearGradient(0,0,0,H);
+    base.addColorStop(0,'#010208'); base.addColorStop(0.5,'#030511'); base.addColorStop(1,'#010208');
+    g.fillStyle=base; g.fillRect(0,0,W,H);
+    for(let i=0;i<95;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()+rnd3()-1.5)*150, r=90+rnd3()*230;
+      const t=rnd3(), col = t<0.6?'222,221,236' : (t<0.85?'234,225,206':'212,200,234');
+      const a=(0.016+0.036*rnd3()).toFixed(3);
+      wrapDraw(dx=>{ const gr=g.createRadialGradient(x+dx,y,0,x+dx,y,r);
+        gr.addColorStop(0,'rgba('+col+','+a+')'); gr.addColorStop(1,'rgba('+col+',0)');
+        g.fillStyle=gr; g.beginPath(); g.arc(x+dx,y,r,0,TAU); g.fill(); });
+    }
+    for(let i=0;i<75;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()-1)*95, rx=60+rnd3()*190, ry=0.16+0.22*rnd3();
+      const a=(0.10+0.16*rnd3()).toFixed(3);
+      wrapDraw(dx=>{ const gr=g.createRadialGradient(x+dx,y,0,x+dx,y,rx);
+        gr.addColorStop(0,'rgba(4,4,7,'+a+')'); gr.addColorStop(1,'rgba(4,4,7,0)');
+        g.save(); g.translate(x+dx,y); g.scale(1,ry); g.translate(-(x+dx),-y);
+        g.fillStyle=gr; g.beginPath(); g.arc(x+dx,y,rx,0,TAU); g.fill(); g.restore(); });
+    }
+    for(let i=0;i<8000;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()+rnd3()+rnd3()-2)*135;
+      g.fillStyle='rgba(226,228,244,'+(0.04+0.26*rnd3()*rnd3()).toFixed(3)+')';
+      g.fillRect(x,y,1,1);
+    }
+    for(let i=0;i<5200;i++){
+      const x=rnd3()*W, y=rnd3()*H, t=rnd3();
+      const col = t<0.12?'157,180,255' : t<0.52?'220,228,255' : t<0.82?'248,244,232' : t<0.94?'255,219,170' : '255,178,140';
+      const b=rnd3()*rnd3();
+      g.fillStyle='rgba('+col+','+(0.10+0.7*b).toFixed(3)+')';
+      const s=b>0.55?2.4:(b>0.25?1.6:1.1);
+      g.fillRect(x,y,s,s);
+    }
+    for(let i=0;i<50;i++){
+      const x=rnd3()*W, y=rnd3()*H, t=rnd3();
+      const col = t<0.2?'170,192,255' : t<0.75?'238,242,255' : '255,224,180';
+      const r=1.3+rnd3()*1.3, gl=4+rnd3()*5;
+      g.shadowColor='rgba('+col+',0.95)'; g.shadowBlur=6;
+      g.fillStyle='rgba('+col+',0.95)';
+      g.beginPath(); g.arc(x,y,r,0,TAU); g.fill();
+      g.shadowBlur=0;
+      g.strokeStyle='rgba('+col+',0.30)'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(x-gl,y); g.lineTo(x+gl,y); g.moveTo(x,y-gl); g.lineTo(x,y+gl); g.stroke();
+    }
+    const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t;
+  }
+
+  function init3d(){
+    if(!window.THREE) return;
+    renderer3=new THREE.WebGLRenderer({canvas:glc,antialias:true});
+    renderer3.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer3.outputEncoding=THREE.sRGBEncoding;
+    renderer3.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer3.toneMappingExposure=1.1;
+    scene3=new THREE.Scene();
+    camera3=new THREE.PerspectiveCamera(45,1.6,0.05,1200);
+    _pv=new THREE.Vector3();
+
+    domeMesh=new THREE.Mesh(new THREE.SphereGeometry(320,48,24),
+      new THREE.MeshBasicMaterial({map:makeSpaceTex(),side:THREE.BackSide,depthWrite:false}));
+    domeMesh.rotation.z=0.42; domeMesh.frustumCulled=false; scene3.add(domeMesh);
+
+    scene3.add(new THREE.AmbientLight(0x2c3444,0.5));
+    scene3.add(new THREE.PointLight(0xfff2d6,1.8,0,0));
+
+    /* faint polar reference grid on the orbital plane */
+    const gmat=new THREE.LineBasicMaterial({color:0x8aa0c0,transparent:true,opacity:0.07});
+    for(let rr=2;rr<=12;rr+=2){
+      const pts=[]; for(let k=0;k<=120;k++){ const a=k/120*Math.PI*2; pts.push(new THREE.Vector3(rr*Math.cos(a),0,rr*Math.sin(a))); }
+      scene3.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),gmat));
+    }
+    const smat=new THREE.LineBasicMaterial({color:0x8aa0c0,transparent:true,opacity:0.045});
+    for(let k=0;k<12;k++){ const a=k*Math.PI/6;
+      const geo=new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(2*Math.cos(a),0,2*Math.sin(a)),
+        new THREE.Vector3(12*Math.cos(a),0,12*Math.sin(a))]);
+      scene3.add(new THREE.Line(geo,smat)); }
+
+    sunMesh=new THREE.Mesh(new THREE.SphereGeometry(0.32,32,24),
+      new THREE.MeshBasicMaterial({color:0xfff0c4}));
+    scene3.add(sunMesh);
+    sunGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:makeGlowSprite(),color:0xffdf9e,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    sunGlow.scale.set(3.2,3.2,1); scene3.add(sunGlow);
+
+    bodyMesh=new THREE.Mesh(new THREE.SphereGeometry(0.14,28,20),
+      new THREE.MeshStandardMaterial({map:makeBodyTex(),roughness:0.9,metalness:0,
+        emissive:new THREE.Color(0x93c5fd).multiplyScalar(0.25)}));
+    scene3.add(bodyMesh);
+
+    /* live trail — preallocated dynamic line */
+    const tGeo=new THREE.BufferGeometry();
+    tGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(state.trailMax*3),3));
+    tGeo.setDrawRange(0,0);
+    trailLine=new THREE.Line(tGeo,new THREE.LineBasicMaterial({color:0x3fb5a5,transparent:true,opacity:0.95}));
+    trailLine.frustumCulled=false; scene3.add(trailLine);
+
+    /* ghost "naive closed" path — dashed red, rebuilt when state.ghostPath changes */
+    ghostLine=new THREE.Line(new THREE.BufferGeometry(),
+      new THREE.LineDashedMaterial({color:0xf87171,transparent:true,opacity:0.6,dashSize:0.18,gapSize:0.14}));
+    ghostLine.frustumCulled=false; ghostLine.visible=false; scene3.add(ghostLine);
+
+    /* drag to orbit + scroll to zoom — camera only */
+    let dragging=false,lx=0,ly=0;
+    glc.addEventListener('pointerdown',e=>{ dragging=true; lx=e.clientX; ly=e.clientY;
+      glc.setPointerCapture(e.pointerId); glc.style.cursor='grabbing'; });
+    glc.addEventListener('pointermove',e=>{ if(!dragging) return;
+      cam.az+=(e.clientX-lx)*0.005;
+      cam.pol=Math.min(1.30,Math.max(0.18,cam.pol+(e.clientY-ly)*0.004));
+      lx=e.clientX; ly=e.clientY;
+      if(!Shell.playing) draw(0); });
+    ['pointerup','pointercancel'].forEach(ev=>glc.addEventListener(ev,()=>{ dragging=false; glc.style.cursor='grab'; }));
+    glc.addEventListener('wheel',e=>{ e.preventDefault();
+      cam.dist=Math.min(CAM_DIST_MAX,Math.max(CAM_DIST_MIN,cam.dist*Math.exp(e.deltaY*0.0012)));
+      if(!Shell.playing) draw(0);
+    },{passive:false});
+    ready3d=true;
+  }
+
+  function placeCam(){
+    const d=cam.dist, tx=camTarget.x;
+    camera3.position.set(tx+d*Math.sin(cam.pol)*Math.cos(cam.az), d*Math.cos(cam.pol), d*Math.sin(cam.pol)*Math.sin(cam.az));
+    camera3.up.set(0,1,0); camera3.lookAt(tx,0,0);
+    camera3.updateMatrixWorld();
+  }
+  function W2S(x,y){
+    _pv.set(x,0,-y).project(camera3);
+    return { sx:(_pv.x*0.5+0.5)*view.w, sy:(-_pv.y*0.5+0.5)*view.h };
+  }
+
+  function render3d(dt){
+    /* trail geometry from state.trail (positions only — physics owns the data) */
+    const n=Math.min(state.trail.length,state.trailMax);
+    const arr=trailLine.geometry.attributes.position.array;
+    for(let i=0;i<n;i++){ const p=state.trail[i]; arr[i*3]=p.x; arr[i*3+1]=0; arr[i*3+2]=-p.y; }
+    trailLine.geometry.attributes.position.needsUpdate=true;
+    trailLine.geometry.setDrawRange(0,n);
+
+    if(state.ghostPath!==_lastGhost){
+      _lastGhost=state.ghostPath;
+      if(state.ghostPath && state.ghostPath.length>1){
+        ghostLine.geometry.dispose();
+        ghostLine.geometry=new THREE.BufferGeometry().setFromPoints(
+          state.ghostPath.map(p=>new THREE.Vector3(p.x,0,-p.y)));
+        ghostLine.computeLineDistances();
+        ghostLine.visible=true;
+      } else ghostLine.visible=false;
+    }
+
+    bodyMesh.visible=!state.escaped;
+    bodyMesh.position.set(state.pos.x,0,-state.pos.y);
+    if(dt) bodyMesh.rotation.y+=dt*0.8;
+
+    placeCam();
+    renderer3.render(scene3,camera3);
   }
 
   function toScreen(p){
@@ -727,110 +959,86 @@ const Shell = (function(){
     return pts;
   }
 
-  function draw(){
+  function draw(dt){
     const w = view.w, h = view.h;
-    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#060E11';
-    ctx.fillRect(0,0,w,h);
-
-    // Grid
-    const gridColor = document.body.classList.contains('light-theme') ? 'rgba(51,65,85,0.08)' : 'rgba(148,163,184,0.06)';
-    ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
-    const gs = view.scale;
-    for (let gx = view.cx % gs; gx < w; gx += gs){
-      ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,h); ctx.stroke();
+    ctx.clearRect(0,0,w,h);
+    if(!ready3d){
+      ctx.fillStyle = '#05070e'; ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '13px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('3D renderer unavailable — three.js failed to load (check network access).', 16, 24);
+      return;
     }
-    for (let gy = view.cy % gs; gy < h; gy += gs){
-      ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke();
-    }
+    render3d(dt||0);   // scene (dome, sun, body, trail, ghost) lives in 3D
 
     const accent = css('--accent') || '#3b9b8f';
 
-    // Ghost path (misconception overlay: "closed" naive path for E>0 case)
+    // Ghost label (the dashed path itself is rendered in 3D)
     if (state.ghostPath && state.ghostPath.length > 1){
-      ctx.strokeStyle = document.body.classList.contains('light-theme') ? 'rgba(220,38,38,0.55)' : 'rgba(248,113,113,0.55)';
-      ctx.setLineDash([6,5]);
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      for (let i=0;i<state.ghostPath.length;i++){
-        const p = toScreen(state.ghostPath[i]);
-        if (i===0) ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // label
       ctx.font = '600 11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
-      ctx.fillStyle = document.body.classList.contains('light-theme') ? '#b91c1c' : '#fca5a5';
+      ctx.fillStyle = '#fca5a5';
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.fillText('naive "closed" guess (fails)', 16, 74);
     }
 
-    // Real trail
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i=0;i<state.trail.length;i++){
-      const p = toScreen(state.trail[i]);
-      if (i===0) ctx.moveTo(p.sx,p.sy); else ctx.lineTo(p.sx,p.sy);
-    }
-    ctx.stroke();
-
-    // Sun
-    const sun = toScreen({x:0,y:0});
-    const sunGlow = ctx.createRadialGradient(sun.sx, sun.sy, 2, sun.sx, sun.sy, 22);
-    sunGlow.addColorStop(0, '#fde68a');
-    sunGlow.addColorStop(0.5, 'rgba(251,191,36,0.55)');
-    sunGlow.addColorStop(1, 'rgba(251,191,36,0)');
-    ctx.fillStyle = sunGlow;
-    ctx.beginPath(); ctx.arc(sun.sx, sun.sy, 22, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath(); ctx.arc(sun.sx, sun.sy, 6, 0, Math.PI*2); ctx.fill();
-
-    // Body — hide if escaped (out of view)
-    const body = toScreen(state.pos);
+    // Body halo ring (the textured body itself is 3D)
+    const body = W2S(state.pos.x, state.pos.y);
     const bodyInView = body.sx > -10 && body.sx < w+10 && body.sy > -10 && body.sy < h+10;
     if (!state.escaped && bodyInView){
-      ctx.fillStyle = '#93c5fd';
-      ctx.beginPath(); ctx.arc(body.sx, body.sy, 5, 0, Math.PI*2); ctx.fill();
       ctx.strokeStyle = 'rgba(147,197,253,0.4)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(body.sx, body.sy, 9, 0, Math.PI*2); ctx.stroke();
-      // "body" label near the moving dot
-      ctx.font = '600 11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
-      ctx.fillStyle = document.body.classList.contains('light-theme') ? '#334155' : '#cbd5e1';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText('body', body.sx + 12, body.sy - 8);
+      ctx.beginPath(); ctx.arc(body.sx, body.sy, 11, 0, Math.PI*2); ctx.stroke();
     }
 
-    // Conic name pill — anchor to actual trajectory bounding box
+    // Conic name pill — fixed top-centre HUD (static; never tracks the body or
+    // trail apex). Nudge only if that slot would cover the curve, Sun, or body.
     const conic = classifyConic(state.e, state.eps);
     ctx.font = '700 20px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
     const label = conic;
     const tw = ctx.measureText(label).width;
-    const pillH = 32;               // matches 20px font + padding
+    const pillH = 32;
     const pillW = tw + 20;
-    const padX = 10;
+    const sunS = W2S(0, 0);
+    const gap = 16; // clear air between pill and anything it must not cover
 
-    // Anchor: for bound orbits use trajectory bounding-box top; otherwise use current body position
-    let lx, ly;
-    if (state.trail.length > 20){
-      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-      for (const p of state.trail){
-        if (p.x<minX)minX=p.x; if (p.x>maxX)maxX=p.x;
-        if (p.y<minY)minY=p.y; if (p.y>maxY)maxY=p.y;
+    const rectHits = (lx, ly, sx, sy, r) =>
+      sx >= lx - r && sx <= lx + pillW + r && sy >= ly - r && sy <= ly + pillH + r;
+
+    const trailHitsPill = (lx, ly) => {
+      if (state.trail.length < 2) return false;
+      const step = Math.max(1, Math.floor(state.trail.length / 80));
+      for (let i = 0; i < state.trail.length; i += step){
+        const s = W2S(state.trail[i].x, state.trail[i].y);
+        if (rectHits(lx, ly, s.sx, s.sy, gap)) return true;
       }
-      const topWorld = { x:(minX+maxX)/2, y: maxY };
-      const topScreen = toScreen(topWorld);
-      lx = topScreen.sx - pillW/2;
-      ly = topScreen.sy - pillH - 8;
-    } else {
-      // Very early: place at right of Sun
-      lx = view.cx + view.scale*2;
-      ly = view.cy - view.scale*3;
-    }
-    // Clamp
-    lx = Math.min(Math.max(lx, 14), w - pillW - 14);
-    ly = Math.min(Math.max(ly, 14), h - pillH - 14);
+      return false;
+    };
 
-    ctx.fillStyle = document.body.classList.contains('light-theme') ? 'rgba(248,250,252,0.92)' : 'rgba(6,14,17,0.82)';
+    const objectsHitPill = (lx, ly) => {
+      if (rectHits(lx, ly, sunS.sx, sunS.sy, 28)) return true;
+      if (!state.escaped && bodyInView && rectHits(lx, ly, body.sx, body.sy, 18)) return true;
+      return false;
+    };
+
+    const candidates = [
+      [(w - pillW) / 2, 16],                         // top centre (preferred static slot)
+      [(w - pillW) / 2 - 80, 16],
+      [(w - pillW) / 2 + 80, 16],
+      [14, 16],
+      [w - pillW - 14, 16],
+      [(w - pillW) / 2, 16 + pillH + 8]
+    ];
+    let lx = candidates[0][0], ly = candidates[0][1];
+    for (const c of candidates){
+      const cx = Math.min(Math.max(c[0], 14), w - pillW - 14);
+      const cy = Math.min(Math.max(c[1], 14), h - pillH - 14);
+      if (!trailHitsPill(cx, cy) && !objectsHitPill(cx, cy)){
+        lx = cx; ly = cy;
+        break;
+      }
+    }
+
+    ctx.fillStyle = 'rgba(6,14,17,0.82)';   // dark pill — the 3D space view is dark in both themes
     ctx.strokeStyle = accent;
     ctx.lineWidth = 1;
     roundRect(ctx, lx, ly, pillW, pillH, 8, true, true);
@@ -838,9 +1046,48 @@ const Shell = (function(){
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, lx + pillW/2, ly + pillH/2 + 1);
 
+    // "body" label — always on the side of the body away from the Sun so it
+    // cannot sit between them and read as a Sun caption (esp. at load / periapsis).
+    if (!state.escaped && bodyInView){
+      ctx.font = '600 11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+      ctx.fillStyle = '#e2e8f0';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const blbl = 'body';
+      const bw = ctx.measureText(blbl).width;
+      const bh = 14;
+      const rdx = body.sx - sunS.sx;
+      const rdy = body.sy - sunS.sy;
+      const rlen = Math.hypot(rdx, rdy) || 1;
+      const ux = rdx / rlen, uy = rdy / rlen; // unit vector Sun → body
+      const overlapsPill = (tx, ty) => {
+        const x0 = tx, y0 = ty - bh/2, x1 = tx + bw, y1 = ty + bh/2;
+        return !(x1 < lx || x0 > lx + pillW || y1 < ly || y0 > ly + pillH);
+      };
+      const tooNearSun = (tx, ty) =>
+        Math.hypot(tx + bw/2 - sunS.sx, ty - sunS.sy) < 46;
+      // Anchor at body, then step outward (and a few tangential alternatives)
+      const base = 28; // keep clear of the body sphere + halo ring (~11px)
+      const candidates = [
+        [body.sx + ux*base - bw/2, body.sy + uy*base],
+        [body.sx + ux*(base+10) - bw/2, body.sy + uy*(base+10)],
+        [body.sx + ux*base - uy*16 - bw/2, body.sy + uy*base + ux*16],
+        [body.sx + ux*base + uy*16 - bw/2, body.sy + uy*base - ux*16],
+        [body.sx + ux*(base+18) - uy*22 - bw/2, body.sy + uy*(base+18) + ux*22],
+        [body.sx + ux*(base+18) + uy*22 - bw/2, body.sy + uy*(base+18) - ux*22]
+      ];
+      let bx = candidates[0][0], by = candidates[0][1];
+      for (const c of candidates){
+        const cx = Math.min(Math.max(c[0], 8), w - bw - 8);
+        const cy = Math.min(Math.max(c[1], 12), h - 12);
+        if (!overlapsPill(cx, cy) && !tooNearSun(cx, cy)){ bx = cx; by = cy; break; }
+      }
+      ctx.fillText(blbl, bx, by);
+    }
+
     // Escape indicator
     if (state.escaped){
-      const last = toScreen(state.trail[state.trail.length-1]);
+      const lastP = state.trail[state.trail.length-1];
+      const last = W2S(lastP.x, lastP.y);
       ctx.font = '700 14px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
       ctx.fillStyle = accent;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -869,27 +1116,31 @@ const Shell = (function(){
     return (E>=0?'+':'−') + Math.abs(E).toFixed(3);
   }
 
-  // Position the parabola tick proportionally on the e-slider (0..2.2)
-  function positionParabolaTick(){
-    if (!parabolaTick) return;
-    const min = parseFloat(sle.min), max = parseFloat(sle.max);
-    const frac = (1 - min) / (max - min);
-    parabolaTick.style.left = (frac*100).toFixed(2) + '%';
-  }
+  // (e-guide legend is static HTML — no slider-tick positioning needed)
+
+  const presets = {
+    circle:   { e: 0 },
+    ellipse:  { e: 0.6 },
+    parabola: { e: 1 },
+    hyperbola:{ e: 1.5 },
+    // Bypass slider snap so students can probe just inside / outside the parabolic edge
+    e099:     { e: 0.99 },
+    e101:     { e: 1.01 }
+  };
 
   function updateReadouts(){
     ve.textContent = state.e.toFixed(2);
     vE.textContent = fmtE(state.eps);
     statSign.textContent = state.eps > 0.001 ? 'positive' : state.eps < -0.001 ? 'negative' : 'zero';
-    const c = classifyConic(state.e, state.eps);
     document.querySelectorAll('.preset-row button').forEach(b=>{
-      b.classList.toggle('active', b.dataset.preset === c);
+      const p = presets[b.dataset.preset];
+      b.classList.toggle('active', !!(p && Math.abs(p.e - state.e) < 1e-9));
     });
   }
 
   function applyParams(){
+    seed();            // derive() runs here — readouts must come AFTER so ε matches e
     updateReadouts();
-    seed();
     fit(); // view centering depends on bound/unbound
   }
 
@@ -901,12 +1152,6 @@ const Shell = (function(){
     applyParams();
   });
 
-  const presets = {
-    circle:   { e: 0 },
-    ellipse:  { e: 0.6 },
-    parabola: { e: 1 },
-    hyperbola:{ e: 1.5 }
-  };
   document.querySelectorAll('.preset-row button').forEach(b=>{
     b.addEventListener('click', ()=>{
       if (b.disabled) return;
@@ -956,18 +1201,18 @@ const Shell = (function(){
     });
   }
 
-  wirePredict(1, 'b',
+  wirePredict(1, 'a',
     'The orbit stretches out, then eventually stops closing. As e rises from 0, the circle becomes an ellipse; at e = 1 the closure fails — the parabolic edge.',
     {
-      a: 'Higher e stretches the orbit outward, not inward.',
+      b: 'Higher e stretches the orbit outward, not inward.',
       c: 'The shape does change — you\'ll see it stretch as e grows.'
     }
   );
-  wirePredict(2, 'b',
+  wirePredict(2, 'c',
     'ε = 0 exactly. That is the parabolic edge — the minimum energy to escape the Sun.',
     {
       a: 'Just below zero the orbit still closes (an elongated ellipse).',
-      c: 'Just above zero the orbit is already open (hyperbolic).'
+      b: 'Just above zero the orbit is already open (hyperbolic).'
     }
   );
   // Step 4: on a wrong "bound at ε>0" choice, force an ε>0 setup and draw a ghost closed ellipse for contrast
@@ -1034,17 +1279,28 @@ const Shell = (function(){
   }
 
   // Formal equations
+  let _katexRetries = 0;
   function renderKatex(){
-    if (typeof katex === 'undefined'){ setTimeout(renderKatex, 60); return; }
     const map = {
-      'eq-E': '\\varepsilon = \\tfrac{1}{2}v^2 - \\dfrac{GM}{r}',
-      'eq-a': '\\varepsilon = -\\dfrac{GM}{2a} \\quad\\Rightarrow\\quad a = -\\dfrac{GM}{2\\varepsilon}\\;\\;(bound)',
-      'eq-v': 'r_{\\text{peri}} = \\dfrac{p}{1+e},\\;\\; \\varepsilon = \\dfrac{GM(e^2-1)}{2p}',
-      'eq-c': '\\begin{aligned} e=0,\\; \\varepsilon<0 &\\Rightarrow \\text{circle}\\\\ 0<e<1,\\; \\varepsilon<0 &\\Rightarrow \\text{ellipse}\\\\ e=1,\\; \\varepsilon=0 &\\Rightarrow \\text{parabola}\\\\ e>1,\\; \\varepsilon>0 &\\Rightarrow \\text{hyperbola}\\end{aligned}'
+      'eq-E': { tex: '\\varepsilon = \\tfrac{1}{2}v^2 - \\dfrac{GM}{r}', plain: 'ε = ½v² − GM/r' },
+      'eq-a': { tex: '\\varepsilon = -\\dfrac{GM}{2a} \\quad\\Rightarrow\\quad a = -\\dfrac{GM}{2\\varepsilon}\\;\\;(bound)', plain: 'ε = −GM/(2a)  ⇒  a = −GM/(2ε)  (bound)' },
+      'eq-v': { tex: 'r_{\\text{peri}} = \\dfrac{p}{1+e},\\;\\; \\varepsilon = \\dfrac{GM(e^2-1)}{2p}', plain: 'r_peri = p/(1+e),  ε = GM(e²−1)/(2p)' },
+      'eq-c': { tex: '\\begin{aligned} e=0,\\; \\varepsilon<0 &\\Rightarrow \\text{circle}\\\\ 0<e<1,\\; \\varepsilon<0 &\\Rightarrow \\text{ellipse}\\\\ e=1,\\; \\varepsilon=0 &\\Rightarrow \\text{parabola}\\\\ e>1,\\; \\varepsilon>0 &\\Rightarrow \\text{hyperbola}\\end{aligned}', plain: 'e=0, ε<0 → circle;  0<e<1, ε<0 → ellipse;  e=1, ε=0 → parabola;  e>1, ε>0 → hyperbola' }
     };
-    Object.entries(map).forEach(([id,tex])=>{
+    if (typeof katex === 'undefined'){
+      if (++_katexRetries > 40){
+        Object.entries(map).forEach(([id, entry])=>{
+          const el = document.getElementById(id);
+          if (el) el.textContent = entry.plain;
+        });
+        return;
+      }
+      setTimeout(renderKatex, 60);
+      return;
+    }
+    Object.entries(map).forEach(([id, entry])=>{
       const el = document.getElementById(id);
-      if (el) katex.render(tex, el, {throwOnError:false, displayMode:true});
+      if (el) katex.render(entry.tex, el, {throwOnError:false, displayMode:true});
     });
   }
 
@@ -1052,13 +1308,16 @@ const Shell = (function(){
     const sub = 6;
     const h = dt / sub;
     for (let k=0;k<sub;k++) step(h);
-    draw();
+    draw(dt);
   }
   function onReset(){
     // Reset to step 0 defaults
     state.e = 0;
     sle.value = 0;
     state.ghostPath = null;
+    cam.az = CAM_DEFAULT.az;
+    cam.pol = CAM_DEFAULT.pol;
+    cam.dist = CAM_DEFAULT.dist;
     applyParams();
     draw();
     // Clear commitments so gating re-applies
@@ -1075,10 +1334,10 @@ const Shell = (function(){
   }
   function onResize(){
     fit();
-    positionParabolaTick();
     draw();
   }
 
+  init3d();
   applyParams();
   renderKatex();
 
@@ -1086,6 +1345,10 @@ const Shell = (function(){
   // Ensure we start paused on step 1
   Shell.setPlaying(false);
 })();
+</script>
+<script>
+/* Open in Lecture mode by default — trigger the shell's lecture toggle once on load. */
+requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),r=document.getElementById('shell');if(b&&r&&!r.classList.contains('lecture-mode'))b.click();});
 </script>
 </body>
 </html>
