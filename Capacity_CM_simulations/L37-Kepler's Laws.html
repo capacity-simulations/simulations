@@ -116,6 +116,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;}
 .stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
 .stat-value.highlight{font-size:18px;}
+.stat-row--formula{align-items:flex-start;gap:10px;}
+.stat-formula{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.stat-formula .stat-label{font-family:var(--font-nums);font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+.stat-units{font-size:11px;font-weight:500;color:var(--ink-mute);line-height:1.35;}
+.stat-row--formula .stat-value{padding-top:1px;flex-shrink:0;}
+.units-note{font-size:11px;color:var(--ink-mute);margin-top:8px;font-style:italic;line-height:1.4;}
 .divider{height:1px;background:var(--border);}
 .note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
 .shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
@@ -425,8 +431,15 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <div class="planet-chips" id="chips"></div>
           <div class="divider" style="margin:10px 0;"></div>
           <div class="ctrl-box">
-            <div class="stat-row"><span class="stat-label">planets</span><span class="stat-value" id="nplanets">0</span></div>
-            <div class="stat-row"><span class="stat-label">T²/a³ (yr²/AU³, AU–yr–M☉ units)</span><span class="stat-value" id="kratio">—</span></div>
+            <div class="stat-row"><span class="stat-label">added / measured</span><span class="stat-value" id="nplanets">0 / 0</span></div>
+            <div class="stat-row stat-row--formula">
+              <div class="stat-formula">
+                <span class="stat-label">T² / a³</span>
+                <span class="stat-units">yr² / AU³</span>
+              </div>
+              <span class="stat-value" id="kratio">—</span>
+            </div>
+            <div class="units-note">Unit system: AU–yr–M☉</div>
           </div>
         </div>
       </div>
@@ -447,20 +460,26 @@ const Shell=(function(){
   let onFrame=()=>{},onReset=()=>{},onResize=()=>{},onStep=()=>{};
   let playing=true,speed=1,last=performance.now(),started=false;
   let inqStep=0,inqTotal=0;
-  function loop(now){let dt=(now-last)/1000;if(dt>0.1)dt=0.1;last=now;if(playing)onFrame(dt*speed);requestAnimationFrame(loop);}
+  function loop(now){let dt=(now-last)/1000;if(dt>0.05)dt=0.05;last=now;if(playing)onFrame(dt*speed);requestAnimationFrame(loop);}
   function refit(){onResize();last=performance.now();}
   function setPlaying(p){playing=p;last=performance.now();const b=document.getElementById('shell-play');if(b){b.textContent=p?'⏸ Pause':'▶ Play';b.classList.toggle('paused',!p);}}
   function setMaximized(on){root.classList.toggle('shell-max',on);const m=document.getElementById('shell-maximize');if(m){m.classList.toggle('active',on);m.textContent=on?'⤡ Minimize':'⛶ Maximize';}requestAnimationFrame(refit);}
   function setInquiryCollapsed(on){root.classList.toggle('inquiry-collapsed',on);requestAnimationFrame(refit);}
   function inqCards(){return root.querySelectorAll('#inq-cards .inq-step');}
   function inqShow(n){const cards=inqCards();if(!cards.length)return;inqStep=Math.max(0,Math.min(n,cards.length-1));cards.forEach((c,i)=>c.classList.toggle('active',i===inqStep));root.querySelectorAll('#inq-dots .inq-dot').forEach((d,i)=>{d.classList.toggle('active',i===inqStep);d.classList.toggle('done',i<inqStep);});const next=document.getElementById('inq-next');if(next){const card=cards[inqStep];const gated=card&&card.hasAttribute('data-gate')&&!card.hasAttribute('data-ready');next.disabled=gated;next.textContent=(inqStep>=cards.length-1)?'Finish':'Next →';}inqUpdatePager();onStep(inqStep);requestAnimationFrame(refit);}
-  function setLectureMode(on){root.classList.toggle('lecture-mode',on);const b=document.getElementById('shell-lecture');if(b)b.classList.toggle('active',on);if(on){const cards=inqCards();if(cards.length)inqShow(cards.length-1);setInquiryCollapsed(true);}else{setInquiryCollapsed(false);inqShow(0);}}
+  function setLectureMode(on){root.classList.toggle('lecture-mode',on);const b=document.getElementById('shell-lecture');if(b)b.classList.toggle('active',on);if(on){const cards=inqCards();if(cards.length)inqShow(cards.length-1);setInquiryCollapsed(true);const k1=document.querySelector('.mode-tab[data-mode="K1"]');if(k1)k1.click();}else{setInquiryCollapsed(false);inqShow(0);}}
   function inqUpdatePager(){const cards=inqCards();const prev=document.getElementById('inq-prev');const pnext=document.getElementById('inq-pager-next');if(prev)prev.disabled=inqStep<=0;if(pnext)pnext.disabled=inqStep>=cards.length-1;}
   function inqPrev(){if(inqStep>0)inqShow(inqStep-1);}
   function inqPagerNext(){const cards=inqCards();if(inqStep<cards.length-1)inqShow(inqStep+1);}
   function inqNext(){const cards=inqCards();if(inqStep>=cards.length-1)setInquiryCollapsed(true);else inqShow(inqStep+1);}
   function stepReady(){const card=inqCards()[inqStep];if(card)card.setAttribute('data-ready','');const next=document.getElementById('inq-next');if(next)next.disabled=false;}
-  function stepUnready(){const card=inqCards()[inqStep];if(card)card.removeAttribute('data-ready');const next=document.getElementById('inq-next');if(next)next.disabled=true;}
+  function stepUnready(){
+    const card=inqCards()[inqStep];
+    if(card)card.removeAttribute('data-ready');
+    const next=document.getElementById('inq-next');
+    // Mirror inqShow: only disable Next when the card actually gates.
+    if(next)next.disabled=!!(card && card.hasAttribute('data-gate'));
+  }
   function wire(){
     const play=document.getElementById('shell-play'),reset=document.getElementById('shell-reset'),spd=document.getElementById('shell-speed'),maxBtn=document.getElementById('shell-maximize'),skip=document.getElementById('aside-inquiry-skip'),restore=document.getElementById('aside-inquiry-restore'),tFormal=document.getElementById('toggle-formal');
     if(play)play.addEventListener('click',()=>setPlaying(!playing));
@@ -535,8 +554,9 @@ const state={
   simTime:0,
   dtWin:0.10,
   // Windows in phase (fraction of orbit period). Perihelion window: phaseFrac wraps 0.
-  areaWin1:{active:false, tStart:0, tEnd:0, area:0, lastPhase:0, samples:[], done:false, phaseCenter:0.0},
-  areaWin2:{active:false, tStart:0, tEnd:0, area:0, lastPhase:0, samples:[], done:false, phaseCenter:0.5},
+  // primed: false until the planet has been outside the window once (avoids a partial first A₁).
+  areaWin1:{active:false, tStart:0, tEnd:0, area:0, lastPhase:0, samples:[], done:false, primed:false, phaseCenter:0.0},
+  areaWin2:{active:false, tStart:0, tEnd:0, area:0, lastPhase:0, samples:[], done:false, primed:false, phaseCenter:0.5},
   area1:0, area2:0,
   // colour-by-speed overlay (step 2 wrong-choice reveal)
   showSpeedTrail:false,
@@ -554,12 +574,15 @@ const CATALOG=[
 ];
 
 function sampleOrbit(a,e,N=720){
-  const p=initAtPerihelion(a,e);
-  const T=Math.sqrt(a*a*a);
-  const dt=T/N;
-  const pts=[];
-  for(let i=0;i<=N;i++){pts.push({x:p.x,y:p.y,t:i*dt});stepVerlet(p,dt);}
-  return {pts,T,dt};
+  // Exact Keplerian ellipse via eccentric anomaly (closed, framerate-independent).
+  // Perihelion on +x with Sun at origin: x = a(cos E − e), y = b sin E.
+  const T=Math.sqrt(a*a*a), b=a*Math.sqrt(1-e*e), pts=[];
+  for(let i=0;i<=N;i++){
+    const E=2*Math.PI*i/N;
+    const M=E-e*Math.sin(E);
+    pts.push({x:a*(Math.cos(E)-e), y:b*Math.sin(E), t:M/(2*Math.PI)*T});
+  }
+  return {pts,T,dt:T/N};
 }
 
 let orbitSample=null;
@@ -575,8 +598,8 @@ function rebuildOrbit(){
 
 function resetAreaWindows(){
   state.area1=0;state.area2=0;
-  state.areaWin1={active:false,tStart:0,tEnd:0,area:0,samples:[],done:false,phaseCenter:0.0};
-  state.areaWin2={active:false,tStart:0,tEnd:0,area:0,samples:[],done:false,phaseCenter:0.5};
+  state.areaWin1={active:false,tStart:0,tEnd:0,area:0,samples:[],done:false,primed:false,phaseCenter:0.0};
+  state.areaWin2={active:false,tStart:0,tEnd:0,area:0,samples:[],done:false,primed:false,phaseCenter:0.5};
 }
 
 /* True-anomaly / phase along orbit from position+velocity (via mean anomaly).
@@ -649,6 +672,8 @@ function drawOrbitCanvas(){
     const p=W(pts[i].x,pts[i].y);
     if(i===0)orbitCx.moveTo(p.X,p.Y);else orbitCx.lineTo(p.X,p.Y);
   }
+  // Close the analytic ellipse path
+  orbitCx.closePath();
   orbitCx.stroke();
 
   // K2 accumulated swept-area polygons (Sun + samples the planet actually traversed)
@@ -683,9 +708,38 @@ function drawOrbitCanvas(){
   grd.addColorStop(0,'#fde68a');grd.addColorStop(1,'rgba(253,224,71,0)');
   orbitCx.fillStyle=grd;orbitCx.beginPath();orbitCx.arc(f1.X,f1.Y,14,0,Math.PI*2);orbitCx.fill();
   orbitCx.fillStyle='#fbbf24';orbitCx.beginPath();orbitCx.arc(f1.X,f1.Y,5,0,Math.PI*2);orbitCx.fill();
-  orbitCx.fillStyle=cssVar('--text');
+
+  // Semi-major axis marker: centre (−ae, 0) → perihelion (a(1−e), 0) — length a
+  orbitCx.strokeStyle=cssVar('--muted');
+  orbitCx.setLineDash([4,4]);orbitCx.beginPath();
+  const Aperi=W(a*(1-e),0), Acent=W(-a*e,0), Aaph=W(-a-a*e,0);
+  orbitCx.moveTo(Acent.X,Acent.Y);orbitCx.lineTo(Aperi.X,Aperi.Y);orbitCx.stroke();
+  orbitCx.setLineDash([]);
+  orbitCx.fillStyle=cssVar('--muted');
   orbitCx.font='12px '+cssVar('--font-sans');
-  orbitCx.fillText('Sun',f1.X+10,f1.Y-10);
+  orbitCx.fillText('a',(Acent.X+Aperi.X)/2 - 4,(Acent.Y+Aperi.Y)/2 - 12);
+
+  // Perihelion / aphelion / Sun labels — clamped; nudge Sun if it collides with perihelion
+  orbitCx.font='12px '+cssVar('--font-sans');
+  const periLabel='perihelion', sunLabel='Sun';
+  const periW=orbitCx.measureText(periLabel).width;
+  let periX=Math.min(w-8-periW, Math.max(8, Aperi.X-32));
+  let periY=Math.max(14, Aperi.Y-14);
+  let sunX=f1.X+10, sunY=f1.Y-10;
+  if(Math.hypot(sunX-periX, sunY-periY) < periW*0.55 + 28){
+    sunY = periY + 16;
+    if(sunY > h-8) sunY = f1.Y+18;
+  }
+  sunX=Math.min(w-28, Math.max(8, sunX));
+  sunY=Math.min(h-8, Math.max(14, sunY));
+  orbitCx.fillStyle=cssVar('--text');
+  orbitCx.fillText(sunLabel, sunX, sunY);
+  orbitCx.fillStyle='#f59e0b';
+  orbitCx.fillText(periLabel, periX, periY);
+  orbitCx.fillStyle='#06b6d4';
+  const aphLabel='aphelion';
+  const aphW=orbitCx.measureText(aphLabel).width;
+  orbitCx.fillText(aphLabel, Math.min(w-8-aphW, Math.max(8, Aaph.X-6)), Math.max(14, Aaph.Y-14));
 
   // Trail (colour-by-speed if enabled)
   if(state.trail.length>2){
@@ -723,42 +777,24 @@ function drawOrbitCanvas(){
   orbitCx.strokeStyle='rgba(226,232,240,0.35)';
   orbitCx.lineWidth=1;
   orbitCx.beginPath();orbitCx.moveTo(f1.X,f1.Y);orbitCx.lineTo(P.X,P.Y);orbitCx.stroke();
-  // Light planet
+  // Heavy planet (step-4): hollow ring behind the light marker so both stay visible when co-located
+  if(state.showHeavyDemo&&state.planetHeavy){
+    const H=W(state.planetHeavy.x,state.planetHeavy.y);
+    orbitCx.strokeStyle='#c084fc';
+    orbitCx.lineWidth=2.5;
+    orbitCx.beginPath();orbitCx.arc(H.X,H.Y,11,0,Math.PI*2);orbitCx.stroke();
+    orbitCx.fillStyle=cssVar('--text');
+    orbitCx.font='11px '+cssVar('--font-sans');
+    orbitCx.fillText('10× heavier (same orbit)', Math.min(w-130, H.X+14), Math.max(14, H.Y-10));
+  }
+  // Light planet (on top)
   orbitCx.fillStyle='#60a5fa';
   orbitCx.beginPath();orbitCx.arc(P.X,P.Y,6,0,Math.PI*2);orbitCx.fill();
   orbitCx.strokeStyle='#93c5fd';orbitCx.lineWidth=1.5;orbitCx.stroke();
-  // Heavy planet (step-4 demo)
-  if(state.showHeavyDemo&&state.planetHeavy){
-    const H=W(state.planetHeavy.x,state.planetHeavy.y);
-    orbitCx.fillStyle='#c084fc';
-    orbitCx.beginPath();orbitCx.arc(H.X,H.Y,8,0,Math.PI*2);orbitCx.fill();
-    orbitCx.strokeStyle='#e9d5ff';orbitCx.lineWidth=1.5;orbitCx.stroke();
-    orbitCx.fillStyle=cssVar('--text');
-    orbitCx.font='11px '+cssVar('--font-sans');
-    orbitCx.fillText('10× heavier',H.X+10,H.Y-8);
-    orbitCx.fillText('(same orbit)',H.X+10,H.Y+6);
-  }
 
-  // Semi-major axis marker, "a" label above the dashed line
-  orbitCx.strokeStyle=cssVar('--muted');
-  orbitCx.setLineDash([4,4]);orbitCx.beginPath();
-  const A1=W(a*(1-e),0), A2=W(-a-a*e,0);
-  orbitCx.moveTo(A1.X,A1.Y);orbitCx.lineTo(A2.X,A2.Y);orbitCx.stroke();
-  orbitCx.setLineDash([]);
-  orbitCx.fillStyle=cssVar('--muted');
-  orbitCx.font='12px '+cssVar('--font-sans');
-  orbitCx.fillText('a',(A1.X+A2.X)/2 - 4,(A1.Y+A2.Y)/2 - 12);
-
-  // Perihelion / aphelion labels — ABOVE the ellipse endpoints
-  orbitCx.fillStyle='#f59e0b';
-  orbitCx.font='12px '+cssVar('--font-sans');
-  orbitCx.fillText('perihelion',A1.X-32,A1.Y-14);
-  orbitCx.fillStyle='#06b6d4';
-  orbitCx.fillText('aphelion',A2.X-6,A2.Y-14);
-
-  // K2 area-comparison boxes — move to TOP of canvas
+  // K2 area-comparison boxes — below the plot-title band
   if(state.mode==='K2'){
-    const boxY=18, boxH=30, boxW=Math.min(160,(w-80)/2 - 20);
+    const boxY=46, boxH=30, boxW=Math.min(160,(w-80)/2 - 20);
     const maxA=Math.max(state.area1,state.area2,1e-6);
     function drawBox(cx0,color,label,val){
       orbitCx.strokeStyle=cssVar('--border');orbitCx.lineWidth=1;
@@ -793,7 +829,14 @@ function drawSystemCanvas(){
   sysCx.fillStyle=cssVar('--ink-mute');
   for(let r=1;r<=Math.ceil(maxA);r++){
     sysCx.beginPath();sysCx.arc(ox,oy,r*scale,0,Math.PI*2);sysCx.stroke();
-    if(r%2===0||maxA<3)sysCx.fillText(r+' AU',ox+r*scale+4,oy-3);
+    if(r%2===0||maxA<3){
+      const label=r+' AU';
+      const tw=sysCx.measureText(label).width;
+      let lx=ox+r*scale+4;
+      if(lx+tw > w-4) lx=ox - r*scale - tw - 4; // flip to left side if clipped
+      if(lx < 4) lx=4;
+      sysCx.fillText(label, lx, oy-3);
+    }
   }
   const g=sysCx.createRadialGradient(ox,oy,0,ox,oy,12);
   g.addColorStop(0,'#fde68a');g.addColorStop(1,'rgba(253,224,71,0)');
@@ -809,9 +852,15 @@ function drawSystemCanvas(){
     sysCx.closePath();sysCx.stroke();
     const P=W(pl.body.x,pl.body.y);
     sysCx.fillStyle=pl.color;sysCx.beginPath();sysCx.arc(P.X,P.Y,5,0,Math.PI*2);sysCx.fill();
-    sysCx.fillStyle=cssVar('--text');
-    sysCx.font='12px '+cssVar('--font-sans');
-    sysCx.fillText(pl.name,P.X+7,P.Y-5);
+    // Offset labels radially outward; suppress when orbit is too small on screen
+    const rPix=Math.hypot(P.X-ox, P.Y-oy);
+    if(rPix>=30){
+      const ux=(P.X-ox)/rPix, uy=(P.Y-oy)/rPix;
+      const lx=P.X+ux*12, ly=P.Y+uy*12;
+      sysCx.fillStyle=cssVar('--text');
+      sysCx.font='12px '+cssVar('--font-sans');
+      sysCx.fillText(pl.name, lx+4, ly);
+    }
   }
 }
 
@@ -845,42 +894,62 @@ function drawTPlot(){
   tpCx.fillText('a³ (AU³)',pad.l+pw-64,pad.t+ph+32);
   tpCx.save();tpCx.translate(16,pad.t+ph/2+22);tpCx.rotate(-Math.PI/2);tpCx.fillText('T² (yr²)',0,0);tpCx.restore();
 
-  // Points
+  // Points — measured solid; un-measured hollow with "measuring…" cue
   for(const pl of state.system){
-    if(!pl.Tmeasured)continue;
-    const a3=Math.pow(pl.a,3), T2=Math.pow(pl.Tmeasured,2);
+    const a3=Math.pow(pl.a,3);
+    const T2=pl.Tmeasured ? Math.pow(pl.Tmeasured,2) : Math.pow(pl.Tanalytic,2);
     const px=X(Math.log10(a3)), py=Y(Math.log10(T2));
-    tpCx.fillStyle=pl.color;tpCx.beginPath();tpCx.arc(px,py,5,0,Math.PI*2);tpCx.fill();
-    tpCx.strokeStyle='#fff';tpCx.lineWidth=1;tpCx.stroke();
-    tpCx.fillStyle=cssVar('--text');
-    tpCx.font='12px '+cssVar('--font-sans');
-    tpCx.fillText(pl.name,px+7,py-6);
+    const label=pl.Tmeasured ? pl.name : (pl.name+' · measuring…');
+    if(pl.Tmeasured){
+      tpCx.fillStyle=pl.color;tpCx.beginPath();tpCx.arc(px,py,5,0,Math.PI*2);tpCx.fill();
+      tpCx.strokeStyle='#fff';tpCx.lineWidth=1;tpCx.stroke();
+      tpCx.fillStyle=cssVar('--text');
+      tpCx.font='12px '+cssVar('--font-sans');
+    }else{
+      tpCx.strokeStyle=pl.color;tpCx.lineWidth=1.5;
+      tpCx.beginPath();tpCx.arc(px,py,5,0,Math.PI*2);tpCx.stroke();
+      tpCx.fillStyle=cssVar('--ink-mute');
+      tpCx.font='11px '+cssVar('--font-sans');
+    }
+    const tw=tpCx.measureText(label).width;
+    let lx=px+7;
+    if(lx+tw > pad.l+pw-2) lx=pad.l+pw-2-tw;
+    if(lx < pad.l) lx=pad.l;
+    let ly=py-6;
+    if(ly < pad.t+10) ly=pad.t+10;
+    if(ly > pad.t+ph-2) ly=pad.t+ph-2;
+    tpCx.fillText(label, lx, ly);
   }
 
   // Reference lines revealed only after ≥2 measured planets — student sees points first.
   const measuredCount=state.system.filter(p=>p.Tmeasured).length;
   if(measuredCount>=2){
-    // De-emphasised wrong-slope guides (slope 2/3 and slope 2), then the correct slope-1 line on top.
-    // Line through (a³=1, T²=1) for reference.
+    // Wrong-slope guides on log(a³) vs log(T²): slope s means T² ∝ (a³)^s.
+    // T ∝ a² ⇒ T² ∝ a⁴ ⇒ T² ∝ (a³)^{4/3} ⇒ slope 4/3. (Not slope 2 — that would be T ∝ a³.)
+    function guideLabel(txt, slope, yNudge, color){
+      tpCx.fillStyle=color;
+      tpCx.font='11px '+cssVar('--font-sans');
+      const tw=tpCx.measureText(txt).width;
+      const xEnd=Math.min(xMax, yMax/slope);        // right edge OR top edge, whichever comes first
+      const lx=Math.max(pad.l, X(xEnd)-tw-4);
+      let ly=Y(slope*xEnd)+yNudge;
+      ly=Math.max(pad.t+10, Math.min(pad.t+ph-2, ly));
+      tpCx.fillText(txt, lx, ly);
+    }
     tpCx.setLineDash([3,4]);tpCx.lineWidth=1;
-    tpCx.strokeStyle='rgba(244,63,94,0.35)'; // slope 2 (T ∝ a²) → T² ∝ a⁴ → slope 2 on log-log
+    tpCx.strokeStyle='rgba(244,63,94,0.35)';
     tpCx.beginPath();
-    tpCx.moveTo(X(xMin),Y(yMin + 2*(xMin-xMin)));
-    // Actually plot line y = 2x on log axes through origin (a³=1,T²=1)
-    tpCx.moveTo(X(xMin),Y(2*xMin));
-    tpCx.lineTo(X(xMax),Y(2*xMax));
+    tpCx.moveTo(X(xMin),Y((4/3)*xMin));
+    tpCx.lineTo(X(xMax),Y((4/3)*xMax));
     tpCx.stroke();
-    tpCx.fillStyle='rgba(244,63,94,0.7)';
-    tpCx.font='11px '+cssVar('--font-sans');
-    tpCx.fillText('slope 2 (T ∝ a²)',X(1)+4,Y(2)-4);
+    guideLabel('slope 4/3 (T ∝ a²)', 4/3, -4, 'rgba(244,63,94,0.7)');
 
-    tpCx.strokeStyle='rgba(251,191,36,0.35)'; // slope 2/3 (T linear in a → T² ∝ a²  → slope 2/3 vs a³)
+    tpCx.strokeStyle='rgba(251,191,36,0.35)'; // slope 2/3 (T linear in a → T² ∝ a² → slope 2/3 vs a³)
     tpCx.beginPath();
     tpCx.moveTo(X(xMin),Y((2/3)*xMin));
     tpCx.lineTo(X(xMax),Y((2/3)*xMax));
     tpCx.stroke();
-    tpCx.fillStyle='rgba(251,191,36,0.75)';
-    tpCx.fillText('slope 2/3 (T ∝ a)',X(1)+4,Y((2/3)*1)+14);
+    guideLabel('slope 2/3 (T ∝ a)', 2/3, 14, 'rgba(251,191,36,0.75)');
 
     // Slope-1 line on top, full-weight
     tpCx.setLineDash([5,4]);tpCx.lineWidth=1.8;
@@ -889,7 +958,9 @@ function drawTPlot(){
     tpCx.setLineDash([]);
     tpCx.fillStyle=cssVar('--accent');
     tpCx.font='12px '+cssVar('--font-sans');
-    tpCx.fillText('T² = a³  (slope 1)',X(1)+6,Y(1)-8);
+    const s1='T² = a³  (slope 1)';
+    const tw1=tpCx.measureText(s1).width;
+    tpCx.fillText(s1, X(xMax)-tw1-4, Y(xMax)-8);
   }
 }
 
@@ -897,21 +968,80 @@ function drawTPlot(){
 function onFrame(dt){
   const timeScale=0.5;
   const dtSim=dt*timeScale;
-  const substeps=6;
-  const h=dtSim/substeps;
 
-  // Track phase before/after for perihelion crossing detection (K2 windows, K3 T measurement).
+  // Characteristic length = smallest PERIHELION radius among active orbits.
+  // Must NOT depend on instantaneous position: a phase-correlated h makes Verlet
+  // non-symplectic and the orbit decays secularly (measured −4.9% in a over 60 yr).
+  let rPeri = state.a*(1-state.e);
+  if(state.mode==='K3') for(const pl of state.system) rPeri=Math.min(rPeri, pl.a*(1-pl.e));
+  rPeri = Math.max(rPeri, 0.02);
+  const hmax = 0.01*Math.sqrt(rPeri*rPeri*rPeri/GM);
+  const substeps = Math.max(6, Math.min(4000, Math.ceil(dtSim/hmax)));
+  const h = dtSim/substeps;
+
   const T=Math.sqrt(state.a*state.a*state.a);
 
-  // K1/K2 main planet
-  const phiBefore=phaseFromPos(state.planet,state.a,state.e);
-  const prev={x:state.planet.x,y:state.planet.y};
-  for(let s=0;s<substeps;s++) stepVerlet(state.planet,h);
-  const phiAfter=phaseFromPos(state.planet,state.a,state.e);
+  // K1/K2 main planet — step and (in K2) accumulate area per substep so high-e
+  // perihelion curvature is not under-counted by one coarse frame triangle.
+  const phiStart=phaseFromPos(state.planet,state.a,state.e);
+  let prev={x:state.planet.x,y:state.planet.y};
+  let phiBefore=phiStart;
+
+  const winHalf=(state.mode==='K2') ? state.dtWin/2 : 0;
+  function inPeri(phi){const d=Math.min(Math.abs(phi),Math.abs(phi-1));return d<=winHalf;}
+  function inAph(phi){return Math.abs(phi-0.5)<=winHalf;}
+  function phaseSpan(phiB,phiA){ return phiA>=phiB ? (phiA-phiB) : (1-phiB+phiA); }
+  function lerpPhase(phiB,phiA,t){
+    let p=phiB + t*phaseSpan(phiB,phiA);
+    while(p>=1)p-=1; while(p<0)p+=1;
+    return p;
+  }
+  function fracInside(inFn, phiB, phiA){
+    const was=inFn(phiB), now=inFn(phiA);
+    if(was && now) return 1;
+    if(!was && !now) return 0;
+    let lo=0, hi=1;
+    for(let i=0;i<20;i++){
+      const mid=(lo+hi)/2;
+      if(inFn(lerpPhase(phiB,phiA,mid))===now) hi=mid; else lo=mid;
+    }
+    return was ? hi : (1-hi);
+  }
+  function accumulate(winObj, inFn, phiB, phiA, p0, p1){
+    const wasInside=inFn(phiB), nowInside=inFn(phiA);
+    if(!wasInside && !nowInside){
+      winObj.primed=true;
+      if(winObj.active){ winObj.active=false; winObj.done=true; }
+      return;
+    }
+    if(!wasInside) winObj.primed=true;
+    if((wasInside || nowInside) && winObj.primed){
+      if(!winObj.active){ winObj.active=true; winObj.area=0; winObj.samples=[{x:p0.x,y:p0.y}]; }
+      const frac=fracInside(inFn, phiB, phiA);
+      const cross=p0.x*p1.y - p1.x*p0.y;
+      winObj.area += 0.5*cross*frac;
+      winObj.samples.push({x:p1.x,y:p1.y});
+    }
+    if(winObj.active && wasInside && !nowInside){
+      winObj.active=false;
+      winObj.done=true;
+    }
+  }
+
+  for(let s=0;s<substeps;s++){
+    stepVerlet(state.planet,h);
+    if(state.mode==='K2'){
+      const phiAfter=phaseFromPos(state.planet,state.a,state.e);
+      const cur={x:state.planet.x,y:state.planet.y};
+      accumulate(state.areaWin1, inPeri, phiBefore, phiAfter, prev, cur);
+      accumulate(state.areaWin2, inAph, phiBefore, phiAfter, prev, cur);
+      prev=cur; phiBefore=phiAfter;
+    }
+  }
   state.simTime+=dtSim;
 
-  // Heavy planet (identical dynamics; mass cancels)
-  if(state.showHeavyDemo){
+  // Heavy planet (identical dynamics; mass cancels) — same h/substeps
+  if(state.showHeavyDemo&&state.planetHeavy){
     for(let s=0;s<substeps;s++) stepVerlet(state.planetHeavy,h);
   }
 
@@ -922,26 +1052,7 @@ function onFrame(dt){
   const cap=Math.max(200,Math.floor(T/dtSim)+50);
   while(state.trail.length>cap){state.trail.shift();state.trailSpeeds.shift();}
 
-  // K2: accumulate area actually swept in two phase windows (peri: [-Δ/2, +Δ/2] mod 1; aph: [0.5-Δ/2, 0.5+Δ/2])
   if(state.mode==='K2'){
-    const win=state.dtWin/2; // half-width in phase fraction
-    function inPeri(phi){const d=Math.min(Math.abs(phi),Math.abs(phi-1));return d<=win;}
-    function inAph(phi){return Math.abs(phi-0.5)<=win;}
-    function accumulate(winObj,inside){
-      if(inside){
-        if(!winObj.active){winObj.active=true;winObj.area=0;winObj.samples=[{x:prev.x,y:prev.y}];}
-        // signed triangle area from Sun (origin), summed
-        const cross=prev.x*state.planet.y - state.planet.x*prev.y;
-        winObj.area += 0.5*cross;
-        winObj.samples.push({x:state.planet.x,y:state.planet.y});
-      }else if(winObj.active){
-        winObj.active=false;
-        winObj.done=true;
-      }
-    }
-    accumulate(state.areaWin1,inPeri(phiAfter));
-    accumulate(state.areaWin2,inAph(phiAfter));
-    // Publish once each window completes; keep last completed value
     if(state.areaWin1.done){state.area1=Math.abs(state.areaWin1.area);state.areaWin1.done=false;}
     if(state.areaWin2.done){state.area2=Math.abs(state.areaWin2.area);state.areaWin2.done=false;}
     updateReadouts();
@@ -950,20 +1061,21 @@ function onFrame(dt){
   // K3: advance each system planet; detect perihelion crossings to measure T.
   if(state.mode==='K3'){
     for(const pl of state.system){
-      const before={x:pl.body.x,y:pl.body.y};
       const phiB=phaseFromPos(pl.body,pl.a,pl.e);
       for(let s=0;s<substeps;s++) stepVerlet(pl.body,h);
       const phiA=phaseFromPos(pl.body,pl.a,pl.e);
       pl.timeAcc=(pl.timeAcc||0)+dtSim;
-      // Perihelion crossing: phase wraps past 0 (phiB near 1, phiA near 0)
-      if(phiB>0.85 && phiA<0.15){
+      // Perihelion crossing: phase wraps (phiB → 1, phiA → 0); interpolate crossing time
+      if(phiA < phiB){
+        const frac=(1-phiB)/((1-phiB)+phiA);
+        const tCross=pl.timeAcc - dtSim + dtSim*frac;
         if(pl.lastCrossT!==undefined){
-          const Tm=pl.timeAcc - pl.lastCrossT;
+          const Tm=tCross - pl.lastCrossT;
           if(Tm>0.01){
             pl.Tmeasured = pl.Tmeasured ? 0.5*(pl.Tmeasured+Tm) : Tm;
           }
         }
-        pl.lastCrossT=pl.timeAcc;
+        pl.lastCrossT=tCross;
       }
     }
     updateNPlanets();
@@ -981,7 +1093,6 @@ function onResize(){
   else drawOrbitCanvas();
 }
 function onReset(){
-  state.mode='K1';
   state.e=0.6;state.a=1.0;state.dtWin=0.10;
   state.showHeavyDemo=false;state.showSpeedTrail=false;
   document.getElementById('ecc').value=0.6;
@@ -990,8 +1101,6 @@ function onReset(){
   document.querySelectorAll('.planet-chip').forEach(c=>c.classList.remove('added'));
   rebuildOrbit();
   updateNPlanets();
-  applyMode('K1');
-  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.toggle('active',t.dataset.mode==='K1'));
   document.querySelectorAll('.inq-step').forEach(step=>{
     step.removeAttribute('data-ready');
     step.querySelectorAll('.choice').forEach(c=>{c.disabled=false;c.classList.remove('correct','wrong','dim');});
@@ -999,6 +1108,9 @@ function onReset(){
   });
   const s3live=document.getElementById('step3-live');if(s3live)s3live.style.display='none';
   const cbtn=document.getElementById('confirm-k2');if(cbtn){cbtn.classList.remove('done');cbtn.textContent='Confirm A₁ ≈ A₂';}
+  // Restore panels/mode for the open inquiry card (do not hard-force K1)
+  onStep(Shell.step);
+  Shell.stepUnready();
 }
 
 /* ---- Mode wiring ---- */
@@ -1059,7 +1171,11 @@ function addSystemPlanet(catEntry){
   const p=initAtPerihelion(catEntry.a,catEntry.e);
   const Tan=Math.sqrt(catEntry.a**3);
   const advance=Math.random()*Tan;
-  const substeps=200;const h=advance/substeps;
+  // Same perihelion-based h as onFrame — consistent stepping for every body.
+  const rPeri=Math.max(catEntry.a*(1-catEntry.e), 0.02);
+  const hmax=0.01*Math.sqrt(rPeri*rPeri*rPeri/GM);
+  const substeps=Math.max(6, Math.min(4000, Math.ceil(advance/hmax)));
+  const h=advance/substeps;
   for(let s=0;s<substeps;s++) stepVerlet(p,h);
   const sample=sampleOrbit(catEntry.a,catEntry.e,240);
   state.system.push({
@@ -1071,8 +1187,8 @@ function addSystemPlanet(catEntry){
   updateNPlanets();
 }
 function updateNPlanets(){
-  document.getElementById('nplanets').textContent=state.system.length;
   const measured=state.system.filter(p=>p.Tmeasured);
+  document.getElementById('nplanets').textContent=state.system.length+' / '+measured.length;
   if(measured.length){
     const r=measured.reduce((s,p)=>s+p.Tmeasured*p.Tmeasured/(p.a**3),0)/measured.length;
     document.getElementById('kratio').textContent=r.toFixed(3);
@@ -1189,7 +1305,12 @@ function onStep(i){
   if(i<=0){setModeFromStep('K1');}
   else if(i===1){setModeFromStep('K1');}  // watching speed variation on the plain K1 canvas
   else if(i===2){setModeFromStep('K2');}
-  else if(i===3){setModeFromStep('K1');state.showHeavyDemo=true;}
+  else if(i===3){
+    setModeFromStep('K1');
+    // Co-seed so both markers stay locked (mass cancels) — do not reuse a stale heavy phase
+    state.planetHeavy={...state.planet};
+    state.showHeavyDemo=true;
+  }
   else if(i>=4){setModeFromStep('K3');}
 }
 function setModeFromStep(m){
@@ -1219,22 +1340,39 @@ function renderFormal(){
     <div>
       <div style="color:var(--ink-mid);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">K3 — periods</div>
       <div id="eq-k3"></div>
-      <div style="margin-top:6px;color:var(--muted);font-size:12.5px;">Depends only on a and M_☉ — planet mass cancels.</div>
+      <div style="margin-top:6px;color:var(--muted);font-size:12.5px;">Depends only on a and M☉ — planet mass cancels.</div>
     </div>`;
+  const plain={
+    'eq-newton':'F = −GM☉ m / r² r̂  ⇒  r̈ = −GM☉ / r² r̂',
+    'eq-k1':'r(θ) = a(1−e²)/(1 + e cos θ)',
+    'eq-k2':'dA/dt = L/(2m) = const',
+    'eq-k3':'T² = 4π² a³ / GM☉   (AU, yr, M☉)'
+  };
   if(typeof katex!=='undefined'){
     katex.render("\\mathbf{F} = -\\frac{GM_\\odot m}{r^2}\\,\\hat{\\mathbf{r}}\\quad\\Rightarrow\\quad\\ddot{\\mathbf{r}} = -\\frac{GM_\\odot}{r^2}\\hat{\\mathbf{r}}",document.getElementById('eq-newton'),{throwOnError:false});
     katex.render("r(\\theta) = \\frac{a(1-e^2)}{1 + e\\cos\\theta}",document.getElementById('eq-k1'),{throwOnError:false});
     katex.render("\\frac{dA}{dt} = \\frac{L}{2m} = \\text{const}",document.getElementById('eq-k2'),{throwOnError:false});
     katex.render("T^2 = \\frac{4\\pi^2}{GM_\\odot}\\,a^3",document.getElementById('eq-k3'),{throwOnError:false});
+  }else{
+    Object.entries(plain).forEach(([id,txt])=>{ const n=document.getElementById(id); if(n) n.textContent=txt; });
   }
 }
 
 /* ---- Boot ---- */
 buildChips();
 rebuildOrbit();
-setTimeout(renderFormal,60);
+renderFormal(); // plain-text equations immediately (don't wait on CDN)
+let _katexRetries=0;
+(function tryFormal(){
+  if(typeof katex!=='undefined'){ renderFormal(); }
+  else if(++_katexRetries<40){ setTimeout(tryFormal,150); }
+})();
 
 Shell.init({onFrame,onReset,onResize,onStep});
+</script>
+<script>
+/* Open in Lecture mode by default — trigger the shell's lecture toggle once on load. */
+requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),r=document.getElementById('shell');if(b&&r&&!r.classList.contains('lecture-mode'))b.click();});
 </script>
 </body>
 </html>
