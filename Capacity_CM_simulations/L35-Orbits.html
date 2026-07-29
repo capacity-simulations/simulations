@@ -713,9 +713,9 @@ const Shell = (function(){
     const maxExtent = 12;
     view.scale = Math.min(r.width, r.height) / (2.2 * maxExtent);
 
-    // 3D: aim the camera at the Sun for bound orbits; shift the look-target
-    // for unbound ones so the escaping trajectory has room on screen
-    camTarget.x = unbound ? 4.5 : 0;
+    // 3D: camera stays locked on the Sun for every conic — no view jump when
+    // e crosses 1 (use drag/scroll to follow an escaping trajectory)
+    camTarget.x = 0;
     if(ready3d){
       renderer3.setSize(view.w, view.h, false);
       camera3.aspect = view.w/Math.max(1,view.h);
@@ -981,23 +981,23 @@ const Shell = (function(){
     const pillW = tw + 20;
     const padX = 10;
 
-    // Anchor: for bound orbits use trajectory bounding-box top; otherwise use current body position
+    // Anchor: directly above the trajectory's topmost point IN SCREEN SPACE,
+    // so the pill can never sit on the curve regardless of camera angle
     let lx, ly;
+    const sunS = W2S(0, 0);
     if (state.trail.length > 20){
-      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-      for (const p of state.trail){
-        if (p.x<minX)minX=p.x; if (p.x>maxX)maxX=p.x;
-        if (p.y<minY)minY=p.y; if (p.y>maxY)maxY=p.y;
+      let minSY = Infinity, sxAt = sunS.sx;
+      for (let i = 0; i < state.trail.length; i += 6){
+        const p = state.trail[i];
+        const s = W2S(p.x, p.y);
+        if (s.sy < minSY){ minSY = s.sy; sxAt = s.sx; }
       }
-      const topWorld = { x:(minX+maxX)/2, y: maxY };
-      const topScreen = W2S(topWorld.x, topWorld.y);
-      lx = topScreen.sx - pillW/2;
-      ly = topScreen.sy - pillH - 8;
+      lx = sxAt - pillW/2;
+      ly = minSY - pillH - 14;
     } else {
-      // Very early: place at right of Sun
-      const early = W2S(2, 3);
-      lx = early.sx;
-      ly = early.sy;
+      // Very early: hover above the Sun, clear of the seeded orbit
+      lx = sunS.sx - pillW/2;
+      ly = sunS.sy - pillH - 84;
     }
     // Clamp
     lx = Math.min(Math.max(lx, 14), w - pillW - 14);
