@@ -797,25 +797,84 @@ const Shell = (function(){
   }
   function makeSpaceTex(){
     _rs=773;
-    const c=document.createElement('canvas'); c.width=4096; c.height=2048;
+    const W=4096, H=2048, TAU=Math.PI*2, mid=H*0.5;
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d');
-    g.fillStyle='#020308'; g.fillRect(0,0,4096,2048);
-    /* faint horizontal galaxy band — dome mesh is tilted in 3D, so no seam */
-    const gb=g.createLinearGradient(0,860,0,1190);
-    gb.addColorStop(0,'rgba(190,205,235,0)'); gb.addColorStop(0.5,'rgba(190,205,235,0.075)'); gb.addColorStop(1,'rgba(190,205,235,0)');
-    g.fillStyle=gb; g.fillRect(0,860,4096,330);
-    for(let i=0;i<520;i++){ const x=rnd3()*4096, y=880+rnd3()*280;
-      g.fillStyle='rgba(215,225,250,'+(0.05+0.2*rnd3()).toFixed(2)+')';
-      g.fillRect(x,y,1.6,1.6); }
-    for(let i=0;i<3800;i++){ const x=rnd3()*4096, y=rnd3()*2048, t=rnd3();
-      const col = t<0.75?'215,225,255' : (t<0.9?'255,240,220':'255,214,190');
-      g.fillStyle='rgba('+col+','+(0.14+0.6*rnd3()*rnd3()).toFixed(2)+')';
-      const s=rnd3()<0.1?2.6:1.5;
-      g.fillRect(x,y,s,s); }
-    for(let i=0;i<40;i++){ const x=rnd3()*4096, y=rnd3()*2048;
-      g.shadowColor='rgba(230,238,255,0.9)'; g.shadowBlur=5;
-      g.fillStyle='rgba(240,246,255,0.9)'; g.beginPath(); g.arc(x,y,1.6,0,Math.PI*2); g.fill();
-      g.shadowBlur=0; }
+    /* All random values are computed BEFORE the wrap duplication so the
+       panorama is continuous across the texture seam. */
+    function wrap(draw){ [0,-W,W].forEach(dx=>draw(dx)); }
+    /* deep-space base with the faintest blue airglow near the band */
+    const base=g.createLinearGradient(0,0,0,H);
+    base.addColorStop(0,'#010208'); base.addColorStop(0.5,'#030511'); base.addColorStop(1,'#010208');
+    g.fillStyle=base; g.fillRect(0,0,W,H);
+    /* Milky Way: layered star-cloud glow along the band */
+    for(let i=0;i<95;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()+rnd3()-1.5)*150, r=90+rnd3()*230;
+      const t=rnd3(), col = t<0.6?'222,221,236' : (t<0.85?'234,225,206':'212,200,234');
+      const a=(0.016+0.036*rnd3()).toFixed(3);
+      wrap(dx=>{ const gr=g.createRadialGradient(x+dx,y,0,x+dx,y,r);
+        gr.addColorStop(0,'rgba('+col+','+a+')'); gr.addColorStop(1,'rgba('+col+',0)');
+        g.fillStyle=gr; g.beginPath(); g.arc(x+dx,y,r,0,TAU); g.fill(); });
+    }
+    /* central bulge — broad warm glow, flattened */
+    const bx=W*0.32;
+    wrap(dx=>{ const gr=g.createRadialGradient(bx+dx,mid,0,bx+dx,mid,520);
+      gr.addColorStop(0,'rgba(240,228,205,0.11)'); gr.addColorStop(0.4,'rgba(228,215,195,0.055)'); gr.addColorStop(1,'rgba(228,215,195,0)');
+      g.save(); g.translate(bx+dx,mid); g.scale(1.6,0.55); g.translate(-(bx+dx),-mid);
+      g.fillStyle=gr; g.beginPath(); g.arc(bx+dx,mid,520,0,TAU); g.fill(); g.restore(); });
+    /* dark dust lanes cutting through the band */
+    for(let i=0;i<75;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()-1)*95, rx=60+rnd3()*190, ry=0.16+0.22*rnd3();
+      const a=(0.10+0.16*rnd3()).toFixed(3);
+      wrap(dx=>{ const gr=g.createRadialGradient(x+dx,y,0,x+dx,y,rx);
+        gr.addColorStop(0,'rgba(4,4,7,'+a+')'); gr.addColorStop(1,'rgba(4,4,7,0)');
+        g.save(); g.translate(x+dx,y); g.scale(1,ry); g.translate(-(x+dx),-y);
+        g.fillStyle=gr; g.beginPath(); g.arc(x+dx,y,rx,0,TAU); g.fill(); g.restore(); });
+    }
+    /* dense unresolved-star speckle inside the band */
+    for(let i=0;i<9000;i++){
+      const x=rnd3()*W, y=mid+(rnd3()+rnd3()+rnd3()+rnd3()-2)*135;
+      g.fillStyle='rgba(226,228,244,'+(0.04+0.26*rnd3()*rnd3()).toFixed(3)+')';
+      g.fillRect(x,y,1,1);
+    }
+    /* subtle nebulae: two H-alpha patches near the band, one blue reflection */
+    const NEB=[[W*0.52,mid-70,'186,84,94',5],[W*0.145,mid+55,'184,90,98',4],[W*0.68,mid+40,'112,140,216',4]];
+    NEB.forEach(nb=>{
+      for(let k=0;k<nb[3];k++){
+        const x=nb[0]+(rnd3()-0.5)*150, y=nb[1]+(rnd3()-0.5)*90, r=50+rnd3()*110;
+        const a=(0.020+0.028*rnd3()).toFixed(3);
+        wrap(dx=>{ const gr=g.createRadialGradient(x+dx,y,0,x+dx,y,r);
+          gr.addColorStop(0,'rgba('+nb[2]+','+a+')'); gr.addColorStop(1,'rgba('+nb[2]+',0)');
+          g.fillStyle=gr; g.beginPath(); g.arc(x+dx,y,r,0,TAU); g.fill(); });
+      }
+    });
+    /* one distant galaxy — tilted elliptical smudge */
+    const gx=W*0.78, gy=H*0.27;
+    wrap(dx=>{ g.save(); g.translate(gx+dx,gy); g.rotate(-0.5); g.scale(1,0.34);
+      const gr=g.createRadialGradient(0,0,0,0,0,46);
+      gr.addColorStop(0,'rgba(236,230,215,0.34)'); gr.addColorStop(0.25,'rgba(222,214,200,0.12)'); gr.addColorStop(1,'rgba(222,214,200,0)');
+      g.fillStyle=gr; g.beginPath(); g.arc(0,0,46,0,TAU); g.fill(); g.restore(); });
+    /* field stars: power-law brightness, colour temperature spread */
+    for(let i=0;i<5600;i++){
+      const x=rnd3()*W, y=rnd3()*H, t=rnd3();
+      const col = t<0.12?'157,180,255' : t<0.52?'220,228,255' : t<0.82?'248,244,232' : t<0.94?'255,219,170' : '255,178,140';
+      const b=rnd3()*rnd3();
+      g.fillStyle='rgba('+col+','+(0.10+0.7*b).toFixed(3)+')';
+      const s=b>0.55?2.4:(b>0.25?1.6:1.1);
+      g.fillRect(x,y,s,s);
+    }
+    /* bright stars with soft glow + diffraction glints */
+    for(let i=0;i<55;i++){
+      const x=rnd3()*W, y=rnd3()*H, t=rnd3();
+      const col = t<0.2?'170,192,255' : t<0.75?'238,242,255' : '255,224,180';
+      const r=1.3+rnd3()*1.3, gl=4+rnd3()*5;
+      g.shadowColor='rgba('+col+',0.95)'; g.shadowBlur=6;
+      g.fillStyle='rgba('+col+',0.95)';
+      g.beginPath(); g.arc(x,y,r,0,TAU); g.fill();
+      g.shadowBlur=0;
+      g.strokeStyle='rgba('+col+',0.30)'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(x-gl,y); g.lineTo(x+gl,y); g.moveTo(x,y-gl); g.lineTo(x,y+gl); g.stroke();
+    }
     const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; return t;
   }
 
