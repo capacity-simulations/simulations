@@ -173,6 +173,13 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;}
 .stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
 .stat-value.highlight{font-size:18px;}
+.readout-box{display:flex;flex-direction:column;gap:0;}
+.readout-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 12px;padding:8px 0;}
+.readout-row + .readout-row{border-top:1px solid var(--border);}
+.readout-meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.readout-label{font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.readout-hint{font-size:11px;font-weight:500;color:var(--text-muted);line-height:1.3;}
+.readout-box .shell-readout{min-width:7.25em;text-align:right;justify-self:end;}
 .divider{height:1px;background:var(--border);}
 .note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
 .shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
@@ -275,7 +282,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .switch{display:inline-flex;border:1px solid var(--ctrl-border);border-radius:6px;overflow:hidden;}
 .switch button{background:transparent;border:none;color:var(--ink-mute);padding:4px 12px;cursor:pointer;font-family:var(--font-sans);font-size:12px;font-weight:600;}
 .switch button.on{background:var(--ctrl-bg);color:var(--accent);}
-#gridToggle{width:34px;height:18px;accent-color:var(--accent);cursor:pointer;}
+#gridToggle{accent-color:var(--accent);cursor:pointer;}
 
 /* Invariant row + "what changes" note — gold, since invariance IS this sim's lesson (J-scoped). */
 .stat-row.inv-row{border-top:1px solid var(--border);margin-top:4px;padding-top:8px;}
@@ -306,7 +313,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .mode-btn.on-naive{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.55);color:#fde68a;}
 .choice{display:block;width:100%;text-align:left;margin:6px 0;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font:inherit;font-size:13px;cursor:pointer;line-height:1.45;}
 .choice:hover{border-color:var(--accent-soft);}
-#plot{width:100%;height:190px;max-height:190px;display:block;background:#0a0d13;border:1px solid var(--border);border-radius:6px;}
+#plot{width:100%;height:270px;max-height:270px;display:block;background:#0a0d13;border:1px solid var(--border);border-radius:6px;}
 .micro{font-size:13px;color:var(--text-muted);margin:7px 0 0;line-height:1.45;}
 .data-t{width:100%;border-collapse:collapse;font-size:13px;}
 .data-t td{padding:4px 6px;border-bottom:1px solid var(--border);}
@@ -321,10 +328,22 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .eq-row.falsified{opacity:.78;border-style:dashed;border-color:rgba(251,191,36,.35);}
 .ctl-muted{opacity:.4;transition:opacity .3s;}
 .ctl-muted:hover{opacity:.75;}
+.ctrl-row-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);margin:0 0 5px;letter-spacing:.02em;}
+.ctrl-row{display:flex;flex-wrap:wrap;gap:6px;}
+.ctrl-row.ctrl-row--nowrap{flex-wrap:nowrap;}
+.ctrl-row.ctrl-row--nowrap .shell-btn{flex:1 1 0;min-width:0;padding-left:8px;padding-right:8px;justify-content:center;}
+.ctrl-row + .ctrl-row-label{margin-top:10px;}
+#btn-launch.armed{box-shadow:0 0 0 2px var(--accent),0 0 10px var(--accent-soft);filter:brightness(1.12);}
 .inq-step h4{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--text);}
 .inq-step p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--muted);}
 .inq-step .predict-eval{display:none;}
 .inq-step .predict-eval.show{display:block;}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;font-weight:600;}
+.chk input{accent-color:var(--accent);cursor:pointer;width:15px;height:15px;}
+/* Hide Text toggle */
+#ht-ctl{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+#ht-ctl input{accent-color:var(--accent);margin:0;cursor:pointer;}
+#shell.hide-text .ht-hide{display:none !important;}
 </style>
 </head>
 <body>
@@ -371,6 +390,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
+<label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+  <input type="checkbox" id="ht-toggle"> Hide Text
+</label>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -390,15 +412,45 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     </div>
   </header>
 
+<!-- HIDE-TEXT REGISTRY ("Simplify display" v2)
+     DOM items:    add class "ht-hide" to the element.
+     Canvas items: wrap the draw call in  if(!HT()){ ... }
+     Keep this list current when registering items:
+     - [dom] "✓ Independent — aₓ = 0, aᵧ = −g" — #mode-banner, applyBanner
+     - [dom] legend chip (all entries: A projectile / B twin / M 90°−θ / previous trials, incl. colour swatches) — #legend
+-->
+<script>
+/* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
+(function(){
+  var shell=document.getElementById('shell');
+  var box=document.getElementById('ht-toggle');
+  if(!shell||!box) return;
+  window.HT=function(){ return shell.classList.contains('hide-text'); };
+  function apply(){
+    shell.classList.toggle('hide-text', box.checked);
+    window.dispatchEvent(new Event('resize')); /* forces a redraw in every CM sim, even while paused */
+  }
+  box.addEventListener('change', apply);
+  /* Default: follow lecture mode at boot. Must wait for window load — in these ~300KB
+     files a rAF can fire mid-parse, BEFORE the end-of-body auto-lecture script runs. */
+  window.addEventListener('load', function(){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      box.checked = shell.classList.contains('lecture-mode');
+      apply();
+    });});
+  });
+})();
+</script>
+
   <main class="shell-hero">
     <div class="plot-box">
   <canvas id="scene"></canvas>
-  <div id="mode-banner" class="hero-chip ok" style="display:none"></div>
-  <div id="legend" class="hero-chip">
-    <span><i style="background:#f59e0b"></i>A projectile</span>
+  <div id="mode-banner" class="hero-chip ok ht-hide" style="display:none"></div>
+  <div id="legend" class="hero-chip ht-hide">
+    <span><i style="background:#f59e0b"></i><span>A projectile</span></span>
     <span id="lg-B" style="display:none"><i style="background:#22d3ee"></i>B twin (vₓ = 0)</span>
     <span id="lg-M" style="display:none"><i style="background:#a78bfa"></i>M at 90°−θ</span>
-    <span id="lg-G" style="display:none"><i style="background:#64748b"></i>previous trials</span>
+    <span id="lg-G" style="display:none"><i style="background:#64748b"></i><span>previous trials</span></span>
   </div>
 </div>
   </main>
@@ -474,11 +526,16 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="control-range"><span>0°</span><span>90°</span></div>
     </div>
     <div class="ctrl-box">
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      <span class="ctrl-row-label">Actions</span>
+      <div class="ctrl-row ctrl-row--nowrap">
         <button id="btn-launch" class="shell-btn primary" title="Fire a new run at the current settings (previous arc becomes a ghost)">🚀 Launch</button>
+        <button id="btn-auto" class="shell-btn" title="Auto-launch — when on, moving a slider or toggling a comparison fires a new run immediately; when off, changes only arm the next launch">↻ Auto</button>
+        <button id="btn-clear" class="shell-btn" title="Clear ghost trails">🧹 Clear</button>
+      </div>
+      <span class="ctrl-row-label">Compare</span>
+      <div class="ctrl-row">
         <button id="btn-twin" class="shell-btn" title="Toss twin ball B straight up at the same instant: same v_y₀ = v₀sinθ, zero horizontal velocity">⇅ Twin ball</button>
         <button id="btn-mirror" class="shell-btn ctl-muted" title="Also launch at the complementary angle 90°−θ">⧉ 90°−θ</button>
-        <button id="btn-clear" class="shell-btn" title="Clear ghost trails">🧹 Clear</button>
       </div>
     </div>
     <div class="ctrl-box" id="physics-model-box" style="display:none" aria-hidden="true">
@@ -488,15 +545,32 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="mode-naive" class="shell-btn mode-btn ctl-muted" title="The myth, implemented exactly: a_y = −g·sinθ — horizontal speed 'dilutes' gravity">⚠ Coupled</button>
       </div>
     </div>
+    <div class="ctrl-box">
+      <label class="chk" title="Toggle meter axes, tick labels, and grid on the launch scene">
+        <input type="checkbox" id="gridToggle"> Show axes &amp; grid
+      </label>
+    </div>
   </div>
 </div>
 
 <div class="shell-panel">
   <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
   <div class="shell-panel-body">
-    <div class="ctrl-box">
-      <div class="stat-row"><span class="stat-label">time since launch</span><span class="shell-readout" id="read-t" style="display:none">t 0.00 s</span></div>
-      <div class="stat-row"><span class="stat-label">range (last ✓ landing)</span><span class="shell-readout" id="read-R">R — m</span></div>
+    <div class="ctrl-box readout-box">
+      <div class="readout-row">
+        <div class="readout-meta">
+          <span class="readout-label">Time</span>
+          <span class="readout-hint">since launch</span>
+        </div>
+        <span class="shell-readout" id="read-t">— s</span>
+      </div>
+      <div class="readout-row">
+        <div class="readout-meta">
+          <span class="readout-label">Range</span>
+          <span class="readout-hint">last ✓ landing</span>
+        </div>
+        <span class="shell-readout" id="read-R">— m</span>
+      </div>
     </div>
   </div>
 </div>
@@ -505,7 +579,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="shell-panel-head"><h3>📈 Range vs angle</h3><span class="shell-caret">▾</span></div>
   <div class="shell-panel-body">
     <canvas id="plot"></canvas>
-    <p class="micro">Function plot of R(θ) = v₀²sin2θ / g for the current v₀. Axes fixed (θ: 0–90°, R: 0–260 m; worst case v₀ = 50 m/s ⇒ R = 254.8 m). The ● marker follows the θ slider; ◇ marks the 45° peak.</p>
   </div>
 </div>
 
@@ -607,6 +680,13 @@ const Shell = (function(){
       const cards = inqCards();
       if(cards.length) inqShow(cards.length - 1); // jump to last step → onStep(last) paints the complete scene
       setInquiryCollapsed(true);                  // hide inquiry → restore bar
+      /* Lecture default: clean scene — axes/grid off, twin ball off */
+      const gt = document.getElementById('gridToggle');
+      if(gt && gt.checked){ gt.checked = false; gt.dispatchEvent(new Event('change')); }
+      const twinBtn = document.getElementById('btn-twin');
+      if(twinBtn && twinBtn.classList.contains('active')) twinBtn.click();
+      const launchBtn = document.getElementById('btn-launch');
+      if(launchBtn) launchBtn.classList.remove('armed');
     } else {
       setInquiryCollapsed(false);
       inqShow(0);                                 // re-initiate guided inquiry from step 1
@@ -797,7 +877,7 @@ function hmaxReal(v0, th){ const vy = v0*Math.sin(th); return vy*vy/(2*G); }
 function rangeNaive(v0, th){ return 2*v0*v0*Math.cos(th)/G; }   /* exact coupled-model range for θ>0; θ=0 glides */
 
 /* ---------- state ---------- */
-const P = { v0:25, theta:40, mode:'real', twin:false, mirror:false };
+const P = { v0:25, theta:40, mode:'real', twin:false, mirror:false, showAxes:false, auto:false };
 const S = { balls:[], t:0, phase:'idle', holdT:0, ghosts:[], view:{xm:10, ym:5},
             realRef:null, lastTwin:null, firstLaunched:false };
 
@@ -928,23 +1008,30 @@ function launch(push){
                   T:tofReal(P.v0,th), R:rangeReal(P.v0,th), H:hmaxReal(P.v0,th) };
   } else S.realRef = null;
   growView();
-  $('read-t').textContent = 't 0.00 s';
+  $('read-t').textContent = '0.00 s';
   drawScene();
 }
 function commit(){
+  $('btn-launch').classList.remove('armed');
   S.firstLaunched = true;
-  $('read-t').style.display = '';
   applyBanner();
   launch(true);
   Shell.setPlaying(true);
   checkSteps();
+}
+function markArmed(){
+  $('btn-launch').classList.add('armed');
+}
+function autoCommit(){
+  if(P.auto) commit();
+  else markArmed();
 }
 
 /* ---------- run completion / prediction evaluation ---------- */
 function runComplete(){
   const A = S.balls.find(b=>b.id==='A');
   const B = S.balls.find(b=>b.id==='B');
-  if(A && A.landed && A.mode==='real') $('read-R').textContent = 'R '+A.R.toFixed(2)+' m';
+  if(A && A.landed && A.mode==='real') $('read-R').textContent = A.R.toFixed(2)+' m';
   if(B){
     S.lastTwin = { tA: A.glide?Infinity:A.T, tB: B.T, mode: A.mode,
                    vy: A.vy, RA: A.glide?Infinity:A.R };
@@ -981,7 +1068,7 @@ function onFrame(dt){
       }
       if(!b.done) all = false;
     });
-    $('read-t').textContent = 't '+Math.min(S.t, maxEnd).toFixed(2)+' s';
+    $('read-t').textContent = Math.min(S.t, maxEnd).toFixed(2)+' s';
     if(all){ S.phase='hold'; S.holdT=0; runComplete(); }
   }
   /* hold phase: stay — re-launch requires explicit 🚀 Launch click */
@@ -1053,21 +1140,28 @@ function drawScene(){
   ctx.quadraticCurveTo(w*.90, gy-h*.07, w, gy);
   ctx.closePath(); ctx.fill();
 
-  /* grid (labeled in meters — the absolute scale reference) */
+  /* grid + axis numbers (labeled in meters — the absolute scale reference) */
   const step = gridStep(sc);
   const xEnd = (w-ml-mr)/sc, yEnd = (gy-mt)/sc;
-  const gridCol = light ? 'rgba(30,41,59,.13)' : 'rgba(148,163,184,.14)';
-  ctx.lineWidth = 1;
-  for(let gx=0; gx<=xEnd+1e-9; gx+=step){
-    const px=X(gx);
-    ctx.strokeStyle=gridCol;
-    ctx.beginPath(); ctx.moveTo(px,mt); ctx.lineTo(px,gy); ctx.stroke();
-  }
-  for(let gv=step; gv<=yEnd+1e-9; gv+=step){
-    const py=Y(gv);
-    ctx.strokeStyle=gridCol;
-    ctx.beginPath(); ctx.moveTo(ml,py); ctx.lineTo(w-mr,py); ctx.stroke();
-    lab(fmt(gv)+((gv+step>yEnd)?' m':''), ml-6, py+4, {align:'right', color: light?'#3f4c63':'#8b9bb4'});
+  if(P.showAxes){
+    const gridCol = light ? 'rgba(30,41,59,.13)' : 'rgba(148,163,184,.14)';
+    const axisCol = light ? 'rgba(30,41,59,.45)' : 'rgba(148,163,184,.45)';
+    ctx.lineWidth = 1;
+    for(let gx=0; gx<=xEnd+1e-9; gx+=step){
+      const px=X(gx);
+      ctx.strokeStyle=gridCol;
+      ctx.beginPath(); ctx.moveTo(px,mt); ctx.lineTo(px,gy); ctx.stroke();
+    }
+    for(let gv=step; gv<=yEnd+1e-9; gv+=step){
+      const py=Y(gv);
+      ctx.strokeStyle=gridCol;
+      ctx.beginPath(); ctx.moveTo(ml,py); ctx.lineTo(w-mr,py); ctx.stroke();
+      lab(fmt(gv)+((gv+step>yEnd)?' m':''), ml-6, py+4, {align:'right', color: light?'#3f4c63':'#8b9bb4'});
+    }
+    /* explicit x/y axes through the origin */
+    ctx.strokeStyle=axisCol; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(ml,mt); ctx.lineTo(ml,gy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ml,gy); ctx.lineTo(w-mr,gy); ctx.stroke();
   }
 
   /* grass ground */
@@ -1078,8 +1172,10 @@ function drawScene(){
   ctx.strokeStyle = light ? '#3c6b2b' : '#3d5c2c'; ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke();
   /* x-axis labels sit on the grass */
-  for(let gx=0; gx<=xEnd+1e-9; gx+=step){
-    lab(fmt(gx)+((gx+step>xEnd)?' m':''), X(gx), gy+16, {align:'center', color: light?'#eaf4e2':'#a9c295', halo:false});
+  if(P.showAxes){
+    for(let gx=0; gx<=xEnd+1e-9; gx+=step){
+      lab(fmt(gx)+((gx+step>xEnd)?' m':''), X(gx), gy+16, {align:'center', color: light?'#eaf4e2':'#a9c295', halo:false});
+    }
   }
 
   function trace(vx, vy, gE, Tmax, glide, stopX){
@@ -1298,23 +1394,25 @@ function drawPlot(){
   const X=d=>ml+d/90*(w-ml-mr), Y=R=>h-mb-(R/PLOT_YMAX)*(h-mb-mt);
 
   ctx.lineWidth=1;
+  const gridCol='rgba(148,163,184,.28)';
+  const tickCol='#cbd5e1';
   for(let d=0; d<=90; d+=15){
-    ctx.strokeStyle='rgba(148,163,184,.1)';
+    ctx.strokeStyle=gridCol;
     ctx.beginPath(); ctx.moveTo(X(d),mt); ctx.lineTo(X(d),h-mb); ctx.stroke();
-    lab(String(d), X(d), h-mb+15, {align:'center', color:'#5f6b80'});
+    lab(String(d), X(d), h-mb+15, {align:'center', color:tickCol});
   }
   for(let R=0; R<=PLOT_YMAX; R+=50){
-    ctx.strokeStyle='rgba(148,163,184,.1)';
+    ctx.strokeStyle=gridCol;
     ctx.beginPath(); ctx.moveTo(ml,Y(R)); ctx.lineTo(w-mr,Y(R)); ctx.stroke();
-    lab(String(R), ml-5, Y(R)+4, {align:'right', color:'#5f6b80'});
+    lab(String(R), ml-5, Y(R)+4, {align:'right', color:tickCol});
   }
-  lab('θ (°)', w-mr, h-4, {align:'right', color:'#5f6b80'});
-  lab('R (m)', 4, 11, {color:'#5f6b80'});
+  lab('θ (°)', w-mr, h-4, {align:'right', color:tickCol});
+  lab('R (m)', 4, 11, {color:tickCol});
 
   /* 45° peak marks */
-  ctx.strokeStyle='rgba(148,163,184,.45)'; ctx.setLineDash([4,4]);
+  ctx.strokeStyle='rgba(148,163,184,.65)'; ctx.setLineDash([4,4]);
   ctx.beginPath(); ctx.moveTo(X(45),mt); ctx.lineTo(X(45),h-mb); ctx.stroke(); ctx.setLineDash([]);
-  lab('45°', X(45), mt-3, {align:'center', color:'#94a3b8'});
+  lab('45°', X(45), mt-3, {align:'center', color:'#e2e8f0'});
 
   /* real curve for the current v0 */
   ctx.strokeStyle='#34d399'; ctx.lineWidth=2;
@@ -1390,7 +1488,7 @@ function applyBanner(){
   const el=$('mode-banner');
   /* Always show Independent status — Coupled UI is hidden; mode stays real. */
   el.style.display='';
-  el.className='hero-chip ok';
+  el.className='hero-chip ok ht-hide';
   el.textContent='✓ Independent — aₓ = 0, aᵧ = −g';
 }
 function setMode(m){
@@ -1402,23 +1500,25 @@ function setMode(m){
   $('mode-naive').classList.toggle('on-naive', false);
   applyBanner();
   $('data-wrap').classList.remove('show-naive');
-  updateData(); drawPlot(); commit();
+  updateData(); drawPlot(); autoCommit();
 }
 function toggleTwin(){
   P.twin=!P.twin;
   $('btn-twin').classList.toggle('active', P.twin);
   updateLegend();
-  commit();
+  autoCommit();
 }
 function liveRefresh(){ updateData(); drawScene(); drawPlot(); }
 
 /* ---------- shell callbacks ---------- */
 function onResize(){ drawScene(); drawPlot(); }
 function onReset(){
-  P.v0=25; P.theta=40; P.mode='real'; P.twin=false; P.mirror=false;
+  P.v0=25; P.theta=40; P.mode='real'; P.twin=false; P.mirror=false; P.auto=false;
   $('v0').value=25; $('theta').value=40;
   $('v0-val').textContent='25.0 m/s'; $('th-val').textContent='40°';
   $('btn-twin').classList.remove('active'); $('btn-mirror').classList.remove('active');
+  $('btn-auto').classList.remove('active');
+  $('btn-launch').classList.remove('armed');
   $('btn-mirror').classList.add('ctl-muted');
   $('mode-real').classList.add('on-real'); $('mode-naive').classList.remove('on-naive');
   $('mode-naive').classList.add('ctl-muted');
@@ -1428,8 +1528,7 @@ function onReset(){
   S.firstLaunched=false;
   hasUsedMirror=false; hasUsedNaive=false;
   stepsDone=[false,false,false,false,false];
-  $('read-R').textContent='R — m'; $('read-t').textContent='t 0.00 s';
-  $('read-t').style.display='none';
+  $('read-R').textContent='— m'; $('read-t').textContent='— s';
   S.view={xm:10, ym:5};
   updateLegend(); updateData();
   applyBanner();
@@ -1445,22 +1544,26 @@ function init(){
     $('v0-val').textContent=P.v0.toFixed(1)+' m/s';
     liveRefresh();
   });
-  $('v0').addEventListener('change', ()=>{ if(S.firstLaunched) commit(); });
+  $('v0').addEventListener('change', ()=>{ if(P.auto && S.firstLaunched) commit(); else markArmed(); });
   $('theta').addEventListener('input', e=>{
     P.theta=parseInt(e.target.value,10);
     $('th-val').textContent=P.theta+'°';
     liveRefresh();
   });
-  $('theta').addEventListener('change', ()=>{ if(S.firstLaunched) commit(); });
+  $('theta').addEventListener('change', ()=>{ if(P.auto && S.firstLaunched) commit(); else markArmed(); });
 
   $('btn-launch').addEventListener('click', commit);
+  $('btn-auto').addEventListener('click', ()=>{
+    P.auto=!P.auto;
+    $('btn-auto').classList.toggle('active', P.auto);
+  });
   $('btn-twin').addEventListener('click', toggleTwin);
   $('btn-mirror').addEventListener('click', ()=>{
     P.mirror=!P.mirror;
     hasUsedMirror=true;
     $('btn-mirror').classList.toggle('active', P.mirror);
     $('btn-mirror').classList.remove('ctl-muted');
-    updateLegend(); drawPlot(); commit();
+    updateLegend(); drawPlot(); autoCommit();
     checkSteps();
   });
   $('mode-real').addEventListener('click', ()=>setMode('real'));
@@ -1471,6 +1574,10 @@ function init(){
     checkSteps();
   });
   $('btn-clear').addEventListener('click', ()=>{ S.ghosts=[]; ghostCI=0; updateLegend(); fitView(); });
+  $('gridToggle').addEventListener('change', e=>{
+    P.showAxes = !!e.target.checked;
+    drawScene();
+  });
 
   renderKatexWhenReady(0);
   Shell.init({ onFrame, onReset, onResize, onStep, onComplete });
@@ -1503,15 +1610,14 @@ function applyInquiryScene(cfg){
   S.phase='idle'; S.balls=[]; S.t=0; S.holdT=0;
   S.firstLaunched=false;
   S.view={xm:10, ym:5};
-  $('read-R').textContent='R — m';
+  $('read-R').textContent='— m';
   updateLegend(); updateData(); applyBanner(); checkSteps();
   if(cfg.launch){
     S.firstLaunched=true;
-    $('read-t').style.display='';
     applyBanner();
     launch(false);
   } else {
-    $('read-t').style.display='none';
+    $('read-t').textContent='— s';
     drawScene(); drawPlot();
   }
   if(cfg.playing != null) Shell.setPlaying(!!cfg.playing);

@@ -246,7 +246,6 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .planet-btn.active{background:var(--ctrl-bg);border-color:var(--accent-soft);}
 .planet-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor;}
 .planet-name{flex:1;font-weight:600;}
-.planet-meta{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted);}
 .zoom-toggle{display:flex;gap:6px;}
 .zoom-toggle .shell-btn{flex:1;justify-content:center;}
 .hidden-until-step{display:none !important;}
@@ -282,7 +281,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <tr><td class="pid">A1</td><td>One concept, one sentence</td><td>Orbits are ellipses; speed varies (faster near perihelion).</td></tr>
             <tr><td class="pid">A2/C1</td><td>Numbers earn their place</td><td>r/v/a/e appear only when the step that reads them activates.</td></tr>
             <tr><td class="pid">E1</td><td>Physics honesty</td><td>Velocity Verlet (symplectic) integrates real GM/a/e; no Euler drift; scale convention printed on canvas.</td></tr>
-            <tr><td class="pid">D6/D7</td><td>Scene evolves with steps</td><td>Perihelion marker, planet list, and eccentricity annotation reveal as the student advances.</td></tr>
+            <tr><td class="pid">D6/D7</td><td>Scene evolves with steps</td><td>Planet list and stats (including e) reveal as the student advances.</td></tr>
             <tr><td class="pid">A3/A4</td><td>Formal tools off by default</td><td>vis-viva and Verlet equations live behind ∑ Formal; the sim reads without them.</td></tr>
           </tbody>
         </table>
@@ -303,9 +302,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
         <label style="font-size:11px;">Time rate</label>
         <select id="shell-speed" class="shell-select">
-          <option value="0.25">0.25×</option>
+          <option value="0.25" selected>0.25×</option>
           <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
+          <option value="1">1×</option>
           <option value="2">2×</option>
           <option value="4">4×</option>
           <option value="8">8×</option>
@@ -357,12 +356,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="inq-step">
           <h4>3 · Observe — the speed readout</h4>
           <p>Now watch Mercury. The stats panel shows its instantaneous distance <strong>r</strong> and speed <strong>v</strong>. Notice how <strong>v is largest when r is smallest</strong>, and smallest when r is largest.</p>
-          <p>The perihelion (closest point) is marked with a small tick on Mercury's trail. That is where it moves fastest — Kepler's second law in action.</p>
+          <p>Closest approach (perihelion) is where it moves fastest — Kepler's second law in action.</p>
         </div>
 
         <div class="inq-step" data-gate>
           <h4>4 · Predict — the shape</h4>
-          <p>Look at each orbit and ask where the Sun sits inside it — dead centre, or off to one side? The planet list now shows each orbit's eccentricity <em>e</em>. Which orbit is <strong>least circular</strong>?</p>
+          <p>Look at each orbit and ask where the Sun sits inside it — dead centre, or off to one side? Click a planet to read its eccentricity <em>e</em> in the stats panel. Which orbit is <strong>least circular</strong>?</p>
           <button class="choice">A · Earth</button>
           <button class="choice">B · Neptune</button>
           <button class="choice">C · Mercury</button>
@@ -457,7 +456,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 const Shell = (function(){
   const root = document.getElementById('shell');
   let onFrame=()=>{}, onReset=()=>{}, onResize=()=>{}, onStep=()=>{};
-  let playing=true, speed=1, last=performance.now(), started=false;
+  let playing=true, speed=0.25, last=performance.now(), started=false;
   let inqStep=0, inqTotal=0;
 
   function loop(now){
@@ -545,7 +544,10 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(false); });
-    if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
+    if(spd){
+      speed=parseFloat(spd.value)||0.25;
+      spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||0.25; });
+    }
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
 
@@ -695,7 +697,14 @@ const Shell = (function(){
   let renderer3, scene3, camera3, sunMesh, sunGlow, domeMesh, refRing, ghostRing, ghostMesh;
   const planetMeshes = [], orbitLines = [], planetSpins = [];
   let ready3d = false, _pv = null;
-  const cam = { az: -Math.PI/2, pol: 0.95, dist: 5.0 };
+  // Per-view camera defaults. Full mode: planets fanned along the left of the
+  // frame (perihelia toward −screen-x), with enough tilt/zoom that Neptune
+  // fills the plot — matches the lecture full-system framing.
+  const CAM_DEF = {
+    inner: { az: -Math.PI/2, pol: 0.95, dist: 5.0 },
+    outer: { az: -Math.PI/2, pol: 1.08, dist: 78 }
+  };
+  const cam = { ...CAM_DEF.inner };
   let _rs = 11;
   function rnd3(){ _rs=(_rs*16807)%2147483647; return _rs/2147483647; }
   function viewK(){ return state.view === 'inner' ? 0.013 : 0.10; }
@@ -961,7 +970,8 @@ const Shell = (function(){
   }
 
   function applyViewScale(){
-    cam.dist = state.view==='inner' ? 5.0 : 92;
+    const def = CAM_DEF[state.view] || CAM_DEF.inner;
+    cam.az = def.az; cam.pol = def.pol; cam.dist = def.dist;
     if(!ready3d) return;
     const K=viewK();
     planetMeshes.forEach((m,i)=>m.scale.setScalar(PLANETS[i].px*K));
@@ -1104,48 +1114,7 @@ const Shell = (function(){
     return `rgba(${r},${g},${b},${a})`;
   }
 
-  function drawPerihelionMarkers(labelsOnly){
-    if(Shell.step < 2) return;
-    const vis = visibleIndices();
-    // Mercury always (when visible); selected planet only when it is on-screen
-    const indices = [];
-    if(vis.includes(0)) indices.push(0);
-    if(state.selected !== 0 && vis.includes(state.selected)) indices.push(state.selected);
-    for(const i of indices){
-      const b = state.bodies[i];
-      const p = PLANETS[i];
-      const sp = W2S(b.peri.x, b.peri.y), px = sp.x, py = sp.y;
-      if(!labelsOnly){
-        ctx.strokeStyle = hexA(p.color, 0.95);
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(px-6, py); ctx.lineTo(px+6, py);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(px, py-6); ctx.lineTo(px, py+6);
-        ctx.stroke();
-        continue;
-      }
-      const lbl = 'perihelion';
-      const font = '12px var(--font-nums), monospace';
-      ctx.font = font;
-      const tw = ctx.measureText(lbl).width;
-      placeCanvasLabel(px, py, lbl, {
-        font,
-        fillStyle: hexA(p.color, 0.95),
-        candidates: [
-          [px + 10, py - 8],
-          [px - 10 - tw, py - 8],
-          [px + 10, py + 18],
-          [px - 10 - tw, py + 18],
-          [px - tw / 2, py - 20],
-          [px - tw / 2, py + 22]
-        ]
-      });
-    }
-  }
-
-  // Shared per-frame canvas label slots (planet names claim first; ecc/ghost defer).
+  // Shared per-frame canvas label slots (planet names claim first; ghost defers).
   let labelRects = [];
   function resetLabelRects(){ labelRects = []; }
   function rectsOverlap(a, b){
@@ -1192,55 +1161,6 @@ const Shell = (function(){
     ctx.fillStyle = opts.fillStyle;
     ctx.font = font;
     ctx.fillText(text, best.lx, best.ly);
-  }
-
-  function drawEccentricityAnnotation(labelsOnly){
-    if(Shell.step < 3) return;
-    if(!visibleIndices().includes(state.selected)) return;
-    const i = state.selected;
-    const p = PLANETS[i], b = state.bodies[i];
-    if(!labelsOnly){
-      ctx.save();
-      ctx.setLineDash([4,4]);
-      ctx.strokeStyle = hexA(p.color, 0.35);
-      ctx.lineWidth = 1;
-      const spp = W2S(b.peri.x, b.peri.y), spa = W2S(b.apo.x, b.apo.y);
-      ctx.beginPath();
-      ctx.moveTo(spp.x, spp.y);
-      ctx.lineTo(spa.x, spa.y);
-      ctx.stroke();
-      ctx.restore();
-
-      // Ellipse geometric centre (Sun is at a focus, offset by a·e from centre)
-      const ecx = (b.peri.x + b.apo.x) / 2;
-      const ecy = (b.peri.y + b.apo.y) / 2;
-      const sc = W2S(ecx, ecy), sx = sc.x, sy = sc.y;
-      const s = 5;
-      ctx.strokeStyle = hexA(p.color, 0.9);
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(sx - s, sy - s); ctx.lineTo(sx + s, sy + s);
-      ctx.moveTo(sx + s, sy - s); ctx.lineTo(sx - s, sy + s);
-      ctx.stroke();
-      return;
-    }
-    const lbl = 'e = ' + p.e.toFixed(3);
-    const font = 'bold 12px var(--font-sans), sans-serif';
-    ctx.font = font;
-    const tw = ctx.measureText(lbl).width;
-    const sap = W2S(b.apo.x, b.apo.y), tx = sap.x, ty = sap.y;
-    placeCanvasLabel(tx, ty, lbl, {
-      font,
-      fillStyle: hexA(p.color, 0.95),
-      candidates: [
-        [tx - tw - 10, ty - 8],
-        [tx + 10, ty - 8],
-        [tx - tw - 10, ty + 16],
-        [tx + 10, ty + 16],
-        [tx - tw / 2, ty - 18],
-        [tx - tw / 2, ty + 18]
-      ]
-    });
   }
 
   function drawGhostMercury(labelsOnly){
@@ -1326,20 +1246,12 @@ const Shell = (function(){
   }
 
   function onFrame(dt){
-    // Wall-clock time mapping only (not the integrator). Inner view is paced
-    // for Mercury (~12 s/orbit at 1x). Outer view uses a faster mapping so
-    // Jupiter/Saturn actually crawl, but it is capped: above ~1.4 yr/s the
-    // inner planets fall below ~10 frames per orbit and the r/v readouts
-    // alias into noise. NOTE: this makes the 4x and 8x settings behave
-    // identically to ~2.8x while in the outer view — intentional, not a
-    // dead control.
-    const MAX_YR_PER_SEC = 1.4;
-    const speed = Shell.speed || 1;
-    const baseRate = state.view === 'outer' ? 0.5 : 0.02;   // yr per real second at 1x
-    const rate = (state.view === 'outer')
-      ? Math.min(baseRate * speed, MAX_YR_PER_SEC)
-      : baseRate * speed;
-    step((dt / speed) * rate);
+    // dt already includes Shell.speed from the animation loop.
+    // Same calendar-time rate in Inner and Full so Mercury–Mars keep the same
+    // on-screen pace when the view toggles (~12 s per Mercury orbit at 1×).
+    // Outer planets crawl in Full view — that is the cost of an honest inner clock.
+    const YR_PER_SEC = 0.02;
+    step(dt * YR_PER_SEC);
     render(dt);
     updateStats();
   }
@@ -1355,12 +1267,8 @@ const Shell = (function(){
       return;
     }
     render3d(dt || 0);
-    drawEccentricityAnnotation(false);
-    drawPerihelionMarkers(false);
-    drawPlanets(); // planet names claim label slots first
-    drawEccentricityAnnotation(true);
+    drawPlanets(); // planet names only
     drawGhostMercury(true);
-    drawPerihelionMarkers(true);
     drawHUD();
   }
 
@@ -1388,8 +1296,7 @@ const Shell = (function(){
       const b = document.createElement('button');
       b.className = 'planet-btn' + (i === state.selected ? ' active' : '');
       b.innerHTML = `<span class="planet-swatch" style="background:${p.color};color:${p.color}"></span>`+
-                    `<span class="planet-name">${p.name}</span>`+
-                    `<span class="planet-meta">e=${p.e.toFixed(3)}</span>`;
+                    `<span class="planet-name">${p.name}</span>`;
       b.addEventListener('click', () => {
         state.selected = i;
         document.querySelectorAll('.planet-btn').forEach(x=>x.classList.remove('active'));

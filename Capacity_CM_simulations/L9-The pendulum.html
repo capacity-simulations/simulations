@@ -348,10 +348,17 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .shell-panel-body{font-size:14px;}
 .subdued:not(.active){opacity:.35;transition:opacity .3s;}
 .subdued.active{opacity:.55;transition:opacity .3s;}
+.shell-btn.inert{opacity:.35;pointer-events:none;cursor:not-allowed;}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;font-weight:600;}
+.chk input{accent-color:var(--accent);cursor:pointer;width:15px;height:15px;}
 .inq-step h4{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--text);}
 .inq-step p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--muted);}
 .inq-step .predict-eval{display:none;}
 .inq-step .predict-eval.show{display:block;}
+/* Hide Text toggle */
+#ht-ctl{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+#ht-ctl input{accent-color:var(--accent);margin:0;cursor:pointer;}
+#shell.hide-text .ht-hide{display:none !important;}
 </style>
 </head>
 <body>
@@ -398,6 +405,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
+<label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+  <input type="checkbox" id="ht-toggle"> Hide Text
+</label>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -416,6 +426,37 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
     </div>
   </header>
+
+<!-- HIDE-TEXT REGISTRY ("Simplify display" v2)
+     DOM items:    add class "ht-hide" to the element.
+     Canvas items: wrap the draw call in  if(!HT()){ ... }
+     Keep this list current when registering items:
+     - [canvas] "θ₀ = …°" — swing-arc amplitude label in drawScene, ~L957
+     - [canvas] "L = … m" — length label beside solid bob in drawScene, ~L1059
+-->
+<script>
+/* Hide Text toggle — hides .ht-hide DOM nodes and gates HT() canvas labels. */
+(function(){
+  var shell=document.getElementById('shell');
+  var box=document.getElementById('ht-toggle');
+  if(!shell||!box) return;
+  window.HT=function(){ return shell.classList.contains('hide-text'); };
+  function apply(){
+    shell.classList.toggle('hide-text', box.checked);
+    window.dispatchEvent(new Event('resize')); /* forces a redraw in every CM sim, even while paused */
+  }
+  box.addEventListener('change', apply);
+  /* Default: follow lecture mode at boot. Must wait for window load — in these ~300KB
+     files a rAF can fire mid-parse, BEFORE the end-of-body auto-lecture script has run
+     (verified live in L4). Independent thereafter. */
+  window.addEventListener('load', function(){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      box.checked = shell.classList.contains('lecture-mode');
+      apply();
+    });});
+  });
+})();
+</script>
 
   <main class="shell-hero">
     <div class="hero-stack">
@@ -496,8 +537,16 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="control-range"><span>5°</span><span>90°</span></div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
-      <div class="ctrl-box-head"><span class="ctrl-box-label">length L</span><span class="slider-val" id="lenVal">2.00 m</span></div>
+      <div class="ctrl-box-head"><span class="ctrl-box-label" id="lbl-len">length L</span><span class="slider-val" id="lenVal">2.00 m</span></div>
       <div class="ctrl-slider-row"><input id="lenSlider" type="range" min="1" max="3" step="0.05" value="2"></div>
+      <div class="control-range"><span>1 m</span><span>3 m</span></div>
+    </div>
+    <div class="ctrl-box">
+      <label class="chk"><input type="checkbox" id="cb-second"> Second pendulum</label>
+    </div>
+    <div class="ctrl-box ctrl-box--slider" id="wrap-l2" style="display:none">
+      <div class="ctrl-box-head"><span class="ctrl-box-label" id="lbl-len2" style="color:#4ade80">length L₂</span><span class="slider-val" id="len2Val" style="color:#4ade80">1.00 m</span></div>
+      <div class="ctrl-slider-row"><input id="len2Slider" type="range" min="1" max="3" step="0.05" value="1"></div>
       <div class="control-range"><span>1 m</span><span>3 m</span></div>
     </div>
     <div class="ctrl-box" id="dynamics-model-box" style="display:none" aria-hidden="true">
@@ -521,10 +570,20 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
   <div class="shell-panel-body">
     <div class="readout-stack">
-      <div class="readout-card period" title="Period of the solid pendulum's model">
+      <div class="readout-card period" id="periodCard" title="Period of the solid pendulum's model">
         <div class="readout-kicker">Period</div>
         <div class="readout-main" id="periodMain">T = ?</div>
         <div class="readout-sub" id="periodSub">release, then ▶ Play</div>
+      </div>
+      <div class="readout-card period" id="cmpPeriod1" style="display:none;border-color:rgba(34,211,238,.45)" title="Period and g for pendulum 1">
+        <div class="readout-kicker" style="color:#22d3ee">Pendulum 1</div>
+        <div class="readout-main" id="cmpMain1">T₁ = —</div>
+        <div class="readout-sub" id="cmpSub1">L₁ = —</div>
+      </div>
+      <div class="readout-card period" id="cmpPeriod2" style="display:none;border-color:rgba(74,222,128,.45)" title="Period and g for pendulum 2">
+        <div class="readout-kicker" style="color:#4ade80">Pendulum 2</div>
+        <div class="readout-main" id="cmpMain2">T₂ = —</div>
+        <div class="readout-sub" id="cmpSub2">L₂ = —</div>
       </div>
       <div class="readout-card race" id="raceCard" title="Lap counter: completed swings of the exact pendulum, and how many extra swings the small-angle ghost has accumulated">
         <div class="readout-kicker">Race</div>
@@ -784,8 +843,9 @@ const Shell = (function(){
 const el = id => document.getElementById(id);
 const G = 9.81;                       // m/s², SI
 const D2R = Math.PI/180;
-const COL_EX = '#22d3ee';             // exact sin θ dynamics
+const COL_EX = '#22d3ee';             // exact sin θ dynamics (pendulum 1)
 const COL_SM = '#fbbf24';             // small-angle formula
+const COL_P2 = '#4ade80';             // second pendulum (compare mode) — green, distinct from cyan/amber
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 
 /* ---------- physics ---------- */
@@ -804,13 +864,23 @@ const state = {
   T0:0, Tex:0, ratio:1,
   curveOpen:false, revealed:false, everPlayed:false
 };
+/** Second pendulum — compare mode only; when on=false, sim is bit-identical to single. */
+const cmp = { on:false, L:1.0, th:0, om:0 };
+let cmpGhostSaved = true;   // ghost state remembered while compare forces it off
 function computePeriods(){
   state.T0 = 2*Math.PI*Math.sqrt(state.L/G);
   state.ratio = agmRatio(state.theta0Deg*D2R);
   state.Tex = state.T0*state.ratio;
 }
 computePeriods();
-
+/** T and AGM-inverted g for a given length (always returns g ≈ 9.81). */
+function periodsForL(L){
+  const ratio = agmRatio(state.theta0Deg*D2R);
+  const T0 = 2*Math.PI*Math.sqrt(L/G);
+  const T = T0*ratio;
+  const g = 4*Math.PI*Math.PI*L / Math.pow(T/ratio, 2);
+  return { T, g, ratio };
+}
 // Precompute the L-independent ratio curve once → stable chart forever (θ₀ ≤ 90°).
 const CURVE = [];
 for(let d=0.5; d<=90.001; d+=0.5) CURVE.push([d, agmRatio(d*D2R)]);
@@ -844,14 +914,14 @@ function fit(canvas, ctx){
 }
 
 /* ---------- integration (true nonlinear dynamics, RK4) ---------- */
-function rk4(h){
-  const L=state.L, th=state.th, om=state.om;
+function rk4(s, h){
+  const L=s.L, th=s.th, om=s.om;
   const k1t=om,             k1o=accel(th,L);
   const k2t=om+0.5*h*k1o,   k2o=accel(th+0.5*h*k1t,L);
   const k3t=om+0.5*h*k2o,   k3o=accel(th+0.5*h*k2t,L);
   const k4t=om+h*k3o,       k4o=accel(th+h*k3t,L);
-  state.th = th + h/6*(k1t+2*k2t+2*k3t+k4t);
-  state.om = om + h/6*(k1o+2*k2o+2*k3o+k4o);
+  s.th = th + h/6*(k1t+2*k2t+2*k3t+k4t);
+  s.om = om + h/6*(k1o+2*k2o+2*k3o+k4o);
 }
 function step(dt){
   if(!state.everPlayed){
@@ -864,8 +934,9 @@ function step(dt){
   const h = dt/n;
   for(let i=0;i<n;i++){
     const po=state.om;
-    rk4(h);
+    rk4(state, h);
     if(po>0 && state.om<=0) state.lapsE++;   // returned to the +θ0 turning point → one full lap
+    if(cmp.on) rk4(cmp, h);
   }
   state.t += dt;
 }
@@ -888,80 +959,36 @@ function drawScene(){
   const usable=Math.max(80, h-topM-botM);
   const sCap=Math.min(0.6*usable, 360)/LMAX;             // longest rod: moderate, capped (px)
   const sFit=(usable-56)/(2*LMAX);                       // fit full swing at LMAX (with beam/shadow headroom)
-  const sWid=(w/2-40)/LMAX;                              // horizontal fit (bob reaches ±L at 90°)
-  const s=Math.min(sCap, sFit, sWid);                    // fixed px/m — same for every L
+  /* compare: each half-panel is its own room — pivots at quarter-points */
+  const sWid=cmp.on ? (w/4-36)/LMAX : (w/2-40)/LMAX;
+  const s=Math.min(sCap, sFit, sWid);                    // fixed px/m — same for every L (shared in compare)
   const a0=state.theta0Deg*D2R;
-  const Ls=state.L*s;                                    // rod grows with the length slider
   const LsMax=LMAX*s;                                    // longest rod in px — freezes hinge y
   const aboveHinge=22;                                   // beam clearance above hinge (fixed)
   const belowHingeMax=LsMax+bobClr+26;                   // room for longest swing + shadow
   const topPad=Math.max(topM,(h-(aboveHinge+belowHingeMax))/2);
-  const px=w/2, py=topPad+aboveHinge;                   // hinge y — independent of current L
+  const py=topPad+aboveHinge;                            // hinge y — independent of current L
   const bobR=Math.max(14, Math.min(22, 7+s*0.55));
   const ghostR=bobR*0.82;
 
-  /* soft floor shadow plane */
-  pctx.fillStyle=light?'rgba(15,23,42,.06)':'rgba(0,0,0,.28)';
-  pctx.beginPath();
-  pctx.ellipse(px, py+Ls+bobR+10, Ls*0.55+28, 10, 0, 0, 7);
-  pctx.fill();
+  const midSplit = w/2;
+  const pivots = cmp.on
+    ? [{x:w*0.25, L:state.L, th:state.th, col:COL_EX, id:'1', x0:0,        x1:midSplit},
+       {x:w*0.75, L:cmp.L,   th:cmp.th,   col:COL_P2, id:'2', x0:midSplit, x1:w}]
+    : [{x:w/2,    L:state.L, th:null,     col:COL_EX, id:null, x0:0, x1:w}];
 
-  /* vertical (θ = 0) reference */
-  pctx.strokeStyle=light?'rgba(51,65,85,.2)':'rgba(148,163,184,.14)'; pctx.lineWidth=1; pctx.setLineDash([4,5]);
-  pctx.beginPath(); pctx.moveTo(px,py); pctx.lineTo(px,py+Ls+bobR+6); pctx.stroke(); pctx.setLineDash([]);
-
-  /* swing-range arc ±θ0 */
-  pctx.strokeStyle=light?'rgba(51,65,85,.28)':'rgba(148,163,184,.22)'; pctx.lineWidth=1.5;
-  pctx.beginPath(); pctx.arc(px,py,Ls,Math.PI/2-a0,Math.PI/2+a0); pctx.stroke();
-  for(const sgn of [1,-1]){
-    const ux=Math.sin(sgn*a0), uy=Math.cos(sgn*a0);
-    pctx.beginPath(); pctx.moveTo(px+ux*Ls,py+uy*Ls); pctx.lineTo(px+ux*(Ls+10),py+uy*(Ls+10)); pctx.stroke();
-  }
-  pctx.font='600 13px Inter,sans-serif'; pctx.fillStyle=light?'#334155':'#94a3b8';
-  {
-    const lb='θ₀ = '+state.theta0Deg+'°';
-    const tw=pctx.measureText(lb).width;
-    let lx=px+Math.sin(a0)*(Ls+18), ly=py+Math.cos(a0)*(Ls+18)+4;
-    pctx.fillText(lb, clamp(lx,4,w-tw-4), clamp(ly,16,h-10));
-  }
-
-  /* timber support beam + pivot bracket */
-  {
-    const beamW=Math.max(110, LsMax*0.42+70), beamH=14;
-    const bx0=px-beamW/2, by0=py-beamH;
-    const wood=pctx.createLinearGradient(0,by0,0,py);
-    if(light){ wood.addColorStop(0,'#b45309'); wood.addColorStop(.45,'#92400e'); wood.addColorStop(1,'#78350f'); }
-    else     { wood.addColorStop(0,'#a16207'); wood.addColorStop(.45,'#854d0e'); wood.addColorStop(1,'#713f12'); }
-    pctx.fillStyle=wood;
-    pctx.fillRect(bx0, by0, beamW, beamH);
-    pctx.strokeStyle=light?'rgba(69,26,3,.55)':'rgba(0,0,0,.45)'; pctx.lineWidth=1;
-    pctx.strokeRect(bx0+0.5, by0+0.5, beamW-1, beamH-1);
-    /* grain ticks */
-    pctx.strokeStyle=light?'rgba(255,255,255,.18)':'rgba(255,255,255,.08)';
-    for(let i=10;i<beamW-8;i+=14){
-      pctx.beginPath(); pctx.moveTo(bx0+i, by0+3); pctx.lineTo(bx0+i+5, by0+beamH-3); pctx.stroke();
-    }
-    /* metal bracket */
-    pctx.fillStyle=light?'#64748b':'#475569';
-    pctx.fillRect(px-10, py-4, 20, 8);
-    pctx.beginPath(); pctx.arc(px, py, 7, 0, 7); pctx.fill();
-    const pin=pctx.createRadialGradient(px-1.5,py-1.5,1,px,py,7);
-    pin.addColorStop(0,'#e2e8f0'); pin.addColorStop(.55,'#94a3b8'); pin.addColorStop(1,'#334155');
-    pctx.fillStyle=pin; pctx.beginPath(); pctx.arc(px,py,4.5,0,7); pctx.fill();
-  }
-
-  function drawPend(a,color,o){
-    const bx=px+Ls*Math.sin(a), by=py+Ls*Math.cos(a);
+  /** Per-pivot bob. Uses shared px/m scale s. */
+  function drawPendAt(px, Lmetres, angle, color, o){
+    const Ls=Lmetres*s;
+    const bx=px+Ls*Math.sin(angle), by=py+Ls*Math.cos(angle);
     pctx.save();
     pctx.globalAlpha=o.alpha;
 
-    /* cord / rod with slight thickness */
     if(o.dash){
       pctx.strokeStyle=color; pctx.lineWidth=o.rod; pctx.setLineDash([8,6]);
       pctx.beginPath(); pctx.moveTo(px,py); pctx.lineTo(bx,by); pctx.stroke();
       pctx.setLineDash([]);
     }else{
-      /* shadowed cord underside */
       pctx.strokeStyle=light?'rgba(15,23,42,.25)':'rgba(0,0,0,.45)';
       pctx.lineWidth=o.rod+1.5; pctx.lineCap='round';
       pctx.beginPath(); pctx.moveTo(px+1,py+1); pctx.lineTo(bx+1,by+1); pctx.stroke();
@@ -973,7 +1000,6 @@ function drawScene(){
       pctx.lineCap='butt';
     }
 
-    /* ground contact shadow under bob */
     if(!o.dash){
       pctx.fillStyle=light?'rgba(15,23,42,.12)':'rgba(0,0,0,.35)';
       pctx.beginPath();
@@ -987,8 +1013,6 @@ function drawScene(){
       pctx.globalAlpha=o.alpha; pctx.lineWidth=2.2; pctx.setLineDash([4,3]);
       pctx.strokeStyle=color; pctx.stroke(); pctx.setLineDash([]);
     }else{
-      /* metallic bob: radial shading + specular */
-      if(o.glow){ pctx.shadowColor=color; pctx.shadowBlur=18; }
       const sh=pctx.createRadialGradient(bx-o.r*0.35, by-o.r*0.4, o.r*0.1, bx, by, o.r);
       sh.addColorStop(0, '#f8fafc');
       sh.addColorStop(0.22, color);
@@ -996,18 +1020,66 @@ function drawScene(){
       sh.addColorStop(1, light?'#0f172a':'#020617');
       pctx.fillStyle=sh;
       pctx.beginPath(); pctx.arc(bx,by,o.r,0,7); pctx.fill();
-      pctx.shadowBlur=0;
       pctx.strokeStyle=light?'rgba(15,23,42,.35)':'rgba(255,255,255,.2)';
       pctx.lineWidth=1.2; pctx.stroke();
-      /* highlight */
       pctx.fillStyle='rgba(255,255,255,.55)';
       pctx.beginPath(); pctx.arc(bx-o.r*0.32, by-o.r*0.38, o.r*0.28, 0, 7); pctx.fill();
-      /* small attachment eye at cord join */
       pctx.fillStyle=light?'#64748b':'#94a3b8';
       pctx.beginPath(); pctx.arc(bx, by-o.r+2, 2.4, 0, 7); pctx.fill();
     }
     pctx.restore();
     return [bx,by];
+  }
+
+  function drawGuides(px, Lmetres, drawThetaLabel, xLo, xHi){
+    const Ls=Lmetres*s;
+    /* soft floor shadow plane */
+    pctx.fillStyle=light?'rgba(15,23,42,.06)':'rgba(0,0,0,.28)';
+    pctx.beginPath();
+    pctx.ellipse(px, py+Ls+bobR+10, Ls*0.55+28, 10, 0, 0, 7);
+    pctx.fill();
+    /* vertical (θ = 0) reference */
+    pctx.strokeStyle=light?'rgba(51,65,85,.2)':'rgba(148,163,184,.14)'; pctx.lineWidth=1; pctx.setLineDash([4,5]);
+    pctx.beginPath(); pctx.moveTo(px,py); pctx.lineTo(px,py+Ls+bobR+6); pctx.stroke(); pctx.setLineDash([]);
+    /* swing-range arc ±θ0 */
+    pctx.strokeStyle=light?'rgba(51,65,85,.28)':'rgba(148,163,184,.22)'; pctx.lineWidth=1.5;
+    pctx.beginPath(); pctx.arc(px,py,Ls,Math.PI/2-a0,Math.PI/2+a0); pctx.stroke();
+    for(const sgn of [1,-1]){
+      const ux=Math.sin(sgn*a0), uy=Math.cos(sgn*a0);
+      pctx.beginPath(); pctx.moveTo(px+ux*Ls,py+uy*Ls); pctx.lineTo(px+ux*(Ls+10),py+uy*(Ls+10)); pctx.stroke();
+    }
+    if(drawThetaLabel && !HT()){
+      pctx.font='600 13px Inter,sans-serif'; pctx.fillStyle=light?'#334155':'#94a3b8';
+      const lb='θ₀ = '+state.theta0Deg+'°';
+      const tw=pctx.measureText(lb).width;
+      const lo=(xLo!=null?xLo:0)+4, hi=(xHi!=null?xHi:w)-tw-4;
+      let lx=px+Math.sin(a0)*(Ls+18), ly=py+Math.cos(a0)*(Ls+18)+4;
+      pctx.fillText(lb, clamp(lx,lo,hi), clamp(ly,16,h-10));
+    }
+  }
+
+  /** One ceiling beam + bracket for a single pivot (separate rooms in compare). */
+  function drawCeilingAt(px, panelW){
+    const beamW = Math.max(110, Math.min(panelW-24, LsMax*0.42+70));
+    const beamH=14;
+    const bx0=px-beamW/2, by0=py-beamH;
+    const wood=pctx.createLinearGradient(0,by0,0,py);
+    if(light){ wood.addColorStop(0,'#b45309'); wood.addColorStop(.45,'#92400e'); wood.addColorStop(1,'#78350f'); }
+    else     { wood.addColorStop(0,'#a16207'); wood.addColorStop(.45,'#854d0e'); wood.addColorStop(1,'#713f12'); }
+    pctx.fillStyle=wood;
+    pctx.fillRect(bx0, by0, beamW, beamH);
+    pctx.strokeStyle=light?'rgba(69,26,3,.55)':'rgba(0,0,0,.45)'; pctx.lineWidth=1;
+    pctx.strokeRect(bx0+0.5, by0+0.5, beamW-1, beamH-1);
+    pctx.strokeStyle=light?'rgba(255,255,255,.18)':'rgba(255,255,255,.08)';
+    for(let i=10;i<beamW-8;i+=14){
+      pctx.beginPath(); pctx.moveTo(bx0+i, by0+3); pctx.lineTo(bx0+i+5, by0+beamH-3); pctx.stroke();
+    }
+    pctx.fillStyle=light?'#64748b':'#475569';
+    pctx.fillRect(px-10, py-4, 20, 8);
+    pctx.beginPath(); pctx.arc(px, py, 7, 0, 7); pctx.fill();
+    const pin=pctx.createRadialGradient(px-1.5,py-1.5,1,px,py,7);
+    pin.addColorStop(0,'#e2e8f0'); pin.addColorStop(.55,'#94a3b8'); pin.addColorStop(1,'#334155');
+    pctx.fillStyle=pin; pctx.beginPath(); pctx.arc(px,py,4.5,0,7); pctx.fill();
   }
 
   // models: exact = integrated state; small-angle = θ0·cos(√(g/L)·t), the formula's world implemented exactly
@@ -1018,18 +1090,44 @@ function drawScene(){
   const heroC  = heroExact ? COL_EX : COL_SM;
   const ghostC = heroExact ? COL_SM : COL_EX;
 
-  if(state.ghost) drawPend(ghostA, ghostC, {alpha:.55,dash:true,r:ghostR,rod:Math.max(2,bobR*0.14)});
-  const hPos=drawPend(heroA, heroC, {alpha:1,dash:false,r:bobR,rod:Math.max(3.5,bobR*0.22),glow:true});
+  let hPos=null;
+  if(!cmp.on){
+    const px=pivots[0].x;
+    drawGuides(px, state.L, true, 0, w);
+    drawCeilingAt(px, w);
+    if(state.ghost) drawPendAt(px, state.L, ghostA, ghostC, {alpha:.55,dash:true,r:ghostR,rod:Math.max(2,bobR*0.14)});
+    hPos=drawPendAt(px, state.L, heroA, heroC, {alpha:1,dash:false,r:bobR,rod:Math.max(3.5,bobR*0.22)});
+    /* current length beside the solid (blue) bob only (Hide Text) */
+    if(hPos && !HT()){
+      const lenLab='L = '+state.L.toFixed(2)+' m';
+      pctx.font='600 12px Inter,sans-serif';
+      pctx.fillStyle=COL_EX;
+      const tw=pctx.measureText(lenLab).width;
+      const lx=clamp(hPos[0]+bobR+8, 4, w-tw-4);
+      const ly=clamp(hPos[1]-6, 14, h-8);
+      pctx.fillText(lenLab, lx, ly);
+    }
+  }else{
+    /* split-screen divider between the two rooms */
+    pctx.strokeStyle=light?'rgba(51,65,85,.35)':'rgba(148,163,184,.28)';
+    pctx.lineWidth=1.5;
+    pctx.beginPath(); pctx.moveTo(midSplit+0.5, 8); pctx.lineTo(midSplit+0.5, h-8); pctx.stroke();
 
-  /* current length beside the solid (blue) bob only */
-  if(hPos){
-    const lenLab='L = '+state.L.toFixed(2)+' m';
-    pctx.font='600 12px Inter,sans-serif';
-    pctx.fillStyle=COL_EX;
-    const tw=pctx.measureText(lenLab).width;
-    const lx=clamp(hPos[0]+bobR+8, 4, w-tw-4);
-    const ly=clamp(hPos[1]-6, 14, h-8);
-    pctx.fillText(lenLab, lx, ly);
+    pivots.forEach((p,i)=>{
+      pctx.save();
+      pctx.beginPath(); pctx.rect(p.x0, 0, p.x1-p.x0, h); pctx.clip();
+      drawGuides(p.x, p.L, i===0, p.x0, p.x1);
+      drawCeilingAt(p.x, p.x1-p.x0);
+      drawPendAt(p.x, p.L, p.th, p.col, {alpha:1,dash:false,r:bobR,rod:Math.max(3.5,bobR*0.22)});
+      if(!HT()){
+        pctx.font='700 11px Inter,sans-serif';
+        pctx.fillStyle=p.col;
+        pctx.textAlign='center';
+        pctx.fillText(p.id, p.x, py-18);
+        pctx.textAlign='left';
+      }
+      pctx.restore();
+    });
   }
 
   /* honesty label */
@@ -1155,6 +1253,27 @@ function updateBadges(){
   const deg=state.theta0Deg;
   const pm=el('periodMain'), ps=el('periodSub');
   const le=el('lapExact'), lg=el('lapGhost'), rc=el('raceCard');
+  const pc=el('periodCard'), c1=el('cmpPeriod1'), c2=el('cmpPeriod2');
+
+  if(cmp.on){
+    if(pc) pc.style.display='none';
+    if(c1) c1.style.display='';
+    if(c2) c2.style.display='';
+    if(rc) rc.style.display='none';
+    const p1=periodsForL(state.L), p2=periodsForL(cmp.L);
+    const m1=el('cmpMain1'), s1=el('cmpSub1'), m2=el('cmpMain2'), s2=el('cmpSub2');
+    if(m1) m1.textContent='T₁ = '+p1.T.toFixed(2)+' s · g = '+p1.g.toFixed(2)+' m/s²';
+    if(s1) s1.textContent='L₁ = '+state.L.toFixed(2)+' m';
+    if(m2) m2.textContent='T₂ = '+p2.T.toFixed(2)+' s · g = '+p2.g.toFixed(2)+' m/s²';
+    if(s2) s2.textContent='L₂ = '+cmp.L.toFixed(2)+' m';
+    return;
+  }
+
+  if(pc) pc.style.display='';
+  if(c1) c1.style.display='none';
+  if(c2) c2.style.display='none';
+  if(rc) rc.style.display='';
+
   if(!state.revealed){
     pm.textContent='T('+deg+'°) = ?';
     ps.textContent='predict · then ▶ Play';
@@ -1186,6 +1305,11 @@ function updateBadges(){
 
 /* ---------- legend ---------- */
 function renderLegend(){
+  if(cmp.on){
+    const row=(color,txt)=>'<span class="lg-row"><i class="lg-chip" style="border-top-style:solid;border-color:'+color+'"></i>'+txt+'</span>';
+    el('sceneLegend').innerHTML = row(COL_EX,'Pendulum 1')+row(COL_P2,'Pendulum 2');
+    return;
+  }
   const exSolid = state.mode==='exact', smSolid = state.mode==='small';
   const exVis = exSolid || state.ghost, smVis = smSolid || state.ghost;
   const row=(vis,style,color,txt)=>'<span class="lg-row"'+(vis?'':' style="opacity:.35"')+
@@ -1199,10 +1323,47 @@ function renderLegend(){
 function resetRun(){
   computePeriods();
   state.th=state.theta0Deg*D2R; state.om=0; state.t=0; state.lapsE=0;
+  if(cmp.on){ cmp.th=state.theta0Deg*D2R; cmp.om=0; }
   el('releaseHint').style.display = state.everPlayed ? 'none' : 'block';
   el('raceCard').classList.remove('danger');
 }
 function restartRace(){ resetRun(); drawScene(); drawChart(); updateBadges(); }
+
+/** Enter/exit second-pendulum compare mode. Full restore path on uncheck. */
+function setCompare(on){
+  on=!!on;
+  const cb=el('cb-second');
+  if(cb) cb.checked=on;
+  if(on===cmp.on) return;
+
+  if(on){
+    cmpGhostSaved = state.ghost;
+    state.ghost = false;
+    state.mode = 'exact';
+    const bg=el('btn-ghost');
+    if(bg){ bg.classList.remove('active'); bg.classList.add('inert','subdued'); }
+  }else{
+    state.ghost = cmpGhostSaved;
+    const bg=el('btn-ghost');
+    if(bg){
+      bg.classList.remove('inert');
+      bg.classList.toggle('active', state.ghost);
+      if(!phase2Done) bg.classList.add('subdued');
+      else bg.classList.remove('subdued');
+    }
+  }
+  cmp.on = on;
+  const wrap=el('wrap-l2'), lbl=el('lbl-len');
+  if(wrap) wrap.style.display = on ? '' : 'none';
+  if(lbl) lbl.textContent = on ? 'length L₁' : 'length L';
+  if(on){
+    cmp.th = state.theta0Deg*D2R;
+    cmp.om = 0;
+  }
+  renderLegend();
+  restartRace();
+  if(typeof Shell!=='undefined' && Shell.refit) Shell.refit();
+}
 
 /* ---------- controls ---------- */
 el('thetaSlider').addEventListener('input',e=>{
@@ -1215,6 +1376,14 @@ el('lenSlider').addEventListener('input',e=>{
   el('lenVal').textContent=state.L.toFixed(2)+' m';
   restartRace();
 });
+el('len2Slider').addEventListener('input',e=>{
+  cmp.L=parseFloat(e.target.value);
+  el('len2Val').textContent=cmp.L.toFixed(2)+' m';
+  restartRace();
+});
+el('cb-second').addEventListener('change',e=>{
+  setCompare(e.target.checked);
+});
 function setMode(m){
   /* Dynamics-model UI is hidden; keep locked to ✓ Exact. */
   m='exact';
@@ -1226,6 +1395,7 @@ function setMode(m){
 }
 /* Mode buttons stay in the DOM (hidden) but are not wired — Exact only. */
 el('btn-ghost').addEventListener('click',()=>{
+  if(cmp.on) return;   /* inert while compare is on */
   state.ghost=!state.ghost;
   el('btn-ghost').classList.toggle('active', state.ghost);
   renderLegend(); drawScene();
@@ -1241,9 +1411,12 @@ el('btn-curve').addEventListener('click',()=>{
 /* ---------- shell callbacks ---------- */
 function onFrame(dt){ step(dt); drawScene(); updateBadges(); }
 function onReset(){
+  if(cmp.on) setCompare(false);
   state.theta0Deg=5; state.L=2; state.mode='exact'; state.ghost=true;
+  cmp.L=1.0;
   el('thetaSlider').value=5;  el('thetaVal').textContent='5°';
   el('lenSlider').value=2;     el('lenVal').textContent='2.00 m';
+  el('len2Slider').value=1;    el('len2Val').textContent='1.00 m';
   el('btn-ghost').classList.add('active');
   setMode('exact');
   resetRun(); renderLegend(); drawScene(); drawChart(); updateBadges();
@@ -1252,6 +1425,8 @@ function onResize(){ drawScene(); drawChart(); }
 
 /* ---------- guided-inquiry scene driver (deterministic; chrome only) ---------- */
 function applyInquiryScene(cfg){
+  /* Inquiry presets never coexist with compare mode — full uncheck restore first. */
+  if(cmp.on) setCompare(false);
   state.theta0Deg = cfg.theta0Deg != null ? Math.min(90, cfg.theta0Deg) : 5;
   state.L = cfg.L != null ? cfg.L : 2;
   state.mode = 'exact';   /* Dynamics-model UI hidden — always Exact */
@@ -1289,10 +1464,14 @@ function onStep(i){
   else if(i===2) applyInquiryScene({ theta0Deg:10, L:2, mode:'exact', ghost:true, curveOpen:false, everPlayed:true, phase2:true, playing:true });
   // 3 Race at 90°
   else if(i===3) applyInquiryScene({ theta0Deg:90, L:2, mode:'exact', ghost:true, curveOpen:false, everPlayed:true, phase2:true, playing:true });
-  // 4 Curve open at 90° (max in scope)
+  // 4 Curve open at 90° (max in scope) — inquiry only
   else if(i===4) applyInquiryScene({ theta0Deg:90, L:2, mode:'exact', ghost:true, curveOpen:true, everPlayed:true, phase2:true, playing:true });
-  // 5 Resolve — exact + ghost at 90° for free exploration of L
-  else if(i===5) applyInquiryScene({ theta0Deg:90, L:2, mode:'exact', ghost:true, curveOpen:true, everPlayed:true, phase2:true, playing:true });
+  // 5 Resolve — exact + ghost at 90°. Lecture mode jumps here on boot: keep T(θ₀)
+  // curve OFF so the default lecture view is the pendulum alone (Overlays unchecked).
+  else if(i===5){
+    const lecture = document.getElementById('shell')?.classList.contains('lecture-mode');
+    applyInquiryScene({ theta0Deg:90, L:2, mode:'exact', ghost:true, curveOpen:!lecture, everPlayed:true, phase2:true, playing:true });
+  }
 }
 function onComplete(){
   revealPhase2();
@@ -1333,7 +1512,14 @@ renderFormal();
 window.__audit = {
   at(x){
     const th = (typeof x==='number' && isFinite(x)) ? Math.abs(x) : state.theta0Deg*D2R;
-    return { periodRatio: agmRatio(th) };  // same AGM that drives every displayed number
+    const out = { periodRatio: agmRatio(th) };  // same AGM that drives every displayed number
+    if(cmp.on){
+      const p1=periodsForL(state.L), p2=periodsForL(cmp.L);
+      out.L1=state.L; out.L2=cmp.L;
+      out.T1=p1.T; out.T2=p2.T;
+      out.g1=p1.g; out.g2=p2.g;
+    }
+    return out;
   }
 };
 
