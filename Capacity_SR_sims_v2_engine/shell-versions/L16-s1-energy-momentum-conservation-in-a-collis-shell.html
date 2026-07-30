@@ -1020,18 +1020,65 @@ function drawScene(canvas, ctx, phys, vb, fname){
   let vmax=0.05, maxR=10;
   setLab.concat(setAft).forEach(b=>{ vmax=Math.max(vmax,Math.abs(b.v)); maxR=Math.max(maxR,discR(b.m)); });
   const Scale=(cx-44-maxR)/vmax;
-  const list=showBefore?setLab:setAft;
-  list.forEach(b=>{
-    let x=cx + b.v*Scale*(S.progress-1);
-    x=Math.max(44+discR(b.m), Math.min(w-44-discR(b.m), x));
-    drawParticle(ctx,x,midY,b,w);
-  });
-  if(!showBefore && phys.mode==='inelastic' && S.prediction==='A'){
-    const real=setAft[0];
-    let x=cx+real.v*Scale*(S.progress-1);
-    x=Math.max(44+discR(real.m), Math.min(w-44-discR(real.m), x));
-    const alpha=Math.max(0, Math.min(0.8,(1.85-S.progress)/0.5));
-    if(alpha>0.02) drawGhost(ctx,x,midY,(S.m1+S.m2),alpha,w);
+
+  /* Elastic: hard-sphere contact — approach until discs touch, brief flash, then
+     rebound with final velocities. Avoids the "pass-through" look from full overlap. */
+  if(phys.mode==='elastic' && setLab.length===2){
+    const iL = setLab[0].v >= setLab[1].v ? 0 : 1;
+    const iR = 1 - iL;
+    const rL = discR(setLab[iL].m), rR = discR(setLab[iR].m);
+    /* +4 keeps strokes from visually merging at contact */
+    const sep = rL + rR + 4;
+    const xContact = [0,0];
+    xContact[iL] = cx - sep/2;
+    xContact[iR] = cx + sep/2;
+    const clampX=(x,m)=>Math.max(44+discR(m), Math.min(w-44-discR(m), x));
+    for(let i=0;i<2;i++){
+      const b = showBefore ? setLab[i] : setAft[i];
+      let x;
+      if(showBefore){
+        const xFar = cx - setLab[i].v * Scale;
+        x = xFar + (xContact[i] - xFar) * S.progress;
+      } else {
+        x = xContact[i] + setAft[i].v * Scale * (S.progress - 1);
+      }
+      drawParticle(ctx, clampX(x,b.m), midY, b, w);
+    }
+    /* Very brief collision flash at the contact point */
+    const flash = 1 - Math.min(1, Math.abs(S.progress - 1) / 0.05);
+    if(flash > 0.02){
+      ctx.save();
+      ctx.globalAlpha = flash;
+      ctx.strokeStyle = '#f8fafc';
+      ctx.fillStyle = 'rgba(248,250,252,'+(0.35*flash)+')';
+      ctx.lineWidth = 2.5;
+      const R = 10 + 14*(1-flash);
+      ctx.beginPath(); ctx.arc(cx, midY, R, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      /* short radial ticks to read as an impact, not a merge */
+      ctx.beginPath();
+      for(let k=0;k<4;k++){
+        const ang = k*Math.PI/2 + Math.PI/4;
+        const r0 = R+2, r1 = R+8+6*flash;
+        ctx.moveTo(cx+Math.cos(ang)*r0, midY+Math.sin(ang)*r0);
+        ctx.lineTo(cx+Math.cos(ang)*r1, midY+Math.sin(ang)*r1);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  } else {
+    const list=showBefore?setLab:setAft;
+    list.forEach(b=>{
+      let x=cx + b.v*Scale*(S.progress-1);
+      x=Math.max(44+discR(b.m), Math.min(w-44-discR(b.m), x));
+      drawParticle(ctx,x,midY,b,w);
+    });
+    if(!showBefore && phys.mode==='inelastic' && S.prediction==='A'){
+      const real=setAft[0];
+      let x=cx+real.v*Scale*(S.progress-1);
+      x=Math.max(44+discR(real.m), Math.min(w-44-discR(real.m), x));
+      const alpha=Math.max(0, Math.min(0.8,(1.85-S.progress)/0.5));
+      if(alpha>0.02) drawGhost(ctx,x,midY,(S.m1+S.m2),alpha,w);
+    }
   }
   ctx.textAlign='left'; ctx.fillStyle='#475569'; ctx.font='11px Inter, sans-serif';
   ctx.textBaseline='top';
