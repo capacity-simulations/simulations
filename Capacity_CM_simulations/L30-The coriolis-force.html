@@ -319,6 +319,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #stage-legend .lg-row{display:flex;align-items:center;gap:7px;color:#e2e8f0;white-space:nowrap;}
 #stage-legend .lg-row.dim{color:#94a3b8;font-size:11px;}
 #stage-legend .lg-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;}
+#stage-legend .lg-swatch.strip{width:14px;height:3px;border-radius:1px;}
+#lg-row-launch{display:none;}
 #bl-stack{display:none;} /* legends moved into #stage-legend (top-right) */
 .chip{background:rgba(8,11,17,.75);border:1px solid var(--line);border-radius:6px;padding:3px 8px;color:#94a3b8;font-size:12px;}
 #status{bottom:12px;left:50%;transform:translateX(-50%);background:rgba(8,11,17,.86);border:1px solid rgba(148,163,184,.25);border-radius:999px;padding:6px 14px;color:#e2e8f0;font-size:12.5px;white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis;}
@@ -357,6 +359,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 }
 .ctrl-readout .ro-main{display:block;}
 .ctrl-readout .ro-meta{display:block;margin-top:2px;font-size:11px;color:var(--ink-mid);font-weight:600;}
+/* Hide Text toggle */
+#ht-ctl{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+#ht-ctl input{accent-color:var(--accent);margin:0;cursor:pointer;}
+#shell.hide-text .ht-hide{display:none !important;}
 </style>
 </head>
 <body>
@@ -402,6 +408,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
+<label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+  <input type="checkbox" id="ht-toggle"> Hide Text
+</label>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
@@ -421,6 +430,42 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     </div>
   </header>
 
+<!-- HIDE-TEXT REGISTRY ("Simplify display" v2)
+     DOM items:    add class "ht-hide" to the element.
+     Canvas items: wrap the draw call in  if(!HT()){ ... }
+     Keep this list current when registering items:
+     - [dom] "launcher" projected label — L.launcher (.p-label), ~L1549
+     - [dom] "target ✕" projected label — L.target (.p-label), ~L1549
+     - [dom] "ball" projected label — L.ball (.p-label), ~L1549
+     - [dom] "lab wall (fixed)" projected label — L.wall (.p-label), ~L1589
+     - [dom] "v_rot (rel. table)" projected label — L.vel (.p-label), ~L1590
+     - [dom] formula " = 2Ω·v_rot" inside a_Cor label (magnitude kept) — updateProjLabels L.cor, ~L1526
+     - [dom] "launch position" label — lab-floor launch marker
+-->
+<script>
+/* Hide Text toggle — hides .ht-hide DOM nodes and gates HT() canvas labels. */
+(function(){
+  var shell=document.getElementById('shell');
+  var box=document.getElementById('ht-toggle');
+  if(!shell||!box) return;
+  window.HT=function(){ return shell.classList.contains('hide-text'); };
+  function apply(){
+    shell.classList.toggle('hide-text', box.checked);
+    window.dispatchEvent(new Event('resize')); /* forces a redraw in every CM sim, even while paused */
+  }
+  box.addEventListener('change', apply);
+  /* Default: follow lecture mode at boot. Must wait for window load — in these ~300KB
+     files a rAF can fire mid-parse, BEFORE the end-of-body auto-lecture script has run
+     (verified live in L4). Independent thereafter. */
+  window.addEventListener('load', function(){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      box.checked = shell.classList.contains('lecture-mode');
+      apply();
+    });});
+  });
+})();
+</script>
+
   <main class="shell-hero">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <div class="plot-box">
@@ -434,6 +479,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="lg-title">Legend</div>
         <div class="lg-row" title="like smoke hanging in the room — fixed to the lab"><span class="lg-swatch" id="lg-swatch-ground"></span>path in the ground frame</div>
         <div class="lg-row" title="like a chalk mark drawn on the table — rides the turntable"><span class="lg-swatch" id="lg-swatch-rot"></span>path in the rotating frame</div>
+        <div class="lg-row" id="lg-row-launch" title="lab-floor chalk mark at the launcher’s fire-time position — fixed to the ground frame"><span class="lg-swatch strip" id="lg-swatch-launch"></span>initial launch position</div>
       </div>
     </div>
     <div id="bl-stack" class="hud" aria-hidden="true"></div>    <div id="status" class="hud"></div>
@@ -815,6 +861,7 @@ const stage=$('stage'), glc=$('gl');
 let renderer,camera,scene,tableGroup,ballMesh,aimArrow,corArrow,velArrow,cfArrow;
 let launcherAnchor,targetAnchor,wallAnchor,muzzleLocal;
 let labTrail,tabTrail;
+let launchMarkRoot,launchMarkTip; /* lab-floor chalk mark (world-parented) */
 const _bp=new V3(), _tmp=new V3();
 
 function makeCanvasTex(draw,size){
@@ -1198,6 +1245,22 @@ function buildScene(){
     new THREE.MeshStandardMaterial({map:makeCanvasTex(drawFloorTex,2048),roughness:0.9,metalness:0.02,envMapIntensity:0.25}));
   floor.rotation.x=-Math.PI/2; floor.position.y=-0.05; floor.receiveShadow=true; scene.add(floor);
 
+  /* Lab-floor launch-position marker — backward extension of the ground-frame
+     smoke line past the rim. World-parented; stamped at fire; cleared with trails.
+     depthTest ON (default) so the table deck hides the under-rim portion. */
+  launchMarkRoot=new THREE.Group();
+  launchMarkRoot.visible=false;
+  const launchStrip=new THREE.Mesh(
+    new THREE.PlaneGeometry(0.60,0.042),
+    new THREE.MeshBasicMaterial({color:0x34d399,transparent:true,opacity:0.95,
+      depthWrite:false,side:THREE.DoubleSide}));
+  launchStrip.rotation.x=-Math.PI/2;
+  launchMarkRoot.add(launchStrip);
+  launchMarkTip=new THREE.Object3D();
+  launchMarkTip.position.set(0.30,0.02,0); /* outer end (local +X = −u) */
+  launchMarkRoot.add(launchMarkTip);
+  scene.add(launchMarkRoot);
+
   /* lamp post marking the lab-frame reference point (cyan = lab colour) */
   const post=new THREE.Group();
   const ironMat=new THREE.MeshStandardMaterial({color:0x23262e,roughness:0.55,metalness:0.75,envMapIntensity:0.7});
@@ -1328,6 +1391,29 @@ function clearTrails(){
     t.geo.attributes.position.needsUpdate=true;
     t.geo.setDrawRange(0,0);
   });
+  if(launchMarkRoot) launchMarkRoot.visible=false;
+  if(L.launchPos) L.launchPos.style.display='none';
+  setLaunchLegend(false);
+}
+function setLaunchLegend(on){
+  const row=$('lg-row-launch');
+  if(row) row.style.display=on?'flex':'none';
+}
+function stampLaunchMark(){
+  /* Backward extension of the ground-frame path: collinear with smoke, along −u
+     from the fire-time world launch point (includes launcher carry Ω×r). */
+  if(!launchMarkRoot) return;
+  const p0x=S.pos[0]*S.ws, p0z=-S.pos[1]*S.ws;
+  const vx=S.vel[0]*S.ws, vz=-S.vel[1]*S.ws;
+  const spd=Math.hypot(vx,vz);
+  if(spd<1e-9){ launchMarkRoot.visible=false; setLaunchLegend(false); return; }
+  const ux=vx/spd, uz=vz/spd;
+  /* centre at p0 − u·0.35; local +X along −u so tip (+0.30) sits at p0 − u·0.65 */
+  launchMarkRoot.position.set(p0x-ux*0.35,-0.040,p0z-uz*0.35);
+  const phi=Math.atan2(-uz,-ux);
+  launchMarkRoot.rotation.set(0,-phi,0);
+  launchMarkRoot.visible=true;
+  setLaunchLegend(true);
 }
 function trailMaybe(){
   const wx=S.pos[0]*S.ws, wz=-S.pos[1]*S.ws;
@@ -1354,6 +1440,7 @@ function doLaunch(){
   S.vel=[ d[0]*S.vLaunch - S.Omega*r0[1],            // + launcher carry Ω×r (honest physics)
           d[1]*S.vLaunch + S.Omega*r0[0] ];
   S.runOm=S.Omega;
+  stampLaunchMark(); /* after pos/vel set — strip collinear with ground-frame path */
 
   /* step-completion tracking */
   completeStep(1);
@@ -1483,13 +1570,19 @@ function updateProjLabels(){
   else L.ball.style.display='none';
   if(corArrow.visible&&S.corTip){
     const m=Math.hypot(S.curF[0],S.curF[1]);
+    /* Hide Text: drop only the middle formula "= 2Ω·v_rot"; keep a_Cor and the magnitude. */
+    const mid=HT()?'':' 2\u03A9\u00B7v<sub>rot</sub> =';
     setL(L.cor,S.corTip.clone().add(new V3(0,0.07,0)),
-      'a<sub>Cor</sub> = 2\u03A9\u00B7v<sub>rot</sub> = '+fmtAcc(m)+(S.corCapped?' \u25B2':''));
+      'a<sub>Cor</sub> ='+mid+' '+fmtAcc(m)+(S.corCapped?' \u25B2':''));
   } else L.cor.style.display='none';
   if(velArrow.visible&&S.velTip) setL(L.vel,S.velTip.clone().add(new V3(0,0.05,0)), S.frame==='rot'||S.frame==='both'?'v<sub>rot</sub> (rel.&thinsp;table)':'v (ground)');
   else L.vel.style.display='none';
   if(cfArrow.visible&&S.cfTip) setL(L.cf,S.cfTip.clone().add(new V3(0,0.05,0)),'a<sub>cf</sub> = \u03A9\u00B2r = '+fmtAcc(S.cfMag));
   else L.cf.style.display='none';
+  if(launchMarkRoot&&launchMarkRoot.visible&&L.launchPos){
+    launchMarkTip.getWorldPosition(_bp);
+    setL(L.launchPos,_bp,'launch position');
+  } else if(L.launchPos) L.launchPos.style.display='none';
 }
 function hideProjLabels(){ for(const k in L) L[k].style.display='none'; }
 
@@ -1546,12 +1639,14 @@ function resetToArmed(){
 function wireUI(){
   H.bl=$('badge-lab'); H.br=$('badge-rot');
   H.status=$('status'); H.divider=$('split-divider');
-  L.launcher=mkLabel('lb-g'); L.target=mkLabel('lb-r'); L.ball=mkLabel('lb-w');
-  L.wall=mkLabel('lb-c'); L.cor=mkLabel('lb-f'); L.vel=mkLabel('lb-g'); L.cf=mkLabel('lb-v');
+  L.launcher=mkLabel('lb-g ht-hide'); L.target=mkLabel('lb-r ht-hide'); L.ball=mkLabel('lb-w ht-hide');
+  L.wall=mkLabel('lb-c ht-hide'); L.cor=mkLabel('lb-f'); L.vel=mkLabel('lb-g ht-hide'); L.cf=mkLabel('lb-v');
+  L.launchPos=mkLabel('lb-g ht-hide');
 
-  const swG=$('lg-swatch-ground'), swR=$('lg-swatch-rot');
+  const swG=$('lg-swatch-ground'), swR=$('lg-swatch-rot'), swL=$('lg-swatch-launch');
   if(swG) swG.style.background=PATH_COL.ground;
   if(swR) swR.style.background=PATH_COL.rotating;
+  if(swL) swL.style.background='#34d399';
 
   $('omega').addEventListener('input',()=>{ readSliders(); resetToArmed(); });
   $('vlaunch').addEventListener('input',()=>{ readSliders(); resetToArmed(); });
