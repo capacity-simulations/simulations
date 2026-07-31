@@ -790,7 +790,7 @@ const Shell = (function(){
   /* Low-velocity view: shorter time window (Newtonian exits at Vmax) with full v-scale.
      Relativistic v-trace and energy both stop at β = LOW_BETA; Newtonian v continues.
      Energy (if shown) shares the same time axis with a Y scale zoomed to E(β). */
-  const LOW_BETA = 0.4;
+  const LOW_BETA = 0.2;
   function tRelCap(){ return (LOW_BETA / Math.sqrt(1 - LOW_BETA*LOW_BETA)) / S.a0; }
   function tLowView(){ return 1.2 / S.a0; }  // Newtonian reaches Vmax=1.2 at the right edge
 
@@ -804,9 +804,9 @@ const Shell = (function(){
   function viewLimits(){
     if(!S.lowV) return {T:S.Tmax, Vmax:1.2, Emax:S.Emax};
     const T = tLowView();
-    /* Zoom energy Y to the E at β = LOW_BETA (same stop as the relativistic v-trace). */
+    /* Energy Y from 0; headroom above E(β) so the rest-energy line sits clearly above the axis. */
     const gCap = gammaFromBeta(LOW_BETA);
-    return {T, Vmax:1.2, Emax: 1 + (gCap - 1)*1.6};
+    return {T, Vmax:1.2, Emax: Math.max(1.5, gCap * 1.35)};
   }
 
   /* ----- canvas helpers ----- */
@@ -899,7 +899,7 @@ const Shell = (function(){
 
     const xOfT=t=>padL+(t/Tview)*plotW;
     const vY=vc=>vTop+(1-vc/Vmax)*plotH;
-    const eY=E=>eBot-((E-1)/Math.max(Emax-1,1e-6))*plotH;
+    const eY=E=>eBot-(E/Math.max(Emax,1e-6))*plotH;
 
     /* shared vertical gridlines + bottom time ticks */
     ctx.font='12px Inter,sans-serif';ctx.lineWidth=1;
@@ -972,19 +972,18 @@ const Shell = (function(){
 
     /* ===== ENERGY PLOT (optional; zoomed Y in low-v, same T as v/c) ===== */
     if(showE){
-      const st=niceStep(Emax-1);
-      const eDig = (Emax-1) < 0.5 ? 2 : ((Emax-1) < 5 ? 1 : 0);
-      for(let E=1+st;E<=Emax+1e-9;E+=st){
+      const st=niceStep(Emax);
+      const eDig = Emax < 0.5 ? 2 : (Emax < 5 ? 1 : 0);
+      for(let E=0;E<=Emax+1e-9;E+=st){
         const y=eY(E);
         ctx.strokeStyle=COL.grid;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+plotW,y);ctx.stroke();
         ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(E.toFixed(eDig),padL-8,y);
       }
       ctx.strokeStyle=COL.box;ctx.lineWidth=1;ctx.strokeRect(padL,eTop,plotW,plotH);
 
-      /* rest energy reference line at E=1 */
+      /* rest energy reference line at E=1 (above the E=0 axis) */
       ctx.setLineDash([4,4]);ctx.strokeStyle=COL.rest;ctx.lineWidth=1.2;
       ctx.beginPath();ctx.moveTo(padL,eY(1));ctx.lineTo(padL+plotW,eY(1));ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle=COL.mid;ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('1',padL-8,eY(1));
 
       /* energy curve — in low-v, stop at the same t as relativistic v (β = LOW_BETA) */
       ctx.save();ctx.beginPath();ctx.rect(padL,eTop,plotW,plotH);ctx.clip();
@@ -1015,7 +1014,7 @@ const Shell = (function(){
 
     /* x-axis title */
     ctx.fillStyle=COL.mid;ctx.textAlign='center';ctx.textBaseline='top';ctx.font='12px Inter,sans-serif';
-    const axisLabel = 'time  t   (seconds, lab frame)'+(S.lowV?'  ·  low velocity (relativistic to v = 0.4 c)':'');
+    const axisLabel = 'time  t   (seconds, lab frame)'+(S.lowV?'':'');
     ctx.fillText(axisLabel, padL+plotW/2, tickBot+24);
   }
 
@@ -1046,6 +1045,7 @@ const Shell = (function(){
   });
   lLow.addEventListener('click',()=>{
     S.lowV=!S.lowV;
+    if(S.lowV) S.showEnergy=false; /* energy off by default when entering low-v */
     S.t=0;                        /* restart at origin for the new view */
     Shell.setPlaying(false);      /* wait for Play — do not auto-run */
     syncLayers();
