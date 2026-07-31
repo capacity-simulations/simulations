@@ -1506,6 +1506,13 @@ function mkTrail(parent,hex,y,max,minStep){
       pts.splice(0, i);
       writeRibbon();
     },
+    /* Total polyline length in metres (xz). */
+    arcLen(){
+      let len=0;
+      for(let i=1;i<pts.length;i++)
+        len+=Math.hypot(pts[i].x-pts[i-1].x, pts[i].z-pts[i-1].z);
+      return len;
+    },
     clear(){ pts.length=0; lx=lz=1e9; geo.setDrawRange(0,0); }
   };
 }
@@ -1641,17 +1648,23 @@ function updateVisuals(t,record){
   } else st.showCl=false;
 
   if(record && !pastFence){
-    const dropOldest=!E.released; /* ring-buffer only while circling on the hold radius */
-    trailG.add(S.p.x,S.p.z,dropOldest);
     const c=Math.cos(th), s=Math.sin(th);
-    trailR.add(S.p.x*c-S.p.z*s, S.p.x*s+S.p.z*c, dropOldest);      /* rotate world→platform: R(−θ) */
-    /* While held, keep ≈one lap only — overlapping revolutions fill dash gaps → solid ring. */
-    if(!E.released && E.r0>0){
-      trailG.trimToArc(2*Math.PI*E.r0*1.02);
-    }
-    if(naive&&C&&E.released&&t>=E.tRel&&E.v0>0&&Math.hypot(C.p.x,C.p.z)<FENCE_R){
-      trailCG.add(C.p.x,C.p.z);
-      trailCR.add(C.p.x*c-C.p.z*s, C.p.x*s+C.p.z*c);
+    const xr=S.p.x*c-S.p.z*s, zr=S.p.x*s+S.p.z*c;   /* world→platform: R(−θ) */
+    if(!E.released){
+      /* Hold: ground trail paints ONE static world lap then freezes. A sliding
+         trimToArc window used to chase the ball after ~1 rev, so the dotted
+         ring looked locked to the merry-go-round. Rotating trail stays at the
+         hold point on the deck (table-static). */
+      const lap=2*Math.PI*E.r0;
+      if(E.r0>0 && trailG.arcLen()<lap*0.995) trailG.add(S.p.x,S.p.z,false);
+      trailR.add(xr,zr,false);
+    }else{
+      trailG.add(S.p.x,S.p.z,false);
+      trailR.add(xr,zr,false);
+      if(naive&&C&&t>=E.tRel&&E.v0>0&&Math.hypot(C.p.x,C.p.z)<FENCE_R){
+        trailCG.add(C.p.x,C.p.z);
+        trailCR.add(C.p.x*c-C.p.z*s, C.p.x*s+C.p.z*c);
+      }
     }
   }
 }
