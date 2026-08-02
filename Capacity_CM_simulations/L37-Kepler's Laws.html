@@ -313,6 +313,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
      - [canvas] "perihelion" — drawOrbitCanvas, ~L775
      - [canvas] "aphelion" — drawOrbitCanvas, ~L779
      - [canvas] K2 area bars A₁/A₂ (label+bar+AU²) — drawOrbitCanvas, ~L843
+     - [canvas] K3 system ring labels "N AU" (rings kept) — drawSystemCanvas, ~L880
+     - [canvas] K3 wrong-slope guides: 4/3 + 2/3 lines AND labels (slope-1 line kept) — drawTPlot, ~L987
+     - [canvas] K3 "· measuring…" suffix — plain planet name shown instead — drawTPlot points, ~L950
 -->
 <script>
 /* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
@@ -684,6 +687,8 @@ const tpCx=tpCv.getContext('2d');
 /* ---- K1/K2 orbit canvas ---- */
 function drawOrbitCanvas(){
   const {w,h}=fit(orbitCv,orbitCx);
+  orbitCx.clearRect(0,0,w,h); /* --surface is 95% alpha — without a hard clear, one-shot
+     redraws (e.g. Hide-Text toggles while paused) leave ~5% ghosts of the previous frame */
   orbitCx.fillStyle=cssVar('--surface')||'#060E11';
   orbitCx.fillRect(0,0,w,h);
   const a=state.a,e=state.e,b=a*Math.sqrt(1-e*e);
@@ -862,6 +867,7 @@ function drawOrbitCanvas(){
 /* ---- K3 system canvas ---- */
 function drawSystemCanvas(){
   const {w,h}=fit(sysCv,sysCx);
+  sysCx.clearRect(0,0,w,h);
   sysCx.fillStyle=cssVar('--surface');sysCx.fillRect(0,0,w,h);
   const emptyEl=document.getElementById('system-empty');
   if(emptyEl)emptyEl.style.display=(state.system.length===0)?'flex':'none';
@@ -876,7 +882,7 @@ function drawSystemCanvas(){
   sysCx.fillStyle=cssVar('--ink-mute');
   for(let r=1;r<=Math.ceil(maxA);r++){
     sysCx.beginPath();sysCx.arc(ox,oy,r*scale,0,Math.PI*2);sysCx.stroke();
-    if(r%2===0||maxA<3){
+    if(!HT() && (r%2===0||maxA<3)){
       const label=r+' AU';
       const tw=sysCx.measureText(label).width;
       let lx=ox+r*scale+4;
@@ -914,6 +920,7 @@ function drawSystemCanvas(){
 /* ---- T² vs a³ plot ---- */
 function drawTPlot(){
   const {w,h}=fit(tpCv,tpCx);
+  tpCx.clearRect(0,0,w,h);
   tpCx.fillStyle=cssVar('--surface');tpCx.fillRect(0,0,w,h);
   const pad={l:56,r:20,t:36,b:44};
   const pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
@@ -946,7 +953,7 @@ function drawTPlot(){
     const a3=Math.pow(pl.a,3);
     const T2=pl.Tmeasured ? Math.pow(pl.Tmeasured,2) : Math.pow(pl.Tanalytic,2);
     const px=X(Math.log10(a3)), py=Y(Math.log10(T2));
-    const label=pl.Tmeasured ? pl.name : (pl.name+' · measuring…');
+    const label=(pl.Tmeasured || HT()) ? pl.name : (pl.name+' · measuring…'); /* Hide Text: straight to the name */
     if(pl.Tmeasured){
       tpCx.fillStyle=pl.color;tpCx.beginPath();tpCx.arc(px,py,5,0,Math.PI*2);tpCx.fill();
       tpCx.strokeStyle='#fff';tpCx.lineWidth=1;tpCx.stroke();
@@ -983,20 +990,22 @@ function drawTPlot(){
       ly=Math.max(pad.t+10, Math.min(pad.t+ph-2, ly));
       tpCx.fillText(txt, lx, ly);
     }
-    tpCx.setLineDash([3,4]);tpCx.lineWidth=1;
-    tpCx.strokeStyle='rgba(244,63,94,0.35)';
-    tpCx.beginPath();
-    tpCx.moveTo(X(xMin),Y((4/3)*xMin));
-    tpCx.lineTo(X(xMax),Y((4/3)*xMax));
-    tpCx.stroke();
-    guideLabel('slope 4/3 (T ∝ a²)', 4/3, -4, 'rgba(244,63,94,0.7)');
+    if(!HT()){ /* wrong-slope guides (lines + labels) hidden together — explicit user ask; slope-1 stays */
+      tpCx.setLineDash([3,4]);tpCx.lineWidth=1;
+      tpCx.strokeStyle='rgba(244,63,94,0.35)';
+      tpCx.beginPath();
+      tpCx.moveTo(X(xMin),Y((4/3)*xMin));
+      tpCx.lineTo(X(xMax),Y((4/3)*xMax));
+      tpCx.stroke();
+      guideLabel('slope 4/3 (T ∝ a²)', 4/3, -4, 'rgba(244,63,94,0.7)');
 
-    tpCx.strokeStyle='rgba(251,191,36,0.35)'; // slope 2/3 (T linear in a → T² ∝ a² → slope 2/3 vs a³)
-    tpCx.beginPath();
-    tpCx.moveTo(X(xMin),Y((2/3)*xMin));
-    tpCx.lineTo(X(xMax),Y((2/3)*xMax));
-    tpCx.stroke();
-    guideLabel('slope 2/3 (T ∝ a)', 2/3, 14, 'rgba(251,191,36,0.75)');
+      tpCx.strokeStyle='rgba(251,191,36,0.35)'; // slope 2/3 (T linear in a → T² ∝ a² → slope 2/3 vs a³)
+      tpCx.beginPath();
+      tpCx.moveTo(X(xMin),Y((2/3)*xMin));
+      tpCx.lineTo(X(xMax),Y((2/3)*xMax));
+      tpCx.stroke();
+      guideLabel('slope 2/3 (T ∝ a)', 2/3, 14, 'rgba(251,191,36,0.75)');
+    }
 
     // Slope-1 line on top, full-weight
     tpCx.setLineDash([5,4]);tpCx.lineWidth=1.8;
@@ -1217,7 +1226,13 @@ function buildChips(){
 function addSystemPlanet(catEntry){
   const p=initAtPerihelion(catEntry.a,catEntry.e);
   const Tan=Math.sqrt(catEntry.a**3);
-  const advance=Math.random()*Tan;
+  /* Seed in the final third of the orbit (approaching perihelion), and backdate the
+     seed as the "last crossing" (we KNOW the planet is u·T past perihelion — we put
+     it there). The first OBSERVED crossing then completes an honest full-period
+     measurement: Tm = (1−u)·T − (−u·T) = T exactly. Cuts the "measuring…" wait from
+     1–2 periods to 0.05–0.35 periods (Saturn: ~2 min worst → ≤ ~21 s at 1×). */
+  const u=0.65+0.30*Math.random();
+  const advance=u*Tan;
   // Same perihelion-based h as onFrame — consistent stepping for every body.
   const rPeri=Math.max(catEntry.a*(1-catEntry.e), 0.02);
   const hmax=0.01*Math.sqrt(rPeri*rPeri*rPeri/GM);
@@ -1229,7 +1244,7 @@ function addSystemPlanet(catEntry){
     name:catEntry.name,color:catEntry.color,
     a:catEntry.a,e:catEntry.e,Tanalytic:Tan,
     body:p, orbit:sample.pts,
-    timeAcc:0, lastCrossT:undefined, Tmeasured:0
+    timeAcc:0, lastCrossT:-advance, Tmeasured:0
   });
   updateNPlanets();
 }

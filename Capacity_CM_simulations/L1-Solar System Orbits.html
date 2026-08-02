@@ -114,10 +114,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box canvas{display:block;width:100%;height:100%;}
 #gl3d{position:absolute;inset:0;z-index:0;cursor:grab;}
 #sky{position:absolute;inset:0;z-index:1;background:transparent;pointer-events:none;}
-.orbit-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;
-  font-size:13px;font-weight:600;letter-spacing:.02em;color:rgba(255,255,255,.95);
-  background:rgba(6,10,18,.78);padding:7px 16px;border:1.5px solid rgba(255,255,255,.75);
-  border-radius:6px;pointer-events:none;white-space:nowrap;}
+.orbit-hint{position:absolute;left:12px;bottom:8px;z-index:2;
+  font-size:11px;font-weight:400;letter-spacing:.01em;color:rgba(203,213,225,.85);
+  background:transparent;padding:0;border:none;
+  border-radius:0;pointer-events:none;white-space:nowrap;}
 .plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;margin-left:6px;}
@@ -270,7 +270,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <dt>Serves</dt><dd>Framing: predicting the future by solving Newton's equations numerically (velocity Verlet).</dd>
           <dt>Inquiry</dt><dd>Where on its orbit does Mercury move fastest? Which orbit is least circular?</dd>
           <dt>Misconception</dt><dd>That planetary orbits are circles traversed at constant speed.</dd>
-          <dt>Units</dt><dd>Distances in AU, time in years, so GM<sub>☉</sub> = 4π² AU³/yr². Speed converted to km/s for display (1 AU/yr ≈ 4.74 km/s).</dd>
+          <dt>Units</dt><dd>Distances in AU, time in years, so GM<sub>☉</sub> = 4π² AU³/yr². Speed converted to km/s for display (1 AU/yr ≈ 4.74 km/s). Full-system view: spacing between orbits is compressed for legibility; each orbit's shape, eccentricity, and Sun-at-focus placement are exact.</dd>
         </dl>
         <h3>Pedagogy principles applied</h3>
         <table class="shell-info-table">
@@ -323,7 +323,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="plot-title">Orbital view — 3D <span class="plot-inline" id="view-label">— Inner system (out to Mars)</span></div>
       <canvas id="gl3d"></canvas>
       <canvas id="sky"></canvas>
-      <div class="orbit-hint">drag to orbit · scroll to zoom</div>
+      <div class="orbit-hint">drag to pan, scroll to zoom</div>
     </div>
   </main>
 
@@ -411,9 +411,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <div class="shell-panel-head"><h3>Selected planet</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box">
-            <div class="stat-row"><span class="stat-label"><span class="stat-swatch" id="s-swatch" style="background:#c9b39a;color:#c9b39a"></span>Name</span><span class="stat-value" id="s-name">Mercury</span></div>
-            <div class="stat-row row-a hidden-until-step"><span class="stat-label">a (semi-major axis)</span><span class="stat-value" id="s-a">0.387 AU</span></div>
-            <div class="stat-row row-e hidden-until-step"><span class="stat-label">e (eccentricity)</span><span class="stat-value" id="s-e">0.206</span></div>
+            <div class="stat-row"><span class="stat-label"><span class="stat-swatch" id="s-swatch" style="background:transparent;color:transparent"></span>Name</span><span class="stat-value" id="s-name">—</span></div>
+            <div class="stat-row row-a hidden-until-step"><span class="stat-label">a (semi-major axis)</span><span class="stat-value" id="s-a">—</span></div>
+            <div class="stat-row row-e hidden-until-step"><span class="stat-label">e (eccentricity)</span><span class="stat-value" id="s-e">—</span></div>
             <div class="stat-row row-r hidden-until-step"><span class="stat-label">r (now)</span><span class="stat-value" id="s-r">— AU</span></div>
             <div class="stat-row row-v hidden-until-step"><span class="stat-label">v (now)</span><span class="stat-value" id="s-v">— km/s</span></div>
           </div>
@@ -646,7 +646,7 @@ const Shell = (function(){
 
   const state = {
     view: 'inner',
-    selected: 0,
+    selected: null,   // null = none highlighted; click active planet again to clear
     bodies: [],
     stars: [],
     tYears: 0,
@@ -696,13 +696,15 @@ const Shell = (function(){
   const glc = document.getElementById('gl3d');
   let renderer3, scene3, camera3, sunMesh, sunGlow, domeMesh, refRing, ghostRing, ghostMesh;
   const planetMeshes = [], orbitLines = [], planetSpins = [];
+  const planetWorldR = new Array(PLANETS.length).fill(0); /* display mesh radius (world units) */
   let ready3d = false, _pv = null;
+  let labelTierPrev = new Array(PLANETS.length).fill(0); /* last-frame tier index 0..3 */
   // Per-view camera defaults. Full mode: planets fanned along the left of the
-  // frame (perihelia toward −screen-x), with enough tilt/zoom that Neptune
-  // fills the plot — matches the lecture full-system framing.
+  // frame (perihelia toward −screen-x), moderate top-down tilt so Neptune’s
+  // orbit fills the plot — matches the lecture full-system framing.
   const CAM_DEF = {
     inner: { az: -Math.PI/2, pol: 0.95, dist: 5.0 },
-    outer: { az: -Math.PI/2, pol: 1.08, dist: 78 }
+    outer: { az: -Math.PI/2, pol: 0.88, dist: 72 }
   };
   const cam = { ...CAM_DEF.inner };
   let _rs = 11;
@@ -960,9 +962,10 @@ const Shell = (function(){
       lx=e.clientX; ly=e.clientY;
       if(!Shell.playing) render(0); });
     ['pointerup','pointercancel'].forEach(ev=>glc.addEventListener(ev,()=>{ dragging=false; glc.style.cursor='grab'; }));
-    /* scroll to zoom — camera distance only, clamped per view */
+    /* scroll to zoom — camera distance only, clamped per view.
+       Outer: cannot zoom out past the lecture Full framing (CAM_DEF.outer.dist). */
     glc.addEventListener('wheel',e=>{ e.preventDefault();
-      const lim = state.view==='inner' ? [2.2,9] : [8,170];
+      const lim = state.view==='inner' ? [2.2,9] : [8, CAM_DEF.outer.dist];
       cam.dist=Math.min(lim[1],Math.max(lim[0],cam.dist*Math.exp(e.deltaY*0.0012)));
       if(!Shell.playing) render(0);
     },{passive:false});
@@ -974,16 +977,35 @@ const Shell = (function(){
     cam.az = def.az; cam.pol = def.pol; cam.dist = def.dist;
     if(!ready3d) return;
     const K=viewK();
-    planetMeshes.forEach((m,i)=>m.scale.setScalar(PLANETS[i].px*K));
     /* Sun stays the largest body on screen: clearly bigger than Jupiter (8.5·K) */
     const sunS = state.view==='inner' ? 9*K : 12.5*K;
     sunMesh.scale.setScalar(sunS);
     sunGlow.scale.set(sunS*4.2,sunS*4.2,1);
     ghostMesh.scale.setScalar(3.2*K*0.8);
-    /* rebuild display-space geometry for the current view */
-    refRing.scale.setScalar(state.view==='outer' ? Math.pow(1/R_NEP,DISP_P)*R_NEP : 1);
+    /* Planet icon sizes. Outer view: cap vs orbit gaps so neighbours never touch. */
+    if(state.view !== 'outer'){
+      for(let i=0;i<PLANETS.length;i++){
+        planetWorldR[i]=PLANETS[i].px*K;
+        planetMeshes[i].scale.setScalar(planetWorldR[i]);
+      }
+    } else {
+      const Rdisp=PLANETS.map(p=>orbScale(p.a)*p.a);
+      const sunClear=sunS; /* glow-core radius for Mercury's inward clearance */
+      for(let i=0;i<PLANETS.length;i++){
+        const gIn = i===0 ? (Rdisp[i]-sunClear) : (Rdisp[i]-Rdisp[i-1]);
+        const gOut = i===PLANETS.length-1 ? Infinity : (Rdisp[i+1]-Rdisp[i]);
+        const g = Math.max(0.05, Math.min(gIn, gOut));
+        const base = PLANETS[i].px*K;
+        planetWorldR[i] = Math.min(base, 0.35*g);
+        planetMeshes[i].scale.setScalar(planetWorldR[i]); /* rings (Saturn/Uranus) ride the same scale */
+      }
+    }
+    /* Per-orbit uniform scale: ring layout matches old spacing, each curve stays a conic. */
+    refRing.scale.setScalar(orbScale(1));
+    ghostRing.scale.setScalar(orbScale(PLANETS[0].a));
     for(let i=0;i<orbitLines.length;i++){
-      const pts=state.bodies[i].trail.map(q=>{ const d=dispXY(q.x,q.y); return new THREE.Vector3(d[0],0,-d[1]); });
+      const s=orbScale(PLANETS[i].a);
+      const pts=state.bodies[i].trail.map(q=>new THREE.Vector3(q.x*s,0,-q.y*s));
       orbitLines[i].geometry.dispose();
       orbitLines[i].geometry=new THREE.BufferGeometry().setFromPoints(pts);
     }
@@ -995,26 +1017,29 @@ const Shell = (function(){
     camera3.up.set(0,1,0); camera3.lookAt(0,0,0);
     camera3.updateMatrixWorld();
   }
-  /* Display-space radial compression for the Full view ONLY: keeps every
-     orbit visible (Mercury→2.8 AU display) while physics stays in true AU.
-     Monotonic power law along each ray — Sun stays at the focus, peri<apo. */
+  /* Outer view: ONE constant scale per orbit from its semi-major axis a.
+     Uniform scaling about the Sun preserves the Kepler ellipse (same e, Sun at focus)
+     while keeping today's inter-orbit spacing (display a' = R_NEP^(1−p)·a^p). */
   const R_NEP = 30.061, DISP_P = 0.42;
-  function dispXY(x,y){
-    if(state.view !== 'outer') return [x,y];
-    const r = Math.hypot(x,y);
-    if(r < 1e-9) return [x,y];
-    const f = Math.pow(r/R_NEP, DISP_P)*R_NEP/r;
-    return [x*f, y*f];
+  function orbScale(a){
+    if(state.view !== 'outer') return 1;
+    return Math.pow(a / R_NEP, DISP_P - 1);
   }
   function projPt(x,y){
     _pv.set(x,0,-y).project(camera3);
     return { x:(_pv.x*0.5+0.5)*state.W, y:(-_pv.y*0.5+0.5)*state.H };
   }
-  function W2S(x,y){ const d=dispXY(x,y); return projPt(d[0],d[1]); }
+  /* World→screen via planet i's orbit scale (never from instantaneous r). */
+  function W2S(i,x,y){
+    const s=orbScale(PLANETS[i].a);
+    return projPt(x*s, y*s);
+  }
   function projRadius(i){
-    const b=state.bodies[i], wr=PLANETS[i].px*viewK();
-    const d=dispXY(b.x,b.y);
-    const s0=projPt(d[0],d[1]), s1=projPt(d[0]+wr,d[1]);
+    const b=state.bodies[i];
+    const wr = planetWorldR[i] || PLANETS[i].px*viewK();
+    const s=orbScale(PLANETS[i].a);
+    const dx=b.x*s, dy=b.y*s;
+    const s0=projPt(dx,dy), s1=projPt(dx+wr,dy);
     return Math.max(3, Math.hypot(s1.x-s0.x,s1.y-s0.y));
   }
 
@@ -1023,14 +1048,17 @@ const Shell = (function(){
     for(let i=0;i<planetMeshes.length;i++){
       const m=planetMeshes[i], b=state.bodies[i], on=vis.includes(i);
       m.visible=on; orbitLines[i].visible=on;
-      const d=dispXY(b.x,b.y);
-      m.position.set(d[0],0,-d[1]);
+      const s=orbScale(PLANETS[i].a);
+      m.position.set(b.x*s,0,-b.y*s);
       if(dt) planetSpins[i].rotation.y+=dt*0.35;
       orbitLines[i].material.opacity=(i===state.selected)?0.95:0.58;
     }
     const act=!!(state.ghostActive&&state.ghost)&&state.view!=='outer';
     ghostRing.visible=act; ghostMesh.visible=act;
-    if(act){ const g=state.ghost; ghostMesh.position.set(g.a*Math.cos(g.theta),0,-g.a*Math.sin(g.theta)); }
+    if(act){
+      const g=state.ghost, s=orbScale(PLANETS[0].a);
+      ghostMesh.position.set(s*g.a*Math.cos(g.theta),0,-s*g.a*Math.sin(g.theta));
+    }
     placeCam();
     renderer3.render(scene3,camera3);
   }
@@ -1168,7 +1196,7 @@ const Shell = (function(){
     if(state.view === 'outer') return;
     if(!labelsOnly) return;   // dashed track + marker are rendered in the 3D scene
     const g = state.ghost;
-    const gs = W2S(g.a * Math.cos(g.theta), g.a * Math.sin(g.theta));
+    const gs = W2S(0, g.a * Math.cos(g.theta), g.a * Math.sin(g.theta));
     const gx = gs.x, gy = gs.y;
     const glbl = 'ghost — constant speed';
     const font = '12px var(--font-sans), sans-serif';
@@ -1189,60 +1217,93 @@ const Shell = (function(){
   }
 
   function drawPlanets(){
-    // Spheres are rendered in 3D; this overlay adds selection ring + labels.
+    /* Spheres in 3D; overlay draws selection ring + names.
+       Each label is horizontally centered on its planet. Overlaps resolve by
+       trying above / below / further-above / further-below (inner→outer). */
     const vis = visibleIndices();
-    for(const i of vis){
+    const sunScr = projPt(0,0);
+    const PAD = 4;          /* few-px padding between label rects */
+    const LINE = 15;        /* vertical step between tiers */
+    const SUN_CLEAR = 34;   /* keep labels off the Sun's glow */
+    const placed = [];      /* accepted label rects this frame */
+
+    function makeRect(lx, ly, tw, lh){
+      return { x:lx, y:ly-lh+2, w:tw+2, h:lh };
+    }
+    function clampCentered(cx, ly, tw, lh){
+      let lx = cx - tw/2;
+      if(lx < 4) lx = 4;
+      if(lx + tw > state.W - 4) lx = state.W - 4 - tw;
+      let y = ly;
+      if(y - lh + 2 < 4) y = 4 + lh - 2;
+      if(y > state.H - 4) y = state.H - 4;
+      return [lx, y];
+    }
+    function hitsSun(r){
+      const mx = r.x + r.w/2, my = r.y + r.h/2;
+      return Math.hypot(mx - sunScr.x, my - sunScr.y) < SUN_CLEAR;
+    }
+    function freeOf(r){
+      if(hitsSun(r)) return false;
+      const grow = { x:r.x-PAD, y:r.y-PAD, w:r.w+2*PAD, h:r.h+2*PAD };
+      return !placed.some(o => rectsOverlap(grow, o));
+    }
+
+    /* Inner → outer (deterministic). */
+    const order = vis.slice().sort((a,b)=>a-b);
+    for(const i of order){
       const b = state.bodies[i];
       const p = PLANETS[i];
-      const s = W2S(b.x, b.y), x = s.x, y = s.y;
+      const scr = W2S(i, b.x, b.y);
       const sel = (i === state.selected);
       const pr = projRadius(i);
       if(sel){
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.arc(x,y,pr+5,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(scr.x,scr.y,pr+5,0,Math.PI*2); ctx.stroke();
       }
-      // Compressed spacing keeps orbits apart, so every visible planet gets a label
-      {
-        const lbl = p.name;
-        const font = (sel ? 'bold ' : '') + '12px var(--font-sans), sans-serif';
-        ctx.font = font;
-        const tw = ctx.measureText(lbl).width;
-        // Centered above/below first — keeps each label unambiguously on its planet
-        placeCanvasLabel(x, y, lbl, {
-          font,
-          fillStyle: hexA('#ffffff', sel ? 0.95 : 0.72),
-          candidates: [
-            [x - tw / 2, y - pr - 8],
-            [x - tw / 2, y + pr + 16],
-            [x - tw / 2, y - pr - 22],
-            [x - tw / 2, y + pr + 30],
-            [x + pr + 6, y + 4],
-            [x - pr - 6 - tw, y + 4]
-          ]
-        });
+      const font = (sel ? 'bold ' : '') + '12px var(--font-sans), sans-serif';
+      ctx.font = font;
+      const tw = ctx.measureText(p.name).width;
+      const lh = 14;
+      /* Tier baselines (text baseline y): T1 above, T2 below, T3 further above, T4 further below.
+         Earth sits a few px higher so its name clears Mars when both want “above”. */
+      const up = (p.name === 'Earth') ? 10 : 0;
+      const tiers = [
+        scr.y - pr - 6 - up,
+        scr.y + pr + lh + 2,
+        scr.y - pr - 6 - LINE - up,
+        scr.y + pr + lh + 2 + LINE
+      ];
+      /* T1→T4 in order so labels return to “all above” when space allows.
+         Soft ±4 px preference keeps last-frame tier from flip-flopping. */
+      let chosen = null, chosenTier = 0;
+      for(let t=0;t<4;t++){
+        const [lx, ly] = clampCentered(scr.x, tiers[t], tw, lh);
+        const r = makeRect(lx, ly, tw, lh);
+        if(freeOf(r)){ chosen = { lx, ly, r }; chosenTier = t; break; }
+        if(t === (labelTierPrev[i]||0)){
+          for(const dy of [-4, 4]){
+            const [lx2, ly2] = clampCentered(scr.x, tiers[t]+dy, tw, lh);
+            const r2 = makeRect(lx2, ly2, tw, lh);
+            if(freeOf(r2)){ chosen = { lx:lx2, ly:ly2, r:r2 }; chosenTier = t; break; }
+          }
+          if(chosen) break;
+        }
       }
+      if(!chosen){
+        /* Fallback: T1 clamped even if overlapping (should be rare). */
+        const [lx, ly] = clampCentered(scr.x, tiers[0], tw, lh);
+        chosen = { lx, ly, r: makeRect(lx, ly, tw, lh) };
+        chosenTier = 0;
+      }
+      labelTierPrev[i] = chosenTier;
+      placed.push(chosen.r);
+      labelRects.push(chosen.r);
+      ctx.font = font;
+      ctx.fillStyle = hexA('#ffffff', sel ? 0.95 : 0.72);
+      ctx.fillText(p.name, chosen.lx, chosen.ly);
     }
-  }
-
-  function drawHUD(){
-    if(state.view === 'outer') return;   // a linear scale bar would be misleading under compressed spacing
-
-    // Scale bar (projected length of barAU at the Sun's distance)
-    const barAU = 0.5;
-    const b0 = W2S(0,0), b1 = W2S(barAU,0);
-    const barPx = Math.hypot(b1.x-b0.x, b1.y-b0.y);
-    const bx = 14, by = state.H - 32;
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by);
-    ctx.moveTo(bx, by-4); ctx.lineTo(bx, by+4);
-    ctx.moveTo(bx+barPx, by-4); ctx.lineTo(bx+barPx, by+4);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.font = '12px var(--font-nums), monospace';
-    ctx.fillText(barAU + ' AU', bx + barPx + 6, by + 4);
   }
 
   function onFrame(dt){
@@ -1269,17 +1330,26 @@ const Shell = (function(){
     render3d(dt || 0);
     drawPlanets(); // planet names only
     drawGhostMercury(true);
-    drawHUD();
   }
 
   function updateStats(){
+    const $ = id => document.getElementById(id);
     const i = state.selected;
+    if(i == null){
+      $('s-name').textContent = '—';
+      const sw = $('s-swatch');
+      if(sw){ sw.style.background = 'transparent'; sw.style.color = 'transparent'; }
+      $('s-a').textContent = '—';
+      $('s-e').textContent = '—';
+      $('s-r').textContent = '—';
+      $('s-v').textContent = '—';
+      return;
+    }
     const b = state.bodies[i];
     const p = PLANETS[i];
     const r = Math.sqrt(b.x*b.x + b.y*b.y);
     const v = Math.sqrt(b.vx*b.vx + b.vy*b.vy);
     const v_kms = v * AUyr_to_kms;
-    const $ = id => document.getElementById(id);
     $('s-name').textContent = p.name;
     const sw = $('s-swatch');
     if(sw){ sw.style.background = p.color; sw.style.color = p.color; }
@@ -1287,6 +1357,16 @@ const Shell = (function(){
     $('s-e').textContent = p.e.toFixed(3);
     $('s-r').textContent = r.toFixed(3) + ' AU';
     $('s-v').textContent = v_kms.toFixed(2) + ' km/s';
+  }
+
+  function setSelectedPlanet(i){
+    /* Pass null to clear; clicking the active planet again toggles off. */
+    state.selected = i;
+    document.querySelectorAll('.planet-btn').forEach((btn, idx)=>{
+      btn.classList.toggle('active', i != null && idx === i);
+    });
+    updateStats();
+    render(0); // refresh highlight/orbit emphasis even while paused
   }
 
   function buildPlanetList(){
@@ -1298,11 +1378,7 @@ const Shell = (function(){
       b.innerHTML = `<span class="planet-swatch" style="background:${p.color};color:${p.color}"></span>`+
                     `<span class="planet-name">${p.name}</span>`;
       b.addEventListener('click', () => {
-        state.selected = i;
-        document.querySelectorAll('.planet-btn').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active');
-        updateStats();
-        render(0); // refresh highlight/orbit emphasis even while paused
+        setSelectedPlanet(state.selected === i ? null : i);
       });
       host.appendChild(b);
     });
@@ -1397,6 +1473,8 @@ const Shell = (function(){
   function onReset(){
     initBodies();
     state.ghostActive = false;
+    state.selected = null;
+    document.querySelectorAll('.planet-btn').forEach(btn=>btn.classList.remove('active'));
     // Rebuild inquiry
     document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
       card.removeAttribute('data-answered');

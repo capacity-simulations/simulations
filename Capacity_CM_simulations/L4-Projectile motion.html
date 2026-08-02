@@ -418,6 +418,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
      Keep this list current when registering items:
      - [dom] "✓ Independent — aₓ = 0, aᵧ = −g" — #mode-banner, applyBanner
      - [dom] legend chip (all entries: A projectile / B twin / M 90°−θ / previous trials, incl. colour swatches) — #legend
+     - [canvas] ball letter labels "A"/"B"/"M" (in-flight above ball) — drawScene ball loop, lab(id,…)
+     - [canvas] landing-flag letter "A"/"B"/"M" — drawScene landing flags, lab(b.id,…)
+     - [canvas] "same height" (twin tie-line callout) — drawScene tie-line, lab('same height',…)
+     - [canvas] "equal range — both … m" (90°−θ landing callout) — drawScene complementary-angle callout
 -->
 <script>
 /* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
@@ -1036,6 +1040,8 @@ function runComplete(){
     S.lastTwin = { tA: A.glide?Infinity:A.T, tB: B.T, mode: A.mode,
                    vy: A.vy, RA: A.glide?Infinity:A.R };
   }
+  /* Landed — pause and offer ▶ Play (shell-play click relaunches). */
+  Shell.setPlaying(false);
   checkSteps();
 }
 
@@ -1071,7 +1077,7 @@ function onFrame(dt){
     $('read-t').textContent = Math.min(S.t, maxEnd).toFixed(2)+' s';
     if(all){ S.phase='hold'; S.holdT=0; runComplete(); }
   }
-  /* hold phase: stay — re-launch requires explicit 🚀 Launch click */
+  /* hold phase: stay until ▶ Play or 🚀 Launch */
   drawScene();
 }
 
@@ -1241,7 +1247,7 @@ function drawScene(){
         ctx.setLineDash([]);
         if(x2-x1>90){
           const mx=(x1+x2)/2;
-          if(same) lab('same height', mx, (y1+y2)/2-8, {align:'center', color: light?'#047857':'#34d399'});
+          if(same){ if(!HT()) lab('same height', mx, (y1+y2)/2-8, {align:'center', color: light?'#047857':'#34d399'}); }
           else lab('Δy = '+(pb.y-pa.y).toFixed(1)+' m', mx, Math.min(y1,y2)-8,
                    {align:'center', color: light?'#dc2626':'#f87171', font:'bold 12px Inter,system-ui,sans-serif'});
         }
@@ -1257,7 +1263,7 @@ function drawScene(){
       ctx.beginPath(); ctx.moveTo(fx,gy); ctx.lineTo(fx-5,gy-9); ctx.lineTo(fx+5,gy-9); ctx.closePath(); ctx.fill();
       /* stacked above the ball: id, time, then range — clear of each other and the sphere */
       const by=gy-48-SLOT[b.id]*44;
-      lab(b.id, fx, by, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
+      if(!HT()) lab(b.id, fx, by, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
       lab(b.T.toFixed(2)+' s', fx, by+16, {align:'center', color:b.color, font:'bold 12px Inter,system-ui,sans-serif'});
       if(b.id!=='B') lab(b.R.toFixed(2)+' m', fx, by+32, {align:'center', color: light?'#475569':'#94a3b8'});
     }
@@ -1272,7 +1278,7 @@ function drawScene(){
     const fx=X(Ab.R);
     ctx.strokeStyle = light ? 'rgba(4,120,87,.4)' : 'rgba(110,231,183,.35)'; ctx.setLineDash([4,4]);
     ctx.beginPath(); ctx.moveTo(fx,gy); ctx.lineTo(fx,gy-152); ctx.stroke(); ctx.setLineDash([]);
-    lab('equal range — both '+Ab.R.toFixed(2)+' m', fx, gy-158,
+    if(!HT()) lab('equal range — both '+Ab.R.toFixed(2)+' m', fx, gy-158,
         {align:'center', color: light?'#047857':'#6ee7b7', font:'bold 12px Inter,system-ui,sans-serif'});
   }
 
@@ -1376,7 +1382,7 @@ function drawScene(){
     }
     /* D3: letter label above each ball — omit on ground so landing-flag stack owns the name */
     if(!(b.everLanded && p.y < 0.05)){
-      lab(id, bx, by - (id==='B' ? 15 : 13), {align:'center', color:b.color, font:'bold 11px Inter,system-ui,sans-serif'});
+      if(!HT()) lab(id, bx, by - (id==='B' ? 15 : 13), {align:'center', color:b.color, font:'bold 11px Inter,system-ui,sans-serif'});
     }
   });
 }
@@ -1506,6 +1512,14 @@ function toggleTwin(){
   P.twin=!P.twin;
   $('btn-twin').classList.toggle('active', P.twin);
   updateLegend();
+  /* Drop B immediately when Twin is off — otherwise a prior twin launch (or
+     lecture-mode's last-step scene) leaves B on the canvas while the button
+     looks inactive. */
+  if(!P.twin){
+    S.balls = S.balls.filter(b=>b.id!=='B');
+    S.lastTwin = null;
+    drawScene();
+  }
   autoCommit();
 }
 function liveRefresh(){ updateData(); drawScene(); drawPlot(); }
@@ -1581,6 +1595,10 @@ function init(){
 
   renderKatexWhenReady(0);
   Shell.init({ onFrame, onReset, onResize, onStep, onComplete });
+  /* After landing, ▶ Play relaunches (shell toggle already flipped playing on). */
+  $('shell-play').addEventListener('click', ()=>{
+    if(S.phase==='hold' && Shell.playing) commit();
+  });
   // Re-apply opening card after Shell.init's onReset.
   if(Shell.totalSteps > 0) onStep(Shell.step);
   else Shell.setPlaying(false);
