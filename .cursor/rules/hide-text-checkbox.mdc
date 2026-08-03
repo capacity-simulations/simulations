@@ -1,0 +1,124 @@
+---
+description: Hide Text checkbox + empty hide-registry for CM lecture sims — top-bar checkbox beside the 🎓 Lecture button; nothing is hidden until items are explicitly registered
+globs: Capacity_CM_simulations/*.html
+alwaysApply: false
+---
+
+# Hide Text checkbox (empty container mechanism)
+
+Adds a **"Hide Text"** checkbox to the shell top bar, immediately **beside the
+`#shell-lecture` button**, wired to an initially **empty registry**. Checking the box
+applies the class `hide-text` to the `#shell` root and exposes a global `HT()` guard —
+but since no element is registered yet, **checking it changes nothing visually**.
+Text items get registered later, one prompt at a time, per the v2 "Simplify display"
+requests. Registered items are *hidden, never deleted* — user-facing builds get them
+back by unchecking (or removing the auto-lecture default).
+
+## Naming tokens (fixed — automation greps for these)
+
+| Token | Meaning |
+|---|---|
+| `#ht-ctl` / `#ht-toggle` | the label / checkbox in the top bar |
+| `hide-text` | class toggled on `#shell` when checked |
+| `.ht-hide` | class that registered **DOM** text nodes receive |
+| `HT()` | global guard for registered **canvas** text draw calls |
+| `HIDE-TEXT REGISTRY` | manifest comment listing everything registered |
+
+## Insertion 1 — markup (in the top bar)
+
+Find the lecture button (present in every CM sim):
+
+```html
+<button id="shell-lecture" class="shell-btn" title="...">🎓 Lecture</button>
+```
+
+Insert **immediately after** its closing `</button>`:
+
+```html
+<label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+  <input type="checkbox" id="ht-toggle"> Hide Text
+</label>
+```
+
+## Insertion 2 — CSS (append inside the sim's main `<style>` block)
+
+```css
+/* Hide Text toggle */
+#ht-ctl{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+#ht-ctl input{accent-color:var(--accent);margin:0;cursor:pointer;}
+#shell.hide-text .ht-hide{display:none !important;}
+```
+
+(If the sim has no `--accent` variable, omit `accent-color`.)
+
+## Insertion 3 — registry comment + wiring script
+
+Place this block **immediately after the closing `</header>`** of the top bar, so
+`window.HT` is defined *before* the main sim IIFE runs and plain `HT()` calls are safe
+inside draw code:
+
+```html
+<!-- HIDE-TEXT REGISTRY ("Simplify display" v2)
+     DOM items:    add class "ht-hide" to the element.
+     Canvas items: wrap the draw call in  if(!HT()){ ... }
+     Keep this list current when registering items:
+     (empty — nothing registered yet)
+-->
+<script>
+/* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
+(function(){
+  var shell=document.getElementById('shell');
+  var box=document.getElementById('ht-toggle');
+  if(!shell||!box) return;
+  window.HT=function(){ return shell.classList.contains('hide-text'); };
+  function apply(){
+    shell.classList.toggle('hide-text', box.checked);
+    window.dispatchEvent(new Event('resize')); /* forces a redraw in every CM sim, even while paused */
+  }
+  box.addEventListener('change', apply);
+  /* Default: follow lecture mode at boot. Must wait for window load — in these ~300KB
+     files a rAF can fire mid-parse, BEFORE the end-of-body auto-lecture script has run
+     (verified live in L4). Independent thereafter. */
+  window.addEventListener('load', function(){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      box.checked = shell.classList.contains('lecture-mode');
+      apply();
+    });});
+  });
+})();
+</script>
+```
+
+## Registering items later (NOT part of installation)
+
+Installation ships the container **empty**. When asked to register text:
+- **DOM items** (panels, HTML legends, readouts): add `ht-hide` to the **complete visible
+  element**, not just its text node — a legend entry includes its colour swatch/icon; a
+  chip includes its pill background. Hiding only the text and leaving an orphaned dot in
+  an empty pill is wrong (this exact failure occurred in L4).
+  **No orphaned chrome:** if hiding leaves a container with no visible children (e.g. a
+  legend chip whose other entries are `display:none`), register the container itself.
+- **Canvas text** (`fillText`/label helpers): wrap the call site in `if(!HT()){ … }`.
+  On canvas, never gate physics content — arrows, markers, trajectories, geometry —
+  text labels only, unless explicitly asked. (The protection is for *physics* drawings;
+  DOM UI chrome accompanying text is part of the item and gets hidden with it.)
+- Append a one-line entry to the `HIDE-TEXT REGISTRY` comment for every item, replacing
+  the `(empty — …)` line on first registration.
+
+## Rules
+
+- **Install must not hide anything.** The registry starts empty; the checkbox visibly
+  toggling class `hide-text` with zero visual change is the *correct* install state.
+- **Never delete text** through this mechanism — hide-only, reversible by design.
+- **Idempotent:** if `id="ht-toggle"` already exists in the file, skip it entirely.
+- **Scope:** `Capacity_CM_simulations/*.html` **excluding** `index.html`, `vendor/`,
+  and anything under `CM_lecture_sims_backup/`.
+- Do not touch physics code, the shell loop, or the auto-lecture script.
+
+## Verify after installing (per sim)
+
+1. `id="ht-toggle"` appears exactly once; registry comment appears exactly once.
+2. Load the sim: checkbox renders beside 🎓 Lecture, checked by default (sims boot into
+   lecture mode), zero console errors.
+3. Toggling it adds/removes `hide-text` on `#shell` and nothing visible changes (empty registry).
+4. Physics untouched: no edits inside the sim's main IIFE.
