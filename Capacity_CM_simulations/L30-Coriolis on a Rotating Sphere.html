@@ -204,6 +204,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .mode-seg .mode-btn.active{background:rgba(59,155,143,.16);border-color:var(--accent);color:var(--accent);}
 .mode-seg .mode-btn:disabled{opacity:.5;cursor:not-allowed;}
 #shell.mode-free .legend-item.legend-low{display:none;}
+#shell.field-off .legend-item.legend-f{display:none;}
 #shell.mode-free .hint-cyclone{display:none;}
 #shell.mode-cyclone .hint-free{display:none;}
 #shell.mode-cyclone #launch-dir-box{display:none;}
@@ -321,8 +322,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="plot-title">Rotating Earth</div>
       <div class="legend">
         <div class="legend-item legend-low"><span class="legend-dot" style="background:#f472b6"></span>Low-pressure centre (⇧+drag)</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>Parcel</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#facc15"></span>|f| = 2ω sin φ magnitude</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#fb923c"></span>Parcel</div>
+        <div class="legend-item legend-f"><span class="legend-dot" style="background:#facc15"></span>|f| = 2ω sin φ (dot size)</div>
         <div class="legend-item"><span class="legend-dot" style="background:#f43f5e"></span>No-hurricane band</div>
       </div>
       <canvas id="scene"></canvas>
@@ -375,12 +376,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <h4>5 · The Coriolis parameter</h4>
           <p>What controls the strength of the deflection? On a rotating sphere the horizontal Coriolis parameter is</p>
           <p style="text-align:center;font-family:var(--font-nums);color:var(--text);"><strong>f = 2ω sin φ</strong></p>
-          <p>The yellow arrows on the globe (now visible) show |f| at each latitude — <em>arrow length ∝ sin |φ|</em>. Notice they are longest near the poles and vanish at the equator. In the north f &gt; 0; in the south f &lt; 0, which flips the deflection handedness.</p>
+          <p>The yellow dots on the globe (now visible) show |f| at each latitude — <em>dot size ∝ sin |φ|</em>. Notice they are largest near the poles and vanish at the equator. In the north f &gt; 0; in the south f &lt; 0, which flips the deflection handedness.</p>
         </div>
 
         <div class="inq-step" data-gate>
           <h4>6 · Predict — the equator</h4>
-          <p>Set the dial due <strong>East (90°)</strong> and launch a parcel <em>on</em> the equator. Given that f = 2ω sin φ and the arrows are essentially zero there — what will the path do?</p>
+          <p>Set the dial due <strong>East (90°)</strong> and launch a parcel <em>on</em> the equator. Given that f = 2ω sin φ and the yellow dots vanish there — what will the path do?</p>
           <button class="choice" data-c="right">Deflected right, as everywhere in the north</button>
           <button class="choice" data-c="zero">Essentially none — travels straight</button>
           <button class="choice" data-c="strong">Strongest deflection of all</button>
@@ -438,6 +439,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
             <div class="control-range"><span>at rest</span><span>fast</span></div>
           </div>
           <div class="note-text" id="cyclone-rest-note" style="margin:2px 2px 8px;">Parcels are released <em>at rest</em> — zero initial velocity.</div>
+          <div class="ctrl-box">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);">
+              <input type="checkbox" id="field-toggle" checked style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0;">
+              Show |f| dots
+            </label>
+          </div>
           <div class="ctrl-box">
             <button id="clear-parcels" class="shell-btn" style="width:100%;justify-content:center;">Clear parcels</button>
           </div>
@@ -853,9 +860,13 @@ function initSim(){
   const fieldGroup = new THREE.Group();
   earth.add(fieldGroup);
 
-  const arrowMat = new THREE.LineBasicMaterial({color:0xfacc15, transparent:true, opacity:0.85});
+  const fieldDotMat = new THREE.MeshBasicMaterial({color:0xfacc15, transparent:true, opacity:0.45, side:THREE.DoubleSide});
   function buildField(){
     fieldGroup.clear();
+    // Magnitude-only field: a filled disc at each sample point whose RADIUS
+    // encodes |sin φ| — a circle carries no direction, so it cannot imply one
+    // (the old poleward strokes still read as arrows). Discs vanish smoothly
+    // toward the equator, where f = 0; the equator row draws nothing.
     const latSteps = [-75,-60,-45,-30,-15,0,15,30,45,60,75];
     for(const latDeg of latSteps){
       const lat = latDeg*Math.PI/180;
@@ -863,22 +874,13 @@ function initSim(){
       for(let k=0;k<nLon;k++){
         const lon = (k/nLon)*2*Math.PI;
         const s = Math.sin(Math.abs(lat));
-        const len = 0.02 + 0.13*s;
+        const rad = 0.052*s;
+        if(rad < 0.005) continue; // f ≈ 0 → no marker (the message itself)
         const pos = latLonToVec(lat, lon, R*1.005);
-        // Poleward tangent (points toward the nearer pole) — purely a visual
-        // cue whose LENGTH encodes |sin φ|; direction is not physical.
-        const north = new THREE.Vector3(-Math.sin(lat)*Math.cos(lon), Math.cos(lat), Math.sin(lat)*Math.sin(lon));
-        const dir = north.clone().multiplyScalar(lat>=0 ? 1 : -1); // toward nearer pole
-        const tip = pos.clone().add(dir.clone().multiplyScalar(len));
-        const geo = new THREE.BufferGeometry().setFromPoints([pos, tip]);
-        fieldGroup.add(new THREE.Line(geo, arrowMat));
-        // Small cap at tip
-        const perp = new THREE.Vector3().crossVectors(dir, pos.clone().normalize()).normalize();
-        const cap = len*0.25;
-        const h1 = tip.clone().add(perp.clone().multiplyScalar(cap));
-        const h2 = tip.clone().add(perp.clone().multiplyScalar(-cap));
-        const hgeo = new THREE.BufferGeometry().setFromPoints([h1, h2]);
-        fieldGroup.add(new THREE.Line(hgeo, arrowMat));
+        const dot = new THREE.Mesh(new THREE.CircleGeometry(rad, 20), fieldDotMat);
+        dot.position.copy(pos);
+        dot.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), pos.clone().normalize());
+        fieldGroup.add(dot);
       }
     }
   }
@@ -959,6 +961,7 @@ function initSim(){
       const hemi = d>=0 ? 'N' : 'S';
       t.textContent = Math.abs(d).toFixed(0) + '° ' + hemi;
     }
+    renderPausedFrame();
   }
 
   const parcels = [];
@@ -978,6 +981,14 @@ function initSim(){
   let simMode = null;          // set by applyStep on boot
   let launchDirDeg = 90;       // dial: degrees clockwise from north (90 = east)
   let freeSpeed = FREE_SPEED_DEFAULT; // free-mode launch speed (slider; sets circle size r = v/f)
+  let fieldOn = true;          // "Show |f| dots" checkbox
+  let fieldStepOn = false;     // inquiry step allows the field (step ≥ 4)
+
+  function syncFieldVis(){
+    fieldGroup.visible = fieldOn && fieldStepOn;
+    document.getElementById('shell').classList.toggle('field-off', !fieldOn);
+    renderPausedFrame();
+  }
 
   function syncModeUI(){
     if(!simMode) return;
@@ -989,6 +1000,7 @@ function initSim(){
     const bC = document.getElementById('mode-cyclone');
     if(bF) bF.classList.toggle('active', simMode==='free');
     if(bC) bC.classList.toggle('active', simMode==='cyclone');
+    renderPausedFrame();
   }
   function setSimMode(mode){
     if(simMode === mode) return;
@@ -1039,25 +1051,34 @@ function initSim(){
         const east = new THREE.Vector3(-Math.sin(lon), 0, -Math.cos(lon));
         const north = new THREE.Vector3(-Math.sin(lat)*Math.cos(lon), Math.cos(lat), Math.sin(lat)*Math.sin(lon));
         const dir3 = east.multiplyScalar(Math.sin(dirRad)).add(north.multiplyScalar(Math.cos(dirRad))).normalize();
-        const arrow = new THREE.ArrowHelper(dir3, latLonToVec(lat, lon, R*1.02), 0.16, 0x93c5fd, 0.05, 0.03);
+        const arrow = new THREE.ArrowHelper(dir3, latLonToVec(lat, lon, R*1.02), 0.16, 0xfdba74, 0.05, 0.03);
         parcelGroup.add(arrow);
         parcel.arrowObj = arrow;
       }
     }
     // Cyclone mode: released at rest — the pressure force does the rest.
 
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshBasicMaterial({color:0x60a5fa}));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshBasicMaterial({color:0xfb923c}));
     dot.position.copy(latLonToVec(lat, lon, R*1.012));
     parcelGroup.add(dot);
     parcel.obj = dot;
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3*400), 3));
-    geo.setDrawRange(0,0);
-    const mat = new THREE.LineBasicMaterial({color:0x93c5fd, transparent:true, opacity:0.85});
-    const line = new THREE.Line(geo, mat);
-    parcelGroup.add(line);
-    parcel.trailObj = line;
+    // WebGL ignores linewidth — fake a ~3px stroke with three 1px lines at
+    // hair-thin radial offsets that merge on screen.
+    const trailGroup = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({color:0xfdba74, transparent:true, opacity:0.95});
+    parcel.trailLines = [];
+    for(let L=0;L<3;L++){
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3*400), 3));
+      geo.setDrawRange(0,0);
+      const line = new THREE.Line(geo, mat);
+      trailGroup.add(line);
+      parcel.trailLines.push(line);
+    }
+    parcelGroup.add(trailGroup);
+    parcel.trailObj = trailGroup;
+    parcel.trailMat = mat;
 
     parcels.push(parcel);
 
@@ -1074,6 +1095,7 @@ function initSim(){
     }
     if(simMode === 'cyclone') obs.parcelsCyc++;
     checkGates();
+    renderPausedFrame();
   }
 
   function clearParcels(){
@@ -1083,6 +1105,7 @@ function initSim(){
       if(p.arrowObj) parcelGroup.remove(p.arrowObj);
     }
     parcels.length = 0;
+    renderPausedFrame();
   }
 
   function stepParcel(p, dt){
@@ -1144,17 +1167,21 @@ function initSim(){
 
     p.trail.push(newPos);
     if(p.trail.length > 400) p.trail.shift();
-    const arr = p.trailObj.geometry.attributes.position.array;
-    for(let i=0;i<p.trail.length;i++){
-      arr[i*3]   = p.trail[i].x;
-      arr[i*3+1] = p.trail[i].y;
-      arr[i*3+2] = p.trail[i].z;
+    const TRAIL_SCALES = [1, 0.998, 1.002]; // radial offsets ≈ ±0.7px on screen
+    for(let L=0;L<3;L++){
+      const arr = p.trailLines[L].geometry.attributes.position.array;
+      const sc = TRAIL_SCALES[L];
+      for(let i=0;i<p.trail.length;i++){
+        arr[i*3]   = p.trail[i].x*sc;
+        arr[i*3+1] = p.trail[i].y*sc;
+        arr[i*3+2] = p.trail[i].z*sc;
+      }
+      p.trailLines[L].geometry.attributes.position.needsUpdate = true;
+      p.trailLines[L].geometry.setDrawRange(0, p.trail.length);
     }
-    p.trailObj.geometry.attributes.position.needsUpdate = true;
-    p.trailObj.geometry.setDrawRange(0, p.trail.length);
 
     const alpha = Math.max(0, Math.min(1, p.life/PARCEL_LIFE));
-    p.trailObj.material.opacity = 0.15 + 0.7*alpha;
+    p.trailMat.opacity = 0.25 + 0.7*alpha;
 
     if(p.arrowObj){
       p.arrowT += dt;
@@ -1176,12 +1203,20 @@ function initSim(){
     button: 0
   };
 
+  // While paused the animation loop doesn't render — interactions that change
+  // the view (orbit, zoom, parcel add/clear, low drag, toggles) must paint one
+  // frame themselves or the canvas goes stale until resume.
+  function renderPausedFrame(){
+    if(!Shell.playing) renderer.render(scene, camera);
+  }
+
   function applyCamera(){
     const x = orbit.dist * Math.cos(orbit.el) * Math.sin(orbit.az);
     const y = orbit.dist * Math.sin(orbit.el);
     const z = orbit.dist * Math.cos(orbit.el) * Math.cos(orbit.az);
     camera.position.set(x,y,z);
     camera.lookAt(0,0,0);
+    renderPausedFrame();
   }
   applyCamera();
 
@@ -1351,6 +1386,9 @@ function initSim(){
     }
     if(dial){ dial.addEventListener('input', updateDial); updateDial(); }
 
+    const fToggle = document.getElementById('field-toggle');
+    if(fToggle) fToggle.addEventListener('change', ()=>{ fieldOn = fToggle.checked; syncFieldVis(); });
+
     const spd = document.getElementById('launch-speed');
     const spdVal = document.getElementById('launch-speed-val');
     function updateSpeed(){
@@ -1506,8 +1544,10 @@ function initSim(){
   function applyStep(i){
     // Stage A (0–5): free parcels, Coriolis only. Stage B (6–7): cyclone (low + PG + drag).
     setSimMode(i >= 6 ? 'cyclone' : 'free');
-    // The sin φ arrow field is the payoff cue for f — reveal it at step 4 (the formula step).
-    fieldGroup.visible = (i >= 4);
+    // The sin φ dot field is the payoff cue for f — reveal it at step 4 (the
+    // formula step), subject to the "Show |f| dots" checkbox.
+    fieldStepOn = (i >= 4);
+    syncFieldVis();
     // Dead band reveals with the payoff step
     deadBand.visible = (i >= 7);
     if(i===3){ orbit.el = -0.2; applyCamera(); }
