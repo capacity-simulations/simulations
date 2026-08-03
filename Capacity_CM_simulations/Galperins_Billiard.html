@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Galperin's Billiard — π from Elastic Collisions</title>
+<title>Digits of π from Elastic Collisions</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
@@ -296,7 +296,7 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
-      <label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+      <label id="ht-ctl" class="shell-btn" title="Hide Text — hides velocity arrows, wall/meter labels, and slider hints">
         <input type="checkbox" id="ht-toggle"> Hide Text
       </label>
     </div>
@@ -325,10 +325,15 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
      DOM items:    add class "ht-hide" to the element.
      Canvas items: wrap the draw call in  if(!HT()){ ... }
      Keep this list current when registering items:
-     (empty — nothing registered yet)
+     - #count-pi (⌊π·10ᴺ⌋ readout under collisions)
+     - hint under Mass exponent N select
+     - hint under Heavy block initial speed slider
+     - canvas: immovable wall label
+     - canvas: v₁ / v₂ arrows + speed labels
+     - canvas: ground meter labels (0 m, 2 m, …)
 -->
 <script>
-/* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
+/* Hide Text toggle — hides .ht-hide DOM nodes and gates HT() canvas labels. */
 (function(){
   var shell=document.getElementById('shell');
   var box=document.getElementById('ht-toggle');
@@ -353,7 +358,7 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
 
   <main class="shell-hero">
     <div class="plot-box">
-      <div class="plot-title">Apparatus — side view</div>
+      <div class="plot-title">Side view</div>
       <div class="plot-tr-stack">
         <div class="legend">
           <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span><span id="legend-m1">Light block m₁ = 1 kg</span></div>
@@ -362,7 +367,7 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
         <div id="count-badge" class="count-badge">
           <div class="count-label">Collisions</div>
           <div class="count-value" id="count-value">0</div>
-          <div class="count-pi" id="count-pi">&nbsp;</div>
+          <div class="count-pi ht-hide" id="count-pi">&nbsp;</div>
         </div>
       </div>
       <div id="halt-banner" class="halt-banner">Halted — heavy block is escaping. No further collision is possible.</div>
@@ -443,7 +448,7 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
               <option value="2">N = 2  →  m₂ = 10 000 kg</option>
               <option value="3">N = 3  →  m₂ = 1 000 000 kg</option>
             </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">Selecting an N resets the scene immediately.</div>
+            <div class="ht-hide" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">Selecting an N resets the scene immediately.</div>
           </div>
           <div class="ctrl-box ctrl-box--slider">
             <div class="ctrl-box-head">
@@ -454,7 +459,7 @@ body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;ba
               <input type="range" id="v0-slider" min="0.2" max="2" step="0.05" value="1">
             </div>
             <div class="control-range"><span>0.20 m/s</span><span>2.00 m/s</span></div>
-            <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Applies before a run starts (or on next <strong>↻ Reset</strong>). The collision count is independent of v₀.</div>
+            <div class="ht-hide" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Applies before a run starts (or on next <strong>↻ Reset</strong>). The collision count is independent of v₀.</div>
           </div>
         </div>
       </div>
@@ -837,18 +842,27 @@ const Shell = (function(){
     return (v1 >= 0) && (v2 >= v1);
   }
 
-  function step(simSeconds){
+  function markCollisionsDone(){
     if (halted) return;
+    halted = true;
+    lastEventText = 'escaping';
+    // Keep animating — blocks continue at constant velocity. Banner stays hidden.
+  }
+
+  function step(simSeconds){
+    // After the final collision, keep free-flight animation running.
+    if (isTerminallyDone()) {
+      markCollisionsDone();
+      advance(simSeconds);
+      return;
+    }
     let remaining = simSeconds;
     let events = 0;
     const cap = maxEventsPerFrame();
     while (remaining > 0 && events < cap) {
       if (isTerminallyDone()) {
+        markCollisionsDone();
         advance(remaining);
-        halted = true;
-        lastEventText = 'halted';
-        document.getElementById('halt-banner').classList.add('show');
-        Shell.setPlaying(false);   // FIX: return Play button to ▶ instead of idling as ⏸ Pause
         break;
       }
       const ev = nextEvent();
@@ -940,16 +954,20 @@ const Shell = (function(){
       ctx.lineTo(wallX - 2, y - 8);
       ctx.stroke();
     }
-    ctx.fillStyle = muted;
-    ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');
-    ctx.textAlign = 'left';
-    ctx.fillText('immovable wall', wallX + 6, floorY - 200);
+    if (!HT()) {
+      ctx.fillStyle = muted;
+      ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');
+      ctx.textAlign = 'left';
+      ctx.fillText('immovable wall', wallX + 6, floorY - 200);
+    }
 
     drawBlock(x1, W_LIGHT, m1, '#60a5fa', 'm₁', floorY, 60);
     drawBlock(x2, W_HEAVY, m2, '#f472b6', 'm₂', floorY, 120);
 
-    drawVelocityArrow(x1, v1, floorY - 60 - 20, '#60a5fa', 'v₁');
-    drawVelocityArrow(x2, v2, floorY - 120 - 20, '#f472b6', 'v₂');
+    if (!HT()) {
+      drawVelocityArrow(x1, v1, floorY - 60 - 20, '#60a5fa', 'v₁');
+      drawVelocityArrow(x2, v2, floorY - 120 - 20, '#f472b6', 'v₂');
+    }
 
     ctx.fillStyle = muted;
     ctx.font = '12px ' + (cssVar('--font-nums') || 'monospace');
@@ -961,7 +979,7 @@ const Shell = (function(){
       ctx.moveTo(sx, floorY);
       ctx.lineTo(sx, floorY + 4);
       ctx.stroke();
-      ctx.fillText(m + ' m', sx, floorY + 20);
+      if (!HT()) ctx.fillText(m + ' m', sx, floorY + 20);
     }
   }
 
@@ -1076,11 +1094,11 @@ const Shell = (function(){
     if (keEl) keEl.textContent = (ke < 1e4 ? ke.toFixed(3) : Math.round(ke).toLocaleString('en-US')) + ' J';
     const evEl = document.getElementById('stat-event');
     if (evEl) evEl.textContent = lastEventText;
-    const status = halted ? 'halted' : (Shell.playing ? 'running' : 'paused');
+    const status = Shell.playing ? 'running' : (halted ? 'done' : 'paused');
     const st = document.getElementById('stat-status');
     if (st) {
       st.textContent = status;
-      st.style.color = halted ? '#6ee7b7' : (Shell.playing ? 'var(--accent)' : 'var(--muted)');
+      st.style.color = Shell.playing ? 'var(--accent)' : (halted ? '#6ee7b7' : 'var(--muted)');
     }
     document.getElementById('v0-val').textContent = v0.toFixed(2);
   }
@@ -1225,10 +1243,15 @@ const Shell = (function(){
     Shell.setPlayLocked(gated);
     if (gated) Shell.setPlaying(false);
 
-    // Expand Live State panel when we reach Step 2 (first observation).
-    if (stepIdx >= 1) {
-      const p = document.getElementById('panel-livestate');
-      if (p) p.classList.remove('collapsed');
+    // Expand Live State panel when we reach Step 2 (first observation),
+    // but keep it minimized in lecture display mode.
+    const p = document.getElementById('panel-livestate');
+    if (p) {
+      if (document.getElementById('shell').classList.contains('lecture-mode')) {
+        p.classList.add('collapsed');
+      } else if (stepIdx >= 1) {
+        p.classList.remove('collapsed');
+      }
     }
     // Once past step 3 gate, expected is revealed anyway
     if (stepIdx >= 3) {
@@ -1272,17 +1295,14 @@ const Shell = (function(){
     onStep(i){ applyStepScene(i); }
   });
 
-  // FIX: pressing ▶ Play after a halt restarts a fresh run instead of doing nothing.
-  document.getElementById('shell-play').addEventListener('click', () => {
-    if (halted && !Shell.playing) { resetState(); draw(); updateReadouts(); updateBadge(); }
-  }, true);
-
   // Entering Lecture mode = the old "skip" affordance: reveal Expected + unlock Play.
   // (Shell's own lecture handler runs first, so the class reflects the NEW state here.)
   document.getElementById('shell-lecture').addEventListener('click', ()=>{
     if (!document.getElementById('shell').classList.contains('lecture-mode')) return;
     step3Committed = true;
     Shell.setPlayLocked(false);
+    const live = document.getElementById('panel-livestate');
+    if (live) live.classList.add('collapsed');
     updateReadouts();
     updateBadge();
   });
