@@ -109,6 +109,39 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
   position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;flex:1;min-height:0;width:100%;height:100%;}
+/* ---- in-place arrow editor popover ---- */
+#arrow-pop{position:absolute;z-index:6;width:238px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:10px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);font-family:var(--font-sans);}
+#arrow-pop .pop-head{display:flex;align-items:center;gap:6px;margin-bottom:2px;}
+#arrow-pop .pop-title{flex:1;font-size:12px;font-weight:700;color:var(--text);}
+#arrow-pop .pop-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);
+  cursor:pointer;font:600 11px var(--font-sans);padding:2px 8px;}
+#arrow-pop .pop-btn:hover{color:var(--text);border-color:var(--accent);}
+#arrow-pop .pop-sec{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:8px 0 4px;}
+#arrow-pop .chip-row{display:flex;flex-wrap:wrap;gap:4px;}
+#arrow-pop .chip{border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);
+  font-size:11px;padding:3px 8px;cursor:pointer;line-height:1.2;}
+#arrow-pop .chip:hover{border-color:var(--accent);}
+#arrow-pop .chip.active{border-color:var(--accent);color:var(--accent);font-weight:700;}
+#arrow-pop .chip .sym{font-family:var(--font-nums);font-weight:700;margin-right:3px;}
+#arrow-pop .pop-nums{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;color:var(--muted);}
+#arrow-pop .pop-nums input{width:74px;background:var(--ctrl-bg);border:1px solid var(--ctrl-border);
+  border-radius:5px;color:var(--text);font:600 12px var(--font-nums);padding:3px 4px 3px 7px;box-sizing:border-box;}
+#arrow-pop #pop-agent{width:100%;margin-top:6px;background:var(--ctrl-bg);border:1px solid var(--ctrl-border);
+  border-radius:5px;color:var(--text);font:600 12px var(--font-sans);padding:4px 7px;box-sizing:border-box;}
+#arrow-pop #pop-agent.invalid{border-color:#f87171;}
+/* ---- compact sidebar arrow rows ---- */
+.arrow-row{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid var(--border);
+  border-radius:7px;margin-bottom:6px;cursor:pointer;background:var(--surface);}
+.arrow-row:hover{border-color:var(--accent);}
+.arrow-row.selected{border-color:var(--accent);}
+.arrow-row.invalid{border-color:#f87171;}
+.arrow-row .arrow-sym{font-family:var(--font-nums);font-weight:700;font-size:12px;color:var(--text);}
+.arrow-row .arrow-agent{flex:1;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.arrow-row .arrow-agent.missing{color:#f87171;font-weight:600;}
+.arrow-row .arrow-nums{font-family:var(--font-nums);font-size:11px;color:var(--text);white-space:nowrap;}
+.arrow-row .arrow-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;}
+.arrow-row .arrow-del:hover{color:#f87171;}
 .hero-hint{position:absolute;bottom:12px;left:16px;font-size:12px;color:#a9b8c4;
   background:rgba(6,14,17,.65);padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.28);
   z-index:2;pointer-events:none;letter-spacing:.02em;}
@@ -338,10 +371,12 @@ body.light-theme .mini-legend{background:rgba(248,250,252,.78);}
     <div class="plot-box">
       <div class="plot-title">Scene <span class="plot-inline" id="scene-title">— block on table (rest)</span></div>
       <div class="mini-legend" id="mini-legend">
-        <div><span style="color:#60a5fa;">↑</span> F<sub>g</sub> gravity · <span style="color:#34d399;">↑</span> N normal · <span style="color:#fbbf24;">↑</span> T tension</div>
-        <div><span style="color:#f472b6;">↑</span> f friction · <span style="color:#a78bfa;">↑</span> F<sub>app</sub> applied · <span style="color:#f87171;">↑</span> F<sub>cf</sub> / F<sub>cor</sub> fictitious</div>
+        <div><span style="color:#60a5fa;">↑</span> F<sub>g</sub> gravity · <span style="color:#34d399;">↑</span> N normal</div>
+        <div><span style="color:#fbbf24;">↑</span> T tension · <span style="color:#f472b6;">↑</span> f friction</div>
+        <div><span style="color:#a78bfa;">↑</span> F<sub>app</sub> applied · <span style="color:#f87171;">↑</span> F<sub>cf</sub> / F<sub>cor</sub> fictitious</div>
       </div>
       <canvas id="stage"></canvas>
+      <div id="arrow-pop" style="display:none;"></div>
       <div class="hero-hint">drag outward from the dashed body to draw a force arrow</div>
     </div>
   </main>
@@ -365,7 +400,7 @@ body.light-theme .mini-legend{background:rgba(248,250,252,.78);}
 
         <div class="inq-step" data-gate>
           <h4>2 · Build the FBD</h4>
-          <p><strong>Click and drag from the body</strong> to place a force arrow (or use <strong>＋ Add force arrow</strong> in the Force arrows panel). Edit type, agent, magnitude, and angle in the sidebar cards. Every arrow needs an <strong>agent</strong> before the diagram can be checked.</p>
+          <p><strong>Click and drag from the body</strong> to place a force arrow (or use <strong>＋ Add force arrow</strong> in the Force arrows panel). An editor pops up at the arrow — pick its <strong>type</strong> and <strong>agent</strong> with one click each. Every arrow needs an agent before the diagram can be checked.</p>
           <p>For this block-on-table you should end up with <strong>two</strong> real forces (gravity from Earth ↓, and normal from the table ↑). Add them now, then press the button:</p>
           <button class="choice" data-done>Done — I've added my two arrows</button>
           <div class="predict-eval" id="eval-build" style="display:none;"></div>
@@ -984,7 +1019,8 @@ function drawArrows(){
       ctx.save();
       ctx.fillStyle='rgba(52,211,153,0.9)';
       ctx.font='bold 13px var(--font-sans)';
-      ctx.fillText('F_net ≈ 0 · a = 0', x+state.bodySize/2+14, y-state.bodySize/2-4);
+      fillSubText([['F',0],['net',1],[' ≈ 0 · a = 0',0]], x+state.bodySize/2+14, y-state.bodySize/2-4,
+        'bold 13px var(--font-sans)', 'bold 10px var(--font-sans)');
       ctx.restore();
     }
   }
@@ -1004,7 +1040,16 @@ function pxPerN(){
 // Individual arrows are length-clamped so an extreme typed magnitude can't run
 // off-canvas now that big arrows no longer compress the scale (labels always
 // show the true value in N).
-const ARROW_LEN_MAX = 210;
+const ARROW_LEN_MAX = 229.6;   // 90px·(50/19.6): puts the m=2 block cap at 50.0 N (scales with scenario)
+// Magnitudes are capped at exactly the value whose drawn length hits the
+// visual clamp — so the number can never keep climbing while the arrow has
+// stopped growing. Scenario-dependent (≈45 N for the m=2 block; scales with
+// mass/ω via the solution-anchored pxPerN).
+function magMax(){ return ARROW_LEN_MAX / pxPerN(); }
+function clampArrowMags(){
+  const mx = magMax();
+  for(const a of state.arrows) if(a.mag > mx) a.mag = mx;
+}
 
 function drawArrow(x0,y0,f, idx){
   const scale = pxPerN();
@@ -1033,12 +1078,11 @@ function drawArrow(x0,y0,f, idx){
   ctx.lineTo(x1-ah*Math.cos(ang-Math.PI/7), y1-ah*Math.sin(ang-Math.PI/7));
   ctx.lineTo(x1-ah*Math.cos(ang+Math.PI/7), y1-ah*Math.sin(ang+Math.PI/7));
   ctx.closePath(); ctx.fill();
-  const symbol = symbolFor(f.type);
-  const labelText = hasAgent
-    ? (symbol + ' — ' + f.agent.trim())
-    : (symbol + '  (needs agent!)');
-  ctx.font='bold 12px var(--font-sans)';
-  const tw=ctx.measureText(labelText).width;
+  const LBL_MAIN='bold 12px var(--font-sans)', LBL_SUB='bold 9px var(--font-sans)';
+  const segs = symbolSegs(f.type).concat(hasAgent
+    ? [[' — ' + f.agent.trim(), 0]]
+    : [['  (needs agent!)', 0]]);
+  const tw=subTextWidth(segs, LBL_MAIN, LBL_SUB);
   let lx = x1 + Math.cos(ang)*10;
   let ly = y1 + Math.sin(ang)*10;
   if(lx+tw+4>W) lx = W-tw-6;
@@ -1048,7 +1092,7 @@ function drawArrow(x0,y0,f, idx){
   ctx.fillStyle='rgba(6,14,17,0.75)';
   ctx.fillRect(lx-3, ly-11, tw+6, 15);
   ctx.fillStyle=color;
-  ctx.fillText(labelText, lx, ly);
+  fillSubText(segs, lx, ly, LBL_MAIN, LBL_SUB);
   ctx.font='11px var(--font-nums)';
   const magTxt = f.mag.toFixed(1)+' N';
   const mw=ctx.measureText(magTxt).width;
@@ -1078,12 +1122,12 @@ function drawNetArrow(x0,y0,net){
   ctx.lineTo(x1-ah*Math.cos(ang-Math.PI/7), y1-ah*Math.sin(ang-Math.PI/7));
   ctx.lineTo(x1-ah*Math.cos(ang+Math.PI/7), y1-ah*Math.sin(ang+Math.PI/7));
   ctx.closePath(); ctx.fill();
-  ctx.font='bold 12px var(--font-sans)';
   // Direction using physics convention (0°=right, 90°=up)
   const dirDeg = Math.atan2(net.fy, net.fx)*180/Math.PI;
   const a = mag/state.mass;
-  const txt = 'F_net = '+mag.toFixed(1)+' N @ '+dirDeg.toFixed(0)+'° · a = '+a.toFixed(2)+' m/s²';
-  const tw=ctx.measureText(txt).width;
+  const NET_MAIN='bold 12px var(--font-sans)', NET_SUB='bold 9px var(--font-sans)';
+  const segs=[['F',0],['net',1],[' = '+mag.toFixed(1)+' N @ '+dirDeg.toFixed(0)+'° · a = '+a.toFixed(2)+' m/s²',0]];
+  const tw=subTextWidth(segs, NET_MAIN, NET_SUB);
   let lx=x1+Math.cos(ang)*8, ly=y1+Math.sin(ang)*8;
   if(lx+tw>W-4) lx=W-tw-6;
   if(lx<4) lx=6;
@@ -1092,7 +1136,7 @@ function drawNetArrow(x0,y0,net){
   ctx.fillStyle='rgba(6,14,17,0.85)';
   ctx.fillRect(lx-3,ly-11,tw+6,14);
   ctx.fillStyle='#ffffff';
-  ctx.fillText(txt, lx, ly);
+  fillSubText(segs, lx, ly, NET_MAIN, NET_SUB);
   ctx.restore();
 }
 
@@ -1101,6 +1145,35 @@ function symbolFor(type){
     gravity:'F_g', normal:'N', tension:'T', friction:'f',
     applied:'F_app', centrifugal:'F_cf', coriolis:'F_cor', other:'F'
   }[type] || 'F';
+}
+// HTML variant with true subscripts — for DOM contexts (popover chips, sidebar
+// rows); canvas text keeps the plain ASCII form above.
+function symbolHtml(type){
+  return {
+    gravity:'F<sub>g</sub>', normal:'N', tension:'T', friction:'f',
+    applied:'F<sub>app</sub>', centrifugal:'F<sub>cf</sub>', coriolis:'F<sub>cor</sub>', other:'F'
+  }[type] || 'F';
+}
+// Canvas variant: fillText can't render <sub>, so subscripts are drawn as a
+// second pass in a smaller font, baseline-lowered. Segments: [text, isSub].
+function symbolSegs(type){
+  return {
+    gravity:[['F',0],['g',1]], normal:[['N',0]], tension:[['T',0]], friction:[['f',0]],
+    applied:[['F',0],['app',1]], centrifugal:[['F',0],['cf',1]], coriolis:[['F',0],['cor',1]], other:[['F',0]]
+  }[type] || [['F',0]];
+}
+function subTextWidth(segs, mainFont, subFont){
+  let w=0;
+  for(const [t,sub] of segs){ ctx.font = sub?subFont:mainFont; w += ctx.measureText(t).width; }
+  return w;
+}
+function fillSubText(segs, x, y, mainFont, subFont){
+  let cx=x;
+  for(const [t,sub] of segs){
+    ctx.font = sub?subFont:mainFont;
+    ctx.fillText(t, cx, y + (sub?3:0));
+    cx += ctx.measureText(t).width;
+  }
 }
 
 function netForce(){
@@ -1135,6 +1208,147 @@ function draw(){
   drawArrows();
 }
 
+/* ---------- angle snapping ---------- */
+// A rough gesture should produce an exact diagram: while dragging, the angle
+// clicks to the nearest 15° — plus, on the incline, the slope-aligned axes
+// (up/down-slope, perpendicular in/out), which a 15° grid can't hit.
+// Hold Shift for a free, continuous angle.
+function snapAngle(deg, free){
+  if(free) return deg;
+  const targets=[];
+  for(let a=-180;a<=180;a+=15) targets.push(a);
+  if(state.scenario==='incline'){
+    const t=state.angle;
+    targets.push(90-t, -90-t, 180-t, -t);
+  }
+  let best=deg, bd=1e9;
+  for(const tg of targets){
+    const d=Math.abs(((deg-tg+540)%360)-180);
+    if(d<bd){ bd=d; best=tg; }
+  }
+  return ((best+540)%360)-180;
+}
+
+/* ---------- in-place arrow editor (popover at the arrow tip) ---------- */
+// Scenario-aware agent suggestions — aligned with the grader's keyword match.
+const AGENT_CHIPS = {
+  block:    ['Earth','table'],
+  stack:    ['Earth','lower box','table'],
+  incline:  ['Earth','incline'],
+  twobody:  ['Earth','floor','box A'],
+  pendulum: ['Earth','string'],
+  orbit:    ['central body','(fictitious — rotating frame)']
+};
+const popEl = document.getElementById('arrow-pop');
+let popArrowId = null;
+
+function popArrow(){ return state.arrows.find(a=>a.id===popArrowId) || null; }
+
+function closeArrowPop(){
+  popArrowId = null;
+  popEl.style.display='none';
+}
+
+function positionArrowPop(a){
+  const boxEl = canvas.parentElement;
+  const scale = pxPerN();
+  const len = Math.min(ARROW_LEN_MAX, Math.max(6, a.mag*scale));
+  const th = a.angleDeg*Math.PI/180;
+  const cr = canvas.getBoundingClientRect(), br = boxEl.getBoundingClientRect();
+  const sx = cr.width/canvas.width, sy = cr.height/canvas.height;
+  const tipX = (cr.left-br.left) + (state.bodyPos.x + Math.cos(th)*len)*sx;
+  const tipY = (cr.top -br.top ) + (state.bodyPos.y - Math.sin(th)*len)*sy;
+  const pw = popEl.offsetWidth || 238, ph = popEl.offsetHeight || 200;
+  let left = tipX + 16, top = tipY - ph/2;
+  if(left + pw > br.width - 8) left = tipX - pw - 16;
+  left = Math.max(8, Math.min(left, br.width - pw - 8));
+  top  = Math.max(8, Math.min(top,  br.height - ph - 8));
+  popEl.style.left = left+'px';
+  popEl.style.top  = top +'px';
+}
+
+function renderArrowPop(){
+  const a = popArrow();
+  if(!a){ closeArrowPop(); return; }
+  const chips = AGENT_CHIPS[state.scenario] || ['Earth'];
+  const agentKnown = chips.includes(a.agent);
+  const showInput = (!agentKnown && a.agent) || a._agentOther;
+  popEl.innerHTML =
+    '<div class="pop-head">'+
+      '<span class="arrow-dot" style="background:'+(COLORS[a.type]||'#f87171')+'"></span>'+
+      '<span class="pop-title">'+escHtml(prettyType(a.type))+'</span>'+
+      '<button class="pop-btn" id="pop-del" title="delete arrow">✕</button>'+
+      '<button class="pop-btn" id="pop-close" title="done">✓ done</button>'+
+    '</div>'+
+    '<div class="pop-sec">type</div>'+
+    '<div class="chip-row">'+TYPE_OPTIONS.map(([k])=>
+      '<button class="chip'+(k===a.type?' active':'')+'" data-type="'+k+'">'+
+      '<span class="sym" style="color:'+(COLORS[k]||'#f87171')+'">'+symbolHtml(k)+'</span>'+(k==='coriolis'?'Coriolis':k)+'</button>').join('')+'</div>'+
+    '<div class="pop-sec">agent — what exerts it</div>'+
+    '<div class="chip-row">'+chips.map(c=>
+      '<button class="chip'+(a.agent===c?' active':'')+'" data-agent="'+escHtml(c)+'">'+escHtml(c)+'</button>').join('')+
+      '<button class="chip'+(showInput?' active':'')+'" data-agent-other>other…</button></div>'+
+    (showInput ? '<input id="pop-agent" type="text" placeholder="e.g. rope, hand" value="'+escHtml(agentKnown?'':a.agent)+'" class="'+((!a.agent||!a.agent.trim())?'invalid':'')+'">' : '')+
+    '<div class="pop-nums">'+
+      '<label>|F|</label><input id="pop-mag" type="number" step="0.1" min="0" max="'+magMax().toFixed(1)+'" value="'+a.mag.toFixed(1)+'"> N'+
+      '<label style="margin-left:6px;">θ</label><input id="pop-ang" type="number" step="1" value="'+Math.round(a.angleDeg)+'"> °'+
+    '</div>';
+  positionArrowPop(a);
+
+  popEl.querySelector('#pop-close').addEventListener('click', closeArrowPop);
+  popEl.querySelector('#pop-del').addEventListener('click', ()=>{
+    state.arrows = state.arrows.filter(x=>x.id!==a.id);
+    if(state.selectedId===a.id) state.selectedId=null;
+    if(state.arrows.length===0) document.getElementById('mini-legend').style.display='none';
+    closeArrowPop();
+    invalidateCommit(); syncPanels(); draw();
+  });
+  popEl.querySelectorAll('.chip[data-type]').forEach(ch=>ch.addEventListener('click', ()=>{
+    a.type = ch.getAttribute('data-type');
+    if(!a.agent || !a.agent.trim()) a.agent = SUGGEST_AGENT[a.type] || '';
+    invalidateCommit(); syncPanels(); draw(); renderArrowPop();
+  }));
+  popEl.querySelectorAll('.chip[data-agent]').forEach(ch=>ch.addEventListener('click', ()=>{
+    a.agent = ch.getAttribute('data-agent'); a._agentOther=false;
+    invalidateCommit(); syncPanels(); draw(); renderArrowPop();
+  }));
+  const otherChip = popEl.querySelector('.chip[data-agent-other]');
+  if(otherChip) otherChip.addEventListener('click', ()=>{
+    a._agentOther=true; a.agent='';
+    invalidateCommit(); syncPanels(); draw(); renderArrowPop();
+    const inp=popEl.querySelector('#pop-agent'); if(inp) inp.focus();
+  });
+  const agentInp = popEl.querySelector('#pop-agent');
+  if(agentInp) agentInp.addEventListener('input', ()=>{
+    a.agent = agentInp.value;
+    agentInp.classList.toggle('invalid', !a.agent.trim());
+    invalidateCommit(); syncPanels(); draw();
+  });
+  popEl.querySelector('#pop-mag').addEventListener('input', e=>{
+    let v=parseFloat(e.target.value);
+    if(!isNaN(v) && v>=0){
+      const mx=magMax();
+      if(v>mx){ v=mx; e.target.value=mx.toFixed(1); }  // typed value clamps to the visual cap
+      a.mag=v; invalidateCommit(); syncPanels(); draw(); positionArrowPop(a);
+    }
+  });
+  popEl.querySelector('#pop-ang').addEventListener('input', e=>{
+    const v=parseFloat(e.target.value);
+    if(!isNaN(v)){ a.angleDeg=v; invalidateCommit(); syncPanels(); draw(); positionArrowPop(a); }
+  });
+}
+
+function openArrowPop(id){
+  if(state.committed) return;
+  popArrowId = id;
+  state.selectedId = id;
+  renderArrowsList();
+  popEl.style.display='block';
+  renderArrowPop();
+  draw();
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && popArrowId!==null) closeArrowPop(); });
+
 /* ---------- interaction: drag from body → add arrow; drag a tip → edit ---------- */
 let drag=null;      // creating a new arrow
 let editDrag=null;  // re-aiming an existing arrow by its tip
@@ -1152,22 +1366,21 @@ function arrowTipAt(mx,my){
   }
   return null;
 }
-// live-sync one arrow's sidebar card while its tip is dragged (full re-render
-// waits for mouseup — rebuilding the list mid-drag would destroy the inputs)
+// live-sync one arrow's sidebar row while its tip is dragged (full re-render
+// waits for mouseup)
 function liveUpdateArrowCard(a){
-  const magInp=document.querySelector('#arrows-list input[data-f="mag"][data-id="'+a.id+'"]');
-  const angInp=document.querySelector('#arrows-list input[data-f="ang"][data-id="'+a.id+'"]');
-  if(magInp) magInp.value=a.mag.toFixed(1);
-  if(angInp) angInp.value=Math.round(a.angleDeg);
+  const nums=document.querySelector('#arrows-list [data-nums="'+a.id+'"]');
+  if(nums) nums.textContent = a.mag.toFixed(1)+' N · '+Math.round(a.angleDeg)+'°';
 }
 
 canvas.addEventListener('mousedown', e=>{
   if(state.committed) return;
+  closeArrowPop();   // pressing the canvas dismisses the editor
   const r=canvas.getBoundingClientRect();
   const mx=e.clientX-r.left, my=e.clientY-r.top;
   const hit = arrowTipAt(mx,my);
   if(hit){
-    editDrag = {id:hit.id};
+    editDrag = {id:hit.id, sx:mx, sy:my, moved:false};
     if(state.selectedId!==hit.id){ state.selectedId=hit.id; renderArrowsList(); }
     draw();
     e.preventDefault();
@@ -1185,11 +1398,13 @@ canvas.addEventListener('mousemove', e=>{
   if(editDrag){
     const r=canvas.getBoundingClientRect();
     const mx=e.clientX-r.left, my=e.clientY-r.top;
+    if(!editDrag.moved && Math.hypot(mx-editDrag.sx, my-editDrag.sy)>4) editDrag.moved=true;
+    if(!editDrag.moved) return;   // still a click, not a re-aim
     const a=state.arrows.find(x=>x.id===editDrag.id);
     if(a){
       const dx=mx-state.bodyPos.x, dy=my-state.bodyPos.y;
-      a.mag = Math.max(0.1, Math.hypot(dx,dy)/pxPerN());
-      a.angleDeg = Math.atan2(-dy,dx)*180/Math.PI;
+      a.mag = Math.min(magMax(), Math.max(0.1, Math.hypot(dx,dy)/pxPerN()));
+      a.angleDeg = snapAngle(Math.atan2(-dy,dx)*180/Math.PI, e.shiftKey);
       liveUpdateArrowCard(a);
       draw();
     }
@@ -1207,32 +1422,42 @@ canvas.addEventListener('mousemove', e=>{
   drag.curX=e.clientX-r.left; drag.curY=e.clientY-r.top;
   draw();
   const dx=drag.curX-drag.startX, dy=drag.curY-drag.startY;
-  const th=Math.atan2(-dy,dx);
-  const mag=Math.hypot(dx,dy)/pxPerN();
+  const rawMag=Math.hypot(dx,dy)/pxPerN();
+  const mag=Math.min(magMax(), rawMag);
+  const atMax = rawMag > mag + 1e-9;
+  const thDeg=snapAngle(Math.atan2(-dy,dx)*180/Math.PI, e.shiftKey);
+  drag.snapDeg=thDeg; drag.snapMag=mag;   // used on release
+  // ghost preview along the SNAPPED direction, capped like the real arrow
+  const lenPx=Math.min(Math.hypot(dx,dy), ARROW_LEN_MAX);
+  const ex=drag.startX+Math.cos(thDeg*Math.PI/180)*lenPx;
+  const ey=drag.startY-Math.sin(thDeg*Math.PI/180)*lenPx;
   ctx.save();
   ctx.strokeStyle='rgba(203,213,225,0.6)'; ctx.setLineDash([5,4]); ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(drag.startX,drag.startY); ctx.lineTo(drag.curX,drag.curY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(drag.startX,drag.startY); ctx.lineTo(ex,ey); ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle='rgba(203,213,225,0.85)'; ctx.font='12px var(--font-nums)';
-  ctx.fillText('|F| ≈ '+mag.toFixed(1)+' N, θ = '+(th*180/Math.PI).toFixed(0)+'°', drag.curX+6, drag.curY-6);
+  ctx.fillText('|F| ≈ '+mag.toFixed(1)+' N'+(atMax?' (max)':'')+', θ = '+thDeg.toFixed(0)+'° (⇧ = free angle)', ex+6, ey-6);
   ctx.restore();
 });
 function finishDrag(){
   if(editDrag){
+    const id=editDrag.id;
     editDrag=null;
-    renderArrowsList();   // final values into the sidebar card
+    renderArrowsList();
     syncPanels(); draw();
+    openArrowPop(id);   // plain click opens the editor; a re-aim reopens it at the new tip
     return;
   }
   if(!drag) return;
   const dx=drag.curX-drag.startX, dy=drag.curY-drag.startY;
-  const mag = Math.hypot(dx,dy)/pxPerN();
-  const th = Math.atan2(-dy,dx)*180/Math.PI;
+  const mag = drag.snapMag !== undefined ? drag.snapMag : Math.hypot(dx,dy)/pxPerN();
+  const th  = drag.snapDeg !== undefined ? drag.snapDeg : Math.atan2(-dy,dx)*180/Math.PI;
   drag=null;
   if(mag > 0.15){
     // Type 'other' with a blank agent: the student must classify what they
     // drew — a drag upward must not appear pre-labelled as gravity.
     addArrow({type:'other', agent:'', mag, angleDeg:th});
+    openArrowPop(state.arrows[state.arrows.length-1].id);
   } else {
     draw();
   }
@@ -1287,6 +1512,7 @@ function addArrow(preset){
 }
 
 function renderArrowsList(){
+  // Compact summary rows — all editing happens in the on-canvas popover.
   const arrowsListEl = document.getElementById('arrows-list');
   const hintEmptyEl = document.getElementById('hint-empty');
   if(!arrowsListEl) return;
@@ -1294,80 +1520,30 @@ function renderArrowsList(){
   if(hintEmptyEl) hintEmptyEl.style.display = state.arrows.length===0 ? 'block' : 'none';
   state.arrows.forEach(a=>{
     const color = COLORS[a.type] || '#f87171';
-    const wrap = document.createElement('div');
-    wrap.className = 'arrow-editor' + (a.id===state.selectedId?' selected':'');
-    wrap.innerHTML =
-      '<div class="arrow-head">'+
-        '<span class="arrow-dot" style="background:'+color+'"></span>'+
-        '<span class="arrow-title">'+escHtml(prettyType(a.type))+' arrow</span>'+
-        '<button class="arrow-del" data-del="'+a.id+'" title="remove">✕</button>'+
-      '</div>'+
-      '<div class="field-row"><label>type</label>'+
-        '<select data-f="type" data-id="'+a.id+'">'+
-          TYPE_OPTIONS.map(([k,lab])=>'<option value="'+k+'"'+(k===a.type?' selected':'')+'>'+lab+'</option>').join('')+
-        '</select></div>'+
-      '<div class="field-row"><label>agent</label>'+
-        '<input type="text" data-f="agent" data-id="'+a.id+'" value="'+escHtml(a.agent||'')+'" placeholder="e.g. Earth, table, rope" class="'+((!a.agent||!a.agent.trim())?'invalid':'')+'"></div>'+
-      '<div class="field-row"><label>|F|</label>'+
-        '<input type="number" step="0.1" min="0" data-f="mag" data-id="'+a.id+'" value="'+a.mag.toFixed(1)+'">'+
-        '<span class="unit">N</span></div>'+
-      '<div class="field-row"><label>angle</label>'+
-        '<input type="number" step="1" data-f="ang" data-id="'+a.id+'" value="'+Math.round(a.angleDeg)+'">'+
-        '<span class="unit">°</span></div>';
-    wrap.addEventListener('click', (e)=>{
-      if(e.target.closest('input')||e.target.closest('select')||e.target.closest('button')) return;
-      state.selectedId = a.id; renderArrowsList(); draw();
+    const noAgent = !a.agent || !a.agent.trim();
+    const row = document.createElement('div');
+    row.className = 'arrow-row' + (a.id===state.selectedId?' selected':'') + (noAgent?' invalid':'');
+    row.setAttribute('data-row', a.id);
+    row.innerHTML =
+      '<span class="arrow-dot" style="background:'+color+'"></span>'+
+      '<span class="arrow-sym">'+symbolHtml(a.type)+'</span>'+
+      '<span class="arrow-agent'+(noAgent?' missing':'')+'">'+(noAgent?'needs agent!':escHtml(a.agent))+'</span>'+
+      '<span class="arrow-nums" data-nums="'+a.id+'">'+a.mag.toFixed(1)+' N · '+Math.round(a.angleDeg)+'°</span>'+
+      '<button class="arrow-del" data-del="'+a.id+'" title="remove">✕</button>';
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('button')) return;
+      openArrowPop(a.id);   // row click → in-place editor at the arrow
     });
-    arrowsListEl.appendChild(wrap);
+    arrowsListEl.appendChild(row);
   });
   arrowsListEl.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', e=>{
     const id = +e.currentTarget.getAttribute('data-del');
     state.arrows = state.arrows.filter(x=>x.id!==id);
     if(state.selectedId===id) state.selectedId=null;
+    if(popArrowId===id) closeArrowPop();
     if(state.arrows.length===0) document.getElementById('mini-legend').style.display='none';
     invalidateCommit();
     syncPanels(); draw();
-  }));
-  arrowsListEl.querySelectorAll('select[data-f="type"]').forEach(sel=>sel.addEventListener('change', e=>{
-    const id = +e.currentTarget.getAttribute('data-id');
-    const arr = state.arrows.find(x=>x.id===id);
-    if(arr){
-      arr.type = e.currentTarget.value;
-      if(!arr.agent || !arr.agent.trim()) arr.agent = SUGGEST_AGENT[arr.type] || '';
-      invalidateCommit();
-      syncPanels(); draw();
-    }
-  }));
-  arrowsListEl.querySelectorAll('input[data-f="agent"]').forEach(inp=>inp.addEventListener('input', e=>{
-    const id = +e.currentTarget.getAttribute('data-id');
-    const arr = state.arrows.find(x=>x.id===id);
-    if(arr){
-      arr.agent = e.currentTarget.value;
-      e.currentTarget.classList.toggle('invalid', !arr.agent.trim());
-      invalidateCommit();
-      draw();
-      updateArrowStats();
-    }
-  }));
-  arrowsListEl.querySelectorAll('input[data-f="mag"]').forEach(inp=>inp.addEventListener('input', e=>{
-    const id = +e.currentTarget.getAttribute('data-id');
-    const arr = state.arrows.find(x=>x.id===id);
-    if(arr){
-      arr.mag = Math.max(0, parseFloat(e.currentTarget.value)||0);
-      invalidateCommit();
-      draw();
-      updateArrowStats();
-    }
-  }));
-  arrowsListEl.querySelectorAll('input[data-f="ang"]').forEach(inp=>inp.addEventListener('input', e=>{
-    const id = +e.currentTarget.getAttribute('data-id');
-    const arr = state.arrows.find(x=>x.id===id);
-    if(arr){
-      arr.angleDeg = parseFloat(e.currentTarget.value)||0;
-      invalidateCommit();
-      draw();
-      updateArrowStats();
-    }
   }));
 }
 
@@ -1421,7 +1597,7 @@ sAngle.addEventListener('input',()=>{ state.angle=parseInt(sAngle.value); vAngle
 sOmega.addEventListener('input',()=>{ state.omega=parseFloat(sOmega.value); vOmega.textContent=state.omega.toFixed(1); invalidateCommit(); syncPanels(); draw(); });
 sFapp.addEventListener('input',()=>{ state.fapp=parseFloat(sFapp.value); vFapp.textContent=state.fapp.toFixed(1); invalidateCommit(); syncPanels(); draw(); });
 
-scenarioSel.addEventListener('change',()=>{ state.scenario=scenarioSel.value; state.arrows=[]; state.selectedId=null; invalidateCommit(); layoutBody(); syncPanels(); draw(); });
+scenarioSel.addEventListener('change',()=>{ state.scenario=scenarioSel.value; state.arrows=[]; state.selectedId=null; closeArrowPop(); invalidateCommit(); layoutBody(); syncPanels(); draw(); });
 
 gradeToggle.addEventListener('change',()=>{ setMode(gradeToggle.checked ? 'checked' : 'sandbox'); });
 function setMode(m){
@@ -1444,11 +1620,13 @@ function setFrame(f){
 document.getElementById('btn-clear').addEventListener('click',()=>{
   state.arrows=[]; state.selectedId=null; state.committed=false; state.simAnim=null; gradeBanner.style.display='none';
   document.getElementById('mini-legend').style.display='none';
+  closeArrowPop();
   syncPanels(); draw();
 });
 document.getElementById('add-arrow-btn').addEventListener('click', ()=>{
   if(state.committed) return;
   addArrow();
+  openArrowPop(state.arrows[state.arrows.length-1].id);
 });
 btnCommit.addEventListener('click',commitDiagram);
 
@@ -1468,6 +1646,7 @@ function commitDiagram(){
     return;
   }
   state.committed=true;
+  closeArrowPop();
   if(state.mode==='checked'){
     const grade=gradeDiagram();
     state.gradeOk = grade.ok;
@@ -1634,6 +1813,7 @@ function panelVis(step){
 
 function syncPanels(){
   const scn = SCENARIOS[state.scenario];
+  clampArrowMags();   // parameter changes can lower the cap; keep arrows within it
   sceneTitle.textContent = ' — '+ (state.mode==='sandbox'?'ungraded · ':'') + scn.name;
   btnCommit.textContent = state.mode==='checked' ? '✓ Check diagram' : 'Reveal net force';
   boxAngle.style.display  = scn.needsAngle ? '' : 'none';
@@ -1837,6 +2017,7 @@ function resetAll(){
   state.inquiryActive = (Shell.totalSteps>0) && !lecture && Shell.step < 4;
   gradeBanner.style.display='none';
   document.getElementById('mini-legend').style.display='none';
+  closeArrowPop();
   closeEditor();
   layoutBody();
   syncPanels();
