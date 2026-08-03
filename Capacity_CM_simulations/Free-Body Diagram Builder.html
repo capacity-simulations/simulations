@@ -1005,12 +1005,32 @@ function drawBody(){
   ctx.restore();
 }
 
+// Application point per force type: contact forces act at the interface, not
+// the centre of mass — normal/friction at the contact face, tension at the
+// string attachment, the two-body push at the touching side. Body forces
+// (gravity) and fictitious forces stay at the centre.
+function forceAnchor(type){
+  const {x,y}=state.bodyPos, h=state.bodySize/2, scn=state.scenario;
+  if(type==='normal' || type==='friction'){
+    if(scn==='incline'){
+      const t=state.angle*Math.PI/180;
+      // into-slope = minus the outward slope normal (sinθ, −cosθ)
+      return {x: x - h*Math.sin(t), y: y + h*Math.cos(t)};
+    }
+    if(scn==='block' || scn==='stack' || scn==='twobody') return {x, y: y + h};
+  }
+  if(type==='tension' && scn==='pendulum') return {x, y: y - h};
+  if(type==='applied' && scn==='twobody') return {x: x - h, y};
+  return {x, y};
+}
+
 function drawArrows(){
-  const {x,y}=state.bodyPos;
   for(let i=0;i<state.arrows.length;i++){
     const f=state.arrows[i];
-    drawArrow(x,y,f, i);
+    const p=forceAnchor(f.type);
+    drawArrow(p.x,p.y,f, i);
   }
+  const {x,y}=state.bodyPos;
   if(state.committed && state.gradeOk){
     const net = netForce();
     if(Math.hypot(net.fx,net.fy)>0.1){
@@ -1256,8 +1276,9 @@ function positionArrowPop(a){
   const th = a.angleDeg*Math.PI/180;
   const cr = canvas.getBoundingClientRect(), br = boxEl.getBoundingClientRect();
   const sx = cr.width/canvas.width, sy = cr.height/canvas.height;
-  const tipX = (cr.left-br.left) + (state.bodyPos.x + Math.cos(th)*len)*sx;
-  const tipY = (cr.top -br.top ) + (state.bodyPos.y - Math.sin(th)*len)*sy;
+  const anch = forceAnchor(a.type);
+  const tipX = (cr.left-br.left) + (anch.x + Math.cos(th)*len)*sx;
+  const tipY = (cr.top -br.top ) + (anch.y - Math.sin(th)*len)*sy;
   const pw = popEl.offsetWidth || 238, ph = popEl.offsetHeight || 200;
   let left = tipX + 16, top = tipY - ph/2;
   if(left + pw > br.width - 8) left = tipX - pw - 16;
@@ -1355,13 +1376,13 @@ let editDrag=null;  // re-aiming an existing arrow by its tip
 
 function arrowTipAt(mx,my){
   // topmost (last-drawn) arrow whose tip is within grab range
-  const {x,y}=state.bodyPos;
   const scale=pxPerN();
   for(let i=state.arrows.length-1;i>=0;i--){
     const f=state.arrows[i];
+    const p=forceAnchor(f.type);
     const len=Math.min(ARROW_LEN_MAX, Math.max(6, f.mag*scale));
     const th=f.angleDeg*Math.PI/180;
-    const tx=x+Math.cos(th)*len, ty=y-Math.sin(th)*len;
+    const tx=p.x+Math.cos(th)*len, ty=p.y-Math.sin(th)*len;
     if(Math.hypot(mx-tx,my-ty)<=14) return f;
   }
   return null;
@@ -1402,7 +1423,8 @@ canvas.addEventListener('mousemove', e=>{
     if(!editDrag.moved) return;   // still a click, not a re-aim
     const a=state.arrows.find(x=>x.id===editDrag.id);
     if(a){
-      const dx=mx-state.bodyPos.x, dy=my-state.bodyPos.y;
+      const anch=forceAnchor(a.type);
+      const dx=mx-anch.x, dy=my-anch.y;
       a.mag = Math.min(magMax(), Math.max(0.1, Math.hypot(dx,dy)/pxPerN()));
       a.angleDeg = snapAngle(Math.atan2(-dy,dx)*180/Math.PI, e.shiftKey);
       liveUpdateArrowCard(a);

@@ -789,6 +789,7 @@ const G=9.81;               // m/s²
 const K_AR=2.0;             // N·s/m — Aristotle "mobility" constant, v = F/k
 const F_PAIR=5.0;           // N — scene ③ pair force (Newton mode)
 const T_PRE=0.4, T_CT=0.8;  // s — scene ③ pre-launch delay, contact duration
+const T_LOOP=10;            // s — auto-restart each scene so the run loops
 const DEFAULTS={1:{F:0,m:1},2:{F:4,m:1},3:{mA:4,mB:1}};
 
 /* ---------- state ---------- */
@@ -867,6 +868,7 @@ function step(dt){
   S.t += dt;
   if(scene===1 && Math.abs(p.F)>1e-9) S.disturbed=true;
   // No strobe ghosts for the car (scenes ①–②) — outlines looked noisy.
+  if(S.t >= T_LOOP) S = makeS12(scene);  // loop: reopen at t = 0, keep current F/m
 }
 function step3(dt){
   if(!S.played){ S.played=true; }
@@ -880,6 +882,10 @@ function step3(dt){
     S.xA += S.vA*seg + 0.5*aA*seg*seg; S.vA += aA*seg;
     S.xB += S.vB*seg + 0.5*aB*seg*seg; S.vB += aB*seg;
     S.t += seg; rem -= seg;
+  }
+  if(S.t >= T_LOOP){               // loop: reopen pair sequence, keep current masses
+    S = makeS3();
+    return;
   }
   const inC = S.t>=T_PRE && S.t<T_PRE+T_CT;
   const f = inC ? pairForces() : {FA:0,FB:0};
@@ -2165,12 +2171,13 @@ function drawS12(){
   ctx.setLineDash([]);
   const sv=12; let vlen=S.v*sv;
   vlen=Math.max(-150,Math.min(150,vlen));
+  const vReadout=`v = ${f2(S.v)} m/s`;
   if(Math.abs(S.v)>0.02){
     arrow(bx,yv,bx+vlen,yv,'#34d399',4,false);
-    label('v', bx+vlen+(S.v>0?10:-10), yv-8, '#6ee7b7', S.v>0?'left':'right', 13);
+    labelPlate(vReadout, bx+vlen/2, yv-16, '#6ee7b7', 'center', 12, '#34d399');
   }else{
     ctx.fillStyle='#34d399'; ctx.beginPath(); ctx.arc(bx,yv,3.5,0,Math.PI*2); ctx.fill();
-    label('v = 0', bx+10, yv-8, '#6ee7b7', 'left', 12);
+    labelPlate(vReadout, bx, yv-16, '#6ee7b7', 'center', 12, '#34d399');
   }
 }
 function drawS3(){
@@ -2214,14 +2221,12 @@ function drawS3(){
   if(Math.abs(S.vA)>0.02){
     let l=Math.max(-140,Math.min(140,S.vA*sv3));
     arrow(X(S.xA),yv,X(S.xA)+l,yv,'#34d399',4,false);
-    /* [visuals] J4: subscript for v_A */
-    labelSub('v','A',X(S.xA)+l+(S.vA>0?9:-9),yv+4,'#6ee7b7',S.vA>0?'left':'right',12);
+    labelPlate(`vA = ${f2(S.vA)} m/s`, X(S.xA)+l/2, yv-16, '#6ee7b7', 'center', 12, '#34d399');
   }
   if(Math.abs(S.vB)>0.02){
     let l=Math.max(-140,Math.min(140,S.vB*sv3));
     arrow(X(S.xB),yv,X(S.xB)+l,yv,'#34d399',4,false);
-    /* [visuals] J4: subscript for v_B */
-    labelSub('v','B',X(S.xB)+l+(S.vB>0?9:-9),yv+4,'#6ee7b7',S.vB>0?'left':'right',12);
+    labelPlate(`vB = ${f2(S.vB)} m/s`, X(S.xB)+l/2, yv-16, '#6ee7b7', 'center', 12, '#34d399');
   }
   // off-screen indicators
   if(X(S.xA)<-wA/2) label('« A',8,groundY-hA/2,'#67e8f9','left',13);
