@@ -341,6 +341,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
 /* step emphasis */
 #shell.step-1 .rest-energy-panel,#shell.step-1 .invariant-panel{opacity:.5;}
+/* The step-1 fade is an inquiry-only emphasis device — lecture mode parks on
+   inquiry step 0 forever, so without this override the two panels would stay
+   half-faded whenever the sim is projected. */
+#shell.lecture-mode.step-1 .rest-energy-panel,#shell.lecture-mode.step-1 .invariant-panel{opacity:1;}
 #shell.step-2 .deltaM-callout,#shell.step-3 .deltaM-callout{background:rgba(167,139,250,.16);border-color:rgba(167,139,250,.5);}
 
 /* predict */
@@ -575,7 +579,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <ul class="explore-list">
           <li><b>Elastic</b>, equal masses: the velocities swap.</li>
           <li>Heavy-on-light: set m₁ = 5, m₂ = 0.5, u₂ = 0 — watch v₂′ → 2u₁.</li>
-          <li><b>Explosion</b>: the reverse of sticking — spring PE → KE, but Σp is still 0.</li>
+          <li><b>Explosion</b>: the reverse of sticking — stored energy Q → KE, but Σp is still 0.</li>
         </ul>
       </div>
 
@@ -658,7 +662,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           </div>
           <div class="ctrl-stack dim" id="g-mp">
             <div class="ctrl-box ctrl-box--slider ctrl-box--stacked">
-              <span class="ctrl-box-label">Spring energy Q <span class="ctrl-hint">[J]</span></span>
+              <span class="ctrl-box-label">Energy released Q <span class="ctrl-hint">[J]</span></span>
               <div class="ctrl-slider-row">
                 <input type="range" class="shell-range" id="s-mp" min="0" max="10" step="0.1" value="4.0" disabled>
                 <span class="shell-readout" id="r-mp">4.0</span>
@@ -909,7 +913,7 @@ const Shell = (function(){
 const MINUS='\u2212';
 const RATE=0.40;
 const COL={ p1:'#22d3ee', p2:'#f59e0b', prod:'#a78bfa' };
-const MODE_LABEL={ inelastic:'Inelastic collision', elastic:'Elastic scattering', explosion:'Explosion (spring → KE)' };
+const MODE_LABEL={ inelastic:'Inelastic collision', elastic:'Elastic scattering', explosion:'Explosion (Q → KE)' };
 
 const S={
   mode:'inelastic', m1:1.0, m2:1.0, v1:2.0, v2:-2.0, Q:4.0, rest:0, boost:0,
@@ -1133,7 +1137,7 @@ function buildTable(beforeB, afterB, phys){
     const loss=0.5*mu*(1-S.rest*S.rest)*urel*urel;
     keChip=`<div class="cons bad">⚠ ΣKE decreased by ${fmtNum(loss)} J = ½μ(1−e²)u²_rel → heat/deformation</div>`;
   } else {
-    keChip=`<div class="cons ok">ΣKE increased by Q = ${fmtNum(S.Q)} J ← spring</div>`;
+    keChip=`<div class="cons ok">ΣKE increased by Q = ${fmtNum(S.Q)} J ← released</div>`;
   }
   return `<table class="fm-table">
     <thead><tr><th></th><th>m</th><th>v</th><th>p</th><th>KE</th></tr></thead>
@@ -1165,11 +1169,11 @@ function buildRestEnergy(phys, beforeB, afterB){
       <span class="cap">converted to heat/deformation</span></div>`;
   }
   /* explosion */
-  return `<div>Explosion: stored spring energy becomes kinetic energy.</div>
+  return `<div>Explosion: stored energy Q is released as kinetic energy.</div>
     ${bar('ΣKE before', keB, 'avail')}${bar('ΣKE after', keA, 'need')}
-    ${bar('Q (spring)', S.Q, 'avail')}
+    ${bar('Q (released)', S.Q, 'avail')}
     <div class="deltaM-callout">ΔKE = <b>${fmtNum(dKE)}</b> J<br>
-    <span class="cap">spring PE → kinetic energy</span></div>
+    <span class="cap">released energy Q → kinetic energy</span></div>
     <div class="budget-q pos">Q = ${fmtNum(S.Q)} J → released as product kinetic energy</div>`;
 }
 function buildInvariant(beforeB, afterB, phys){
@@ -1327,10 +1331,30 @@ bindSlider('rest','rest', v=>v.toFixed(2));
 
 document.querySelectorAll('#mode-seg .seg-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
+    // Returning to inelastic with e still pinned at 1 would be elastic in
+    // disguise (and would immediately re-trigger the auto-switch) — restore
+    // the last genuinely inelastic value.
+    if(btn.dataset.mode==='inelastic' && S.rest>=1){
+      S.rest=lastInelasticE;
+      setSlider('rest', String(lastInelasticE)); setReadout('rest', lastInelasticE.toFixed(2));
+    }
     setMode(btn.dataset.mode);
     replayCollision();
   });
 });
+
+// Slide e all the way to 1 in inelastic mode → that IS the perfectly elastic
+// collision, so the mode follows the physics.
+(function(){
+  const el=document.getElementById('s-rest');
+  if(!el) return;
+  el.addEventListener('input',()=>{
+    const v=parseFloat(el.value);
+    if(S.mode!=='inelastic') return;
+    if(v<1){ lastInelasticE=v; }
+    else { setMode('elastic'); replayCollision(); }
+  });
+})();
 
 
 function clearPrediction(){
@@ -1381,8 +1405,15 @@ function onReset(){
 }
 function onResize(){ render(); }
 
+// Elastic IS the e = 1 case — entering elastic mode shows (and sets) e = 1 on
+// the restitution slider instead of leaving a stale value behind the dim.
+let lastInelasticE = 0.5;   // restored when the user returns to inelastic
 function setMode(mode){
   S.mode=mode;
+  if(mode==='elastic'){
+    S.rest=1;
+    setSlider('rest','1'); setReadout('rest','1.00');
+  }
   document.querySelectorAll('#mode-seg .seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   applyModeEmphasis();
 }
