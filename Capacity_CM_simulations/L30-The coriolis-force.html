@@ -336,8 +336,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 @media(max-width:1000px){.formal-grid{grid-template-columns:1fr;}}
 .eq-row{background:rgba(15,23,42,.5);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
 .eq-row .eq{color:#e2e8f0;overflow-x:auto;overflow-y:hidden;padding:2px 0;}
-.cf-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:13px;}
-.cf-row input{margin-top:2px;}
+.cf-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:13px;cursor:pointer;user-select:none;}
+.cf-row input{margin-top:2px;accent-color:var(--accent);cursor:pointer;}
+.traj-checks .cf-row{margin-bottom:6px;}
+.traj-checks .cf-row:last-child{margin-bottom:0;}
 /* [pedagogy D7] attention pulse for advanced controls after first run */
 @keyframes ctlReveal{0%,100%{box-shadow:none;}50%{box-shadow:0 0 10px rgba(167,139,250,.55);}}
 .ctl-reveal{animation:ctlReveal .8s ease 3;}
@@ -477,8 +479,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="tr-stack" class="hud">
       <div id="stage-legend">
         <div class="lg-title">Legend</div>
-        <div class="lg-row" title="like smoke hanging in the room — fixed to the lab"><span class="lg-swatch" id="lg-swatch-ground"></span>path in the ground frame</div>
-        <div class="lg-row" title="like a chalk mark drawn on the table — rides the turntable"><span class="lg-swatch" id="lg-swatch-rot"></span>path in the rotating frame</div>
+        <div class="lg-row" id="lg-row-ground" title="like smoke hanging in the room — fixed to the lab"><span class="lg-swatch" id="lg-swatch-ground"></span>path in the ground frame</div>
+        <div class="lg-row" id="lg-row-rot" title="like a chalk mark drawn on the table — rides the turntable"><span class="lg-swatch" id="lg-swatch-rot"></span>path in the rotating frame</div>
         <div class="lg-row" id="lg-row-launch" title="lab-floor chalk mark at the launcher’s fire-time position — fixed to the ground frame"><span class="lg-swatch strip" id="lg-swatch-launch"></span>initial launch position</div>
       </div>
     </div>
@@ -541,6 +543,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="frame-lab" class="shell-btn active" title="Camera bolted to the room (inertial)">Ground frame</button>
         <button id="frame-rot" class="shell-btn" title="Camera bolted to the turntable (rotating)">Rotating frame</button>
         <button id="frame-both" class="shell-btn" title="Both views side by side">Both</button>
+      </div>
+      <div class="traj-checks" style="margin-top:10px;">
+        <label class="cf-row" title="Show / hide the cyan path fixed to the room"><input type="checkbox" id="chk-trail-ground" checked> <span>View ground frame trajectory</span></label>
+        <label class="cf-row" title="Show / hide the amber path that rides with the turntable"><input type="checkbox" id="chk-trail-rot" checked> <span>View rotating frame trajectory</span></label>
       </div>
     </div>
     <div class="ctrl-box ctrl-box--slider">
@@ -828,6 +834,8 @@ const S={
   phase:'armed', tFlight:0, rearm:0, endReason:'',
   pos:[-PL,0], vel:[0,0],
   hasLaunched:false, autoCycle:false, cfShow:false,
+  showGroundTrail:true, showRotTrail:true,
+  launchMarkOn:false,
   kCor:0.11, kVel:0.16,
   predicted:null, runOm:0.5,
   cam:{az:CAM_DEF.az,pol:CAM_DEF.pol,rad:CAM_DEF.rad},
@@ -1190,7 +1198,7 @@ function makeTrail(color,parent,y,glow){
   geo.setAttribute('position',new THREE.BufferAttribute(arr,3)); geo.setDrawRange(0,0);
   const pts=new THREE.Points(geo,new THREE.PointsMaterial({color,size:glow?0.055:0.04,sizeAttenuation:true,map:trailSprite(),transparent:true,opacity:glow?0.9:0.95,depthWrite:false,blending:glow?THREE.AdditiveBlending:THREE.NormalBlending}));
   pts.frustumCulled=false; parent.add(pts);
-  return {geo,arr,n:0,MAX,y,last:null};
+  return {geo,arr,n:0,MAX,y,last:null,mesh:pts};
 }
 function buildScene(){
   renderer=new THREE.WebGLRenderer({canvas:glc,antialias:true});
@@ -1391,9 +1399,29 @@ function clearTrails(){
     t.geo.attributes.position.needsUpdate=true;
     t.geo.setDrawRange(0,0);
   });
+  S.launchMarkOn=false;
   if(launchMarkRoot) launchMarkRoot.visible=false;
   if(L.launchPos) L.launchPos.style.display='none';
   setLaunchLegend(false);
+}
+function syncTrailVisibility(){
+  if(labTrail && labTrail.mesh) labTrail.mesh.visible = !!S.showGroundTrail;
+  if(tabTrail && tabTrail.mesh) tabTrail.mesh.visible = !!S.showRotTrail;
+  const lgG=$('lg-row-ground'), lgR=$('lg-row-rot');
+  if(lgG) lgG.style.display = S.showGroundTrail ? 'flex' : 'none';
+  if(lgR) lgR.style.display = S.showRotTrail ? 'flex' : 'none';
+  /* Launch chalk mark is a ground-frame cue — follow that trajectory toggle. */
+  if(launchMarkRoot){
+    const showMark = S.showGroundTrail && S.launchMarkOn;
+    launchMarkRoot.visible = showMark;
+    if(!showMark){
+      if(L.launchPos) L.launchPos.style.display='none';
+      setLaunchLegend(false);
+    } else {
+      setLaunchLegend(true);
+    }
+  }
+  repaint();
 }
 function setLaunchLegend(on){
   const row=$('lg-row-launch');
@@ -1406,14 +1434,15 @@ function stampLaunchMark(){
   const p0x=S.pos[0]*S.ws, p0z=-S.pos[1]*S.ws;
   const vx=S.vel[0]*S.ws, vz=-S.vel[1]*S.ws;
   const spd=Math.hypot(vx,vz);
-  if(spd<1e-9){ launchMarkRoot.visible=false; setLaunchLegend(false); return; }
+  if(spd<1e-9){ launchMarkRoot.visible=false; S.launchMarkOn=false; setLaunchLegend(false); return; }
   const ux=vx/spd, uz=vz/spd;
   /* centre at p0 − u·0.35; local +X along −u so tip (+0.30) sits at p0 − u·0.65 */
   launchMarkRoot.position.set(p0x-ux*0.35,-0.040,p0z-uz*0.35);
   const phi=Math.atan2(-uz,-ux);
   launchMarkRoot.rotation.set(0,-phi,0);
-  launchMarkRoot.visible=true;
-  setLaunchLegend(true);
+  S.launchMarkOn=true;
+  launchMarkRoot.visible=!!S.showGroundTrail;
+  setLaunchLegend(!!S.showGroundTrail);
 }
 function trailMaybe(){
   const wx=S.pos[0]*S.ws, wz=-S.pos[1]*S.ws;
@@ -1453,11 +1482,6 @@ function doLaunch(){
 function finishRun(reason){
   S.phase='done'; S.endReason=reason; S.rearm=0;
   Shell.setPlaying(false); /* pause at rim — paths stay until ▶ Play re-arms */
-  /* reveal Both-view control with attention pulse after first completed run */
-  if(!S._advancedRevealed){
-    S._advancedRevealed=true;
-    const el=$('frame-both'); if(el) el.classList.add('ctl-reveal');
-  }
 }
 
 /* ---------- arrows (world-space vectors from world-frame formulas) -------- */
@@ -1655,6 +1679,16 @@ function wireUI(){
   $('frame-rot').addEventListener('click',()=>setFrame('rot'));
   $('frame-both').addEventListener('click',()=>setFrame('both'));
   $('cf-check').addEventListener('change',e=>{ S.cfShow=e.target.checked; resetToArmed(); });
+  const chkG=$('chk-trail-ground'), chkR=$('chk-trail-rot');
+  if(chkG) chkG.addEventListener('change',e=>{
+    S.showGroundTrail=!!e.target.checked;
+    syncTrailVisibility();
+  });
+  if(chkR) chkR.addEventListener('change',e=>{
+    S.showRotTrail=!!e.target.checked;
+    syncTrailVisibility();
+  });
+  syncTrailVisibility();
 
   // clamped orbit camera: drag to orbit, scroll to zoom
   let drag=null;
@@ -1701,6 +1735,11 @@ function onReset(){
   ['lab','rot','both'].forEach(k=>$('frame-'+k).classList.toggle('active',k==='lab'));
   S.cam.az=CAM_DEF.az; S.cam.pol=CAM_DEF.pol; S.cam.rad=CAM_DEF.rad;
   S.cfShow=false; $('cf-check').checked=false;
+  S.showGroundTrail=true; S.showRotTrail=true; S.launchMarkOn=false;
+  const chkG=$('chk-trail-ground'), chkR=$('chk-trail-rot');
+  if(chkG) chkG.checked=true;
+  if(chkR) chkR.checked=true;
+  syncTrailVisibility();
   S.predicted=null;
   $('omega').value='0.5';
   $('vlaunch').value='2';
