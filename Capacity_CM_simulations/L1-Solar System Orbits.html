@@ -698,7 +698,9 @@ const Shell = (function(){
   const planetMeshes = [], orbitLines = [], planetSpins = [];
   const planetWorldR = new Array(PLANETS.length).fill(0); /* display mesh radius (world units) */
   let ready3d = false, _pv = null;
-  let labelTierPrev = new Array(PLANETS.length).fill(0); /* last-frame tier index 0..3 */
+  // DISABLED (label collision avoidance): last-frame tier index 0..3 — restore with the
+  // block in drawPlanets() if names should dodge each other again instead of staying above.
+  // let labelTierPrev = new Array(PLANETS.length).fill(0);
   // Per-view camera defaults. Full mode: planets fanned along the left of the
   // frame (perihelia toward −screen-x), moderate top-down tilt so Neptune’s
   // orbit fills the plot — matches the lecture full-system framing.
@@ -1218,18 +1220,10 @@ const Shell = (function(){
 
   function drawPlanets(){
     /* Spheres in 3D; overlay draws selection ring + names.
-       Each label is horizontally centered on its planet. Overlaps resolve by
-       trying above / below / further-above / further-below (inner→outer). */
+       Each label stays centered above its planet; overlaps are allowed so
+       names do not jump between sides when orbits crowd (esp. full view). */
     const vis = visibleIndices();
-    const sunScr = projPt(0,0);
-    const PAD = 4;          /* few-px padding between label rects */
-    const LINE = 15;        /* vertical step between tiers */
-    const SUN_CLEAR = 34;   /* keep labels off the Sun's glow */
-    const placed = [];      /* accepted label rects this frame */
 
-    function makeRect(lx, ly, tw, lh){
-      return { x:lx, y:ly-lh+2, w:tw+2, h:lh };
-    }
     function clampCentered(cx, ly, tw, lh){
       let lx = cx - tw/2;
       if(lx < 4) lx = 4;
@@ -1239,19 +1233,8 @@ const Shell = (function(){
       if(y > state.H - 4) y = state.H - 4;
       return [lx, y];
     }
-    function hitsSun(r){
-      const mx = r.x + r.w/2, my = r.y + r.h/2;
-      return Math.hypot(mx - sunScr.x, my - sunScr.y) < SUN_CLEAR;
-    }
-    function freeOf(r){
-      if(hitsSun(r)) return false;
-      const grow = { x:r.x-PAD, y:r.y-PAD, w:r.w+2*PAD, h:r.h+2*PAD };
-      return !placed.some(o => rectsOverlap(grow, o));
-    }
 
-    /* Inner → outer (deterministic). */
-    const order = vis.slice().sort((a,b)=>a-b);
-    for(const i of order){
+    for(const i of vis){
       const b = state.bodies[i];
       const p = PLANETS[i];
       const scr = W2S(i, b.x, b.y);
@@ -1266,44 +1249,87 @@ const Shell = (function(){
       ctx.font = font;
       const tw = ctx.measureText(p.name).width;
       const lh = 14;
-      /* Tier baselines (text baseline y): T1 above, T2 below, T3 further above, T4 further below.
-         Earth sits a few px higher so its name clears Mars when both want “above”. */
-      const up = (p.name === 'Earth') ? 10 : 0;
-      const tiers = [
-        scr.y - pr - 6 - up,
-        scr.y + pr + lh + 2,
-        scr.y - pr - 6 - LINE - up,
-        scr.y + pr + lh + 2 + LINE
-      ];
-      /* T1→T4 in order so labels return to “all above” when space allows.
-         Soft ±4 px preference keeps last-frame tier from flip-flopping. */
-      let chosen = null, chosenTier = 0;
-      for(let t=0;t<4;t++){
-        const [lx, ly] = clampCentered(scr.x, tiers[t], tw, lh);
-        const r = makeRect(lx, ly, tw, lh);
-        if(freeOf(r)){ chosen = { lx, ly, r }; chosenTier = t; break; }
-        if(t === (labelTierPrev[i]||0)){
-          for(const dy of [-4, 4]){
-            const [lx2, ly2] = clampCentered(scr.x, tiers[t]+dy, tw, lh);
-            const r2 = makeRect(lx2, ly2, tw, lh);
-            if(freeOf(r2)){ chosen = { lx:lx2, ly:ly2, r:r2 }; chosenTier = t; break; }
-          }
-          if(chosen) break;
-        }
-      }
-      if(!chosen){
-        /* Fallback: T1 clamped even if overlapping (should be rare). */
-        const [lx, ly] = clampCentered(scr.x, tiers[0], tw, lh);
-        chosen = { lx, ly, r: makeRect(lx, ly, tw, lh) };
-        chosenTier = 0;
-      }
-      labelTierPrev[i] = chosenTier;
-      placed.push(chosen.r);
-      labelRects.push(chosen.r);
-      ctx.font = font;
+      const [lx, ly] = clampCentered(scr.x, scr.y - pr - 6, tw, lh);
+      labelRects.push({ x:lx, y:ly-lh+2, w:tw+2, h:lh });
       ctx.fillStyle = hexA('#ffffff', sel ? 0.95 : 0.72);
-      ctx.fillText(p.name, chosen.lx, chosen.ly);
+      ctx.fillText(p.name, lx, ly);
     }
+
+    /* DISABLED — prior collision-avoidance placement (above/below tiers). Names jumped
+       between sides when crowded (esp. full view / fast speed). To restore: uncomment
+       labelTierPrev above, replace the loop body above with this block, and drop the
+       simple “always above” placement.
+    // const sunScr = projPt(0,0);
+    // const PAD = 4;          // few-px padding between label rects
+    // const LINE = 15;        // vertical step between tiers
+    // const SUN_CLEAR = 34;   // keep labels off the Sun's glow
+    // const placed = [];      // accepted label rects this frame
+    // function makeRect(lx, ly, tw, lh){
+    //   return { x:lx, y:ly-lh+2, w:tw+2, h:lh };
+    // }
+    // function hitsSun(r){
+    //   const mx = r.x + r.w/2, my = r.y + r.h/2;
+    //   return Math.hypot(mx - sunScr.x, my - sunScr.y) < SUN_CLEAR;
+    // }
+    // function freeOf(r){
+    //   if(hitsSun(r)) return false;
+    //   const grow = { x:r.x-PAD, y:r.y-PAD, w:r.w+2*PAD, h:r.h+2*PAD };
+    //   return !placed.some(o => rectsOverlap(grow, o));
+    // }
+    // const order = vis.slice().sort((a,b)=>a-b);
+    // for(const i of order){
+    //   const b = state.bodies[i];
+    //   const p = PLANETS[i];
+    //   const scr = W2S(i, b.x, b.y);
+    //   const sel = (i === state.selected);
+    //   const pr = projRadius(i);
+    //   if(sel){
+    //     ctx.strokeStyle = '#ffffff';
+    //     ctx.lineWidth = 1.6;
+    //     ctx.beginPath(); ctx.arc(scr.x,scr.y,pr+5,0,Math.PI*2); ctx.stroke();
+    //   }
+    //   const font = (sel ? 'bold ' : '') + '12px var(--font-sans), sans-serif';
+    //   ctx.font = font;
+    //   const tw = ctx.measureText(p.name).width;
+    //   const lh = 14;
+    //   // Tier baselines: T1 above, T2 below, T3 further above, T4 further below.
+    //   // Earth sits a few px higher so its name clears Mars when both want “above”.
+    //   const up = (p.name === 'Earth') ? 10 : 0;
+    //   const tiers = [
+    //     scr.y - pr - 6 - up,
+    //     scr.y + pr + lh + 2,
+    //     scr.y - pr - 6 - LINE - up,
+    //     scr.y + pr + lh + 2 + LINE
+    //   ];
+    //   // T1→T4 in order so labels return to “all above” when space allows.
+    //   // Soft ±4 px preference keeps last-frame tier from flip-flopping.
+    //   let chosen = null, chosenTier = 0;
+    //   for(let t=0;t<4;t++){
+    //     const [lx, ly] = clampCentered(scr.x, tiers[t], tw, lh);
+    //     const r = makeRect(lx, ly, tw, lh);
+    //     if(freeOf(r)){ chosen = { lx, ly, r }; chosenTier = t; break; }
+    //     if(t === (labelTierPrev[i]||0)){
+    //       for(const dy of [-4, 4]){
+    //         const [lx2, ly2] = clampCentered(scr.x, tiers[t]+dy, tw, lh);
+    //         const r2 = makeRect(lx2, ly2, tw, lh);
+    //         if(freeOf(r2)){ chosen = { lx:lx2, ly:ly2, r:r2 }; chosenTier = t; break; }
+    //       }
+    //       if(chosen) break;
+    //     }
+    //   }
+    //   if(!chosen){
+    //     const [lx, ly] = clampCentered(scr.x, tiers[0], tw, lh);
+    //     chosen = { lx, ly, r: makeRect(lx, ly, tw, lh) };
+    //     chosenTier = 0;
+    //   }
+    //   labelTierPrev[i] = chosenTier;
+    //   placed.push(chosen.r);
+    //   labelRects.push(chosen.r);
+    //   ctx.font = font;
+    //   ctx.fillStyle = hexA('#ffffff', sel ? 0.95 : 0.72);
+    //   ctx.fillText(p.name, chosen.lx, chosen.ly);
+    // }
+    */
   }
 
   function onFrame(dt){
