@@ -312,7 +312,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-formal{display:flex;flex-direction:column;gap:12px;}
 .sim-formal-col{display:flex;flex-direction:column;gap:8px;min-width:0;}
 .sim-eqrow{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:15px;color:var(--text);}
-.sim-eqrow>span{flex:1 1 220px;min-width:200px;overflow-wrap:anywhere;}
+.sim-eqrow>span{flex:0 0 auto;white-space:nowrap;} /* never wrap mid-formula — the row wraps between formulas */
 .sim-eqnote{font-size:12.5px;line-height:1.5;color:var(--muted);}
 .sim-anchor{font-size:13px;line-height:1.5;color:var(--muted);}
 .sim-distwrap{min-width:0;}
@@ -545,7 +545,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -664,7 +664,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -741,6 +741,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -765,18 +766,19 @@ const Shell = (function(){
 'use strict';
 
 /* ===== MANDATORY AUDIT HOOK (engine-verified, pure arithmetic) =====
-   Self-contained reference model: density per unit cosθ = ½(1 + A·P·(v/c)·cosθ)
-   with the reference values A = −1, P = 1 and v/c → 1 inlined as numeric
-   literals (slope = A·P·(v/c) = −1). The body uses ONLY numeric literals and
-   its own parameter — no outer variables. The live simulation physics below is
-   unchanged (it samples P from the slider and β per decay). */
+   Live reporter: density per unit cosθ = ½(1 + A·P·(v/c)·cosθ) evaluated at
+   the sim's CURRENT slider polarization S.P with A = A_COEF (−1) and the mean
+   beta VC (0.60) — slope = A·P·⟨v/c⟩, matching the on-screen theory line.
+   (S/A_COEF/VC are defined below; at() only runs after init.) */
 window.__audit = { at(cosTheta) {
+  const slope = A_COEF * S.P * VC;
   return {
     cosTheta: cosTheta,
-    polarization: 1,
-    asymmetryCoefficient: -1,
-    probabilityDensityPerUnitCosTheta: 0.5 * (1 + (-1 * 1 * 1) * cosTheta),
-    slope: -1 * 1 * 1,
+    polarization: S.P,
+    asymmetryCoefficient: A_COEF,
+    meanBeta: VC,
+    probabilityDensityPerUnitCosTheta: 0.5 * (1 + slope * cosTheta),
+    slope: slope,
     normalization: 1
   };
 } };
@@ -981,9 +983,18 @@ function measured(){
   const s=Math.sqrt(Math.max(1e-9,(1-a*a)/t));
   return {a:a,s:s,t:t};
 }
-function revealReady(){
+/* Sign-aware significance: the Wu signal is 𝒜 ≥ 2σ from zero, signed like
+   A·P·β (A = −1 ⇒ negative), and closer to the theory value A·P·(v/c)/2 than
+   to zero. A magnitude-only cut let +2σ fluctuations at P = 0 (the mirror
+   world's sign!) read as parity violation. */
+function wuSignal(){
   const m=measured();
-  return S.pred!==null && m.t>=REVEAL_N && Math.abs(m.a) >= 2*m.s;
+  if(m.t<REVEAL_N || Math.abs(m.a) < 2*m.s) return false;
+  const aTh = A_COEF*S.P*VC/2;
+  return m.a*A_COEF > 0 && Math.abs(m.a-aTh) < Math.abs(m.a);
+}
+function revealReady(){
+  return S.pred!==null && wuSignal();
 }
 
 /* ===== main scene ===== */
@@ -1072,8 +1083,9 @@ function drawApp(cx, mir, weight){
   /* counter names + counts (mono figures so the numbers don't jitter) */
   const fSz = Math.max(11, Math.min(15, 9+3*sc));
   const fCount = fNums(fSz,700), fName = fSans(Math.max(10,fSz-3),600);
-  const upName = mir ? '↑ counter' : '↑ counter (along B)';
-  const dnName = mir ? '↓ counter' : '↓ counter (opposite B)';
+  /* bM = +1: B points up in this panel → ↑ is along B; bM = −1: B points down → ↑ is opposite B */
+  const upName = '↑ counter (' + (bM>0?'along':'opposite') + ' B)';
+  const dnName = '↓ counter (' + (bM>0?'opposite':'along') + ' B)';
   const upT = fmt(S.nUp) + (S.total? '   '+(100*S.nUp/S.total).toFixed(1)+'%' : '');
   const dnT = fmt(S.nDn) + (S.total? '   '+(100*S.nDn/S.total).toFixed(1)+'%' : '');
   const yTopName = PY(110)+plH/2+13, yTopCount = yTopName+fSz+4;
@@ -1094,11 +1106,11 @@ function drawApp(cx, mir, weight){
     tag = (S.mirror ? 'REAL APPARATUS' : '⁶⁰Co SOURCE') + ' · P = ' + S.P.toFixed(2);
   } else if(anti){
     tag = 'CP MIRROR — mirror + charge conjugation';
-    sub = 'C: I→−I, B→−B, μ→−μ · spin unchanged';
+    sub = 'C on top of P: I→−I, B→−B, μ→−μ (P already flipped the axial spin; C leaves it as is)';
     tcol = revealReady()? GOOD : TH.muted;
   } else {
     tag = 'MIRROR IMAGE — what parity predicts';
-    sub = 'P: momenta flip · spin and B do not';
+    sub = 'reflection: tracks mirrored · axial J, B and I reverse';
     tcol = revealReady()? BAD : TH.muted;
   }
   const availW = (S.mirror? LG.w/2 : LG.w) - 18;
@@ -1141,6 +1153,8 @@ function verdict(){
   if(Math.abs(m.a) < 2*m.s)
     return {t:'𝒜 = '+m.a.toFixed(3)+' ± '+m.s.toFixed(3)+' — consistent with zero', c:TH.muted};
   if(S.pred===null) return {t:'𝒜 = '+m.a.toFixed(3)+' ± '+m.s.toFixed(3), c:TH.text};
+  if(!wuSignal())  /* significant magnitude but not the A·P·β signal (wrong sign / P≈0 fluctuation) — stay numeric */
+    return {t:'𝒜 = '+m.a.toFixed(3)+' ± '+m.s.toFixed(3), c:TH.text};
   return S.anti ? {t:'✓ CP mirror matches the data', c:GOOD}
                 : {t:'✗ Mirror disagrees with the data', c:BAD};
 }
@@ -1237,8 +1251,12 @@ function syncControls(){
   antiBtn.setAttribute('aria-pressed', S.anti?'true':'false');
 }
 function setState(o){
+  /* o.keep: preserve the accumulated counts when P is unchanged (same physics
+     configuration — cards 3/4 cite the counts the student just collected). */
+  const wipe = !(o.keep && S.P===o.p);
   S.P=o.p; S.mirror=o.m; S.anti=o.a;
-  syncControls(); resampleSpins(); clearCounts();
+  syncControls();
+  if(wipe){ resampleSpins(); clearCounts(); }
   updateReadouts(); drawAll(); drawDist();
 }
 /* Guided-inquiry step specs — absolute state per card (self-contained, pager-safe).
@@ -1246,8 +1264,8 @@ function setState(o){
 const STEPS = [
   {p:0, m:false, a:false, pause:true },   // 1 · warm crystal, zero counts, paused
   {p:1, m:false, a:false, pause:true },   // 2 · fully polarized, paused until commit
-  {p:1, m:false, a:false, pause:false},   // 3 · counters running; mirror revealed on commit
-  {p:1, m:true,  a:false, pause:false}    // 4 · mirror view; C applied on commit
+  {p:1, m:false, a:false, pause:false, keep:true},   // 3 · counters running (kept from card 2); mirror revealed on commit
+  {p:1, m:true,  a:false, pause:false, keep:true}    // 4 · mirror view, counts kept; C applied on commit
 ];
 
 /* ===== controls (every one live from load) ===== */
@@ -1297,6 +1315,8 @@ function onFrame(dt){
 function onReset(){
   S.pred=null;                               // prediction lives in the inquiry cards now
   setState(OPEN);                            // back to the OPENING state, not the finale
+
+  onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
 }
 function onResize(){
   fitCanvas(stage); fitCanvas(distCv);
@@ -1304,9 +1324,17 @@ function onResize(){
   drawAll(); drawDist();
 }
 function onStep(i){
-  const s = STEPS[Math.max(0,Math.min(STEPS.length-1,i|0))];
+  const k = Math.max(0,Math.min(STEPS.length-1,i|0));
+  const s = STEPS[k];
   setState(s);
   Shell.setPlaying(!s.pause);
+  /* SYS-5: an answered card's reveal (mirror / CP view) must survive revisits and Reset */
+  const c = document.querySelectorAll('#inq-cards .inq-step')[k];
+  if(c && c.dataset.answered){
+    const spec = c.dataset.build;
+    if(spec==='mirror'){ S.mirror=true; syncControls(); drawAll(); }
+    else if(spec==='cp'){ S.mirror=true; S.anti=true; syncControls(); drawAll(); }
+  }
 }
 function onComplete(){
   /* Free exploration begins from the neutral single-apparatus entry point:

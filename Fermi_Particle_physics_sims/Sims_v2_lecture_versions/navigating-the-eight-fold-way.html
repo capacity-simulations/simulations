@@ -522,7 +522,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -641,7 +641,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -718,6 +718,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -770,7 +771,7 @@ var TILES=[
   P('n','n','','udd','oct',940,'Discovered 1932 — Chadwick.'),
   P('S+','\u03A3','+','uus','oct',1189,'Found 1953 — cosmic rays.'),
   P('S0','\u03A3','0','uds','oct',1193,'Found 1956 — decays to \u039B\u03B3.',-0.24),
-  P('L0','\u039B','0','uds','oct',1116,'\u22481950 — first \u201Cstrange\u201D particle.',0.24),
+  P('L0','\u039B','0','uds','oct',1116,'\u22481950 — first \u201Cstrange\u201D baryon (kaons, 1947, were the first strange particles).',0.24),
   P('S-','\u03A3','\u2212','dds','oct',1197,'Found 1953 — Cosmotron.'),
   P('X0','\u039E','0','uss','oct',1315,'Found 1959 — Bevatron.'),
   P('X-','\u039E','\u2212','dss','oct',1322,'Found 1952 — cosmic rays.'),
@@ -1367,9 +1368,14 @@ function onReset(){
   // lecture mode) → re-arm the completed free-exploration state.
   var shellEl=document.getElementById('shell');
   if(shellEl&&shellEl.classList.contains('inquiry-collapsed')) completedState();
-  else stepState(Math.max(0,Math.min(3,Shell.step|0)));
+  else onStep(Shell.step|0); /* via onStep so an answered card's reveal survives Reset (SYS-5) */
 }
-function onStep(i){ stepState(Math.max(0,Math.min(3,i|0))); }
+function onStep(i){ var k=Math.max(0,Math.min(3,i|0)); stepState(k);
+  /* SYS-5: an answered card's reveal must survive revisits and Reset */
+  var c=document.querySelectorAll('#inq-cards .inq-step')[k];
+  if(c&&c.dataset.answered){ var r=c.dataset.reveal;
+    if(r==='qlines'&&!state.qlines){ state.qlines=true; syncUI(); draw(); }
+    else if(r==='omega'&&!state.revealed){ revealOmega(); } } }
 function onComplete(){ completedState(); }
 
 if(window.ResizeObserver){

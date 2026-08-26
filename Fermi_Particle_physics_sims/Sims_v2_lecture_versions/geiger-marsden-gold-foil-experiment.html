@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Geiger–Marsden Gold Foil Experiment</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
@@ -328,9 +329,9 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
       <div class="shell-modal-body">
         <dl class="shell-info-dl">
   <dt>Concept</dt>
-  <dd>Scintillation counts at scattering angle θ follow 1/sin⁴(θ/2), so they fall by about 10⁵ between 5° and 150° yet never vanish. Because roughly 1 in 26,000 incident α turns through more than 90° — impossible if the positive charge were spread through the whole atom — that charge must sit in a tiny, massive nucleus.</dd>
+  <dd>Scintillation counts at scattering angle θ follow 1/sin⁴(θ/2), so they fall by about 2×10⁵ between 5° and 150° yet never vanish. Because roughly 1 in 26,000 incident α turns through more than 90° — impossible if the positive charge were spread through the whole atom — that charge must sit in a tiny, massive nucleus.</dd>
   <dt>Sub-question</dt>
-  <dd>Nuclear size: the head-on closest approach is d_min = zZ·α_em·ħc/Eₖ = 45.5 fm at 5 MeV. Raising the beam momentum shrinks d_min; when the large-angle counts sag below the Rutherford curve the α is grazing the nuclear surface at d_touch = R_Au + R_α ≈ 8.9 fm, so R_Au ≈ 7 fm (diameter ≈ 1.4×10⁻¹⁴ m).</dd>
+  <dd>Nuclear size: the head-on closest approach is d_min = zZ·α_em·ħc/Eₖ = 45.5 fm at 5 MeV. Raising the beam momentum shrinks d_min; when the large-angle counts sag below the dashed point-Coulomb curve the α is grazing the nuclear surface at d_touch = R_Au + R_α ≈ 8.9 fm, so R_Au ≈ 7 fm (diameter ≈ 1.4×10⁻¹⁴ m).</dd>
   <dt>Model notes</dt>
   <dd>Plum pudding is modelled as ≈2.5×10³ random ≈0.02° kicks, so the random walk gives σ = √2500 × 0.02° ≈ 1° at 5 MeV and essentially no counts past a few degrees. The measured (green) points are always generated from the nuclear model — the switch only chooses which prediction curve is drawn over them. Single scattering only: sub-degree multiple scattering is not simulated. Foil: 0.40 µm gold, n·t = 2.4×10²² m⁻².</dd>
   <dt>Serves</dt>
@@ -496,6 +497,7 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
             <div class="sim-row"><span>α fired (incident)</span><b id="gmN">0</b></div>
             <div class="sim-row"><span>scattered ≥ 1°</span><b id="gmScat">0</b></div>
             <div class="sim-row"><span>counts θ &gt; 90°</span><b id="gmBack" class="sim-hot">0</b></div>
+            <div class="sim-row"><span>absorbed by nucleus</span><b id="gmAbs">0</b></div>
             <div class="sim-row"><span>odds of θ &gt; 90°</span><b id="gmOdds">—</b></div>
           </div>
           <div class="sim-note ht-hide">Odds are per <b>incident</b> α. The 1° line is only where this model starts counting; sub-degree deflections are not simulated.</div>
@@ -556,7 +558,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -592,7 +594,7 @@ const Shell = (function(){
     const b=document.getElementById('shell-lecture');
     if(b) b.classList.toggle('active', on);
     if(on){ finishInquiry(); }
-    else { setInquiryCollapsed(false); if(inqCards().length) inqShow(0); }
+    else { setInquiryCollapsed(false); if(inqCards().length){ inqShow(0); setPlaying(false); /* card 1 is predict-first — reopen paused, matching boot */ } }
   }
 
   // ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
@@ -675,7 +677,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -752,6 +754,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -772,6 +775,7 @@ const Shell = (function(){
     setPlaying, refit
   };
 })();
+window.Shell = Shell; /* expose for the sim's window.Shell guards (const is lexical-only) */
 
 window.__audit = { at(thetaRadians){
   var k = 2*79*(1/137.035999084)*0.1973269804/(4*0.005);
@@ -883,11 +887,15 @@ function applyRun(p,N,seed){
   st.Nf=N; st.nScat=0; st.nBack=0; st.nAbs=0; st.acc=0; st.trAcc=0; st.t=0; st.bins.fill(0);
   dots.length=0; dotPtr=0; tracers.length=0; flashes.length=0;
   if(N>0){ var Ek=EkOf(st.p), rnd=mul32(seed||1), b, i;
+    var absAcc=0;
     for(b=0;b<NBINS;b++){
-      var lam=N*NT*sigBin(TLO[b],(b+1)*BINW*D2R,Ek)*suppress(TEFF[b],Ek);
-      var c=poisson(lam,rnd);                       /* always Poisson: no hidden smoothing */
+      var suppB=suppress(TEFF[b],Ek);
+      var lamRaw=N*NT*sigBin(TLO[b],(b+1)*BINW*D2R,Ek);
+      var c=poisson(lamRaw*suppB,rnd);              /* always Poisson: no hidden smoothing */
       st.bins[b]=c; st.nScat+=c; if(b>=18) st.nBack+=c;
+      absAcc+=lamRaw*(1-suppB);                     /* expected absorbed count in this bin (nucleus absorption, matches suppress()) */
     }
+    st.nAbs=Math.round(absAcc);
     var K=Math.min(2400,Math.round(st.nScat*0.01*dotP()));
     for(i=0;i<K;i++){ var r=rnd(), u=Math.sqrt(1/(1+G10*(1-r))); if(u>1)u=1;
       var th=2*Math.asin(u), S=suppress(th,Ek); if(S<1&&rnd()>S)continue;
@@ -909,6 +917,7 @@ function updateCounts(){
   txt('gmN',fmtN(st.Nf));
   txt('gmScat',fmtN(st.nScat));
   txt('gmBack',Math.round(st.nBack).toLocaleString('en-US'));
+  txt('gmAbs',Math.round(st.nAbs).toLocaleString('en-US'));
   txt('gmOdds',oddsStr());
 }
 function syncUI(){ var Ek=EkOf(st.p), n;
@@ -1220,7 +1229,9 @@ function onComplete(){ st.showPlum=false; st.flat=false;
   applyRun(0.193,3000000,8); syncUI(); updateCounts(); draw(); }
 function onReset(){ st.showPlum=false; st.flat=false; st.rate=RSLOW;
   var f=el('gmFlat'); if(f)f.checked=false;
-  applyRun(0.193,0,1); syncUI(); updateCounts(); draw(); }
+  applyRun(0.193,0,1); syncUI(); updateCounts(); draw(); 
+  onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
+}
 function onResize(){ sizeCanvas(); draw(); }
 
 /* ---- KaTeX (deferred-safe) ---- */

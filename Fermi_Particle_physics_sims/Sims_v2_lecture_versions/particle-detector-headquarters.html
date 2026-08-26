@@ -535,7 +535,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -654,7 +654,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -731,6 +731,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -751,6 +752,7 @@ const Shell = (function(){
     setPlaying, refit
   };
 })();
+window.Shell = Shell; /* expose for the sim's window.Shell guards (const is lexical-only) */
 
 window.__audit = { at(momentumGeV) {
   const m = 0.13957;
@@ -836,7 +838,7 @@ window.__audit = { at(momentumGeV) {
     return { E, KE: E - m, beta, gamma: m > 0 ? E / m : Infinity, t: TOF_D / (beta * C), tL: TOF_D / C };
   }
   function theme() {
-    const cs = getComputedStyle(document.documentElement);
+    const cs = getComputedStyle(document.body);
     const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
     return {
       text: g('--text', '#26303a'), muted: g('--muted', '#5f6b78'),
@@ -871,7 +873,9 @@ window.__audit = { at(momentumGeV) {
       const dxRun = Math.max(80, L.xEnd - L.trk[1]);
       const up = P.q > 0;
       const clear = Math.max(24, up ? (L.yMid - (L.yTop + 50)) : ((L.yBot - 16) - L.yMid));
-      const mag = Math.min(0.62, 0.34 / p, Math.atan(clear / dxRun));
+      const geo = Math.min(0.62, Math.atan(clear / dxRun));
+      /* soft clamp: monotone in p over the whole 0.2-5 range (hard min() saturated below ~1 GeV), always < geo so the track stays inside the detector */
+      const mag = geo * (0.34 / p) / (0.34 / p + geo);
       thT = (up ? -1 : 1) * mag;
     }
 
@@ -1128,8 +1132,7 @@ window.__audit = { at(momentumGeV) {
   function laneKeys() {
     const out = [];
     if (PARTS[state.part].m > 0) out.push(state.part);
-    for (const k of ['pi', 'ka', 'pr']) {
-      if (out.length >= 3) break;
+    for (const k of ['pi', 'ka', 'pr']) { /* always keep all three reference racers (p is the star of cards 5-6) — 5th lane when e/mu/n selected */
       if (!out.includes(k)) out.push(k);
     }
     return out;
@@ -1143,12 +1146,13 @@ window.__audit = { at(momentumGeV) {
     if (ctx.measureText(title).width > W - 70) title = 'TOF race, 10 m \u2014 same p';
     if (ctx.measureText(title).width <= W - 70) ctx.fillText(title, 10, 17);
 
-    const yA = 26, yB = H - 8, lh = (yB - yA) / 4;
+    const keys = laneKeys();
+    const yA = 26, yB = H - 8, lh = (yB - yA) / (keys.length + 1);
     const startX = 72, finX = W - 84, Ln = finX - startX;
     if (Ln < 60 || lh < 10) return;
 
     const rows = [{ key: 'light', sym: 'light', col: '#eab308', beta: 1, q: 0, t: TOF_D / C }];
-    for (const k of laneKeys()) {
+    for (const k of keys) {
       const p = PARTS[k], kk = kinematics(p.m, state.p);
       rows.push({ key: k, sym: p.sym, col: p.color, beta: kk.beta, q: p.q, t: kk.t });
     }
@@ -1199,9 +1203,10 @@ window.__audit = { at(momentumGeV) {
 
   /* ---------- readouts / UI ---------- */
   function fmtDelay(dns) {
-    if (dns < 0.02) return dns.toFixed(3);
-    if (dns < 1) return dns.toFixed(2);
-    return dns.toFixed(1);
+    if (dns < 0.001) return '<0.001'; /* massive particle: delay is real but below display precision */
+    if (dns < 0.02) return '+' + dns.toFixed(3);
+    if (dns < 1) return '+' + dns.toFixed(2);
+    return '+' + dns.toFixed(1);
   }
   function updateReadouts() {
     const P = PARTS[state.part], k = kinematics(P.m, state.p);
@@ -1209,7 +1214,7 @@ window.__audit = { at(momentumGeV) {
     const g = P.m > 0 ? (k.gamma > 999 ? k.gamma.toFixed(0) : k.gamma.toFixed(2)) : '\u221E';
     $('roBeta').textContent = k.beta.toFixed(4) + ' (\u03B3 ' + g + ')';
     const tns = k.t * 1e9, dns = (k.t - k.tL) * 1e9;
-    $('roTof').textContent = tns.toFixed(2) + ' ns' + (P.m > 0 ? ' (+' + fmtDelay(dns) + ')' : ' (light)');
+    $('roTof').textContent = tns.toFixed(2) + ' ns' + (P.m > 0 ? ' (' + fmtDelay(dns) + ')' : ' (light)');
     const ch = $('roCh');
     if (P.q === 0) { ch.textContent = 'n/a \u2014 neutral'; ch.style.color = ''; }
     else if (k.beta > 1 / N_W) { ch.textContent = 'ON \u00B7 \u03B2 > 0.752'; ch.style.color = 'var(--accent)'; }
@@ -1305,14 +1310,27 @@ window.__audit = { at(momentumGeV) {
     syncChips(); updateReadouts();
     ev = buildEvent(false);
     drawAll();
-  }
+  
+  onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
+}
   function onStep(i) {
-    const st = STEPS[Math.max(0, Math.min(STEPS.length - 1, i | 0))];
+    const k = Math.max(0, Math.min(STEPS.length - 1, i | 0));
+    const st = STEPS[k];
     state.part = st.part; state.p = st.p || 1; state.fireCount = (i | 0);
     momEl.value = String(state.p);
     syncChips(); updateReadouts();
     ev = buildEvent(false);
     drawAll();
+    /* SYS-5: an answered card's reveal must survive revisits and Reset */
+    const c = document.querySelectorAll('#inq-cards .inq-step')[k];
+    if (c && c.dataset.answered) {
+      const r = c.dataset.reveal;
+      if (r === 'choice') {
+        const picked = c.querySelector('.choice.wrong') || c.querySelector('.choice[data-correct]');
+        if (picked && picked.dataset.ans) selectParticle(picked.dataset.ans);
+      } else if (r && r.slice(0, 5) === 'fire:') selectParticle(r.slice(5));
+      else if (r === 'mom5') { state.p = 5; momEl.value = '5'; ev = buildEvent(false); updateReadouts(); drawAll(); }
+    }
   }
   function resizeNow() {
     const d = window.devicePixelRatio || 1;

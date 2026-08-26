@@ -558,7 +558,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -677,7 +677,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -754,6 +754,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -774,8 +775,9 @@ const Shell = (function(){
     setPlaying, refit
   };
 })();
+window.Shell = Shell; /* expose for the sim's window.Shell guards (const is lexical-only) */
 
-window.__audit={at(beta){const gamma=1/Math.sqrt(1-beta*beta);const momentumGeV=gamma*beta*0.00051099895;const magneticFieldTesla=1;const radiusMeters=momentumGeV/(0.299792458*magneticFieldTesla);return{beta,gamma,speedFractionOfC:beta,momentumGeV,magneticFieldTesla,radiusMeters};}};
+window.__audit={state(){return null;}}; /* replaced with a live-state reporter inside the sim script */
 (function(){
 'use strict';
 /* ---------- constants (engine ground truth) ---------- */
@@ -833,20 +835,30 @@ function computeTrack(key,Ek0,B,plateOn){
  var cross=[],stopped=false,endR='exit';
  var maxLen=Math.min(4.0,Math.max(0.85,2.35*2*Math.PI*r1));
  for(var i=0;i<9000;i++){
+  var yPrev=y;
   th+=sgn*DS/r;x+=Math.cos(th)*DS;y+=Math.sin(th)*DS;s+=DS;
   var nowIn=plateOn&&Math.abs(y)<PLATE_T/2;
-  if(nowIn){
-   inPb=true;
-   /* energy is taken along the path ACTUALLY travelled in the lead (oblique
-      crossings cost more than 6 mm), sub-stepped so dE/dx tracks beta. */
-   var sub=6,dl=DS/sub,q2;
+  /* energy is taken along the path ACTUALLY travelled in the lead (oblique
+     crossings cost more than 6 mm): each step is charged only for its in-plate
+     fraction (linear interpolation of the y = ±PLATE_T/2 crossings), so the
+     path is continuous, not quantized to DS; sub-stepped so dE/dx tracks beta. */
+  var frac=0;
+  if(plateOn){
+   var hp=PLATE_T/2,loY=Math.min(yPrev,y),hiY=Math.max(yPrev,y);
+   if(hiY-loY>1e-12)frac=Math.max(0,Math.min(1,(Math.min(hiY,hp)-Math.max(loY,-hp))/(hiY-loY)));
+   else frac=nowIn?1:0;
+  }
+  if(frac>0){
+   var sub=6,dl=frac*DS/sub,q2;
    for(q2=0;q2<sub;q2++){
     Ek-=dEdxPb(P,Ek)*dl*1000;pathPb+=dl;
     if(Ek<=0.5){stopped=true;break;}
    }
    if(stopped){pts.push({x:x,y:y,s:s,h:true,j:0,u:0,a:0,w:0,b:0});endR='plate';break;}
    k=kin(P.m,Ek);p=k.p;r=radiusM(p,B);
-  }else if(inPb){
+  }
+  if(nowIn)inPb=true;
+  else if(inPb){
    inPb=false;
    cross.push({i:pts.length,p:p,r:r,Ek:Ek,path:pathPb});
   }
@@ -923,7 +935,7 @@ function mysteryClick(){
 /* ---------- readouts ---------- */
 function fmtP(p){return p>=1000?(p/1000).toFixed(2)+' GeV/c':p.toFixed(1)+' MeV/c';}
 function fmtR(r){return r>=1?r.toFixed(2)+' m':(r*100).toFixed(1)+' cm';}
-function syncEkOut(){ekVal.textContent=(st.mystery&&st.mystery.phase===1)?'hidden':st.Ek+' MeV';}
+function syncEkOut(){ekVal.textContent=(st.mystery&&st.mystery.phase===1)?'hidden':(st.mystery&&st.mystery.phase===2)?st.mystery.Ek+' MeV (revealed)':st.Ek+' MeV';}
 function updateReadouts(){
  var t=st.track;
  if(!t){roPart.textContent='\u2014';roP1.textContent='\u2014';roR1.textContent='\u2014';
@@ -932,6 +944,10 @@ function updateReadouts(){
  roPart.textContent=hide?'? (unknown)':(t.sym+' \u00B7 q = '+(t.qs>0?'+1 e':'\u22121 e'));
  roP1.textContent=fmtP(t.p1);roR1.textContent=fmtR(t.r1);
  if(!t.plateOn){roDE.textContent='no plate';roP2.textContent='\u2014';roR2.textContent='\u2014';}
+ else if(t.stopped&&t.cross&&t.cross.length){
+  /* crossed once, spiralled back, then absorbed \u2014 keep the first crossing's numbers */
+  roDE.textContent=t.Ek0.toFixed(0)+' MeV (all of it, over '+t.cross.length+(t.cross.length>1?' crossings':' crossing')+')';
+  roP2.textContent=fmtP(t.p2)+' then absorbed';roR2.textContent=fmtR(t.r2)+' then absorbed';}
  else if(t.stopped){roDE.textContent=t.Ek0.toFixed(0)+' MeV (all of it)';roP2.textContent='absorbed in Pb';roR2.textContent='\u2014';}
  else if(t.crossed){
   var n=t.cross.length,suf=n>1?' (1 of '+n+')':'';
@@ -954,6 +970,32 @@ function chip(x,y,txt,align,colr){
  ctx.fillStyle='rgba(6,9,14,0.78)';rr(X,Y,w,h,6);ctx.fill();
  ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=1;ctx.stroke();
  ctx.fillStyle=colr||'#eef2f8';ctx.fillText(txt,X+8,Y+15.5);ctx.restore();
+ return {X:X,Y:Y,w:w,h:h};
+}
+function chipRect(x,y,txt,align){
+ ctx.save();
+ ctx.font='600 14px '+(/\d/.test(txt)?FMONO:FSANS);
+ var w=ctx.measureText(txt).width+16,h=22;
+ ctx.restore();
+ var X=align==='center'?x-w/2:(align==='right'?x-w:x);
+ X=Math.max(3,Math.min(W-w-3,X));
+ var Y=Math.max(3,Math.min(H-h-3,y));
+ return {X:X,Y:Y,w:w,h:h};
+}
+function rectsHit(a,b,pad){
+ pad=pad||5;
+ return a.X<b.X+b.w+pad&&a.X+a.w+pad>b.X&&a.Y<b.Y+b.h+pad&&a.Y+a.h+pad>b.Y;
+}
+function nudgeChipDown(box,blockers){
+ var gap=6,i,b,moved=true,n=0;
+ while(moved&&n++<10){
+  moved=false;
+  for(i=0;i<blockers.length;i++){
+   b=blockers[i];
+   if(rectsHit(box,b,gap)){box.Y=Math.min(H-box.h-3,b.Y+b.h+gap);moved=true;}
+  }
+ }
+ return box;
 }
 function arrow(X,Y,dx,dy,col){
  ctx.save();ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.6;
@@ -1034,7 +1076,7 @@ function draw(){
   ctx.globalAlpha=1;
   /* glowing head — ONLY with the plate in, where direction is legitimately known */
   if(st.mode==='track'&&st.s<t.len){
-   var fi=st.s/DS,ii=Math.min(t.pts.length-2,Math.floor(fi)),f=fi-ii;
+   var fi=st.s/DS,ii=Math.max(0,Math.min(t.pts.length-2,Math.floor(fi))),f=Math.max(0,fi-ii);
    var a1=t.pts[ii],b1=t.pts[ii+1];
    var hx=cx+(a1.x+(b1.x-a1.x)*f)*scale,hy=cy-(a1.y+(b1.y-a1.y)*f)*scale;
    ctx.globalAlpha=0.14;ctx.fillStyle=liveCol;ctx.beginPath();ctx.arc(hx,hy,13,0,6.2832);ctx.fill();
@@ -1082,6 +1124,7 @@ function draw(){
   }
   chip(cx,cy-8,'\u25B6 Play (or Fire) to expose the photograph','center','#ffd479');
  }else{
+  var energyBoxes=[];
   if(st.mode==='track'){
    /* direction cues are legitimate only once the plate can fix the direction */
    var ey=cy+HALF_H*scale;
@@ -1089,12 +1132,19 @@ function draw(){
    ctx.beginPath();ctx.moveTo(cx-6,ey-6);ctx.lineTo(cx,ey-14);ctx.lineTo(cx+6,ey-6);ctx.stroke();
    ctx.restore();
    var entryTxt=(st.mystery&&st.mystery.phase===1)?'? \u2191':(t.sym+' '+t.Ek0+' MeV \u2191');
-   chip(cx+14,ey-32,entryTxt,'left',liveCol);
+   energyBoxes.push(chip(cx+14,ey-32,entryTxt,'left',liveCol));
   }else{
    var pTxt=(st.mystery&&st.mystery.phase===1)?'?':(t.sym+' \u00B7 '+t.Ek0+' MeV');
-   chip(x0+cw-10,y0+chh-40,pTxt,'right',liveCol);
+   energyBoxes.push(chip(x0+cw-10,y0+chh-40,pTxt,'right',liveCol));
   }
-  /* radius labels — only once a question asks for the numbers */
+  var gnPre=st.ghosts.length;
+  st.ghosts.forEach(function(g,gi){
+   if(!g.tag||!g.pts||g.pts.length<4)return;
+   if(!g.special&&gi<gnPre-2)return;
+   var gp=g.pts[Math.floor(g.pts.length*(g.rev?0.12:0.55))];
+   energyBoxes.push(chipRect(cx+(gp.x+(g.slide||0))*scale,cy-gp.y*scale-26,g.tag,'center'));
+  });
+  /* radius labels — drop below an energy chip when B tightens and they collide */
   var rLab=function(idx,rv){
    if(!st.showNums)return;
    if(idx<1||idx>=t.pts.length-1)return;
@@ -1103,8 +1153,10 @@ function draw(){
    var A=t.pts[idx-1],B2=t.pts[idx+1];
    var tx=B2.x-A.x,ty=B2.y-A.y,LL=Math.hypot(tx,ty)||1;tx/=LL;ty/=LL;
    var nx=-ty,ny=tx;if(t.qs<0){nx=-nx;ny=-ny;}
-   var off=24/scale;
-   chip(cx+(P.x+nx*off)*scale,cy-(P.y+ny*off)*scale-11,'r '+fmtR(rv),'center');
+   var off=24/scale, rTxt='r '+fmtR(rv);
+   var rx=cx+(P.x+nx*off)*scale, ry=cy-(P.y+ny*off)*scale-11;
+   var box=nudgeChipDown(chipRect(rx,ry,rTxt,'center'),energyBoxes);
+   energyBoxes.push(chip(box.X+box.w/2,box.Y,rTxt,'center'));
   };
   if(t.crossed){rLab(Math.floor(t.iCross*0.55),t.r1);rLab(Math.floor(t.iCross+(t.pts.length-1-t.iCross)*0.5),t.r2);}
   else rLab(Math.floor((t.pts.length-1)*0.55),t.r1);
@@ -1112,18 +1164,19 @@ function draw(){
   var stat=null,scol='#ffd479';
   if(st.mystery)stat=(st.mystery.phase===1)?'which particle?':(t.sym+' \u00B7 '+st.mystery.Ek+' MeV');
   else if(t.stopped)stat='stopped inside the lead';
-  else if(t.endR==='orbit')stat='trapped \u2014 r too small';
   else if(!t.plateOn){stat='no plate \u00B7 direction unknown';scol='#c9d2df';}
   else stat='lead plate in';
   if(stat)chip(W-10,8,stat,'right',scol);
  }
  /* ghost tags — newest two, plus every reveal overlay */
- var gn=st.ghosts.length;
+ var gn=st.ghosts.length,gBoxes=[];
  st.ghosts.forEach(function(g,gi){
   if(!g.tag||!g.pts||g.pts.length<4)return;
   if(!g.special&&gi<gn-2)return;
   var p=g.pts[Math.floor(g.pts.length*(g.rev?0.12:0.55))];
-  chip(cx+(p.x+(g.slide||0))*scale,cy-p.y*scale-26,g.tag,'center',g.col);
+  /* nudge each tag below any previously drawn ghost tag so they never overlap */
+  var gb=nudgeChipDown(chipRect(cx+(p.x+(g.slide||0))*scale,cy-p.y*scale-26,g.tag,'center'),gBoxes);
+  gBoxes.push(chip(gb.X+gb.w/2,gb.Y,g.tag,'center',g.col));
  });
  if(st.sceneNoteT>0&&st.sceneNote)chip(cx,H-30,st.sceneNote,'center','#ffd479');
 }
@@ -1142,7 +1195,7 @@ function onFrame(dt){
   else{
    st.expo=1;
    /* head speed follows the LOCAL beta, so it slows after the plate */
-   if(st.s<t.len)st.s=Math.min(t.len,st.s+0.34*Math.max(0.05,betaAt(t,st.s))*dt);
+   if(st.s<t.len)st.s=Math.max(0,Math.min(t.len,st.s+0.34*Math.max(0.05,betaAt(t,st.s))*dt));
   }
  }
  for(var i=0;i<st.ghosts.length;i++){
@@ -1295,11 +1348,13 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(function(card){
   /* data-reveal — the commitment drives the scene via the sim's own setters */
   var r=card.dataset.reveal;
   if(r==='identical'){revealIdentical();Shell.setPlaying(true);}
-  else if(r==='bfield'){if(st.track)pushGhost(false);st.scrub=false;st.B=3.0;fire('full');syncControls();Shell.setPlaying(true);}
+  else if(r==='bfield'){stageFor(1);if(st.track)pushGhost(false);st.scrub=false;st.B=3.0;fire('full');syncControls();Shell.setPlaying(true);} /* restage card 2's spec first so the quoted 14.1 → 7.1 cm always matches (PHY-P2-2) */
   else if(r==='proton'){if(st.track)pushGhost(false);st.scrub=false;st.pKey='p';setActive('p');if(moreBox.classList.contains('sim-hidden'))moreBtn.click();fire('full');Shell.setPlaying(true);}
   else if(r==='plate'){revealPlate();Shell.setPlaying(true);}
  });});
 });
+/* live audit reporter (st is in scope here) — replaces the static template stub */
+window.__audit={state(){var t=st.track;return{B:st.B,Ek:st.Ek,particle:st.pKey,plate:st.plate,p1:t?t.p1:null,r1:t?t.r1:null,p2:t&&t.crossed?t.p2:null,r2:t&&t.crossed?t.r2:null,dE:t&&t.crossed?t.dE:null,stopped:t?!!t.stopped:null};}};
 /* ---------- formal layer (KaTeX, deferred-safe) ---------- */
 var EQS=[
  ['sim-eq1','r=\\dfrac{p}{|q|\\,B}'],
@@ -1318,10 +1373,8 @@ if(window.ResizeObserver){new ResizeObserver(function(){onResize();}).observe(cv
 stageFor(0);
 onResize();
 renderFormal(0);
+booted=true;                                        /* flip BEFORE Shell.init so setLectureMode(true)->finishInquiry->onStep(k) can execute */
 Shell.init({onFrame:onFrame,onReset:onReset,onResize:onResize,onStep:onStep,onComplete:onComplete});
-/* Prediction-first: the outcome-bearing exposure waits on the ENABLED Play button. */
-Shell.setPlaying(false);
-booted=true;
 syncControls();draw();
 })();
 </script>

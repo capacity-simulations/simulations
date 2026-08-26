@@ -372,7 +372,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
-      <label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts; registry is empty until items are added">
+      <label id="ht-ctl" class="shell-btn" title="Hide Text — hides registered labels/readouts (boots checked; unchecks to reveal the E_min explainer)">
         <input type="checkbox" id="ht-toggle" checked> Hide Text
       </label>
     </div>
@@ -402,7 +402,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
      NOTE: default flipped — Hide Text boots CHECKED in this sim (curriculum request).
 -->
 <script>
-/* Hide Text toggle — empty registry; hides .ht-hide DOM nodes and gates HT() canvas labels. */
+/* Hide Text toggle — hides .ht-hide DOM nodes and gates HT() canvas labels. Boots CHECKED; the E_min explainer note is the single registered item (see REGISTRY comment above). */
 (function(){
   var shell=document.getElementById('shell');
   var box=document.getElementById('ht-toggle');
@@ -457,7 +457,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <button class="choice" data-fb="Viruses scatter light fine — but any detail finer than one wavelength blurs away regardless of the sample.">Light damages samples this small</button>
           <div class="predict-eval"></div></div>
 <div class="inq-step" data-gate data-reveal="proton"><h4>4 · Decades for decades</h4>
-          <p>d = 10⁻¹⁰ m — an atom; <strong>E<sub>min</sub></strong> ≈ 2 keV, X-ray territory. The proton is 100,000× smaller still (1.7 fm). Predict E<sub>min</sub> there — the zoom will check you.</p>
+          <p>d = 10⁻¹⁰ m — an atom; <strong>E<sub>min</sub></strong> ≈ 2 keV, X-ray territory. The proton is almost five orders of magnitude smaller still (1.7 fm). Predict E<sub>min</sub> there — the zoom will check you.</p>
           <button class="choice" data-fb="The ladder is log–log: five decades of size cost five decades of energy. Watch <strong>E<sub>min</sub></strong> land at 116 MeV.">A few times more — tens of keV</button>
           <button class="choice" data-fb="Brightness adds photons, not resolution — each photon's wave is unchanged. Watch <strong>E<sub>min</sub></strong> climb to 116 MeV.">Same keV — just a brighter beam</button>
           <button class="choice" data-correct data-fb="Decade for decade — watch the zoom land at 1.7 fm as <strong>E<sub>min</sub></strong> climbs to 116 MeV.">About 100,000× more — hundreds of MeV</button>
@@ -552,7 +552,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -671,7 +671,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -748,6 +748,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -768,6 +769,7 @@ const Shell = (function(){
     setPlaying, refit
   };
 })();
+window.Shell = Shell; /* expose for the sim's window.Shell guards (const is lexical-only) */
 
 window.__audit = { at(resolutionMeters) {
   const momentumGeV = 1.9732698e-16 / resolutionMeters;
@@ -1522,7 +1524,7 @@ function updateUI(){
 /* ---------- sizing ---------- */
 function readAcc(){
   try{
-    const v=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const v=getComputedStyle(document.body).getPropertyValue('--accent').trim();
     if (v) ACC=v;
   }catch(e){}
 }
@@ -1566,7 +1568,9 @@ eScale.addEventListener('input', ()=>{
 });
 eEnergy.addEventListener('input', ()=>{
   userMove();
-  S.logd=S.view=clamp(LOGC-parseFloat(eEnergy.value),LMIN,LMAX);
+  /* Snap to the slider's own 2-dp resolution: the 4-dp min/max attributes carry
+     LOGC rounding, so the raw endpoint would read d = 99,997 km instead of 10⁵ km. */
+  S.logd=S.view=clamp(Math.round((LOGC-parseFloat(eEnergy.value))*100)/100,LMIN,LMAX);
   updateUI(); draw();
 });
 bigBtn.addEventListener('click', ()=>{
@@ -1623,7 +1627,7 @@ function renderFormal(n){
   if (a && b && c && window.katex){
     try{
       katex.render('\\frac{\\lambda}{2\\pi}=\\frac{\\hbar}{p}\\;\\Rightarrow\\; p\\gtrsim\\frac{\\hbar}{d}', a, {throwOnError:false});
-      katex.render('E_{\\min}=pc=\\frac{\\hbar c}{d},\\qquad \\hbar c\\approx 0.1973\\ \\text{GeV·fm}', b, {throwOnError:false});
+      katex.render('E_{\\min}=pc=\\frac{\\hbar c}{d},\\qquad \\hbar c\\approx 0.1973\\ \\text{GeV}\\cdot\\text{fm}', b, {throwOnError:false});
       katex.render('d=10^{-18}\\,\\text{m}\\ \\Rightarrow\\ E_{\\min}\\approx 197\\ \\text{GeV}', c, {throwOnError:false});
     }catch(e){}
     return;
@@ -1654,6 +1658,8 @@ function onFrame(dt){
 function onReset(){
   S.logd=S.view=HOME; S.t=0; S.ghost=null;
   updateUI(); draw();
+
+  onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
 }
 function onResize(){ sizeCanvas(); updateUI(); draw(); }
 function onStep(i){

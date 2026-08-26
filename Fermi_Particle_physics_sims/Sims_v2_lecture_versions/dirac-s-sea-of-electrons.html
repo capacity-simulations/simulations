@@ -143,6 +143,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
   font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(255,255,255,.8);} /* NP-P2-3: theme-aware pill */
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -298,6 +299,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 .sim-strip{flex:0 0 150px;display:flex;flex-direction:column}
 .sim-main canvas,.sim-strip canvas{flex:1 1 auto;min-height:0;width:100%;display:block}
+.sim-main .legend{top:2px;right:12px;bottom:auto;left:auto;padding:6px 12px}
+.sim-main .plot-title{max-width:calc(100% - 360px)}
 #seaCanvas{cursor:crosshair}
 /* padding wrapper: the shell's .shell-panel has none, so sim content needs its own */
 .sim-pad{padding:12px}
@@ -359,7 +362,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <tr><td>Predict before reveal</td><td>Opens with an empty sea and ℰ = 0; the three prediction chips sit above the controls, and the field only comes on once the student commits. Nothing is ever disabled — the order does the work.</td></tr>
   <tr><td>Misconception targeted structurally</td><td>A wrong choice is rendered, not just corrected: dashed ghost h⁺ follow the predicted motion beside the solid real holes until they visibly separate.</td></tr>
   <tr><td>Invariants made visible</td><td>Net charge is recomputed from the particle list every frame (always 0); net momentum of matter is shown in MeV/c with a note that annihilation photons carry the remainder.</td></tr>
-  <tr><td>Operational quantities</td><td>Every pair prints its exact cost 2E(p) — 2.25 MeV at p = 1 MeV/c; both axes carry units (MeV and MeV/c) and eℰ is given as 4.0 MeV/c per second at ℰ = 1.</td></tr>
+  <tr><td>Operational quantities</td><td>Every pair prints its exact cost 2E(p) — 2.25 MeV at p = 1 MeV/c; both axes carry units (MeV and MeV/c); internally the ℰ slider applies eℰ = 4.0 MeV/c per second at ℰ = 1.</td></tr>
   <tr><td>Formal layer on demand</td><td>Dispersion relation, pair cost, thermal weight, the hole↔positron map and the drift equations sit behind the formal toggle.</td></tr>
 </table>
       </div>
@@ -460,7 +463,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <p>One pair at p ≈ 0 cost 1.022 MeV. The <strong>⚡ Excite</strong> button makes the next pair at p = +1 MeV/c. That one costs…</p>
           <button class="choice" data-fb="E(p) = √((pc)² + (mc²)²) rises with |p| — watch the readout jump past 2.2 MeV.">The same — the gap is the gap</button>
           <button class="choice" data-fb="Both branches bend away from each other with |p|: the separation 2E(p) only grows.">Less — it skips the steepest part</button>
-          <button class="choice" data-correct data-fb="2E(p) ≈ 2.25 MeV at 1 MeV/c — see <strong>cost to make the last pair</strong> and <strong>net momentum (matter)</strong>.">More — the pair also carries kinetic energy</button>
+          <button class="choice" data-correct data-fb="2E(p) ≈ 2.25 MeV at 1 MeV/c — see <strong>cost to make the last pair</strong>; <strong>net momentum (matter)</strong> stays 0: e⁻ carries +1 MeV/c and h⁺ carries −1 MeV/c.">More — the pair also carries kinetic energy</button>
           <div class="predict-eval"></div></div>
 <div class="inq-step" data-gate data-reveal="seed5"><h4>4 · Charging up the vacuum?</h4>
           <p>At <strong>Temperature kT</strong> = 0.80 MeV the sea fires pairs on its own. As they accumulate, <strong>net charge</strong> will…</p>
@@ -541,7 +544,7 @@ const Shell = (function(){
   let inqStep=0, inqTotal=0;   // guided-inquiry stepper (shell-owned)
 
   function loop(now){
-    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; last=now;
+    let dt=(now-last)/1000; if(dt>0.1)dt=0.1; if(!(dt>=0))dt=0; /* first frame after setPlaying can predate the stamp */ last=now;
     if(playing) onFrame(dt*speed);
     requestAnimationFrame(loop);
   }
@@ -660,7 +663,7 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -737,6 +740,7 @@ const Shell = (function(){
         }
         onResize(); onReset();
         inqShow(0);
+        setLectureMode(true); /* default view: open in Lecture mode (curriculum request) — 🎓 or the restore chip re-opens the inquiry at card 1 */
       }else{
         root.classList.add('no-inquiry');
         const lb=document.getElementById('shell-lecture');
@@ -757,6 +761,7 @@ const Shell = (function(){
     setPlaying, refit
   };
 })();
+window.Shell = Shell; /* expose for the sim's window.Shell guards (const is lexical-only) */
 
 'use strict';
 
@@ -806,7 +811,7 @@ function tok(n,f){
   let v='';
   try{
     v=getComputedStyle(document.body).getPropertyValue(n);
-    if(!v||!v.trim()) v=getComputedStyle(document.documentElement).getPropertyValue(n);
+    if(!v||!v.trim()) v=getComputedStyle(document.body).getPropertyValue(n);
   }catch(e){}
   v=(v||'').trim(); return v||f;
 }
@@ -885,10 +890,16 @@ function fit(cv){
 }
 
 /* ===== dynamics ===== */
+function rejectNote(p,txt){                  // NP-P2-2: caps no longer reject silently
+  const last=S.chips[S.chips.length-1];
+  if(last && last.txt===txt && last.t<1.2) return;   // don't stack duplicates
+  S.chips.push({p:clampP(p),t:0,txt:txt});
+  draw();
+}
 function spawnPair(p,user){
   const cap = user?3:2;                      // keep creation/annihilation events separable
-  if(S.flights.length>=cap) return;
-  if(S.electrons.length+upCount()>=14) return;
+  if(S.flights.length>=cap){ if(user) rejectNote(p,'sea is busy — wait for the flight'); return; }
+  if(S.electrons.length+upCount()>=14){ if(user) rejectNote(p,'sea is full — wait for annihilation'); return; }
   p=clampP(p);
   S.flights.push({kind:'up',p:p,t:0,dur:0.75});
   S.lastCostMeV=2*Epos(p)*1000;
@@ -1300,7 +1311,7 @@ function bindUI(){
   /* kT and ℰ keep running while dragged — their whole point is the motion */
   if(els.kt) els.kt.addEventListener('input',()=>{ S.ktMeV=+els.kt.value; syncLabels(); draw(); });
   if(els.field) els.field.addEventListener('input',()=>{ S.field=+els.field.value; syncLabels(); draw(); });
-  if(els.depth) els.depth.addEventListener('input',()=>{ S.depthMeV=+els.depth.value; syncLabels(); pauseScrub(); });
+  if(els.depth) els.depth.addEventListener('input',()=>{ S.depthMeV=+els.depth.value; syncLabels(); draw(); });
   if(els.excite) els.excite.addEventListener('click',()=>{ spawnPair(0.001*S.sign,true); S.sign*=-1; syncExcite(); play(); });
   if(els.sea) els.sea.addEventListener('pointerdown',ev=>{
     if(!S.map) return;
@@ -1332,7 +1343,7 @@ function applyStep(i){
   /* One spec per card; ℰ stays 0 on the predict cards — the ANSWER switches it on. */
   if(i===0){ S.ktMeV=0.10; S.field=0; S.depthMeV=3.0; S.lastCostMeV=null; }
   else if(i===1){ S.ktMeV=0.10; S.field=0; S.depthMeV=3.0; S.lastCostMeV=null; }
-  else if(i===2){ S.ktMeV=0.10; S.field=0; S.depthMeV=3.0; seed([0]); S.lastCostMeV=2*Epos(0)*1000; }
+  else if(i===2){ S.ktMeV=0.10; S.field=0; S.depthMeV=3.0; seed([0]); S.lastCostMeV=2*Epos(0)*1000; S.sign=1; /* NP-P2-1: card promises +1 MeV/c */ }
   else if(i===3){ S.ktMeV=0.80; S.field=0; S.depthMeV=3.0; S.lastCostMeV=null; }
   else { S.ktMeV=0.25; S.field=0; S.depthMeV=3.0; seed(SEED3); S.lastCostMeV=null; }
   syncUI(); draw();
@@ -1361,7 +1372,9 @@ function onFrame(dt){
   if(!(dt>0)) dt=0; if(dt>0.1) dt=0.1;
   S.t+=dt; physics(dt); draw();
 }
-function onReset(){ applyOpening(); }
+function onReset(){ applyOpening(); 
+  onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
+}
 function onResize(){
   if(els.sea) fit(els.sea);
   if(els.drift) fit(els.drift);
@@ -1387,7 +1400,7 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(card=>{
     /* data-reveal — the commitment triggers the reveal via the sim's own setters */
     const r=card.dataset.reveal;
     if(r==='pair0'){ spawnPair(0,true); play(); }
-    else if(r==='excite'){ if(els.excite) els.excite.click(); }
+    else if(r==='excite'){ S.sign=1; syncExcite(); if(els.excite) els.excite.click(); } /* NP-P2-1: reveal always fires at the promised +1 MeV/c */
     else if(r==='seed5'){ seed(SEED5); draw(); play(); }
     else if(r==='drift'){ revealDrift(ch.dataset.ans); }
   }));
