@@ -8,7 +8,7 @@
  * 2. Extensions → Apps Script. Delete any starter code, paste this whole file.
  * 3. Select the `initSheet` function in the toolbar dropdown → Run.
  *    - It will ask for permission to edit the sheet; grant it.
- *    - It creates (or ensures) four tabs — PP, QM, SR, CM — each with:
+ *    - It creates (or ensures) five tabs — PP, QM, SR, CM, JEE — each with:
  *        Row 1 header:  Sim | v1 | v2 | … | v10   (MAX_VERSIONS columns)
  *        Rows 2..N:     one row per sim, column A pre-populated with the title.
  *    - Safe to re-run; never overwrites existing feedback.
@@ -31,7 +31,9 @@
  *
  * ---------- HOW SUBMISSIONS ARE ROUTED ----------
  *
- * Each viewer.html sends: course=<PP|QM|SR|CM>, sim=<title>, message=<text>.
+ * Each viewer.html (and each embedded pill) sends:
+ *   course=<PP|QM|SR|CM|JEE>, sim=<title|filename-stem>, message=<text>.
+ *   JEE sims embed the pill directly and send the filename stem as `sim`.
  * doPost finds the row for that sim title (col A) in the matching tab, then
  * writes the dated message into the first empty cell among v1..v10. Any
  * submission after all MAX_VERSIONS cells are filled returns an error.
@@ -41,6 +43,110 @@ const MAX_VERSIONS = 10;
 const MAX_MESSAGE_CHARS = 5000;
 
 const SIM_TITLES_BY_COURSE = {
+  JEE: [
+    "C021-equations-of-motion-for-uniform-acceleration",
+    "C023-reading-x-t-v-t-and-a-t-graphs",
+    "C024-relative-velocity-in-one-dimension",
+    "C025-projectile-motion-ground-to-ground--with-air-drag",
+    "C025-projectile-motion-ground-to-ground",
+    "C028-relative-velocity-in-2d-river-boat-rain-man",
+    "C030-newtons-first-law-and-inertia",
+    "C031-newtons-second-law-f-ma",
+    "C032-newtons-third-law-pairs",
+    "C033-free-body-diagrams-the-master-skill",
+    "C036-pseudo-forces-and-non-inertial-frames",
+    "C037-static-and-kinetic-friction",
+    "C039-motion-on-inclined-planes-with-friction",
+    "C041-banking-of-roads",
+    "C042-vertical-circular-motion",
+    "C046-work-energy-theorem",
+    "C051-conservation-of-mechanical-energy",
+    "C053-potential-energy-curves-and-equilibrium-stable-unstable",
+    "C054-elastic-and-inelastic-collisions-in-1d--momentum-and-energy",
+    "C054-elastic-and-inelastic-collisions-in-1d",
+    "C055-collisions-in-2d-and-coefficient-of-restitution",
+    "C059-impulse-momentum-theorem",
+    "C062-torque-moment-of-force",
+    "C063-moment-of-inertia-and-radius-of-gyration",
+    "C064-parallel-and-perpendicular-axis-theorems",
+    "C067-conservation-of-angular-momentum",
+    "C069-rolling-motion-without-slipping",
+    "C070-rolling-on-an-inclined-plane",
+    "C072-toppling-vs-sliding-combined-equilibrium",
+    "C077-escape-velocity",
+    "C078-orbital-velocity-and-satellite-time-period",
+    "C079-geostationary-and-polar-satellites",
+    "C080-keplers-three-laws--solar-system",
+    "C080-keplers-three-laws",
+    "C081-energy-of-a-satellite-and-binding-energy",
+    "C088-buoyancy-and-archimedes-principle",
+    "C090-equation-of-continuity",
+    "C092-viscosity-stokes-law-and-terminal-velocity--raindrop-in-air",
+    "C097-thermal-expansion-linear-areal-volumetric",
+    "C099-latent-heat-and-change-of-state",
+    "C100-heat-conduction-steady-state-thermal-resistance",
+    "C103-black-body-radiation-stefan-boltzmann-and-wiens-law",
+    "C104-ideal-gas-equation-and-the-gas-laws",
+    "C106-rms-average-and-most-probable-speeds",
+    "C108-degrees-of-freedom-and-equipartition-of-energy",
+    "C113-thermodynamic-processes-isothermal-adiabatic-isobaric-isochoric",
+    "C118-the-carnot-cycle",
+    "C120-shm-defining-relation-and-phasor-picture",
+    "C123-spring-block-systems-series-and-parallel-springs",
+    "C124-the-simple-pendulum",
+    "C126-damped-oscillations--three-regimes",
+    "C127-forced-oscillations-and-resonance",
+    "C132-principle-of-superposition",
+    "C134-standing-waves-on-strings-and-harmonics",
+    "C135-standing-waves-in-air-columns-open-and-closed-pipes",
+    "C136-beats",
+    "C137-the-doppler-effect-sound",
+    "C139-electric-charge-quantisation-and-coulombs-law",
+    "C140-electric-field-and-field-lines",
+    "C142-electric-dipole-and-its-field",
+    "C143-dipole-in-a-uniform-field-torque-and-energy",
+    "C144-electric-flux-and-gausss-law",
+    "C148-relation-between-field-and-potential-gradient",
+    "C149-equipotential-surfaces",
+    "C152-capacitors-in-series-and-parallel",
+    "C154-dielectrics-polarisation-and-capacitance-change",
+    "C156-electric-current-drift-velocity-and-mobility",
+    "C157-ohms-law-and-resistance",
+    "C159-resistors-in-series-and-parallel",
+    "C160-emf-internal-resistance-and-terminal-voltage",
+    "C161-kirchhoffs-laws",
+    "C166-rc-circuits-charging-and-discharging",
+    "C169-charged-particle-in-a-magnetic-field-circular-and-helical",
+    "C170-the-cyclotron",
+    "C171-force-on-a-current-carrying-conductor",
+    "C173-torque-on-a-current-loop-magnetic-moment",
+    "C175-field-due-to-a-straight-wire-and-a-circular-loop",
+    "C183-magnetic-flux-and-faradays-law",
+    "C185-motional-emf",
+    "C190-growth-and-decay-of-current-in-an-lr-circuit",
+    "C192-ac-through-r-l-and-c-separately",
+    "C193-series-lcr-circuit-and-impedance",
+    "C194-resonance-in-a-series-lcr-circuit",
+    "C198-displacement-current",
+    "C199-electromagnetic-waves-nature-and-properties",
+    "C202-spherical-mirrors-and-the-mirror-formula",
+    "C203-refraction-and-snells-law",
+    "C204-total-internal-reflection-and-applications",
+    "C206-thin-lens-formula-and-lensmakers-equation",
+    "C208-prism-deviation-and-dispersion",
+    "C210-the-astronomical-and-terrestrial-telescope",
+    "C213-interference-and-youngs-double-slit-experiment",
+    "C215-single-slit-diffraction",
+    "C216-resolving-power-of-instruments",
+    "C217-polarisation-and-maluss-law",
+    "C219-the-photoelectric-effect-observations",
+    "C222-de-broglie-waves-and-the-davisson-germer-experiment",
+    "C223-rutherfords-model-and-alpha-particle-scattering",
+    "C224-bohrs-model-of-the-hydrogen-atom",
+    "C225-energy-levels-and-the-hydrogen-spectral-series--emission-and-absorption",
+    "C225-energy-levels-and-the-hydrogen-spectral-series",
+    "C230-radioactive-decay-law-and-half-life",
+  ],
   PP: [
     "Exploring the Standard Model",
     "Scale of the Universe",
