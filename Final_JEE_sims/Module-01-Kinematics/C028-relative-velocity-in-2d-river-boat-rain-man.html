@@ -1,0 +1,3267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relative Velocity in 2D — River-Boat Crossing</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+:root{
+  --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
+  --panel:var(--surface); --panel-2:#0f1a1d; --line:var(--border);
+  --ink:#e2e8f0; --ink-mid:#cbd5e1; --ink-mute:#9ca3af;
+  --text:#e2e8f0; --muted:#cbd5e1; --text-muted:#9ca3af;
+  --border:rgba(19,49,49,.45);
+  --accent:#3b9b8f; --accent-soft:rgba(59,155,143,.35);
+  --ctrl-bg:rgba(30,77,58,.15); --ctrl-border:rgba(30,77,58,.50); --track-bg:rgba(30,77,58,.35);
+  --topbar-bg:#FAF8F4; --topbar-text:#0f172a; --topbar-border:rgba(19,49,49,.25);
+  --btn-play-bg:#1E4D3A; --btn-play-hover:#2D6E52; --btn-play-text:#fff;
+  --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
+  --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
+  --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
+  --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
+  --r:8px;
+}
+body.light-theme,html[data-theme="light"]{
+  --bg:#e2e8f0; --surface:rgba(248,250,252,.96); --surface-soft:rgba(241,245,249,.96); --panel-bg:#e5e7eb;
+  --panel-2:#e5e7eb;
+  --ink:#0f172a; --ink-mid:#334155; --ink-mute:#6b7280;
+  --text:#0f172a; --muted:#334155; --text-muted:#6b7280;
+  --border:rgba(51,65,85,.18);
+  --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
+  --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
+  --topbar-border:rgba(19,49,49,.20);
+  --warn:#b45309;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow:hidden;}
+
+#shell{display:grid;grid-template-areas:"header header" "hero aside" "formal formal";grid-template-columns:1fr 320px;grid-template-rows:auto minmax(0,1fr) auto;height:100vh;gap:0;}
+#shell.hide-aside{grid-template-areas:"header header" "hero hero" "formal formal";}
+#shell.hide-aside .shell-aside{display:none;}
+#shell.hide-formal .shell-formal{display:none;}
+#shell.shell-max{grid-template-areas:"header" "hero";grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+#shell.shell-max .shell-aside,#shell.shell-max .shell-formal{display:none !important;}
+.shell-exit-max{display:none !important;}
+
+.shell-header{grid-area:header;display:flex;align-items:center;align-content:center;gap:12px;flex-wrap:wrap;min-height:62px;padding:8px 18px;background:var(--topbar-bg);border-bottom:1px solid var(--topbar-border);position:relative;z-index:3000;overflow:visible;}
+.shell-title{font-size:18px;font-weight:600;color:var(--topbar-text);white-space:nowrap;letter-spacing:.5px;min-width:0;flex-shrink:1;overflow:hidden;text-overflow:ellipsis;}
+.shell-title span{font-weight:400;color:#475569;font-size:13px;letter-spacing:0;}
+.shell-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto;}
+.shell-group{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.shell-sep{width:1px;height:24px;background:var(--topbar-border);}
+.shell-header label{color:#475569;font-family:var(--font-sans);}
+.shell-btn{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 11px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
+.shell-btn:hover{background:rgba(30,77,58,.28);border-color:var(--accent-soft);}
+.shell-btn.primary{background:var(--ctrl-bg);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn.active{background:rgba(59,155,143,.16);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn:disabled{opacity:.4;cursor:not-allowed;}
+.shell-select{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;}
+.shell-header .shell-btn{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;padding:0 12px;}
+.shell-header .shell-btn:hover{background:var(--btn-reset-hover);border-color:var(--topbar-border);color:#0f172a;}
+.shell-header .shell-btn.active{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:#fff;}
+.shell-header .shell-select{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;}
+.shell-header #shell-play{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:var(--btn-play-text);}
+.shell-header #shell-play:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+.shell-header #shell-play.paused{background:var(--btn-paused-bg);border-color:var(--btn-paused-border);color:var(--btn-paused-text);}
+.shell-header #shell-play.paused:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+.shell-header #shell-reset{background:var(--btn-reset-bg);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-header #shell-reset:hover{background:var(--btn-reset-hover);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-readout{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:var(--accent);background:var(--ctrl-bg);border:1px solid var(--ctrl-border);padding:4px 9px;border-radius:5px;white-space:nowrap;}
+.shell-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;background:var(--track-bg);width:150px;cursor:pointer;}
+.shell-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+.shell-range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+
+.shell-hero{grid-area:hero;min-height:0;min-width:0;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:14px;}
+.shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:16px;padding:18px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);backdrop-filter:blur(12px);border-left:1px solid rgba(148,163,184,.18);}
+.shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;padding:14px 18px;background:var(--surface-soft);border-top:1px solid var(--border);}
+
+.plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
+.plot-box canvas{display:block;width:100%;height:100%;}
+.plot-title{position:absolute;top:10px;left:12px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:6px 10px;backdrop-filter:blur(6px);}
+body.light-theme .plot-title,html[data-theme="light"] .plot-title{background:rgba(248,250,252,.88);color:#334155;}
+.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.legend{position:absolute;top:12px;right:12px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:13px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-item > span:last-child{white-space:nowrap;}
+.legend-dot{width:10px;height:10px;border-radius:999px;flex-shrink:0;}
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.88);}
+.legend sub,.ctrl-box-label sub,.inq-step sub,.eq-label sub,.shell-info-table sub,.cg-callout sub{
+  font-size:.68em;line-height:0;vertical-align:-0.35em;letter-spacing:0;
+}
+
+.shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
+.shell-panel-head h3{margin:0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
+.shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
+.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel-body{padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere;font-family:var(--font-sans);}
+
+.ctrl-box{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:5px;padding:12px;margin-bottom:8px;box-sizing:border-box;}
+.ctrl-box:last-child{margin-bottom:0;}
+.ctrl-box--slider{min-height:73px;display:flex;flex-direction:column;justify-content:center;}
+.ctrl-box-label{display:block;font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.ctrl-box-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.ctrl-box-head .ctrl-box-label{flex:1;min-width:0;}
+.ctrl-slider-row{display:flex;align-items:center;gap:10px;width:100%;}
+.ctrl-slider-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:6px;background:var(--track-bg);border-radius:3px;outline:none;cursor:pointer;}
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
+.ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
+.slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
+.stat-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
+.ctrl-box .stat-row:first-child{padding-top:0;}
+.ctrl-box .stat-row:last-child{padding-bottom:0;}
+.stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;flex-shrink:0;}
+.stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;min-width:0;text-align:right;overflow-wrap:anywhere;}
+.stat-value.highlight{font-size:18px;color:var(--accent);}
+.divider{height:1px;background:var(--border);}
+.note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
+.shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
+
+.choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;line-height:1.5;padding:10px 12px;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.choice:hover{border-color:var(--accent-soft);}
+.choice:disabled{cursor:default;}
+.choice.correct{background:rgba(52,211,153,.18);border:1px solid #34d399;color:#d1fae5;}
+.choice.wrong{background:rgba(244,63,94,.16);border:1px solid #f43f5e;color:#ffe4e6;}
+.choice.dim{opacity:.55;}
+.predict-eval{margin-top:10px;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:13px;line-height:1.6;color:var(--text);}
+.predict-eval.correct{background:rgba(52,211,153,.14);border-color:#34d399;}
+.predict-eval.wrong{background:rgba(244,63,94,.12);border-color:#f43f5e;}
+.predict-eval .answer,.predict-eval strong{color:#6ee7b7;font-weight:700;}
+body.light-theme .choice.correct,html[data-theme="light"] .choice.correct{background:rgba(16,185,129,.16);border-color:#059669;color:#065f46;}
+body.light-theme .choice.wrong,html[data-theme="light"] .choice.wrong{background:rgba(244,63,94,.12);border-color:#e11d48;color:#9f1239;}
+body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,html[data-theme="light"] .predict-eval .answer,html[data-theme="light"] .predict-eval strong{color:#047857;}
+
+.aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+#aside-controls{flex:1 1 auto;}
+.aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.aside-zone-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.inq-dots{display:flex;gap:6px;flex-shrink:0;}
+.inq-dots .inq-dot{flex:1;height:4px;border-radius:2px;background:var(--ctrl-border);transition:background .2s;}
+.inq-dots .inq-dot.active{background:var(--accent);}
+.inq-dots .inq-dot.done{background:var(--accent-soft);}
+#inq-cards{flex:1 1 auto;min-height:0;}
+.inq-step{display:none;}
+.inq-step.active{display:block;}
+.inq-nav{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
+#inq-next{min-width:96px;justify-content:center;margin-left:auto;}
+.inq-step h4{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--text);}
+.inq-step p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--muted);}
+.predict-eval{display:none;}
+.predict-eval.show{display:block;}
+.aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s;}
+.aside-restore:hover{background:rgba(30,77,58,.28);color:var(--text);}
+#shell.inquiry-collapsed #aside-inquiry{display:none;}
+#shell.inquiry-collapsed #aside-inquiry-restore{display:block;}
+#shell.no-inquiry #aside-inquiry,#shell.no-inquiry #aside-inquiry-restore,#shell.no-inquiry #shell-lecture{display:none !important;}
+#shell.no-transport #shell-play,#shell.no-transport #shell-speed,#shell.no-transport .shell-header label{display:none !important;}
+
+.shell-modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.74);backdrop-filter:blur(2px);z-index:200;display:none;align-items:center;justify-content:center;padding:24px;}
+.shell-modal-backdrop.open{display:flex;}
+.shell-modal{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;max-width:720px;width:100%;max-height:84vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.55);}
+.shell-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.shell-modal-head h2{margin:0;font-size:14px;font-weight:700;color:var(--text);}
+.shell-modal-body{padding:16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--ink);}
+.shell-modal-body h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-mute);margin:18px 0 8px;font-weight:600;}
+.shell-modal-body h3:first-child{margin-top:0;}
+.shell-modal-body p{margin:0 0 8px;}
+.shell-info-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 4px;}
+.shell-info-table th,.shell-info-table td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--line);}
+.shell-info-table thead th{color:var(--ink-mid);font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;}
+.shell-info-table td.pid{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--accent);white-space:nowrap;}
+.shell-info-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;}
+.shell-info-dl dt{color:var(--ink-mid);font-weight:600;}
+.shell-info-dl dd{margin:0;}
+
+@media(max-width:1000px){
+  body{overflow:auto;}
+  #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
+  .shell-header{padding:8px 14px;}
+  .shell-aside{border-left:none;border-top:1px solid var(--border);}
+}
+
+.formal-grid{display:grid;grid-template-columns:1fr;gap:12px;}
+@media(min-width:1000px){.formal-grid{grid-template-columns:1fr 1fr;}}
+.eq-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
+.eq-row .eq-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+
+
+/* ===== Two-button template: Guided Inquiry zone visibility ===== */
+.gi-off #aside-inquiry{display:none !important;}
+
+/* ===== Controls Guide (overlay tutorial) ===== */
+.cg-hidden{display:none !important;}
+.cg-veiled{visibility:hidden !important;pointer-events:none;}
+.cg-glow{outline:1px solid #10b981;border-radius:8px;
+  box-shadow:0 0 0 1px #10b981,0 0 14px rgba(16,185,129,.55);
+  animation:cgPulse 1.6s ease-in-out infinite;}
+@keyframes cgPulse{0%,100%{box-shadow:0 0 0 1px #10b981,0 0 10px rgba(16,185,129,.4);}
+  50%{box-shadow:0 0 0 2px #10b981,0 0 20px rgba(16,185,129,.7);}}
+.cg-callout{position:fixed;z-index:4000;max-width:260px;background:#0d1522;color:#e2e8f0;
+  border:1.5px solid #8b5cf6;border-radius:10px;padding:10px 12px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-callout h5{margin:0 0 4px;font-size:0.8rem;font-weight:700;color:#a78bfa;}
+.cg-callout p{margin:0;font-size:0.78rem;line-height:1.45;}
+.cg-arrow{position:absolute;width:12px;height:12px;background:#0d1522;transform:rotate(45deg);}
+.cg-callout.arrow-top .cg-arrow{top:-7px;border-top:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.arrow-bottom .cg-arrow{bottom:-7px;border-bottom:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-right .cg-arrow{right:-7px;border-top:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-left .cg-arrow{left:-7px;border-bottom:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.no-arrow .cg-arrow{display:none;}
+html[data-theme="light"] .cg-callout, body.light-theme .cg-callout{background:#fff;color:#0f172a;border-color:#7c3aed;}
+html[data-theme="light"] .cg-callout h5, body.light-theme .cg-callout h5{color:#7c3aed;}
+html[data-theme="light"] .cg-arrow, body.light-theme .cg-arrow{background:#fff;border-color:#7c3aed !important;}
+/* Nav bar matches the purple callout: same panel fill, purple border, purple buttons */
+.cg-nav{position:fixed;z-index:4000;right:18px;bottom:16px;display:flex;gap:8px;align-items:center;
+  background:#0d1522;border:1.5px solid #8b5cf6;border-radius:10px;padding:8px 10px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-nav button{height:30px;padding:0 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;
+  background:transparent;border:1px solid #8b5cf6;color:#a78bfa;font-family:var(--font-sans);transition:background .15s,color .15s;}
+.cg-nav button:hover:not(:disabled){background:rgba(139,92,246,.18);color:#e2e8f0;}
+.cg-nav button:disabled{opacity:.35;cursor:default;}
+.cg-nav #cg-next{background:#8b5cf6;border-color:#8b5cf6;color:#fff;min-width:76px;}
+.cg-nav #cg-next:hover:not(:disabled){background:#7c3aed;border-color:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav, body.light-theme .cg-nav{background:#fff;border-color:#7c3aed;}
+html[data-theme="light"] .cg-nav button, body.light-theme .cg-nav button{border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav button:hover:not(:disabled), body.light-theme .cg-nav button:hover:not(:disabled){background:rgba(124,58,237,.12);color:#5b21b6;}
+html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{background:#7c3aed;color:#fff;}
+
+/* ===== Welcome overlay (first landing) ===== */
+#welcome-overlay{position:fixed;inset:0;z-index:5000;background:radial-gradient(ellipse at center,rgba(2,6,12,.94) 0%,rgba(2,6,12,.86) 55%,rgba(2,6,12,.7) 100%);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);}
+#welcome-overlay.hidden{display:none;}
+.welcome-card{position:relative;width:min(760px,92vw);margin:0 auto;background:transparent;color:#E6EDF5;border-radius:0;overflow:visible;
+  box-shadow:none;
+  animation:wcIn .55s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes wcIn{from{opacity:0;transform:translateY(14px) scale(.985);}to{opacity:1;transform:none;}}
+.welcome-hero{position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:140px;background:transparent;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);opacity:.9;}
+.welcome-hero canvas{display:block;width:100%;height:100%;}
+.welcome-hero::after{content:none;}
+.welcome-hero .hero-label{display:none;}
+.welcome-body{padding:156px 0 0;}
+.welcome-card h2{margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;}
+.welcome-kicker{font-size:.95rem;font-weight:500;letter-spacing:.02em;color:#AAB6C6;}
+.welcome-name{font-size:2.3rem;line-height:1.08;letter-spacing:-.02em;font-weight:700;max-width:22ch;}
+.welcome-blurb{margin:0 auto 26px;font-size:1rem;line-height:1.55;color:#AAB6C6;max-width:44ch;text-align:center;}
+.welcome-ask{margin:0 0 8px;font-size:.82rem;font-weight:600;color:#E6EDF5;text-align:center;}
+html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F172A;}
+.welcome-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0;}
+.welcome-mode{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;
+  padding:18px 16px 16px;border-radius:14px;cursor:pointer;color:#E6EDF5;font-family:var(--font-sans);
+  background:rgba(255,255,255,.045);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(148,163,184,.18);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transition:transform .16s,border-color .16s,background .16s,box-shadow .16s;}
+.welcome-mode:hover,.welcome-mode:focus-visible{transform:translateY(-3px);background:rgba(255,255,255,.075);outline:none;box-shadow:0 14px 34px rgba(0,0,0,.35);}
+.welcome-mode[data-mode="inquiry"]:hover,.welcome-mode[data-mode="inquiry"]:focus-visible{border-color:rgba(52,211,153,.7);}
+.welcome-mode[data-mode="controls"]:hover,.welcome-mode[data-mode="controls"]:focus-visible{border-color:rgba(167,139,250,.7);}
+.welcome-mode[data-mode="free"]:hover,.welcome-mode[data-mode="free"]:focus-visible{border-color:rgba(251,191,36,.7);}
+.wm-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;}
+.wm-icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode[data-mode="inquiry"] .wm-icon{background:rgba(16,185,129,.16);color:#34d399;}
+.welcome-mode[data-mode="controls"] .wm-icon{background:rgba(139,92,246,.18);color:#a78bfa;}
+.welcome-mode[data-mode="free"] .wm-icon{background:rgba(245,158,11,.16);color:#fbbf24;}
+.wm-text{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.wm-title{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;font-weight:600;font-size:.95rem;white-space:nowrap;}
+.wm-tag{font-size:.6rem;font-weight:600;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,.16);color:#6ee7b7;letter-spacing:.01em;}
+.wm-desc{display:block;font-size:.8rem;line-height:1.45;color:#AAB6C6;}
+.wm-go{margin-top:auto;padding-top:6px;display:flex;align-items:center;gap:4px;font-size:.78rem;font-weight:600;color:#94A3B8;}
+.wm-go svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode:hover .wm-go{color:#E6EDF5;}
+@media (max-width:760px){.welcome-modes{grid-template-columns:1fr;}}
+.welcome-foot{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:22px;padding-top:0;border-top:none;}
+.welcome-listen{font-size:.8rem;color:#AAB6C6;line-height:1.35;}
+.welcome-listen b{display:block;color:#E6EDF5;font-weight:600;font-size:.84rem;}
+.welcome-audio{display:flex;align-items:center;gap:10px;}
+.welcome-audio button{display:grid;place-items:center;border:none;cursor:pointer;background:transparent;color:#C7D2E0;padding:0;font-family:var(--font-sans);}
+.welcome-audio button:disabled{opacity:.3;cursor:default;}
+.welcome-audio .wa-skip{width:34px;height:34px;border-radius:50%;}
+.welcome-audio .wa-skip:hover:not(:disabled){color:#fff;background:rgba(148,163,184,.12);}
+.welcome-audio .wa-skip svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak{width:44px;height:44px;border-radius:50%;background:#F4F7FA;color:#0B1220;transition:transform .12s;}
+#welcome-speak:hover{transform:scale(1.06);}
+#welcome-speak svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak[data-state="playing"] svg.i-play,#welcome-speak[data-state="playing"] svg.i-again{display:none;}
+#welcome-speak:not([data-state="playing"]) svg.i-pause{display:none;}
+#welcome-speak[data-state="done"] svg.i-play{display:none;}
+#welcome-speak:not([data-state="done"]) svg.i-again{display:none;}
+.welcome-seg{display:flex;gap:4px;margin-left:4px;}
+.welcome-seg i{display:block;width:14px;height:3px;border-radius:2px;background:rgba(148,163,184,.25);}
+.welcome-seg i.on{background:#34d399;}
+.welcome-seg i.cur{background:#F4F7FA;}
+.welcome-progress{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+@media (prefers-reduced-motion: reduce){.welcome-card{animation:none;}}
+html[data-theme="light"] #welcome-overlay, body.light-theme #welcome-overlay{background:radial-gradient(ellipse at center,rgba(241,245,249,.94) 0%,rgba(241,245,249,.86) 55%,rgba(241,245,249,.72) 100%);}
+html[data-theme="light"] .welcome-card, body.light-theme .welcome-card{background:transparent;color:#0F172A;box-shadow:none;}
+html[data-theme="light"] .welcome-hero, body.light-theme .welcome-hero{background:transparent;}
+html[data-theme="light"] .welcome-blurb,html[data-theme="light"] .wm-desc,html[data-theme="light"] .welcome-listen, body.light-theme .welcome-blurb,body.light-theme .wm-desc,body.light-theme .welcome-listen{color:#475569;}
+html[data-theme="light"] .welcome-listen b, body.light-theme .welcome-listen b{color:#0F172A;}
+html[data-theme="light"] .welcome-mode, body.light-theme .welcome-mode{color:#0F172A;background:rgba(255,255,255,.55);border-color:rgba(15,23,42,.12);}
+html[data-theme="light"] .wm-tag, body.light-theme .wm-tag{color:#047857;background:rgba(16,185,129,.14);}
+html[data-theme="light"] .wm-go, body.light-theme .wm-go{color:#475569;}
+html[data-theme="light"] .welcome-mode:hover, body.light-theme .welcome-mode:hover{background:rgba(15,23,42,.07);}
+html[data-theme="light"] .welcome-audio button, body.light-theme .welcome-audio button{color:#334155;}
+html[data-theme="light"] #welcome-speak, body.light-theme #welcome-speak{background:#0F172A;color:#fff;}
+html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur{background:#0F172A;}
+/* ===== Card voiceover (controls guide + guided inquiry) ===== */
+/* Two-row layout: a "Listen" narration row (transport + Auto) above the
+   card-navigation row, separated by a hairline — audio is secondary, the
+   Next progression stays the anchor action. */
+.cg-nav{flex-direction:column;align-items:stretch;gap:7px;}
+.cg-nav-row{display:flex;align-items:center;gap:8px;}
+.cg-row-nav{border-top:1px solid rgba(139,92,246,.28);padding-top:7px;}
+html[data-theme="light"] .cg-row-nav, body.light-theme .cg-row-nav{border-top-color:rgba(124,58,237,.22);}
+.cg-flex{flex:1;}
+.cg-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a7;margin-right:2px;}
+html[data-theme="light"] .cg-listen-lab, body.light-theme .cg-listen-lab{color:#64748b;}
+.cg-nav .cg-voice{width:26px;height:26px;min-width:26px;padding:0;border:none !important;background:transparent;
+  border-radius:50%;display:grid;place-items:center;color:#a78bfa;}
+.cg-nav .cg-voice:hover:not(:disabled){background:rgba(139,92,246,.22);color:#e2e8f0;}
+.cg-nav .cg-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+.cg-nav #cg-voice-play{width:30px;height:30px;min-width:30px;border:1px solid #8b5cf6 !important;}
+.cg-nav #cg-voice-play[data-vstate="playing"]{background:#8b5cf6;color:#fff;}
+.cg-nav #cg-voice-play svg{width:13px;height:13px;}
+.cg-nav .cg-sep{width:1px;height:20px;background:rgba(139,92,246,.4);margin:0 4px;flex-shrink:0;}
+html[data-theme="light"] .cg-nav .cg-voice, body.light-theme .cg-nav .cg-voice{color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-voice-play, body.light-theme .cg-nav #cg-voice-play{border-color:#7c3aed !important;}
+html[data-theme="light"] .cg-nav #cg-voice-play[data-vstate="playing"], body.light-theme .cg-nav #cg-voice-play[data-vstate="playing"]{background:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav .cg-sep, body.light-theme .cg-nav .cg-sep{background:rgba(124,58,237,.35);}
+.cg-nav #cg-auto{height:22px;min-width:0;padding:0 9px;border-radius:999px;font-size:0.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(139,146,167,.45);color:#8b93a7;display:inline-flex;align-items:center;transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+.cg-nav #cg-auto:hover:not(.active){border-color:#8b5cf6;color:#a78bfa;}
+.cg-nav #cg-auto.active{background:#8b5cf6;border-color:#8b5cf6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.55);}
+html[data-theme="light"] .cg-nav #cg-auto, body.light-theme .cg-nav #cg-auto{border-color:rgba(100,116,139,.5);color:#64748b;}
+html[data-theme="light"] .cg-nav #cg-auto:hover:not(.active), body.light-theme .cg-nav #cg-auto:hover:not(.active){border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-auto.active, body.light-theme .cg-nav #cg-auto.active{background:#7c3aed;border-color:#7c3aed;color:#fff;box-shadow:0 0 10px rgba(124,58,237,.4);}
+#inq-auto{height:27px;max-height:27px;min-width:0;padding:0 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;box-sizing:border-box;
+  border-color:var(--ctrl-border);color:var(--ink-mute);transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+#inq-auto:hover:not(.active){border-color:var(--accent-soft);color:var(--accent);}
+#inq-auto.active{background:var(--accent) !important;border-color:var(--accent) !important;color:#06231c !important;box-shadow:0 0 10px rgba(59,155,143,.45);}
+body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{color:#fff !important;}
+.inq-listen{display:flex;align-items:center;gap:8px;margin:10px 0 0;}
+.inq-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-right:2px;}
+#inq-voice{width:27px;height:27px;min-width:27px;max-height:27px;padding:0;border-radius:50%;justify-content:center;display:inline-flex;align-items:center;box-sizing:border-box;}
+#inq-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+[data-vstate] svg.i-play,[data-vstate] svg.i-pause,[data-vstate] svg.i-again{display:none;}
+[data-vstate="idle"] svg.i-play{display:block;}
+[data-vstate="playing"] svg.i-pause{display:block;}
+[data-vstate="done"] svg.i-again{display:block;}
+</style>
+
+<script type="application/json" id="engine-manifest">{"manifestVersion":1,"engine":"1.0.0-dev","modules":["domain.mechanics-newtonian","verify.audit"]}</script>
+<script id="engine-inline">
+/* ENGINE:BEGIN */
+window.Engine = window.Engine || {};
+const Engine = window.Engine;
+
+// ---- module domain.mechanics-newtonian ----
+Engine.newton = Object.freeze((function () {
+'use strict';
+// domain.mechanics-newtonian — the Newtonian foundations (namespace
+// Engine.newton). Physics results only: no canvas, no DOM, no time stepping.
+// State ADVANCES exclusively through core.integrate steppers in sim code;
+// this module supplies the analytic relations those sims read out.
+//
+// WHY THIS MODULE EXISTS, AND WHY IT IS SEPARATE.
+// The CM domain was ported topic-first: orbits, rigid bodies, oscillations,
+// drag, collisions. Every composed scenario had an op — and F = ma did not.
+// A sim about a block on a table, the most ordinary problem in mechanics, had
+// nothing to call, so the model wrote its own force sum, its own a = F/m, its
+// own work integral. That is exactly the authorship the engine exists to take
+// back, and it was missing from the bottom of the stack rather than the top.
+//
+// It is its OWN module rather than more ops in domain.mechanics because module
+// selection picks ONE domain by default and the cards travel with the code. A
+// torque sim selects domain.mechanics-rigid; folding the foundations into
+// domain.mechanics would have meant a beam sim either cannot reach a = F/m, or
+// drags Kepler solvers and drag models into its prompt to get it. Every CM
+// module depends on this one instead, so the foundations arrive with all of
+// them and cost ~1 card either way.
+//
+// CONVENTIONS (fixed; never flip them sim-side)
+//   Vectors are `[x, y]` arrays. Ops that take a single velocity/force accept
+//   EITHER a scalar (1-D) or a vector, and return the same kind — matching
+//   domain.mechanics dragForceLinear.
+//   +y is UP. Weight is therefore [0, -m*g], a NEGATIVE y-component.
+//   SI throughout: metres, kilograms, seconds, newtons, joules, watts.
+
+/** Newton's gravitational constant (CODATA 2018), m^3 kg^-1 s^-2. */
+const G = 6.6743e-11;
+
+const isVec = (v) => Array.isArray(v) || ArrayBuffer.isView(v);
+const finite = (x) => typeof x === 'number' && Number.isFinite(x);
+
+function checkVec(v, label, op) {
+  if (!isVec(v)) {
+    throw new RangeError(`${op}: ${label} must be an [x, y] vector, got ${JSON.stringify(v)}`);
+  }
+  for (let i = 0; i < v.length; i++) {
+    if (!finite(v[i])) throw new RangeError(`${op}: ${label}[${i}] must be finite, got ${v[i]}`);
+  }
+  return v;
+}
+
+/** Accept a scalar or a vector; normalise to a vector for the maths. */
+function asVec(x, label, op) {
+  if (finite(x)) return [x];
+  return checkVec(x, label, op);
+}
+
+const dot = (a, b) => {
+  let s = 0;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) s += (a[i] || 0) * (b[i] || 0);
+  return s;
+};
+const mag = (a) => Math.sqrt(dot(a, a));
+/** Return in the SAME shape the caller supplied: scalar in, scalar out. */
+const like = (sample, vec) => (finite(sample) ? vec[0] : vec);
+
+// ---------------------------------------------------------------------------
+// Forces and the three laws
+// ---------------------------------------------------------------------------
+
+/**
+ * Vector sum of the forces on ONE body — the left-hand side of F = ma.
+ * `forces` is an array of [fx, fy] vectors (or scalars, for 1-D).
+ * `balanced` compares |ΣF| against the GROSS scale Σ|F|, so two large opposed
+ * forces that cancel read balanced while a single tiny force does not.
+ */
+function sumForces(forces) {
+  if (!Array.isArray(forces)) {
+    throw new RangeError(`sumForces: expected an array of forces, got ${JSON.stringify(forces)}`);
+  }
+  if (forces.length === 0) {
+    return { netForce: [0, 0], magnitude: 0, direction: 0, gross: 0, balanced: true, count: 0 };
+  }
+  const vecs = forces.map((f, i) => asVec(f, `forces[${i}]`, 'sumForces'));
+  const dims = Math.max(...vecs.map((v) => v.length), 2);
+  const net = new Array(dims).fill(0);
+  let gross = 0;
+  for (const v of vecs) {
+    for (let i = 0; i < dims; i++) net[i] += v[i] || 0;
+    gross += mag(v);
+  }
+  const magnitude = mag(net);
+  return {
+    netForce: net,
+    magnitude,
+    direction: Math.atan2(net[1] || 0, net[0]),
+    gross,
+    balanced: magnitude <= 1e-9 * Math.max(1, gross),
+    count: forces.length,
+  };
+}
+
+/**
+ * Newton's second law: a = F_net / m. Pass the NET force (see sumForces) — a
+ * single applied force is not the net force unless it is the only one acting.
+ */
+function newtonSecondLaw(m, netForce) {
+  if (!(m > 0)) throw new RangeError(`newtonSecondLaw: need m > 0, got ${m}`);
+  const F = asVec(netForce, 'netForce', 'newtonSecondLaw');
+  const a = F.map((c) => c / m);
+  return { acceleration: like(netForce, a), magnitude: mag(a), netForce: like(netForce, F), mass: m };
+}
+
+/**
+ * Newton's second law solved for the force that produces a given acceleration.
+ * The same law, not a different one — kept separate so a sim never divides
+ * when it meant to multiply.
+ */
+function forceForAcceleration(m, acceleration) {
+  if (!(m > 0)) throw new RangeError(`forceForAcceleration: need m > 0, got ${m}`);
+  const a = asVec(acceleration, 'acceleration', 'forceForAcceleration');
+  const F = a.map((c) => c * m);
+  return { force: like(acceleration, F), magnitude: mag(F), mass: m };
+}
+
+/**
+ * Newton's third law. The reaction is equal and opposite — and acts on the
+ * OTHER body, which is the whole content of the law and the part that gets
+ * lost. Two third-law partners NEVER appear in the same free-body diagram, so
+ * they can never cancel each other: put `action` in onBody's diagram and
+ * `reaction` in byBody's.
+ */
+function thirdLawPair(force, onBody = 'B', byBody = 'A') {
+  const F = asVec(force, 'force', 'thirdLawPair');
+  const reaction = F.map((c) => -c);
+  return {
+    action: like(force, F),
+    reaction: like(force, reaction),
+    magnitude: mag(F),
+    actsOn: onBody,
+    reactsOn: byBody,
+    // Stated as data so a sim cannot render the pair as a cancelling couple.
+    sameBody: false,
+    cancels: false,
+  };
+}
+
+/** Weight near a planet's surface: W = m·g pointing DOWN, i.e. [0, −m·g]. */
+function weight(m, g = 9.81) {
+  if (!(m > 0)) throw new RangeError(`weight: need m > 0, got ${m}`);
+  if (!(g > 0)) throw new RangeError(`weight: need g > 0, got ${g}`);
+  return { force: [0, -m * g], magnitude: m * g, gravity: g, mass: m };
+}
+
+/**
+ * Newton's law of universal gravitation, F = G·m1·m2/r².
+ * `r` is either a scalar separation (returns the magnitude only) or the vector
+ * FROM m1 TO m2 (returns the force ON m1, i.e. pointing toward m2).
+ */
+function gravitationalForce(m1, m2, r) {
+  if (!(m1 > 0) || !(m2 > 0)) throw new RangeError(`gravitationalForce: need m1 > 0 and m2 > 0, got ${m1}, ${m2}`);
+  if (finite(r)) {
+    if (!(r > 0)) throw new RangeError(`gravitationalForce: need r > 0, got ${r}`);
+    return { magnitude: (G * m1 * m2) / (r * r), force: null, distance: r, G };
+  }
+  const sep = checkVec(r, 'r', 'gravitationalForce');
+  const d = mag(sep);
+  if (!(d > 0)) throw new RangeError('gravitationalForce: the two bodies are at the same point (r = 0)');
+  const magnitude = (G * m1 * m2) / (d * d);
+  return { magnitude, force: sep.map((c) => (magnitude * c) / d), distance: d, G };
+}
+
+/**
+ * Galilean velocity transformation: the velocity of an object, as measured in
+ * a frame that is itself moving at `frameVelocity` in the original frame.
+ *   v' = v − v_frame
+ * The classical composition law only — for anything relativistic the sign of
+ * this being wrong is not the problem, the law is; use domain.relativity.
+ */
+function galileanFrameVelocity(v, frameVelocity) {
+  const a = asVec(v, 'v', 'galileanFrameVelocity');
+  const b = asVec(frameVelocity, 'frameVelocity', 'galileanFrameVelocity');
+  const n = Math.max(a.length, b.length);
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = (a[i] || 0) - (b[i] || 0);
+  return { velocity: like(v, out), speed: mag(out), frameVelocity: like(v, b) };
+}
+
+/**
+ * Closed-form motion under a CONSTANT net force (so constant acceleration):
+ *   x = x0 + v0·t + ½·a·t²,  v = v0 + a·t,  a = F/m
+ * Constant force ONLY. A force that varies with position or velocity (springs,
+ * drag, gravity between moving bodies) must be advanced through
+ * core.integrate — using this for those is the classic silent-wrong-answer.
+ * `t` may be negative (the motion runs backwards just as well).
+ */
+function constantForceMotion(m, force, x0, v0, t) {
+  if (!(m > 0)) throw new RangeError(`constantForceMotion: need m > 0, got ${m}`);
+  if (!finite(t)) throw new RangeError(`constantForceMotion: need finite t, got ${t}`);
+  const F = asVec(force, 'force', 'constantForceMotion');
+  const X0 = asVec(x0, 'x0', 'constantForceMotion');
+  const V0 = asVec(v0, 'v0', 'constantForceMotion');
+  const n = Math.max(F.length, X0.length, V0.length);
+  const a = new Array(n), x = new Array(n), v = new Array(n);
+  for (let i = 0; i < n; i++) {
+    a[i] = (F[i] || 0) / m;
+    x[i] = (X0[i] || 0) + (V0[i] || 0) * t + 0.5 * a[i] * t * t;
+    v[i] = (V0[i] || 0) + a[i] * t;
+  }
+  return {
+    position: like(x0, x),
+    velocity: like(v0, v),
+    acceleration: like(force, a),
+    speed: mag(v),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Energy, work and power
+// ---------------------------------------------------------------------------
+
+/** Translational kinetic energy, KE = ½·m·|v|². Scalar or vector velocity. */
+function kineticEnergy(m, v) {
+  if (!(m > 0)) throw new RangeError(`kineticEnergy: need m > 0, got ${m}`);
+  const V = asVec(v, 'v', 'kineticEnergy');
+  const speed = mag(V);
+  return { kineticEnergy: 0.5 * m * speed * speed, speed, mass: m };
+}
+
+/**
+ * Work done by a CONSTANT force over a straight displacement: W = F·d.
+ * The DOT PRODUCT, not |F|·|d| — only the component of the force along the
+ * displacement does work, a force perpendicular to the motion does none, and a
+ * force opposing it does NEGATIVE work. `angle` is between F and d.
+ */
+function work(force, displacement) {
+  const F = asVec(force, 'force', 'work');
+  const d = asVec(displacement, 'displacement', 'work');
+  const w = dot(F, d);
+  const fm = mag(F), dm = mag(d);
+  const cos = fm > 0 && dm > 0 ? Math.max(-1, Math.min(1, w / (fm * dm))) : 0;
+  return {
+    work: w,
+    forceMagnitude: fm,
+    displacementMagnitude: dm,
+    angle: fm > 0 && dm > 0 ? Math.acos(cos) : 0,
+    alongComponent: dm > 0 ? w / dm : 0,
+    sense: w > 0 ? 'positive' : w < 0 ? 'negative' : 'zero',
+  };
+}
+
+/**
+ * Work-energy theorem: the NET work done on a body equals its change in
+ * kinetic energy, W_net = ΔKE = ½m(v₁² − v₀²). Direction-free — only the
+ * SPEEDS matter, so a body returning to its original speed by any path has had
+ * zero net work done on it.
+ */
+function workEnergyTheorem(m, v0, v1) {
+  if (!(m > 0)) throw new RangeError(`workEnergyTheorem: need m > 0, got ${m}`);
+  const before = kineticEnergy(m, v0).kineticEnergy;
+  const after = kineticEnergy(m, v1).kineticEnergy;
+  return {
+    work: after - before,
+    kineticEnergyBefore: before,
+    kineticEnergyAfter: after,
+    deltaKineticEnergy: after - before,
+  };
+}
+
+/**
+ * Gravitational potential energy NEAR A SURFACE, U = m·g·h, measured from a
+ * datum the sim chooses (h is a height ABOVE that datum, and may be negative).
+ * Only differences are physical. For the orbital form −G·M·m/r use
+ * domain.mechanics-orbits — the two are different approximations and must
+ * never be mixed in one energy budget.
+ */
+function gravitationalPotentialEnergy(m, h, g = 9.81) {
+  if (!(m > 0)) throw new RangeError(`gravitationalPotentialEnergy: need m > 0, got ${m}`);
+  if (!(g > 0)) throw new RangeError(`gravitationalPotentialEnergy: need g > 0, got ${g}`);
+  if (!finite(h)) throw new RangeError(`gravitationalPotentialEnergy: need finite h, got ${h}`);
+  return { potentialEnergy: m * g * h, height: h, gravity: g, mass: m };
+}
+
+/** Instantaneous power delivered by a force, P = F·v (a dot product). */
+function power(force, velocity) {
+  const F = asVec(force, 'force', 'power');
+  const v = asVec(velocity, 'velocity', 'power');
+  return { power: dot(F, v), speed: mag(v), forceMagnitude: mag(F) };
+}
+
+// ---------------------------------------------------------------------------
+// Momentum and impulse
+// ---------------------------------------------------------------------------
+
+/** Linear momentum, p = m·v. Scalar or vector velocity. */
+function momentum(m, v) {
+  if (!(m > 0)) throw new RangeError(`momentum: need m > 0, got ${m}`);
+  const V = asVec(v, 'v', 'momentum');
+  const p = V.map((c) => c * m);
+  return { momentum: like(v, p), magnitude: mag(p), mass: m };
+}
+
+/**
+ * Impulse of a CONSTANT force over an interval, J = F·Δt, and the velocity
+ * change it produces in a mass m: Δv = J/m (the impulse-momentum theorem).
+ * For a varying force, integrate it — F here is the AVERAGE force if you have
+ * one, and passing a peak force instead is a large overestimate.
+ */
+function impulse(force, dt, m = null) {
+  if (!(dt > 0)) throw new RangeError(`impulse: need dt > 0, got ${dt}`);
+  const F = asVec(force, 'force', 'impulse');
+  const J = F.map((c) => c * dt);
+  const out = { impulse: like(force, J), magnitude: mag(J), duration: dt };
+  if (m !== null) {
+    if (!(m > 0)) throw new RangeError(`impulse: need m > 0 when a mass is given, got ${m}`);
+    const dv = J.map((c) => c / m);
+    out.deltaVelocity = like(force, dv);
+    out.deltaMomentum = like(force, J);   // Δp = J exactly — that IS the theorem
+  }
+  return out;
+}
+
+return { sumForces, newtonSecondLaw, forceForAcceleration, thirdLawPair, weight, gravitationalForce, galileanFrameVelocity, constantForceMotion, kineticEnergy, work, workEnergyTheorem, gravitationalPotentialEnergy, power, momentum, impulse };
+})());
+
+// ---- module verify.audit ----
+Engine.audit = Object.freeze((function () {
+'use strict';
+// verify.audit — the __audit machine-verification surface (Layer: verify).
+// Formalizes the window.__audit convention already present ad-hoc in 35 sims
+// (SR `__audit.at(beta)` in 23 files, CM orbit audits in 12). This module is
+// contract, not framework: one call installs the surface verify.mjs drives.
+//
+// TWO KINDS OF CLAIM, one surface — they catch different bugs and neither
+// subsumes the other:
+//
+//   at(inputs)  — POINTWISE/TERMINAL. A pure function of the inputs it is
+//     handed, returning named scalars an EXTERNAL oracle re-derives and
+//     compares (course audit specs recompute every expected value from an
+//     independent kernel). This is the only claim an outside party can falsify,
+//     so it is where formula errors and wrong composed results surface. A
+//     terminal scalar of a whole run — total collision count, final speed,
+//     number of orbits — belongs here, not in an invariant: it has an
+//     externally-known right answer.
+//
+//   invariants  — RUN-LEVEL/SELF-REFERENTIAL. Properties the sim asserts about
+//     its own evolving state (energy drift, norm preservation, momentum
+//     conservation) which no closed form predicts and no external oracle can
+//     supply. run() aggregates them. These catch integrator drift and blow-up,
+//     the failure class `at` is blind to because `at` never advances time.
+//
+// A sim that ships only `at` cannot detect its integrator decaying; a sim that
+// ships only invariants can be perfectly self-consistent and perfectly wrong.
+// defineAudit takes both.
+//
+// defineAudit(opts, target) works without a browser: pass any globalThis-like
+// target (default globalThis) — node tests inject a mock {document, Event}.
+
+/* Parse the inert #engine-manifest JSON block, or null when absent/invalid. */
+function readManifest(target) {
+  const doc = target && target.document;
+  if (!doc || typeof doc.getElementById !== 'function') return null;
+  const el = doc.getElementById('engine-manifest');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/* Default setParam: drive the control through the SAME code path as the UI.
+ * controls.bind listens for 'input' on the element (see controls/bind.js
+ * bindSlider), so setting .value and dispatching 'input' exercises the
+ * sanitize/clamp/state/onChange chain exactly like a user gesture. When the
+ * manifest carries a params schema, only its ids are accepted. */
+function makeSetParam(target, manifest) {
+  return function setParam(id, value) {
+    const doc = target && target.document;
+    if (!doc) throw new Error('audit.setParam: no document in this context');
+    if (manifest && Array.isArray(manifest.params) &&
+        !manifest.params.some((p) => p.id === id)) {
+      throw new Error('audit.setParam: "' + id + '" is not in the manifest params schema');
+    }
+    const el = doc.getElementById(id);
+    if (!el) throw new Error('audit.setParam: no control element "' + id + '"');
+    el.value = String(value);
+    const Ev = target.Event || (typeof Event !== 'undefined' ? Event : null);
+    el.dispatchEvent(Ev ? new Ev('input', { bubbles: true }) : { type: 'input' });
+    return el.value;
+  };
+}
+
+/**
+ * Install the audit surface: target.__audit =
+ *   {version: 1, manifest, at, probes, invariants, state, setParam, run()}.
+ * - at(inputs): pointwise/terminal probe — a PURE function of the inputs it is
+ *   given (never of live UI state) that an external oracle compares against.
+ *   Null when the sim declares no externally-checkable quantities.
+ * - probes: pure numeric functions, exposed as-is.
+ * - invariants: each fn MUST return {ok, value, expected, tol}; run()
+ *   aggregates them into {pass, results:[{name, ok, value, expected, tol}]}.
+ *   A throwing invariant is recorded as ok:false, never rethrown.
+ * - state: optional live-state accessor object (or null).
+ * - setParam(id, v): defaults to the UI-code-path helper above.
+ * Returns the audit object (also handed to guards via registerWith).
+ */
+function defineAudit(opts = {}, target = globalThis) {
+  const at = typeof opts.at === 'function' ? opts.at : null;
+  const probes = opts.probes || {};
+  const invariants = opts.invariants || {};
+  const state = opts.state || null;
+  const manifest = readManifest(target);
+
+  const audit = {
+    version: 1,
+    manifest,
+    at,
+    probes,
+    invariants,
+    state,
+    setParam: opts.setParam || makeSetParam(target, manifest),
+    run() {
+      const results = [];
+      for (const name of Object.keys(invariants)) {
+        let r;
+        try {
+          r = invariants[name]() || {};
+        } catch (e) {
+          r = { ok: false, value: String((e && e.message) || e), expected: null, tol: null };
+        }
+        results.push({ name, ok: !!r.ok, value: r.value, expected: r.expected, tol: r.tol });
+      }
+      return { pass: results.every((x) => x.ok), results };
+    },
+  };
+  if (target) target.__audit = audit;
+  return audit;
+}
+
+return { defineAudit };
+})());
+
+Object.freeze(Engine);
+
+/* ENGINE:END */
+</script>
+</head>
+<body>
+<!-- POLISH: [physics] H-CAPTION: info-modal D6/D7 row claimed the vector triangle "appears only when the concept requires it" but drawScene draws it unconditionally from load (onStep is a no-op) — reworded the row to describe the actual persistent-evidence behavior [UNVERIFIED: appears only when the concept requires it not found in this file]; model, readouts, equations and audit all verified correct, no other findings ; [pedagogy] no findings (both data-gate steps carry data-correct, no locked controls, formal off by default, every readout referenced by a card) ; [visuals] D2: bumped sub-12px canvas labels to 12px (bank labels, current →, start x, opposite start were 10–11px); D5: moved the current → arrow/label band from ry0+20 to ry0+34 so it no longer grazes the 'opposite start' dashed ring at the shared x-centre. Deliberately NOT changed: triangle-reveal staging (build-time additive), legend-vs-canvas-label dodge list (multi-site edit beyond minimal polish), 40 s default crossing pace (speed select exists and the build chose 1×). -->
+<div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title" data-no-reset>
+    <div class="welcome-card">
+        <div class="welcome-hero">
+            <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
+            <span class="hero-label">A boat aimed straight across a flowing river — its heading, the current, and the track it actually follows</span>
+        </div>
+        <div class="welcome-body">
+            <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">River-boat crossing</span></h2>
+            <p class="welcome-blurb">Steer a boat across a flowing river — the current decides where you land, never when.</p>
+            <p class="welcome-ask">How would you like to begin?</p>
+            <div class="welcome-modes">
+                <button type="button" class="welcome-mode" data-mode="inquiry">
+                    <span class="wm-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.9 4.6-4.6 1.9 1.9-4.6z"/></svg></span>
+                    <span class="wm-text"><span class="wm-title">Guided inquiry <span class="wm-tag">Recommended</span></span>
+                        <span class="wm-desc">Uncover the simulation in steps and see the physics emerge.</span></span>
+                    <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+                </button>
+                <button type="button" class="welcome-mode" data-mode="controls">
+                    <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>
+                    <span class="wm-text"><span class="wm-title">Controls guide</span>
+                        <span class="wm-desc">Learn each control, one at a time.</span></span>
+                    <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+                </button>
+                <button type="button" class="welcome-mode" data-mode="free">
+                    <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 20l5-5M4 20v-4M4 20h4M20 4l-5 5M20 4v4M20 4h-4"/></svg></span>
+                    <span class="wm-text"><span class="wm-title">Free exploration</span>
+                        <span class="wm-desc">Everything open. Experiment on your own.</span></span>
+                    <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+                </button>
+            </div>
+            <div class="welcome-foot">
+                <div class="welcome-listen"><b>Listen to the intro</b></div>
+                <div class="welcome-audio" aria-label="Read aloud controls">
+                    <button type="button" class="wa-skip" id="welcome-prev" title="Previous line" aria-label="Previous line"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>
+                    <button type="button" id="welcome-speak" data-state="idle" title="Play" aria-label="Play" aria-pressed="false">
+                        <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>
+                        <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                        <svg class="i-again" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+                    </button>
+                    <button type="button" class="wa-skip" id="welcome-next" title="Next line" aria-label="Next line"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+                    <span class="welcome-seg" id="welcome-seg" aria-hidden="true"></span>
+                    <span id="welcome-progress" class="welcome-progress"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="shell" class="hide-formal">
+
+  <div id="shell-info-modal" class="shell-modal-backdrop">
+    <div class="shell-modal" role="dialog" aria-modal="true" aria-label="About this simulation">
+      <div class="shell-modal-head">
+        <h2>About: River-Boat Crossing</h2>
+        <button id="shell-info-close" class="shell-btn shell-modal-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="shell-modal-body">
+        <h3>Source</h3>
+        <dl class="shell-info-dl">
+          <dt>Concept</dt><dd>Relative velocity in 2D — vector addition of independent components.</dd>
+          <dt>Serves</dt><dd>The one thing to notice: the current cannot change how long the crossing takes — only the across-stream component of the boat's velocity carries it over, so the current moves only WHERE it lands, never WHEN.</dd>
+          <dt>Inquiry</dt><dd>Which heading lands the boat exactly opposite its start? What does that heading cost in crossing time?</dd>
+          <dt>Misconception</dt><dd>"Rowing against the current gets you across faster." It does not — it only changes the landing point. Straight across is always the quickest crossing, and it is never the one that lands opposite.</dd>
+        </dl>
+        <h3>Pedagogy principles applied</h3>
+        <table class="shell-info-table">
+          <thead><tr><th>ID</th><th>Principle</th><th>How it shows up here</th></tr></thead>
+          <tbody>
+            <tr><td class="pid">A1</td><td>One concept, one sentence</td><td>Components of velocity are independent — the across component sets the time, the along component sets the drift.</td></tr>
+            <tr><td class="pid">D6/D7</td><td>Scene in step with the activity</td><td>The vector triangle, trail and readouts stay live from the first step; the trail persists across steps as accumulating evidence.</td></tr>
+            <tr><td class="pid">H1/H2</td><td>Misconception in a choice</td><td>The "row upstream to cross faster" idea is a wrong prediction, refuted only when selected.</td></tr>
+            <tr><td class="pid">K1</td><td>Fill the frame</td><td>The river spans the canvas width; the boat and triangle are drawn to a shared scale.</td></tr>
+            <tr><td class="pid">K3</td><td>Named quantities are drawn</td><td>v<sub>bw</sub>, v<sub>c</sub>, v<sub>bg</sub> all appear as arrows at the boat when the triangle is shown.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <header class="shell-header">
+    <div class="shell-title">River-Boat Crossing <span>· Relative velocity in 2D</span></div>
+    <div class="shell-group">
+      <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
+      <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+      <button id="btn-gi" class="shell-btn active" data-no-reset title="Show or hide the guided inquiry">🧭 Guided Inquiry</button>
+      <button id="btn-cg" class="shell-btn" data-no-reset title="Show or hide the controls guide">🎛 Controls Guide</button>
+    </div>
+    <div class="shell-controls">
+      <div class="shell-group">
+        <button id="shell-maximize" class="shell-btn">⛶ Maximize</button>
+        <button id="toggle-formal" class="shell-btn">∑ Formal</button>
+        <label id="lbl-speed" style="font-size:11px;">Speed</label>
+        <select id="shell-speed" class="shell-select">
+          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+        </select>
+      </div>
+      <div class="shell-sep"></div>
+      <div class="shell-group">
+        <button id="shell-reset" class="shell-btn">↻ Reset</button>
+        <button id="shell-play" class="shell-btn">⏸ Pause</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell-hero">
+    <div class="plot-box">
+      <div class="plot-title">River · top-down view <span class="plot-inline">width 200 m</span></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span><span>v<sub>bw</sub> (through water)</span></div>
+        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span><span>v<sub>c</sub> (current)</span></div>
+        <div class="legend-item"><span class="legend-dot" style="background:#34d399"></span><span>v<sub>bg</sub> (ground)</span></div>
+      </div>
+      <canvas id="scene"></canvas>
+    </div>
+  </main>
+
+  <aside class="shell-aside">
+
+    <div id="aside-inquiry" class="aside-zone">
+      <div class="aside-zone-head"><h3>Guided Inquiry</h3></div>
+      <div id="inq-dots" class="inq-dots"></div>
+      <div id="inq-cards" class="aside-zone-body">
+
+        <div class="inq-step">
+          <h4>1 · Watch the crossing</h4>
+          <p>The boat is aimed <b>straight across</b> the river (heading = 0°). Watch its ground trail (Pause / Play is in the top bar). Note the two readouts: <b>crossing time</b> (t) and <b>drift</b> (Δx).</p>
+          <p>The current is flowing left-to-right at 2 m/s. Where does the boat land, relative to its start?</p>
+        </div>
+
+        <div class="inq-step" data-gate>
+          <h4>2 · Predict — how to cancel the drift?</h4>
+          <p>To land <b>exactly opposite</b> the starting point, what should the pilot do?</p>
+          <button class="choice" data-fb="Aiming straight across (heading 0°) is the <strong>fastest</strong> crossing, but the current sweeps the boat downstream — it lands 80 m downstream of the start, not opposite.">Aim straight across — the current is small enough to ignore.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> Angle the bow upstream so the boat's own upstream component exactly cancels the current. That heading is <strong>arcsin(v<sub>c</sub> / v<sub>bw</sub>)</strong>. For v<sub>bw</sub> = 5, v<sub>c</sub> = 2 m/s, that's about 23.6°.">Angle the bow slightly upstream so the boat's own upstream push cancels the current.</button>
+          <button class="choice" data-fb="This is the misconception the sim exists to break. Rowing hard upstream <strong>does not cross faster</strong> — the across-component <em>shrinks</em> (v<sub>bw</sub>·cos θ), so the crossing takes <em>longer</em>. It only changes where you land.">Aim sharply upstream (say 60°) so you cross faster against the current.</button>
+          <div class="predict-eval"></div>
+        </div>
+
+        <div class="inq-step">
+          <h4>3 · Find the zero-drift heading</h4>
+          <p>Now try it. Drag <b>Heading — upstream from straight-across</b>. Watch the <b>drift</b> readout — hunt for the heading where the drift flips sign, from downstream (+) to upstream (−). It crosses zero between 23.5° and 23.6°: the exact zero-drift heading is arcsin(v<sub>c</sub>/v<sub>bw</sub>) ≈ 23.58°, which sits between two slider steps.</p>
+          <p>Then look at the <b>crossing time</b> as you sweep the heading. Does it stay put, or does it change?</p>
+        </div>
+
+        <div class="inq-step" data-gate>
+          <h4>4 · Predict — does the current change the crossing time?</h4>
+          <p>Hold the heading fixed at some angle. Now imagine you triple the <b>current speed</b>. What happens to how long the crossing takes?</p>
+          <button class="choice" data-fb="A stronger current sweeps you further downstream, but it does <strong>not</strong> shorten the crossing. The current pushes ALONG the banks, not ACROSS them.">A stronger current pushes the boat across faster.</button>
+          <button class="choice" data-fb="The current is perpendicular to the crossing direction, so it can never oppose the crossing itself.">The crossing takes longer because you're fighting more current.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> The current is purely along the river (x). It has <strong>zero</strong> across-stream (y) component, so it cannot speed up or slow down the crossing. Only v<sub>bw</sub>·cos θ carries you over. Try it: hold heading fixed and sweep v<sub>c</sub> — the crossing time will not move.">Nothing — the crossing time doesn't depend on the current at all.</button>
+          <div class="predict-eval"></div>
+        </div>
+
+        <div class="inq-step">
+          <h4>5 · The one thing to notice</h4>
+          <p>The current cannot change <em>when</em> you arrive — only <em>where</em> you land. The two components are independent:</p>
+          <p>• <b>Across (y):</b> only v<sub>bw</sub>·cos θ contributes → sets crossing <b>time</b>.<br>
+          • <b>Along (x):</b> v<sub>c</sub> and v<sub>bw</sub>·sin θ contribute → set the <b>drift</b>.</p>
+          <p>So the <b>fastest</b> crossing (θ = 0) is <b>never</b> the one that lands opposite. You cannot have both.</p>
+        </div>
+
+      </div>
+      <div class="inq-listen">
+        <span class="inq-listen-lab">Listen</span>
+        <button id="inq-voice" class="shell-btn primary inq-pager-btn" data-vstate="idle" title="Read this card aloud" aria-label="Read this card aloud">
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          <svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+        </button>
+        <button id="inq-auto" class="shell-btn primary inq-pager-btn" title="Auto walkthrough — narrates each card and moves on; waits for your answers" aria-label="Auto walkthrough">Auto</button>
+      </div>
+      <div class="inq-nav">
+        <div class="inq-pager">
+          <button id="inq-prev" class="shell-btn primary inq-pager-btn" title="Previous step" aria-label="Previous step">&lt;</button>
+          <button id="inq-pager-next" class="shell-btn primary inq-pager-btn" title="Next step" aria-label="Next step">&gt;</button>
+        </div>
+        <button id="inq-next" class="shell-btn primary">Next →</button>
+      </div>
+    </div>
+
+    <div id="aside-controls" class="aside-zone">
+      <div class="shell-panel">
+        <div class="shell-panel-head"><h3>Controls</h3><span class="shell-caret">▾</span></div>
+        <div class="shell-panel-body">
+          <div id="box-vb" class="ctrl-box ctrl-box--slider">
+            <div class="ctrl-box-head"><span class="ctrl-box-label">Boat speed through water (v<sub>bw</sub>)</span><span class="slider-val" id="vb-out">5.0 m/s</span></div>
+            <div class="ctrl-slider-row"><input type="range" id="vb" min="1" max="10" step="0.1" value="5"></div>
+          </div>
+          <div id="box-vc" class="ctrl-box ctrl-box--slider">
+            <div class="ctrl-box-head"><span class="ctrl-box-label">Current speed (v<sub>c</sub>)</span><span class="slider-val" id="vc-out">2.0 m/s</span></div>
+            <div class="ctrl-slider-row"><input type="range" id="vc" min="0" max="8" step="0.1" value="2"></div>
+          </div>
+          <div id="box-heading" class="ctrl-box ctrl-box--slider">
+            <div class="ctrl-box-head"><span class="ctrl-box-label">Heading — upstream from straight-across (θ)</span><span class="slider-val" id="h-out">0°</span></div>
+            <div class="ctrl-slider-row"><input type="range" id="h" min="0" max="80" step="0.1" value="0"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-readouts" class="shell-panel">
+        <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
+        <div class="shell-panel-body">
+          <div class="ctrl-box">
+            <div class="stat-row"><span class="stat-label">Crossing time  t</span><span class="stat-value highlight" id="r-time">40.00 s</span></div>
+            <div class="stat-row"><span class="stat-label">Drift  Δx</span><span class="stat-value highlight" id="r-drift">+80.0 m</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <section class="shell-formal">
+    <div class="formal-grid">
+      <div class="eq-row">
+        <div class="eq-label">Boat velocity relative to ground</div>
+        <div id="eq1"></div>
+      </div>
+      <div class="eq-row">
+        <div class="eq-label">Crossing time (across component only)</div>
+        <div id="eq2"></div>
+      </div>
+      <div class="eq-row">
+        <div class="eq-label">Drift (along component)</div>
+        <div id="eq3"></div>
+      </div>
+      <div class="eq-row">
+        <div class="eq-label">Zero-drift heading (exists iff v<sub>bw</sub> > v<sub>c</sub>)</div>
+        <div id="eq4"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script id="shell-runtime">
+/* SHELL:BEGIN */
+window.Shell = (function(){
+// shell/shell.js — the canonical Shell runtime (Layer 3): rAF frame loop,
+// play/pause/speed/reset, maximize, theme, info modal, formal region,
+// collapsible panels, guided-inquiry stepper, lecture mode.
+//
+// Base: SR_sims/L09-s1-worldline-length-and-proper-time-shell.html L618-816
+// (md5-identical in 10 SR files). Every drift feature found across the 57 sim
+// Shell copies is folded in per shell/HARVEST-NOTES.md — include-always
+// features are inert when the DOM lacks the element; behavior splits sit
+// behind cfg flags. Line-harvest sources:
+//   stepUnready                           — CM L37-Kepler's Laws
+//   playLocked / setPlayLocked / #play-hint — CM Galperins_Billiard
+//   setPlayEnabled / currentGated gating  — CM L36-The Energy of the Orbit-new
+//   finishInquiry / onComplete            — CM L9-The pendulum
+//   data-manual-gate opt-out + inqNext export — CM Free-Body Diagram Builder
+//   scroll-steps-to-top                   — SR L10-s2
+//   onExploreMode plumbing (+ aliases)    — SR L00-s1 (aliases: L01-s1, L08-s2)
+//   'fastforward' lecture landing         — SR L19-s2
+//   #shell-speed markup read at boot      — CM L1-Solar System Orbits
+//   stepReady marks current dot done      — CM L35-Orbits
+//   formal-open root class + lecture refit tail — SR L07-s1
+//   fixed-dt accumulator frame mode       — QM Quantum_Tunneling_Gaussian_Wave L2230-2253
+//   declarative predict feedback (data-correct/data-fb) — capacity-studio
+//                                           simShellTemplate.ts (2026-08-05)
+//
+// BUILD ALIASING: the registry entry "shell" carries "alias": "Shell", so
+// build.py emits `window.Shell = Engine.shell;` right after this module's
+// IIFE — the frozen 57-sim API (`Shell.init({...})`, `Shell.stepReady()`,
+// `Shell.step`, ...) keeps working unchanged. The speed/playing/step/totalSteps
+// getter properties of that API are installed onto the built namespace object
+// by init() (see _installGetters below), because the build's plain
+// `return {exports}` shape cannot carry accessors.
+
+const CFG_DEFAULTS = {
+  resumeOnReset: true,        // true → Reset resumes play | false → leave play state alone | 'pause' → force pause
+  autoplay: true,             // start the loop playing after init
+  speed: 1,                   // fallback speed; a #shell-speed markup value wins at boot (CM L1-Solar fix)
+  dtClamp: 0.05,              // max frame dt (seconds) before speed scaling — frame-stall guard
+  lectureLanding: 'last',     // 'last' | 'first' | 'fastforward' (replay every onStep, SR L19-s2)
+  finishFastForward: false,   // Finish/Skip replays remaining onStep(k) before completing (CM L9)
+  resumeOnFinish: false,      // finishInquiry ends with setPlaying(true) (CM L9 tail)
+  timeless: false,            // sim has NO time evolution (a slider-driven diagram): hide Play/Pause + Speed
+                              // rather than show a transport that drives nothing. The contract already
+                              // blesses static diagrams ('do not invent motion to keep Play busy'); this is
+                              // what makes that honest instead of leaving dead chrome in the top bar.
+  resetBeforeFirstStep: true, // onReset before the stepper's first onStep(0) — fixes the step-0 clobber
+  scrollStepsToTop: true,     // scroll #inq-cards to top on step change (inert when pane not scrollable)
+  gateLocksPlay: false,       // data-gate steps also disable ▶ Play until stepReady (CM L36-Energy)
+  restartOnParamChange: true, // moving a sim slider restarts the run instead of mutating it mid-flight
+};
+
+let onFrame = () => {}, onReset = () => {}, onResize = () => {}, onStep = () => {};
+let onComplete = () => {}, onExploreMode = () => {};
+let cfg = Object.assign({}, CFG_DEFAULTS);
+let frame = null;               // opt-in {mode:'fixed', dt, maxSubsteps}
+let root = null;
+let playing = true, speed = 1, last = 0, started = false, acc = 0;
+let inqStep = 0, inqTotal = 0;  // guided-inquiry stepper (shell-owned)
+let playLocked = false;         // Galperins: prediction gate can hold ▶ Play shut
+let runEnded = false;           // the sim declared its motion over (Shell.endRun)
+let framesSinceRestart = 0;     // guards endRun against firing at t=0
+
+function loop(now) {
+  let dt = (now - last) / 1000;
+  if (dt > cfg.dtClamp) dt = cfg.dtClamp;
+  // ...and a LOWER clamp, which matters just as much. `last` is stamped with
+  // performance.now() (init, refit, setPlaying, Reset) while `now` is the rAF
+  // timestamp — the moment the frame STARTED. When a stamp is taken during a
+  // long task (first load: font decode, KaTeX, the first drawScene) the next
+  // callback can arrive with a timestamp that PREDATES it, so dt is negative.
+  // Sims integrate `state.t += dt`, so a negative dt drives simulation time
+  // below zero; engine ops validate their domain and throw (e.g.
+  // dampedOscillatorState requires t >= 0), which used to kill the sim on
+  // frame one. A frame cannot take negative time — floor it. NaN (first frame
+  // before any stamp) fails `>= 0` too and is caught by the same guard.
+  if (!(dt >= 0)) dt = 0;
+  last = now;
+  try {
+    if (playing) {
+      if (frame && frame.mode === 'fixed') {
+        // Fixed-dt accumulator (QM QTGW L2230-2253): FPS-independent PDE
+        // stepping with a per-frame substep cap; the backlog is dropped when the
+        // cap hits so a stalled tab never triggers a catch-up burst.
+        acc += dt * speed;
+        let n = Math.floor(acc / frame.dt);
+        const cap = frame.maxSubsteps || 600;
+        if (n > cap) { n = cap; acc = 0; } else { acc -= n * frame.dt; }
+        for (let i = 0; i < n; i++) onFrame(frame.dt);
+      } else {
+        onFrame(dt * speed);
+      }
+      framesSinceRestart++;
+    }
+  } finally {
+    // Reschedule unconditionally. Without this, ONE throw out of onFrame ends
+    // the rAF chain for good: the canvas freezes and ▶ Play does nothing,
+    // because there is no loop left to observe `playing`. The error still
+    // propagates to window.onerror — it is reported, it just is not fatal.
+    requestAnimationFrame(loop);
+  }
+}
+
+function refit() { onResize(); last = performance.now(); }
+
+// --- Restart-on-parameter-change ------------------------------------------
+//
+// Moving a slider mid-run used to mutate the parameters underneath a running
+// integration. For an apparatus view that reads fine — the setup simply
+// adjusts. For anything plotting a HISTORY it does not: a damped-oscillator
+// trace built at one damping constant, then continued at another, is a curve
+// no physical system ever produced. It is a splice of two solutions with a
+// kink at the join, and it is on screen for as long as the trace lives.
+//
+// So a parameter change now RESTARTS the run: t back to zero, history cleared,
+// the new value in force from the first frame. Every curve on screen is then a
+// single solution of a single parameter set.
+//
+// HOW, without a new sim-side hook. The contract already requires onReset() to
+// zero the physics AND return every control to its authored default — so
+// calling it alone would throw away the value the student just chose. The
+// watcher therefore snapshots the controls, calls onReset(), puts the snapshot
+// back, and re-fires `input`/`change` so the sim's own listeners re-apply the
+// chosen values against a zeroed clock. Nothing is asked of the sim that the
+// contract did not already require, which is what makes this work on sims that
+// were generated before the rule existed.
+//
+// Sims are NOT to implement this themselves — a sim-side reset on top of this
+// one would zero the clock twice per drag event.
+//
+// Opt out per control with `data-no-reset` (zoom, trail length, "show grid" —
+// anything that changes the VIEW rather than the physics), or wholesale with
+// cfg.restartOnParamChange:false.
+
+let paramWatchDoc = null;      // the document the watcher is bound to
+let restoringParams = false;   // re-entrancy guard for our own synthetic events
+
+/**
+ * Shell- or inquiry-owned, and therefore never a physics parameter.
+ *
+ * The transport, the stepper, the pager and the prediction choices inside a
+ * guided-inquiry card all fire the same events a control does. Restarting the
+ * run when someone presses Next, or answers a prediction, would be its own bug.
+ */
+function isShellOwned(el) {
+  const id = el.id || '';
+  if (id.indexOf('shell-') === 0 || id.indexOf('inq-') === 0 || id.indexOf('aside-inquiry') === 0) return true;
+  if (id === 'toggle-formal') return true;
+  if (el.closest && el.closest('#inq-cards')) return true;          // a prediction card
+  if (el.classList && el.classList.contains('choice')) return true; // a prediction choice
+  // Declarative prediction feedback lives on the choice buttons themselves.
+  if (el.hasAttribute && (el.hasAttribute('data-fb') || el.hasAttribute('data-correct'))) return true;
+  return false;
+}
+
+const VALUE_INPUT_TYPES = ['range', 'number', 'checkbox', 'radio'];
+
+/**
+ * A control whose VALUE is a physics parameter — one we can read, and therefore
+ * snapshot and restore across the restart.
+ *
+ * Originally range and number only, which is why a MODE change did nothing:
+ * the sim under test selected its thermodynamic process with
+ * `<button data-proc="isobaric">`, and a dropdown or a radio group would have
+ * failed the same way. Sliders restarted the run; changing the process did not,
+ * until Reset was pressed.
+ */
+function isSimParam(el) {
+  if (!el) return false;
+  if (isShellOwned(el)) return false;
+  if (el.hasAttribute && el.hasAttribute('data-no-reset')) return false;
+  if (el.closest && el.closest('[data-no-reset]')) return false;
+  const tag = String(el.tagName || '').toLowerCase();
+  if (tag === 'select') return true;
+  const type = String(el.type || '').toLowerCase();
+  return VALUE_INPUT_TYPES.indexOf(type) !== -1;
+}
+
+/**
+ * A BUTTON that sets a parameter — a preset, a mode, a process selector.
+ *
+ * Handled separately because it carries no value we can read back, so the
+ * snapshot-and-restore dance is impossible. See onParamButton for the ordering
+ * that makes it work anyway.
+ */
+function isSimParamButton(el) {
+  if (!el) return false;
+  if (String(el.tagName || '').toLowerCase() !== 'button') return false;
+  if (isShellOwned(el)) return false;
+  if (el.hasAttribute && el.hasAttribute('data-no-reset')) return false;
+  if (el.closest && el.closest('[data-no-reset]')) return false;
+  return true;
+}
+
+function simParams() {
+  if (!document.querySelectorAll) return [];
+  const found = document.querySelectorAll('input[type=range], input[type=number], input[type=checkbox], input[type=radio], select');
+  return Array.prototype.slice.call(found).filter(isSimParam);
+}
+
+function fire(el, type) {
+  if (typeof Event === 'function' && el.dispatchEvent) {
+    el.dispatchEvent(new Event(type, { bubbles: true }));
+  }
+}
+
+// --- Runs that end ---------------------------------------------------------
+//
+// Some sims reach a state where nothing further happens: the bob comes to rest
+// under damping, the projectile lands, the capacitor finishes charging. The
+// loop kept running against a frozen scene, so ⏸ Pause stayed on offer for a
+// motion that was already over and the only way to see it again was Reset.
+//
+// The shell cannot detect this — "at rest" is physics, and the shell is
+// deliberately semantics-free — so the SIM declares it with Shell.endRun().
+// The shell then pauses (▶ Play returns) and the next Play restarts the run
+// from zero with the parameters currently on the controls.
+//
+// endRun() is IGNORED until at least one frame has advanced since the last
+// restart. That is not defensive padding: a projectile launched from ground
+// level satisfies `y <= 0` at t = 0, so the obvious terminal test fires on the
+// first evaluation and would wedge the sim shut the moment Play is pressed.
+
+/** Clear the end-of-run latch. Called wherever the run goes back to zero. */
+function clearRunEnd() { runEnded = false; framesSinceRestart = 0; }
+
+/**
+ * The sim declaring its motion over. Idempotent, and a no-op before the run
+ * has advanced. Sims whose motion is genuinely endless never call it.
+ */
+function endRun() {
+  if (runEnded || framesSinceRestart < 1) return;
+  runEnded = true;
+  setPlaying(false);
+}
+
+/** Zero the run, then re-apply whatever the controls currently say. */
+function restartWithCurrentParams() {
+  // A pause the SHELL imposed at the end of a run is not a pause the student
+  // chose, so a parameter change lifts it and the new run plays. A pause the
+  // student chose is left alone (see below).
+  const wasAutoPaused = runEnded;
+  const held = simParams().map(el => ({ el, value: el.value, checked: el.checked }));
+  restoringParams = true;
+  try {
+    onReset();
+    for (const h of held) {
+      // Only re-notify where onReset actually moved the control. A sim that
+      // leaves its sliders alone has already applied the new value through its
+      // own listener, and a second event would just repeat the work.
+      if (h.el.value === h.value && h.el.checked === h.checked) continue;
+      h.el.value = h.value;
+      h.el.checked = h.checked;
+      fire(h.el, 'input');
+      fire(h.el, 'change');
+    }
+  } finally {
+    restoringParams = false;
+  }
+  // Same clock handling as the Reset button — but the play state is left
+  // alone. A student who paused to line up a value stays paused.
+  last = performance.now();
+  acc = 0;
+  clearRunEnd();
+  if (wasAutoPaused) setPlaying(true);
+}
+
+function onParamGesture(e) {
+  if (restoringParams || !cfg.restartOnParamChange) return;
+  if (!isSimParam(e && e.target)) return;
+  restartWithCurrentParams();
+}
+
+/**
+ * A parameter BUTTON — a preset, a mode, a process selector.
+ *
+ * Handled in the CAPTURE phase, which is the whole trick. A button carries no
+ * value we can read, so the snapshot-and-restore used for sliders is
+ * impossible: onReset() would return the sim to its default process and there
+ * would be nothing to put back, losing the very click that triggered it.
+ *
+ * Running FIRST instead solves it. On capture we zero the run while the button's
+ * own handler has not fired yet; the event then continues to that handler, which
+ * applies the new mode on top of a freshly reset state. Order does the work that
+ * a snapshot cannot.
+ *
+ * (Sliders stay on the bubble phase for the mirror-image reason: their handler
+ * must run BEFORE us, so the value we snapshot is the one just chosen.)
+ */
+function onParamButton(e) {
+  if (restoringParams || !cfg.restartOnParamChange) return;
+  const el = e && e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!isSimParamButton(el)) return;
+  restartWithCurrentParams();
+}
+
+function watchParams() {
+  if (paramWatchDoc === document || !document.addEventListener) return;
+  paramWatchDoc = document;
+  // Delegated on the document: sims author their own control markup, and both
+  // `input` (drag) and `change` (release, and sims that listen only for it)
+  // have to be covered. These run AFTER the sim's own element listeners, so
+  // the value is already applied by the time the restart snapshots it.
+  document.addEventListener('input', onParamGesture);
+  document.addEventListener('change', onParamGesture);
+  // CAPTURE for buttons — see onParamButton. This listener must beat the
+  // sim's own click handler; every other one here must lose to it.
+  document.addEventListener('click', onParamButton, true);
+}
+
+function setPlaying(p) {
+  if (p && playLocked) return;   // Galperins: prediction gate holds ▶ shut
+  playing = p; last = performance.now();
+  const b = document.getElementById('shell-play');
+  if (b) { b.textContent = p ? '⏸ Pause' : '▶ Play'; b.classList.toggle('paused', !p); }
+}
+
+// Enable/disable the ▶ Play button without the playLocked hint (CM L36-Energy).
+function setPlayEnabled(on) {
+  const b = document.getElementById('shell-play'); if (b) b.disabled = !on;
+}
+
+// Hard-lock ▶ Play behind a prediction commitment, with the #play-hint pill
+// (CM Galperins_Billiard). Collapsing the inquiry always unlocks.
+function setPlayLocked(locked) {
+  playLocked = locked;
+  const b = document.getElementById('shell-play');
+  const hint = document.getElementById('play-hint');
+  if (b) {
+    b.disabled = locked;
+    b.title = locked ? 'Commit a prediction to unlock' : '';
+  }
+  if (hint) hint.classList.toggle('show', locked);
+  if (locked && playing) setPlaying(false);
+}
+
+function setMaximized(on) {
+  root.classList.toggle('shell-max', on);
+  const maxBtn = document.getElementById('shell-maximize');
+  if (maxBtn) {
+    maxBtn.classList.toggle('active', on);
+    maxBtn.textContent = on ? '⤡ Minimize' : '⛶ Maximize';
+  }
+  requestAnimationFrame(refit);
+}
+
+// "Free exploration" = the guided inquiry is out of the way (collapsed or
+// lecture mode). SIMs use onExploreMode to unlock their full control surface
+// (SR L00-s1); per-sim DOM toggling belongs in that handler, never here.
+function isFreeExplore() {
+  return root.classList.contains('inquiry-collapsed') || root.classList.contains('lecture-mode');
+}
+function notifyExploreMode() { onExploreMode(isFreeExplore()); }
+
+// Dynamic sidebar: collapse the guided-inquiry zone to its restore bar (on
+// answer or Skip) or expand it again (restore-bar click). Refit canvases so
+// the sidebar height change never distorts the hero.
+// The header button says what CLICKING it will do, and it is relabelled here
+// rather than in setLectureMode because collapsing has more than one route:
+// Finish collapses the inquiry without entering lecture mode, and the restore
+// bar re-opens it. Every one of those paths passes through this function, so
+// this is the only place the label can be kept honest. (It read a static
+// "Lecture" before, which told the student nothing about the current state.)
+const INQUIRY_LABEL = { shown: '🎓 Hide Guided Inquiry', hidden: '🎓 Show Guided Inquiry' };
+const INQUIRY_TITLE = {
+  shown: 'Hide the guided inquiry and use the full simulation',
+  hidden: 'Show the guided inquiry and start again at card 1',
+};
+function syncInquiryButton() {
+  const b = document.getElementById('shell-lecture');
+  if (!b) return;
+  const collapsed = root.classList.contains('inquiry-collapsed') || root.classList.contains('lecture-mode');
+  b.textContent = collapsed ? INQUIRY_LABEL.hidden : INQUIRY_LABEL.shown;
+  b.title = collapsed ? INQUIRY_TITLE.hidden : INQUIRY_TITLE.shown;
+}
+
+function setInquiryCollapsed(on) {
+  root.classList.toggle('inquiry-collapsed', on);
+  if (on) setPlayLocked(false);   // Galperins: collapsing always unlocks ▶
+  syncInquiryButton();
+  notifyExploreMode();
+  requestAnimationFrame(refit);
+}
+
+function setLectureMode(on) {
+  root.classList.toggle('lecture-mode', on);
+  const b = document.getElementById('shell-lecture');
+  if (b) b.classList.toggle('active', on);
+  syncInquiryButton();
+  if (on) {
+    const cards = inqCards();
+    if (cards.length) {
+      if (cfg.lectureLanding === 'fastforward') {
+        // SR L19-s2: incremental onStep — replay every step so the lecture
+        // scene matches the fully-revealed post-inquiry state.
+        for (let i = 0; i < cards.length; i++) onStep(i);
+        inqShow(cards.length - 1);
+      } else if (cfg.lectureLanding === 'first') {
+        inqShow(0);
+      } else {
+        inqShow(cards.length - 1);
+      }
+    }
+    setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: lecture never leaves ▶ dead
+  } else {
+    setInquiryCollapsed(false);
+    inqShow(0);
+  }
+  notifyExploreMode();
+  requestAnimationFrame(refit);   // SR L07-s1: refit tail after the mode swap
+}
+
+// ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
+// The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
+// shell shows ONE at a time, builds the dots, and drives the Next/Finish button.
+// A card marked data-gate keeps Next disabled until the student clicks a .choice
+// inside it (auto-detected) or the SIM calls Shell.stepReady(). A card marked
+// data-manual-gate opts out of the .choice auto-detection (FBD) — the SIM must
+// call stepReady() itself.
+function inqCards() { return root.querySelectorAll('#inq-cards .inq-step'); }
+function currentGated() {
+  const card = inqCards()[inqStep];
+  return !!(card && card.hasAttribute('data-gate') && !card.hasAttribute('data-ready'));
+}
+function inqUpdatePager() {
+  const cards = inqCards();
+  const prev = document.getElementById('inq-prev');
+  const pnext = document.getElementById('inq-pager-next');
+  // The ‹ › pager is NEVER gated (platform rule: gating applies to Next only —
+  // free back/forward keeps review possible even under gateLocksPlay).
+  if (prev) prev.disabled = inqStep <= 0;
+  if (pnext) pnext.disabled = inqStep >= cards.length - 1;
+}
+function inqShow(n) {
+  const cards = inqCards();
+  if (!cards.length) return;
+  inqStep = Math.max(0, Math.min(n, cards.length - 1));
+  cards.forEach((c, i) => c.classList.toggle('active', i === inqStep));
+  root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === inqStep);
+    d.classList.toggle('done', i < inqStep);
+  });
+  const next = document.getElementById('inq-next');
+  if (next) {
+    next.disabled = currentGated();
+    next.textContent = (inqStep >= cards.length - 1) ? 'Finish' : 'Next →';
+  }
+  if (cfg.gateLocksPlay) {   // L36-Energy: gate ▶ Play behind the current step
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  inqUpdatePager();
+  onStep(inqStep);
+  if (cfg.scrollStepsToTop) {   // SR L10-s2: long cards land scrolled to the top
+    const host = document.getElementById('inq-cards');
+    if (host) host.scrollTop = 0;
+  }
+  requestAnimationFrame(refit);
+}
+function inqPrev() {
+  if (inqStep > 0) inqShow(inqStep - 1);
+}
+function inqPagerNext() {
+  const cards = inqCards();
+  if (inqStep < cards.length - 1) inqShow(inqStep + 1);
+}
+function inqNext() {
+  const cards = inqCards();
+  if (inqStep >= cards.length - 1) finishInquiry();   // Finish = completed state + hide the inquiry
+  else inqShow(inqStep + 1);
+}
+// Finish OR Skip (CM L9): optionally fast-forward through any remaining steps
+// (applying each onStep so the scene ends in the SAME fully-revealed state as
+// completing the inquiry), let the SIM set up free exploration via
+// onComplete(), collapse the zone, and optionally leave the sim playing.
+// With default flags this reduces to the canonical Finish (collapse only).
+function finishInquiry() {
+  const cards = inqCards();
+  if (cfg.finishFastForward && cards.length) {
+    for (let k = inqStep + 1; k < cards.length; k++) onStep(k);
+    inqStep = cards.length - 1;
+    root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === inqStep);
+      d.classList.toggle('done', i < inqStep);
+    });
+  }
+  onComplete();
+  // Two-button template: the Guided Inquiry button is the single owner of the
+  // zone's visibility — Finish/Skip route through it so button and zone agree.
+  if (window.__giOff) window.__giOff(); else setInquiryCollapsed(true);
+  if (cfg.resumeOnFinish) setPlaying(true);
+}
+// SIM may call this to satisfy a data-gate step's requirement (e.g. "watched").
+function stepReady() {
+  const card = inqCards()[inqStep];
+  if (card) card.setAttribute('data-ready', '');
+  const next = document.getElementById('inq-next'); if (next) next.disabled = false;
+  // CM L35-Orbits: mark this dot as done immediately upon commit.
+  const dot = root.querySelectorAll('#inq-dots .inq-dot')[inqStep];
+  if (dot) dot.classList.add('done');
+  if (cfg.gateLocksPlay) { setPlayEnabled(true); inqUpdatePager(); }
+}
+// Revoke the current card's readiness (CM L37-Kepler's Laws) — e.g. the
+// student withdrew a committed prediction.
+function stepUnready() {
+  const card = inqCards()[inqStep];
+  if (card) card.removeAttribute('data-ready');
+  const next = document.getElementById('inq-next');
+  // Mirror inqShow: only disable Next when the card actually gates.
+  if (next) next.disabled = !!(card && card.hasAttribute('data-gate'));
+  if (cfg.gateLocksPlay) {
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+    inqUpdatePager();
+  }
+}
+
+function wire() {
+  const play = document.getElementById('shell-play');
+  const reset = document.getElementById('shell-reset');
+  const spd = document.getElementById('shell-speed');
+  const maxBtn = document.getElementById('shell-maximize');
+  const skip = document.getElementById('aside-inquiry-skip');
+  const restore = document.getElementById('aside-inquiry-restore');
+  const tFormal = document.getElementById('toggle-formal');
+
+  if (play) play.addEventListener('click', () => {
+    if (play.disabled) return;
+    // ▶ on a finished run means "show me that again", not "resume a frozen
+    // scene" — there is nothing left to resume.
+    if (runEnded) { restartWithCurrentParams(); setPlaying(true); return; }
+    setPlaying(!playing);
+  });
+  // Reset zeroes state; whether the loop then plays is cfg-driven (tri-state).
+  if (reset) reset.addEventListener('click', () => {
+    onReset(); last = performance.now(); acc = 0; clearRunEnd();
+    if (cfg.resumeOnReset === 'pause') setPlaying(false);
+    else if (cfg.resumeOnReset) setPlaying(true);
+    // resumeOnReset:false → leave the play state as the student had it
+  });
+  if (spd) {
+    // CM L1-Solar fix: honor the select's authored markup value at boot.
+    speed = parseFloat(spd.value) || cfg.speed;
+    spd.addEventListener('change', e => { speed = parseFloat(e.target.value) || cfg.speed; });
+  }
+
+  watchParams();
+
+  if (maxBtn) maxBtn.addEventListener('click', () => setMaximized(!root.classList.contains('shell-max')));
+
+  const infoBtn = document.getElementById('shell-info');
+  const infoModal = document.getElementById('shell-info-modal');
+  const infoClose = document.getElementById('shell-info-close');
+  function setInfo(open) { if (infoModal) infoModal.classList.toggle('open', open); }
+  if (infoBtn) infoBtn.addEventListener('click', () => setInfo(true));
+  if (infoClose) infoClose.addEventListener('click', () => setInfo(false));
+  if (infoModal) infoModal.addEventListener('click', e => { if (e.target === infoModal) setInfo(false); });
+
+  // Light/dark theme toggle (default dark). Swaps the icon and refits canvases.
+  const themeBtn = document.getElementById('shell-theme');
+  if (themeBtn) themeBtn.addEventListener('click', () => {
+    const light = document.body.classList.toggle('light-theme');
+    themeBtn.textContent = light ? '☀' : '☾';
+    requestAnimationFrame(refit);
+  });
+
+  const lecture = document.getElementById('shell-lecture');
+  if (lecture) lecture.addEventListener('click', () => setLectureMode(!root.classList.contains('lecture-mode')));
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (infoModal && infoModal.classList.contains('open')) setInfo(false);
+    else if (root.classList.contains('shell-max')) setMaximized(false);
+  });
+
+  // Skip collapses the inquiry (CM L37); under finishFastForward it goes through
+  // finishInquiry so the scene still ends fully revealed (CM L9's contract).
+  if (skip) skip.addEventListener('click', () => {
+    if (cfg.finishFastForward) finishInquiry();
+    else setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: Skip unlocks ▶
+  });
+  if (restore) restore.addEventListener('click', () => setLectureMode(false));
+  // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
+  const inqNextBtn = document.getElementById('inq-next');
+  if (inqNextBtn) inqNextBtn.addEventListener('click', inqNext);
+  const inqPrevBtn = document.getElementById('inq-prev');
+  if (inqPrevBtn) inqPrevBtn.addEventListener('click', inqPrev);
+  const inqPagerNextBtn = document.getElementById('inq-pager-next');
+  if (inqPagerNextBtn) inqPagerNextBtn.addEventListener('click', inqPagerNext);
+  // Auto-gate + shell-owned DECLARATIVE prediction feedback (capacity-studio
+  // shell, 2026-08-05). When the card's choices carry annotations
+  // (data-correct / data-fb), the shell does everything on the first click:
+  // paints the pick .correct/.wrong, always highlights the correct option,
+  // dims + locks the rest, and reveals the card's .predict-eval with the
+  // clicked choice's data-fb text — the SIM writes no choice JS. Unannotated
+  // choices keep the harvested behavior (SIM-authored feedback).
+  // data-manual-gate suppresses ONLY the automatic stepReady() call (FBD) —
+  // feedback painting still runs when the choices are annotated.
+  const cardsHost = document.getElementById('inq-cards');
+  if (cardsHost) cardsHost.addEventListener('click', e => {
+    const ch = e.target.closest('.choice'); if (!ch) return;
+    const card = ch.closest('.inq-step');
+    if (!card || !card.classList.contains('active')) return;
+    const annotated = card.querySelector('.choice[data-correct],.choice[data-fb]');
+    if (annotated && !card.hasAttribute('data-answered')) {
+      card.setAttribute('data-answered', '');
+      const right = ch.hasAttribute('data-correct');
+      card.querySelectorAll('.choice').forEach(c => {
+        if (c === ch) c.classList.add(right ? 'correct' : 'wrong');
+        else if (c.hasAttribute('data-correct')) c.classList.add('correct');
+        else c.classList.add('dim');
+        c.disabled = true;
+      });
+      const ev = card.querySelector('.predict-eval');
+      if (ev) {
+        const fb = ch.getAttribute('data-fb');
+        if (fb) ev.innerHTML = fb;
+        ev.classList.add(right ? 'correct' : 'wrong');
+        ev.classList.add('show');
+      }
+    }
+    if (!card.hasAttribute('data-manual-gate')) stepReady();
+  });
+  if (tFormal) tFormal.addEventListener('click', () => {
+    const hidden = root.classList.toggle('hide-formal');
+    root.classList.toggle('formal-open', !hidden);   // SR L07-s1: lets sim CSS make room
+    tFormal.classList.toggle('active', !hidden);
+    requestAnimationFrame(refit);
+  });
+
+  root.querySelectorAll('.shell-panel-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('collapsed');
+      requestAnimationFrame(refit);
+    });
+  });
+
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(refit, 80); });
+}
+
+// The frozen 57-sim API reads Shell.speed/.playing/.step/.totalSteps as getter
+// properties. The build's `return {exports}` object cannot carry accessors, so
+// install them on the built namespace (Engine.shell === window.Shell) here.
+function _installGetters() {
+  const w = (typeof window !== 'undefined') ? window : null;
+  const ns = w && ((w.Engine && w.Engine.shell) || w.Shell);
+  if (!ns || Object.getOwnPropertyDescriptor(ns, 'speed')) return;
+  Object.defineProperties(ns, {
+    speed:      { get: () => speed,    configurable: true },
+    playing:    { get: () => playing,  configurable: true },
+    step:       { get: () => inqStep,  configurable: true },
+    totalSteps: { get: () => inqTotal, configurable: true },
+  });
+}
+
+function init(opts) {
+  opts = opts || {};
+  onFrame = opts.onFrame || onFrame; onReset = opts.onReset || onReset;
+  onResize = opts.onResize || onResize; onStep = opts.onStep || onStep;
+  onComplete = opts.onComplete || onComplete;
+  // onExploreMode aliases kept for the SR variants (L01-s1 used onLectureMode,
+  // L08-s2 used onInquiryCollapsed) — all fire on the same free-explore signal.
+  onExploreMode = opts.onExploreMode || opts.onLectureMode || opts.onInquiryCollapsed || onExploreMode;
+  cfg = Object.assign({}, CFG_DEFAULTS, opts.cfg || {});
+  frame = opts.frame || null;
+  root = document.getElementById('shell');
+  playing = !!cfg.autoplay;
+  speed = cfg.speed;
+  acc = 0;
+  clearRunEnd();
+  wire();
+  // Same shape as the no-inquiry branch below: the shell owns chrome visibility,
+  // so a sim declares what it HAS and never hides a control itself.
+  if (cfg.timeless) { root.classList.add('no-transport'); playing = false; }
+  // Build the guided-inquiry stepper from the .inq-step cards the SIM supplied.
+  const cards = inqCards();
+  inqTotal = cards.length;
+  // DECIDED (HARVEST-NOTES): reset-first is correct — the canonical step-first
+  // order let onReset clobber the step-0 scene. The flag exists only for
+  // exact-fidelity backports of old SR sims.
+  if (cfg.resetBeforeFirstStep) { onReset(); onResize(); }
+  if (inqTotal > 0) {
+    const dots = document.getElementById('inq-dots');
+    if (dots) { dots.innerHTML = ''; for (let i = 0; i < inqTotal; i++) { const d = document.createElement('span'); d.className = 'inq-dot'; dots.appendChild(d); } }
+    inqShow(0);
+    syncInquiryButton();   // inquiry is open on load → the button offers to HIDE it
+  } else {
+    // No inquiry → hide the whole zone, its restore bar, AND the header
+    // button. The button used to read "Lecture", which was merely redundant on
+    // a sim with no cards; now it would read "Hide Guided Inquiry" and point at
+    // something that does not exist.
+    root.classList.add('no-inquiry');
+  }
+  if (!cfg.resetBeforeFirstStep) { onResize(); onReset(); }
+  last = performance.now();
+  // DECIDED: init always ends with setPlaying(autoplay) — re-syncs the Play
+  // button label after onReset regardless of what onReset touched.
+  setPlaying(playing);
+  if (cfg.gateLocksPlay) {   // L36-Energy: a gated first card locks ▶ at boot
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  _installGetters();
+  if (!started) { started = true; requestAnimationFrame(loop); }
+}
+
+// Test/debug snapshot of shell state — never call from sim logic; sims use the
+// Shell.speed/.playing/.step/.totalSteps getters instead.
+function _state() {
+  return {
+    playing, speed, step: inqStep, totalSteps: inqTotal, playLocked, runEnded,
+    cfg: Object.assign({}, cfg),
+  };
+}
+
+return {
+  init, refit, setPlaying, setPlayEnabled, setPlayLocked, setLectureMode,
+  setInquiryCollapsed, inqShow,   // exposed for the two-button template (GI/CG)
+  stepReady, stepUnready, inqNext, restartWithCurrentParams, endRun, _state,
+  get speed(){ return speed; }, get playing(){ return playing; },
+  get step(){ return inqStep; }, get totalSteps(){ return inqTotal; },
+};
+})();
+/* SHELL:END */
+</script>
+
+<script>
+/* ============================================================================
+   SIM — River-Boat Crossing.
+   ========================================================================== */
+
+// ---------- Constants (the fixed experiment) ----------
+const RIVER_WIDTH_M = 200;       // metres (across, +y in physics; boat travels from y=0 to y=W)
+const START_X_M = 130;           // start x in world (view is always centered on this)
+
+// ---------- State ----------
+const state = {
+  vb: 5.0,          // boat speed through water, m/s
+  vc: 2.0,          // current speed, m/s
+  headingDeg: 0,    // upstream heading from straight-across (degrees)
+  t: 0,             // elapsed seconds
+  arrived: false,
+  trail: [],        // world-space points [x, y] the boat has visited
+  boatWorld: [START_X_M, 0], // current boat world position (x along-stream, y across)
+};
+
+// ---------- Physics (via Engine.newton.galileanFrameVelocity) ----------
+// heading θ is UPSTREAM from straight-across. Water-frame boat velocity:
+//   v_bw = [ -vb·sin(θ), +vb·cos(θ) ]     (−x is upstream, +y is across)
+// Current flows in +x at vc, so frame velocity is [-vc, 0] in the trick that
+// galileanFrameVelocity SUBTRACTS the frame — i.e. v_ground = v_bw − (−vc,0)
+//                                                       = v_bw + (vc, 0)  ✓
+function computeGround(vb, vc, headingDeg){
+  const th = headingDeg * Math.PI / 180;
+  const v_bw = [ -vb * Math.sin(th), vb * Math.cos(th) ];
+  const { velocity, speed } = Engine.newton.galileanFrameVelocity(v_bw, [-vc, 0]);
+  return { v_bw, v_ground: velocity, groundSpeed: speed };
+}
+
+function crossingSolution(vb, vc, headingDeg){
+  const th = headingDeg * Math.PI / 180;
+  const { v_bw, v_ground, groundSpeed } = computeGround(vb, vc, headingDeg);
+  const vy = v_ground[1];             // across-stream component (m/s)
+  const vx = v_ground[0];             // along-stream component (m/s)
+  // vy <= 0 means the boat cannot make forward progress across; report Infinity.
+  const crossingTime = (vy > 1e-9) ? (RIVER_WIDTH_M / vy) : Infinity;
+  const drift = isFinite(crossingTime) ? vx * crossingTime : NaN;
+  const zeroHead = (Math.abs(vc) < vb) ? (Math.asin(vc / vb) * 180 / Math.PI) : null;
+  return { v_bw, v_ground, groundSpeed, vy, vx, crossingTime, drift, zeroDriftHeadingDeg: zeroHead };
+}
+
+// ---------- Audit hook ----------
+Engine.audit.defineAudit({
+  at: ({ boatSpeedMetresPerSecond, currentSpeedMetresPerSecond, headingUpstreamDeg }) => {
+    const s = crossingSolution(boatSpeedMetresPerSecond, currentSpeedMetresPerSecond, headingUpstreamDeg);
+    return {
+      crossingTimeSeconds: s.crossingTime,
+      driftMetres: s.drift,
+      groundSpeedMetresPerSecond: s.groundSpeed,
+      zeroDriftHeadingDeg: s.zeroDriftHeadingDeg
+    };
+  },
+  invariants: {
+    crossingTimeIndependentOfCurrentSpeed: () => {
+      // hold vb=5, heading=15°, sweep vc across [0..8] in 11 points
+      const vb = 5, h = 15;
+      const times = [];
+      for(let k = 0; k <= 10; k++){
+        const vc = 8 * k / 10;
+        const s = crossingSolution(vb, vc, h);
+        times.push(s.crossingTime);
+      }
+      const lo = Math.min(...times), hi = Math.max(...times);
+      const diff = hi - lo;
+      return { ok: diff < 1e-9, value: diff, expected: 0, tol: 1e-9 };
+    }
+  }
+});
+
+// ---------- Canvas / drawing ----------
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+let viewW = 0, viewH = 0;
+
+// Surface markers (drifting with current, purely decorative — driven by state.t)
+const markers = [];
+(function seedMarkers(){
+  for(let i = 0; i < 36; i++){
+    markers.push({
+      u: Math.random(),
+      y: 12 + Math.random() * (RIVER_WIDTH_M - 24),
+      r: 1.2 + Math.random() * 2.2,
+      kind: i % 5 === 0 ? 'dash' : 'dot',
+    });
+  }
+})();
+
+function fit(){
+  const dpr = window.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  const w = Math.floor(r.width * dpr), h = Math.floor(r.height * dpr);
+  if(canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  viewW = r.width; viewH = r.height;
+}
+
+// World → screen. Uniform scale (metres map the same along and across).
+// Height is filled by the 200 m crossing; along-stream extent grows so the
+// river spans the full canvas width instead of sitting in a letterboxed strip.
+function viewLayout(){
+  const padT = 36, padB = 36;
+  const boxH = Math.max(1, viewH - padT - padB);
+  const s = boxH / RIVER_WIDTH_M;
+  const viewAlong = Math.max(1, viewW / s);
+  return {
+    s,
+    ox: 0,
+    oy: padT,
+    drawH: boxH,
+    viewAlong,
+    cameraLeft: START_X_M - viewAlong / 2,
+    cameraRight: START_X_M + viewAlong / 2,
+  };
+}
+function worldToScreen(x, y){
+  const L = viewLayout();
+  return [ L.ox + (x - L.cameraLeft) * L.s, L.oy + L.drawH - y * L.s ];
+}
+function worldScale(){
+  return viewLayout().s;
+}
+
+function cssVar(name){
+  return getComputedStyle(document.body).getPropertyValue(name).trim() || '#888';
+}
+
+function clipRiver(rx0, ry0, rw, rh){
+  ctx.beginPath();
+  ctx.rect(rx0, ry0, rw, rh);
+  ctx.clip();
+}
+function drawCurrentFlow(rx0, ry0, rw, rh, isLight){
+  const rows = 16;
+  const drift = state.t * Math.max(8, state.vc * 14);
+  ctx.save();
+  clipRiver(rx0, ry0, rw, rh);
+  for(let i = 0; i < rows; i++){
+    const y = ry0 + ((i + 0.55) / rows) * rh;
+    const phase = drift + i * 41;
+    ctx.globalAlpha = isLight ? 0.16 : 0.20;
+    ctx.strokeStyle = isLight ? 'rgba(255,255,255,0.85)' : 'rgba(186,230,253,0.45)';
+    ctx.lineWidth = i % 3 === 0 ? 1.6 : 1.1;
+    ctx.beginPath();
+    for(let x = -50; x <= rw + 50; x += 10){
+      const xx = rx0 + x;
+      const yy = y + Math.sin((x + phase) * 0.035 + i * 0.7) * 4.2
+                    + Math.sin((x - phase * 0.4) * 0.09) * 1.6;
+      if(x === -50) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+const bankDecor = [];
+(function seedBankDecor(){
+  for(let side = 0; side < 2; side++){
+    for(let i = 0; i < 42; i++){
+      bankDecor.push({
+        side, u: (i + 0.2 + side * 0.31) / 42 + (Math.random() - 0.5) * 0.016,
+        h: 7 + Math.random() * 11, phase: Math.random() * Math.PI * 2,
+        blades: 3 + (i % 3), tint: Math.random(),
+        kind: i % 11 === 0 ? 'reed' : i % 8 === 0 ? 'rock' : 'grass',
+      });
+    }
+  }
+})();
+function shoreEdge(x, base, far){
+  const n = Math.sin(x * 0.02) * 5.2 + Math.sin(x * 0.051 + 1.4) * 2.6 + Math.sin(x * 0.12 + 0.6) * 1.3;
+  return far ? base + n : base - n;
+}
+function drawBanks(rx0, ry0, rw, rh, isLight){
+  const bankH = 32;
+  const nearY = ry0 + rh;
+  const grassA = isLight ? '#3f6212' : '#14532d';
+  const grassB = isLight ? '#65a30d' : '#166534';
+  const mud = isLight ? '#a16207' : '#5c3d1e';
+  const mudDark = isLight ? '#713f12' : '#3f2e14';
+  const foam = isLight ? 'rgba(255,255,255,0.55)' : 'rgba(186,230,253,0.32)';
+  const step = 6;
+  function fillShore(far){
+    const base = far ? ry0 : nearY;
+    ctx.beginPath();
+    if(far){
+      ctx.moveTo(rx0, 0);
+      ctx.lineTo(rx0 + rw, 0);
+      for(let x = rx0 + rw; x >= rx0; x -= step) ctx.lineTo(x, shoreEdge(x, base, true));
+    } else {
+      ctx.moveTo(rx0, viewH);
+      ctx.lineTo(rx0 + rw, viewH);
+      for(let x = rx0 + rw; x >= rx0; x -= step) ctx.lineTo(x, shoreEdge(x, base, false));
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, far ? 0 : viewH, 0, base);
+    g.addColorStop(0, grassA);
+    g.addColorStop(0.7, grassB);
+    g.addColorStop(1, mud);
+    ctx.fillStyle = g;
+    ctx.fill();
+    // mud lip
+    ctx.strokeStyle = mudDark;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    for(let x = rx0; x <= rx0 + rw; x += step){
+      const y = shoreEdge(x, base, far);
+      if(x === rx0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // lapping foam — drifts with time
+    ctx.strokeStyle = foam;
+    ctx.lineWidth = 1.6;
+    ctx.globalAlpha = 0.4 + 0.18 * Math.sin(state.t * 2.4 + (far ? 0 : 1.2));
+    ctx.beginPath();
+    const into = far ? 3.5 : -3.5;
+    for(let x = rx0; x <= rx0 + rw; x += step){
+      const y = shoreEdge(x, base, far) + into + Math.sin(x * 0.08 + state.t * 3) * 1.1;
+      if(x === rx0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  fillShore(true);
+  fillShore(false);
+  const grassCols = isLight
+    ? ['#3f6212', '#4d7c0f', '#65a30d']
+    : ['#14532d', '#15803d', '#22c55e'];
+  const reedCol = isLight ? '#365314' : '#052e16';
+  bankDecor.forEach(d => {
+    const far = d.side === 0;
+    const x = rx0 + d.u * rw;
+    const base = shoreEdge(x, far ? ry0 : nearY, far);
+    const sway = Math.sin(state.t * 2.05 + d.phase) * 2.3;
+    const dir = far ? -1 : 1;
+    if(d.kind === 'rock'){
+      ctx.fillStyle = isLight ? '#78716c' : '#44403c';
+      ctx.beginPath();
+      ctx.ellipse(x, base + dir * 1.5, 4 + d.tint * 3, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if(d.kind === 'reed'){
+      ctx.strokeStyle = reedCol;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(x, base);
+      ctx.quadraticCurveTo(x + sway, base + dir * d.h * 0.6, x + sway * 1.4, base + dir * (d.h + 8));
+      ctx.stroke();
+      ctx.fillStyle = isLight ? '#4d7c0f' : '#166534';
+      ctx.beginPath();
+      ctx.ellipse(x + sway * 1.4, base + dir * (d.h + 8), 2.4, 1.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    for(let b = 0; b < d.blades; b++){
+      const lean = (b - (d.blades - 1) / 2) * 2.1 + sway;
+      const hh = d.h * (0.7 + 0.3 * ((b + d.tint) % 1));
+      ctx.fillStyle = grassCols[(b + Math.floor(d.tint * 3)) % grassCols.length];
+      ctx.beginPath();
+      ctx.moveTo(x - 0.9, base);
+      ctx.quadraticCurveTo(x + lean * 0.45, base + dir * hh * 0.55, x + lean, base + dir * hh);
+      ctx.quadraticCurveTo(x + 0.3, base + dir * hh * 0.5, x + 0.9, base);
+      ctx.closePath();
+      ctx.fill();
+    }
+  });
+  return bankH;
+}
+function boatOutline(c){
+  c.beginPath();
+  c.moveTo(17.5, 0);
+  c.bezierCurveTo(12.5, 5.2, 6, 6.6, 0, 6.8);
+  c.lineTo(-11.5, 6.4);
+  c.quadraticCurveTo(-16.2, 5.6, -16.8, 2.6);
+  c.lineTo(-16.8, -2.6);
+  c.quadraticCurveTo(-16.2, -5.6, -11.5, -6.4);
+  c.lineTo(0, -6.8);
+  c.bezierCurveTo(6, -6.6, 12.5, -5.2, 17.5, 0);
+  c.closePath();
+}
+function drawBoatHull(bsx, bsy, heading, isLight){
+  const moving = !state.arrived && state.vb > 0.15;
+  const bob = Math.sin(state.t * (moving ? 2.75 : 1.35)) * (moving ? 0.75 : 0.22);
+  const roll = Math.sin(state.t * (moving ? 3.1 : 1.55) + 0.55) * (moving ? 0.05 : 0.018);
+  const stroke = moving ? Math.sin(state.t * 2.35) : 0;
+  const dip = moving ? 0.5 + 0.5 * Math.cos(state.t * 2.35) : 0.25;
+  ctx.save();
+  ctx.translate(bsx, bsy);
+  ctx.rotate(heading + roll);
+  ctx.scale(1.22, 1.22);
+  ctx.translate(bob * 0.2, bob);
+
+  // water shadow (offset down-stream-ish so the hull sits on the surface)
+  ctx.save();
+  ctx.translate(-1.4, 2.1);
+  ctx.fillStyle = isLight ? 'rgba(8,30,48,0.20)' : 'rgba(2,8,16,0.42)';
+  boatOutline(ctx);
+  ctx.fill();
+  ctx.restore();
+
+  // hull — varnished wood, darker at the gunwales
+  const hull = ctx.createLinearGradient(0, -7, 0, 7);
+  if(isLight){
+    hull.addColorStop(0, '#7c2d12');
+    hull.addColorStop(0.28, '#c2410c');
+    hull.addColorStop(0.5, '#fdba74');
+    hull.addColorStop(0.72, '#c2410c');
+    hull.addColorStop(1, '#7c2d12');
+  } else {
+    hull.addColorStop(0, '#431407');
+    hull.addColorStop(0.28, '#9a3412');
+    hull.addColorStop(0.5, '#fb923c');
+    hull.addColorStop(0.72, '#9a3412');
+    hull.addColorStop(1, '#431407');
+  }
+  boatOutline(ctx);
+  ctx.fillStyle = hull;
+  ctx.fill();
+  ctx.strokeStyle = isLight ? '#431407' : '#fed7aa';
+  ctx.lineWidth = 1.15;
+  ctx.stroke();
+
+  // keel / plank seam
+  ctx.strokeStyle = isLight ? 'rgba(67,20,7,0.35)' : 'rgba(254,215,170,0.28)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(15.2, 0);
+  ctx.lineTo(-15.4, 0);
+  ctx.stroke();
+
+  // inner well
+  ctx.beginPath();
+  ctx.moveTo(8.5, 0);
+  ctx.quadraticCurveTo(4, 4.15, -2, 4.25);
+  ctx.lineTo(-11.2, 3.9);
+  ctx.quadraticCurveTo(-13.4, 2.2, -13.4, 0);
+  ctx.quadraticCurveTo(-13.4, -2.2, -11.2, -3.9);
+  ctx.lineTo(-2, -4.25);
+  ctx.quadraticCurveTo(4, -4.15, 8.5, 0);
+  ctx.closePath();
+  ctx.fillStyle = isLight ? 'rgba(255,247,237,0.55)' : 'rgba(67,20,7,0.45)';
+  ctx.fill();
+
+  // thwarts
+  ctx.fillStyle = isLight ? '#9a3412' : '#fdba74';
+  ctx.fillRect(-10.4, -3.7, 1.5, 7.4);
+  ctx.fillRect(-2.2, -4.05, 1.5, 8.1);
+
+  // occupant facing the bow — shoulders, life vest, head
+  ctx.fillStyle = isLight ? '#1e3a5f' : '#172554';
+  ctx.beginPath();
+  ctx.ellipse(-4.4, 0, 2.15, 2.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ea580c';
+  ctx.beginPath();
+  ctx.ellipse(-4.15, 0, 1.85, 2.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = isLight ? '#f5c19b' : '#fcd34d';
+  ctx.beginPath();
+  ctx.ellipse(-1.15, 0, 1.55, 1.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = isLight ? 'rgba(67,20,7,0.4)' : 'rgba(67,20,7,0.65)';
+  ctx.lineWidth = 0.65;
+  ctx.stroke();
+
+  // gunwale highlight
+  ctx.strokeStyle = isLight ? 'rgba(255,237,213,0.7)' : 'rgba(254,243,199,0.55)';
+  ctx.lineWidth = 1.05;
+  ctx.beginPath();
+  ctx.moveTo(12.5, 0);
+  ctx.bezierCurveTo(8, 4.2, 2, 5.15, -4, 5.2);
+  ctx.moveTo(12.5, 0);
+  ctx.bezierCurveTo(8, -4.2, 2, -5.15, -4, -5.2);
+  ctx.stroke();
+
+  // bow flash
+  ctx.fillStyle = isLight ? 'rgba(255,247,237,0.85)' : 'rgba(254,243,199,0.75)';
+  ctx.beginPath();
+  ctx.moveTo(17.2, 0);
+  ctx.quadraticCurveTo(13.6, 2.1, 11.4, 0);
+  ctx.quadraticCurveTo(13.6, -2.1, 17.2, 0);
+  ctx.fill();
+
+  // oars + arms — stroke cycles with the crossing so the dinghy reads as rowed
+  for(const side of [-1, 1]){
+    const lockX = -3.6, lockY = side * 6.2;
+    const ang = side * Math.PI / 2 - stroke * 0.68;
+    const len = 15.2;
+    const tipX = lockX + Math.cos(ang) * len;
+    const tipY = lockY + Math.sin(ang) * len;
+    ctx.strokeStyle = isLight ? '#7c2d12' : '#fdba74';
+    ctx.lineWidth = 1.7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-4.2, side * 1.6);
+    ctx.lineTo(lockX, lockY * 0.78);
+    ctx.stroke();
+    ctx.strokeStyle = isLight ? '#a16207' : '#fbbf24';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(lockX, lockY * 0.78);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    ctx.fillStyle = isLight ? '#44403c' : '#1c1917';
+    ctx.beginPath();
+    ctx.ellipse(tipX, tipY, 3.6, 1.2, ang, 0, Math.PI * 2);
+    ctx.fill();
+    if(moving){
+      ctx.fillStyle = isLight ? 'rgba(255,255,255,0.55)' : 'rgba(224,242,254,0.5)';
+      ctx.globalAlpha = 0.2 + 0.4 * dip;
+      ctx.beginPath();
+      ctx.ellipse(tipX, tipY, 5.2, 2.2, ang, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+function drawWake(bsx, bsy, sol, heading, isLight){
+  const mag = state.vb;
+  if(mag < 0.15) return;
+  const ux = Math.cos(heading), uy = Math.sin(heading);
+  const px = -uy, py = ux;
+  const foam = isLight ? '255,255,255' : '224,242,254';
+  const len = 20 + Math.min(46, mag * 6.2);
+  ctx.save();
+  // stern foam drifting aft
+  for(let i = 0; i < 8; i++){
+    const d = 9 + i * 5.4 + (state.t * 16) % 5;
+    const wob = Math.sin(state.t * 3.6 + i * 1.3) * (1.6 + i * 0.35);
+    ctx.globalAlpha = 0.34 * (1 - i / 9);
+    ctx.fillStyle = `rgba(${foam},1)`;
+    ctx.beginPath();
+    ctx.ellipse(bsx - ux * d + px * wob, bsy - uy * d + py * wob, 3.4 + i * 0.45, 1.55 + i * 0.2, heading, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Kelvin V — generated in the water frame, so it trails the heading, not the ground track
+  for(const side of [-1, 1]){
+    ctx.globalAlpha = isLight ? 0.42 : 0.38;
+    ctx.strokeStyle = `rgba(${foam},0.95)`;
+    ctx.lineWidth = 1.55;
+    ctx.beginPath();
+    ctx.moveTo(bsx - ux * 7 + px * side * 3.2, bsy - uy * 7 + py * side * 3.2);
+    ctx.quadraticCurveTo(
+      bsx - ux * len * 0.46 + px * side * (9 + mag),
+      bsy - uy * len * 0.46 + py * side * (9 + mag),
+      bsx - ux * len + px * side * (15 + mag * 1.15),
+      bsy - uy * len + py * side * (15 + mag * 1.15)
+    );
+    ctx.stroke();
+    for(let k = 1; k <= 4; k++){
+      const f = k / 4.6;
+      ctx.globalAlpha = 0.26 * (1 - f);
+      ctx.lineWidth = 1.15;
+      ctx.beginPath();
+      ctx.ellipse(
+        bsx - ux * (10 + f * len) + px * side * (5 + f * (13 + mag)),
+        bsy - uy * (10 + f * len) + py * side * (5 + f * (13 + mag)),
+        5.5 + f * 7, 1.35, heading + side * 0.38, 0, Math.PI * 2
+      );
+      ctx.stroke();
+    }
+  }
+  // bow wave
+  ctx.globalAlpha = isLight ? 0.5 : 0.44;
+  ctx.strokeStyle = `rgba(${foam},1)`;
+  ctx.lineWidth = 1.25;
+  for(const side of [-1, 1]){
+    ctx.beginPath();
+    ctx.moveTo(bsx + ux * 15.5, bsy + uy * 15.5);
+    ctx.quadraticCurveTo(
+      bsx + ux * 10 + px * side * 7.5,
+      bsy + uy * 10 + py * side * 7.5,
+      bsx + ux * 1.5 + px * side * 11,
+      bsy + uy * 1.5 + py * side * 11
+    );
+    ctx.stroke();
+  }
+  // spray flecks
+  ctx.fillStyle = `rgba(${foam},1)`;
+  for(let i = 0; i < 5; i++){
+    const ph = state.t * 7 + i * 1.7;
+    const a = 0.28 + 0.22 * (0.5 + 0.5 * Math.sin(ph));
+    ctx.globalAlpha = a;
+    const d = 16 + (ph % 1) * 7;
+    const s = (i % 2 === 0 ? 1 : -1) * (3.5 + (i * 1.1));
+    ctx.beginPath();
+    ctx.arc(bsx + ux * d + px * s, bsy + uy * d + py * s, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function drawArrow(x1, y1, x2, y2, color, width){
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width || 2.5;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const head = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - head * Math.cos(ang - 0.4), y2 - head * Math.sin(ang - 0.4));
+  ctx.lineTo(x2 - head * Math.cos(ang + 0.4), y2 - head * Math.sin(ang + 0.4));
+  ctx.closePath(); ctx.fill();
+}
+
+// Label collision list + arrow shafts to dodge, cleared per frame
+let labelRects = [];
+let arrowSegs = [];
+function segHitsRect(x1, y1, x2, y2, rx, ry, rw, rh){
+  const inR = (x, y) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+  if(inR(x1, y1) || inR(x2, y2)) return true;
+  const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+  if(maxX < rx || minX > rx + rw || maxY < ry || minY > ry + rh) return false;
+  for(let t = 0.1; t < 1; t += 0.1){
+    if(inR(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)) return true;
+  }
+  return false;
+}
+let keepOuts = [];
+function rectHitsRect(a, x, y, w, h){
+  return !(x + w < a.x || x > a.x + a.w || y + h < a.y || y > a.y + a.h);
+}
+function labelBlocked(x, y, w, h){
+  const pad = 10;
+  if(labelRects.some(r => rectHitsRect(r, x, y, w, h))) return true;
+  if(keepOuts.some(r => rectHitsRect(r, x, y, w, h))) return true;
+  return arrowSegs.some(s => segHitsRect(s.x1, s.y1, s.x2, s.y2, x - pad, y - pad, w + 2 * pad, h + 2 * pad));
+}
+function clampLabel(x, y, w, h){
+  return [Math.max(4, Math.min(viewW - w - 4, x)), Math.max(4, Math.min(viewH - h - 4, y))];
+}
+const LABEL_FONT = '600 12px "DM Sans", sans-serif';
+const LABEL_SUB_FONT = '600 8px "DM Sans", sans-serif';
+function parseSubParts(text){
+  const parts = [];
+  const re = /v_(bw|bg|c)/g;
+  let last = 0, m;
+  while((m = re.exec(text))){
+    if(m.index > last) parts.push({t: text.slice(last, m.index), sub: false});
+    parts.push({t: 'v', sub: false});
+    parts.push({t: m[1], sub: true});
+    last = m.index + m[0].length;
+  }
+  if(last < text.length) parts.push({t: text.slice(last), sub: false});
+  return parts;
+}
+function measureSubText(text){
+  let w = 0;
+  for(const p of parseSubParts(text)){
+    ctx.font = p.sub ? LABEL_SUB_FONT : LABEL_FONT;
+    w += ctx.measureText(p.t).width;
+  }
+  ctx.font = LABEL_FONT;
+  return w;
+}
+function fillSubText(text, x, y){
+  let cx = x;
+  for(const p of parseSubParts(text)){
+    ctx.font = p.sub ? LABEL_SUB_FONT : LABEL_FONT;
+    ctx.fillText(p.t, cx, y + (p.sub ? 4.5 : 0));
+    cx += ctx.measureText(p.t).width;
+  }
+  ctx.font = LABEL_FONT;
+}
+function placeLabel(text, ax, ay, opts){
+  opts = opts || {};
+  ctx.font = opts.font || LABEL_FONT;
+  const w = measureSubText(text) + 8, h = 18;
+  const align = opts.align || 'left';
+  const originX = align === 'center' ? ax - w / 2 : ax;
+  const originY = ay - h / 2;
+  let x, y;
+  if(opts.fixed){
+    [x, y] = clampLabel(originX, originY, w, h);
+  } else {
+    let placed = false;
+    const ring = [[0, 0]];
+    for(let r = 1; r <= 7; r++){
+      const d = r * 12;
+      ring.push([d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, d], [d, -d], [-d, -d]);
+    }
+    for(const [dx, dy] of ring){
+      [x, y] = clampLabel(originX + dx, originY + dy, w, h);
+      if(!labelBlocked(x, y, w, h)){ placed = true; break; }
+    }
+    if(!placed) [x, y] = clampLabel(originX, originY, w, h);
+  }
+  labelRects.push({x, y, w, h});
+  ctx.fillStyle = 'rgba(6,14,17,0.72)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = opts.border || 'rgba(148,163,184,0.25)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = opts.color || cssVar('--text');
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  fillSubText(text, x + 4, y + h / 2);
+}
+// Color-matched key stacked beside the triangle so the shafts stay visible.
+function placeTriangleKey(items, verts){
+  ctx.font = LABEL_FONT;
+  const sizes = items.map(it => ({w: measureSubText(it.text) + 8, h: 18}));
+  const stackW = Math.max(...sizes.map(s => s.w));
+  const row = 20;
+  const stackH = items.length * row;
+  const minX = Math.min(...verts.map(v => v[0]));
+  const maxX = Math.max(...verts.map(v => v[0]));
+  const minY = Math.min(...verts.map(v => v[1]));
+  const maxY = Math.max(...verts.map(v => v[1]));
+  const gap = 32;
+  const cy = (minY + maxY) / 2 - stackH / 2;
+  const centroidX = verts.reduce((s, v) => s + v[0], 0) / verts.length;
+  const left = [minX - gap - stackW, cy];
+  const right = [maxX + gap, cy];
+  // Sit on the side the triangle does NOT occupy (away from the resultant)
+  const spots = centroidX >= (minX + maxX) / 2
+    ? [left, right]
+    : [right, left];
+  spots.push(
+    [(minX + maxX) / 2 - stackW / 2, maxY + gap],
+    [(minX + maxX) / 2 - stackW / 2, minY - gap - stackH]
+  );
+  let ox = spots[0][0], oy = spots[0][1], found = false;
+  for(const [sx, sy] of spots){
+    const [x, y] = clampLabel(sx, sy, stackW, stackH);
+    if(!labelBlocked(x, y, stackW, stackH)){ ox = x; oy = y; found = true; break; }
+  }
+  if(!found){
+    const [x, y] = clampLabel(spots[0][0], spots[0][1], stackW, stackH);
+    ox = x; oy = y;
+  }
+  items.forEach((it, i) => {
+    placeLabel(it.text, ox + stackW / 2, oy + i * row + 9, {color: it.color, align:'center', fixed:true});
+  });
+}
+
+function drawScene(){
+  fit();
+  labelRects = [];
+  arrowSegs = [];
+  keepOuts = [];
+  ctx.clearRect(0, 0, viewW, viewH);
+
+  // Landscape behind the river so the top/bottom pads read as ground, not void
+  const isLight = document.body.classList.contains('light-theme');
+  ctx.fillStyle = isLight ? '#d9f99d' : '#052012';
+  ctx.fillRect(0, 0, viewW, viewH);
+
+  // River water — full canvas width, camera centered on the start line
+  const lay = viewLayout();
+  const [rx0, ry0] = worldToScreen(lay.cameraLeft, RIVER_WIDTH_M);
+  const [rx1, ry1] = worldToScreen(lay.cameraRight, 0);
+  const rw = rx1 - rx0, rh = ry1 - ry0;
+  const grad = ctx.createLinearGradient(0, ry0, 0, ry1);
+  if(isLight){
+    grad.addColorStop(0, '#38bdf8');
+    grad.addColorStop(0.45, '#0ea5e9');
+    grad.addColorStop(1, '#0284c7');
+  } else {
+    grad.addColorStop(0, '#164e63');
+    grad.addColorStop(0.5, '#0e3a4d');
+    grad.addColorStop(1, '#082f3d');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(rx0, ry0, rw, rh);
+  drawCurrentFlow(rx0, ry0, rw, rh, isLight);
+
+  const bankH = drawBanks(rx0, ry0, rw, rh, isLight);
+
+  // Bank labels — Far bank sits on the water's left, under the HTML plot title
+  ctx.fillStyle = isLight ? '#14532d' : '#bbf7d0';
+  ctx.font = '600 12px "DM Sans", sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('Far bank', rx0 + 10, ry0 + 14);
+  ctx.fillText('Near bank (start)', rx0 + 10, ry1 + bankH/2);
+
+  // Current-direction arrow along top edge (visual only; offset below the
+  // 'opposite start' ring so the two never touch — D5)
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  const arrowY = ry0 + 34;
+  drawArrow(rx0 + rw * 0.35, arrowY, rx0 + rw * 0.65, arrowY, cssVar('--warn'), 2);
+  ctx.fillStyle = cssVar('--warn');
+  ctx.font = '600 12px "DM Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('current →', rx0 + rw * 0.5, arrowY - 10);
+  ctx.restore();
+
+  // Surface markers (foam / glitter drifting with the current)
+  ctx.save();
+  clipRiver(rx0, ry0, rw, rh);
+  markers.forEach(m => {
+    const span = lay.viewAlong;
+    const wx = lay.cameraLeft + (((m.u * span + state.vc * state.t) % span) + span) % span;
+    const [sx, sy] = worldToScreen(wx, m.y);
+    ctx.fillStyle = isLight ? 'rgba(255,255,255,0.72)' : 'rgba(224,242,254,0.55)';
+    if(m.kind === 'dash'){
+      ctx.fillRect(sx - 5, sy - 0.7, 10, 1.4);
+    } else {
+      ctx.beginPath(); ctx.arc(sx, sy, m.r, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  ctx.restore();
+
+  // Compute solution
+  const sol = crossingSolution(state.vb, state.vc, state.headingDeg);
+
+  // START marker
+  const [sxStart, syStart] = worldToScreen(START_X_M, 0);
+  ctx.strokeStyle = cssVar('--muted');
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sxStart, ry0); ctx.lineTo(sxStart, ry1 + bankH); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = cssVar('--muted');
+  ctx.font = '600 12px "DM Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('start x', sxStart, ry1 + bankH + 12);
+
+  // Ideal landing (directly opposite)
+  const [sxIdeal, syIdeal] = worldToScreen(START_X_M, RIVER_WIDTH_M);
+  ctx.strokeStyle = 'rgba(52, 211, 153, 0.7)';
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath();
+  ctx.arc(sxIdeal, syIdeal, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(52, 211, 153, 0.9)';
+  ctx.font = '600 12px "DM Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('opposite start', sxIdeal, syIdeal - 14);
+
+  // Trail (actual ground path so far) — wide fading wake under a crisp track
+  if(state.trail.length > 1){
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(45,212,191,0.22)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    for(let i = 0; i < state.trail.length; i++){
+      const [sx, sy] = worldToScreen(state.trail[i][0], state.trail[i][1]);
+      if(i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = cssVar('--accent');
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+  }
+
+  // Boat — hull points along v_bw (through water)
+  const [bsx, bsy] = worldToScreen(state.boatWorld[0], state.boatWorld[1]);
+  const screenBwAng = Math.atan2(-sol.v_bw[1], sol.v_bw[0]);
+  ctx.save();
+  clipRiver(rx0, ry0, rw, rh);
+  drawWake(bsx, bsy, sol, screenBwAng, isLight);
+  ctx.restore();
+  drawBoatHull(bsx, bsy, screenBwAng, isLight);
+
+  // Vector triangle at the boat: v_bw, v_c (tip-to-tail), v_bg (resultant)
+  const arrowScale = worldScale() * 3.5; // pixels per (m/s)  — 3.5 seconds of travel per (m/s)
+  const bw_dx =  sol.v_bw[0] * arrowScale;
+  const bw_dy = -sol.v_bw[1] * arrowScale; // screen y flip
+  const c_dx  =  state.vc * arrowScale;
+  const c_dy  =  0;
+  const bg_dx =  sol.v_ground[0] * arrowScale;
+  const bg_dy = -sol.v_ground[1] * arrowScale;
+
+  const bwX2 = bsx + bw_dx, bwY2 = bsy + bw_dy;
+  const cX2  = bwX2 + c_dx,  cY2  = bwY2 + c_dy;
+  const bgX2 = bsx + bg_dx, bgY2 = bsy + bg_dy;
+
+  // Water-frame velocity arrow (from boat)
+  drawArrow(bsx, bsy, bwX2, bwY2, '#60a5fa', 2.5);
+  // Current arrow (tip-to-tail from end of v_bw)
+  drawArrow(bwX2, bwY2, cX2, cY2, '#f59e0b', 2.5);
+  // Resultant (closing the triangle) — dashed
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  drawArrow(bsx, bsy, bgX2, bgY2, '#34d399', 3);
+  ctx.restore();
+
+  arrowSegs.push(
+    {x1: bsx, y1: bsy, x2: bwX2, y2: bwY2},
+    {x1: bwX2, y1: bwY2, x2: cX2, y2: cY2},
+    {x1: bsx, y1: bsy, x2: bgX2, y2: bgY2}
+  );
+  const triPad = 16;
+  const triMinX = Math.min(bsx, bwX2, bgX2);
+  const triMaxX = Math.max(bsx, bwX2, bgX2);
+  const triMinY = Math.min(bsy, bwY2, bgY2);
+  const triMaxY = Math.max(bsy, bwY2, bgY2);
+  keepOuts.push({
+    x: triMinX - triPad, y: triMinY - triPad,
+    w: (triMaxX - triMinX) + 2 * triPad,
+    h: (triMaxY - triMinY) + 2 * triPad
+  });
+  placeTriangleKey([
+    {text: `v_bw = ${state.vb.toFixed(1)} m/s`, color: '#93c5fd'},
+    {text: `v_c = ${state.vc.toFixed(1)} m/s`, color: '#fbbf24'},
+    {text: `v_bg = ${sol.groundSpeed.toFixed(2)} m/s`, color: '#6ee7b7'},
+  ], [[bsx, bsy], [bwX2, bwY2], [bgX2, bgY2]]);
+
+  // Run ended with the boat still mid-crossing (drift carried it out of the
+  // viewed reach) — say so, or the frozen boat reads as "stopped in the water".
+  if(state.arrived && state.boatWorld[1] < RIVER_WIDTH_M){
+    const dir = state.boatWorld[0] > START_X_M ? '→' : '←';
+    placeLabel(`swept out of view ${dir} — still crossing`, bsx - 70, bsy - 26, {color: cssVar('--warn')});
+  }
+}
+
+// ---------- Update readouts & bind sliders ----------
+const vbSlider = document.getElementById('vb');
+const vcSlider = document.getElementById('vc');
+const hSlider  = document.getElementById('h');
+const vbOut = document.getElementById('vb-out');
+const vcOut = document.getElementById('vc-out');
+const hOut  = document.getElementById('h-out');
+const rTime = document.getElementById('r-time');
+const rDrift = document.getElementById('r-drift');
+
+function updateReadouts(){
+  vbOut.textContent = `${state.vb.toFixed(1)} m/s`;
+  vcOut.textContent = `${state.vc.toFixed(1)} m/s`;
+  hOut.textContent  = `${state.headingDeg.toFixed(1)}°`;
+
+  const sol = crossingSolution(state.vb, state.vc, state.headingDeg);
+  if(isFinite(sol.crossingTime)){
+    rTime.textContent = `${sol.crossingTime.toFixed(2)} s`;
+    const d = sol.drift;
+    const sign = d >= 0 ? '+' : '−';
+    rDrift.textContent = `${sign}${Math.abs(d).toFixed(1)} m`;
+  } else {
+    rTime.textContent = '∞';
+    rDrift.textContent = '—';
+  }
+  if (viewW > 0 && viewH > 0) drawScene();
+}
+
+vbSlider.addEventListener('input', () => { state.vb = parseFloat(vbSlider.value); updateReadouts(); });
+vcSlider.addEventListener('input', () => { state.vc = parseFloat(vcSlider.value); updateReadouts(); });
+hSlider .addEventListener('input', () => { state.headingDeg = parseFloat(hSlider.value); updateReadouts(); });
+
+// ---------- KaTeX ----------
+let katexTries = 0;
+function renderMath(){
+  if(typeof katex === 'undefined'){
+    if (++katexTries > 40) return;
+    setTimeout(renderMath, 50);
+    return;
+  }
+  katex.render(String.raw`\vec{v}_{bg} = \vec{v}_{bw} + \vec{v}_c`, document.getElementById('eq1'), {throwOnError:false});
+  katex.render(String.raw`t = \dfrac{W}{v_{bw}\cos\theta}`, document.getElementById('eq2'), {throwOnError:false});
+  katex.render(String.raw`\Delta x = (v_c - v_{bw}\sin\theta)\,t`, document.getElementById('eq3'), {throwOnError:false});
+  katex.render(String.raw`\theta_0 = \arcsin\!\left(\dfrac{v_c}{v_{bw}}\right)`, document.getElementById('eq4'), {throwOnError:false});
+}
+renderMath();
+
+// ---------- Shell hooks ----------
+function onFrame(dt){
+  if(dt > 0 && !state.arrived){
+    const sol = crossingSolution(state.vb, state.vc, state.headingDeg);
+    state.t += dt;
+    // integrate boat world position
+    state.boatWorld[0] += sol.v_ground[0] * dt;
+    state.boatWorld[1] += sol.v_ground[1] * dt;
+    // record trail (every ~0.15s)
+    if(state.trail.length === 0 || state.t - (state.trail._lastT || 0) > 0.12){
+      state.trail.push([state.boatWorld[0], state.boatWorld[1]]);
+      state.trail._lastT = state.t;
+    }
+    // arrival: crossed the far bank (y >= W) — interpolate the exact landing
+    if(state.boatWorld[1] >= RIVER_WIDTH_M && sol.v_ground[1] > 0){
+      const overshoot = (state.boatWorld[1] - RIVER_WIDTH_M) / sol.v_ground[1];
+      state.boatWorld[0] -= sol.v_ground[0] * overshoot;
+      state.boatWorld[1] = RIVER_WIDTH_M;
+      state.trail.push([state.boatWorld[0], state.boatWorld[1]]);
+      state.arrived = true;
+      Shell.endRun();
+    }
+    // also cap runaway if boat drifts far off-screen along x
+    const cam = viewLayout();
+    if(state.boatWorld[0] < cam.cameraLeft - 50 || state.boatWorld[0] > cam.cameraRight + 50){
+      state.arrived = true;
+      Shell.endRun();
+    }
+  }
+  drawScene();
+}
+
+function onReset(){
+  // restore DOM slider values to authored defaults + mirror into state
+  vbSlider.value = '5';
+  vcSlider.value = '2';
+  hSlider.value  = '0';
+  state.vb = 5.0;
+  state.vc = 2.0;
+  state.headingDeg = 0;
+  state.t = 0;
+  state.arrived = false;
+  state.trail = [];
+  state.boatWorld = [START_X_M, 0];
+  updateReadouts();
+}
+
+function onResize(){
+  fit();
+  drawScene();
+}
+
+function onStep(i){
+  // For now, the scene evolution is uniform across steps (the triangle,
+  // trail, and readouts are always visible — that IS the lesson). This is
+  // deterministic in i.
+  // We could reset the run at certain steps, but that would fight with the
+  // shell's own auto-reset on control change; leaving the trail persistent
+  // lets students accumulate evidence across cards.
+}
+
+// ---------- TWO-BUTTON TEMPLATE HOOKS ----------
+// This sim stages no reveals (onStep is a no-op; triangle, trail and readouts
+// are live from load — that IS the lesson), so the controls-guide reveal hook
+// is a safe no-op — but it must exist on window, or the template's typeof
+// guard silently skips it.
+window.__cgReveals = function(){};
+// Free exploration = the post-completion state. Nothing is staged and no
+// rebuttal objects exist here; just repaint with the current parameters.
+window.__freeExplore = function(){
+  updateReadouts();
+};
+// Re-entering the inquiry re-applies the current card's state (onStep is a
+// no-op in this sim; progress itself is kept by the shell stepper).
+window.__giResume = function(){
+  onStep((typeof Shell !== 'undefined' && Shell.step) || 0);
+};
+
+Shell.init({ onFrame, onReset, onResize, onStep });
+</script>
+
+<script>
+/* ===== Card voiceover engine (speech synthesis) =====
+   Shared by the Controls Guide transport and the Guided Inquiry play button.
+   Semantics per card: play = read from the top; pause keeps the (line, char)
+   position; resume continues from it; finishing flips the button to the
+   replay state and the next press reads the same card from the beginning.
+   A card CHANGE re-syncs: playing → the new card starts speaking; idle →
+   the position just resets so the next play starts at the new card's top. */
+(function(){
+  const synth = window.speechSynthesis;
+  // Physics-notation → speakable text (textContent flattens <sub> etc.)
+  // ADAPTED for C028: v_bw / v_c / v_bg velocity labels, drift Δx, heading θ,
+  // arcsin(v_c / v_bw), degrees, m/s speeds and metre drifts.
+  const norm = s => s
+    .replace(/<[^>]+>/g,'')
+    .replace(/arcsin\(\s*v_?c\s*\/\s*v_?bw\s*\)/g,'arc sine of v c over v b w')
+    .replace(/v_?bw/g,'v b w').replace(/v_?bg/g,'v b g').replace(/v_?c(?![a-z])/g,'v c')
+    .replace(/Δx/g,'delta x').replace(/Δ/g,'delta')
+    .replace(/θ/g,'theta').replace(/₀/g,' zero')
+    .replace(/arcsin/g,'arc sine')
+    .replace(/°/g,' degrees').replace(/−/g,' minus ').replace(/×/g,' times ')
+    .replace(/≈/g,' approximately ')
+    .replace(/·/g,' ').replace(/—/g,', ').replace(/→/g,' gives ')
+    .replace(/\bm\/s\b/g,'meters per second')
+    .replace(/(\d(?:\.\d+)?)\s*m\b(?!\w)/g,'$1 meters')
+    .replace(/\s+/g,' ').trim();
+  // Quality-ranked: Chrome's remote Google voices sound natural; macOS's local
+  // compact voices (Samantha/Daniel/Fred…) are the mechanical ones — last resort.
+  // Remote voices can silently hang (no start/end/error events); when the
+  // watchdog catches that, preferLocal flips and the session falls back.
+  let preferLocal = false;
+  let engineDead = false;   // set when even the local-voice fallback won't start — stop retry storms
+  // Cancelling an idle engine is what wedges Chrome's TTS service — guard it.
+  function safeCancel(){ if(synth && (synth.speaking || synth.pending)) synth.cancel(); }
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    const remote = [en.find(v => v.name === 'Google US English'),
+                    en.find(v => v.name === 'Google UK English Female'),
+                    en.find(v => v.name === 'Google UK English Male')].filter(Boolean);
+    const local  = [en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name) && v.localService),
+                    en.find(v => v.name === 'Samantha'),
+                    en.find(v => v.localService && /US|GB/i.test(v.lang))].filter(Boolean);
+    const order = preferLocal ? local.concat(remote) : remote.concat(local);
+    return order[0] || en[0] || null;
+  }
+  // btn: the play/pause button (uses data-vstate idle|playing|done).
+  // getLines: () => array of raw strings for the CURRENT card.
+  // opts.onCardDone: called when a card's narration completes (drives Auto mode).
+  function makeCardVoice(btn, getLines, opts){
+    let lines = [], idx = 0, charAt = 0, playing = false, current = null, done = false, lineRetries = 0;
+    function state(){
+      btn.dataset.vstate = playing ? 'playing' : (done ? 'done' : 'idle');
+      btn.title = playing ? 'Pause' : (done ? 'Play again' : (idx === 0 && charAt === 0 ? 'Read this card aloud' : 'Resume'));
+      btn.setAttribute('aria-label', btn.title);
+    }
+    function speak(){
+      if(!synth) return;
+      const text = lines[idx].slice(charAt);
+      const u = new SpeechSynthesisUtterance(text);
+      const v = pickVoice(); if(v) u.voice = v;
+      u.rate = 1.0; u.pitch = 1;
+      const base = charAt, my = idx;
+      let started = false;
+      u.onstart = () => { started = true; };
+      u.onboundary = e => { if(current === u && typeof e.charIndex === 'number'){ charAt = base + e.charIndex; lineRetries = 0; } };
+      u.onerror = () => {   // cold-start hiccup on remote voices: retry the line once or twice
+        if(current === u && playing && lineRetries < 2){
+          lineRetries++;
+          setTimeout(() => { if(current === u && playing) speak(); }, 250);
+        }
+      };
+      u.onend = () => {
+        if(current !== u || !playing) return;
+        if(my < lines.length - 1){ idx = my + 1; charAt = 0; lineRetries = 0; speak(); }
+        else {
+          playing = false; done = true; idx = 0; charAt = 0; lineRetries = 0; current = null; state();
+          if(opts && opts.onCardDone) opts.onCardDone();
+        }
+      };
+      current = u; done = false;
+      // Chrome swallows a speak() issued in the same tick as cancel() — defer it;
+      // resume() unsticks the engine when cancel() left it internally paused.
+      safeCancel();
+      setTimeout(() => { if(current === u && playing){ synth.speak(u); if(synth.paused) synth.resume(); } }, 60);
+      // Watchdog: a remote voice can hang with NO events at all. Retry once,
+      // then flip the whole session to a local voice and retry again.
+      setTimeout(() => {
+        if(current !== u || !playing || started) return;
+        safeCancel();
+        if(lineRetries < 1){ lineRetries++; speak(); }
+        else if(!preferLocal){ preferLocal = true; lineRetries = 0; speak(); }
+        else {   // even local voices won't start: the browser's TTS service is hung
+          engineDead = true; playing = false; current = null; state();
+          btn.title = 'Voice unavailable — restart the browser to re-enable narration';
+          btn.setAttribute('aria-label', btn.title);
+        }
+      }, 1500);
+      state();
+    }
+    function play(){
+      if(!synth || engineDead) return;
+      if(done || !lines.length){ lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; }
+      if(!lines.length) return;
+      playing = true; lineRetries = 0; speak();
+    }
+    function pause(){
+      playing = false;
+      safeCancel();                  // stop now; idx/charAt keep the resume position
+      current = null; state();
+    }
+    function stop(){                  // hard reset (zone hidden, guide closed, Reset)
+      playing = false; done = false; lines = []; idx = 0; charAt = 0;
+      safeCancel();
+      current = null; state();
+    }
+    function sync(){                  // the current card changed
+      const was = playing;
+      playing = false;
+      safeCancel();
+      current = null;
+      lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; done = false;
+      if(was && lines.length){ playing = true; speak(); } else state();
+    }
+    function restart(){               // read the current card again from the top
+      idx = 0; charAt = 0; done = false;
+      if(playing) speak(); else state();
+    }
+    function playLines(arr){          // one-off narration (e.g. a just-revealed feedback box)
+      lines = arr.map(norm).filter(Boolean);
+      if(!lines.length) return;
+      idx = 0; charAt = 0; done = false; playing = true; lineRetries = 0; speak();
+    }
+    btn.addEventListener('click', () => playing ? pause() : play());
+    if(!synth) btn.disabled = true;
+    state();
+    return { sync, stop, restart, play, playLines, atStart: () => idx === 0 && charAt === 0 && !playing };
+  }
+  window.__makeCardVoice = makeCardVoice;
+
+  /* ---- Guided Inquiry voice: play/pause + Auto in the pager row ----
+     Auto walks the whole inquiry hands-free BUT never answers for the student:
+     at a gated predict card it reads the question and waits; when the student
+     commits, it reads the feedback aloud, then moves on. */
+  const giBtn = document.getElementById('inq-voice');
+  if(giBtn){
+    const activeCard = () => document.querySelector('#inq-cards .inq-step.active');
+    const giAutoBtn = document.getElementById('inq-auto');
+    let giAuto = false;
+    function setGiAuto(on){
+      giAuto = on;
+      if(giAutoBtn) giAutoBtn.classList.toggle('active', on);
+      if(on) giVoice.play();
+    }
+    const giVoice = makeCardVoice(giBtn, () => {
+      const card = activeCard();
+      if(!card) return [];
+      const out = [];
+      const h = card.querySelector('h4'); if(h) out.push(h.textContent);
+      card.querySelectorAll('p, button.choice, .predict-eval').forEach(el => {
+        if(el.classList.contains('predict-eval') && getComputedStyle(el).display === 'none') return;
+        const t = el.textContent.trim(); if(t) out.push(t);
+      });
+      return out;
+    }, { onCardDone: () => {
+      if(!giAuto) return;
+      const card = activeCard();
+      if(!card) return;
+      if(card.hasAttribute('data-gate') && !card.hasAttribute('data-answered')) return;  // wait for the student
+      const next = document.getElementById('inq-next');
+      if(!next || next.textContent === 'Finish'){ setGiAuto(false); return; }            // tour ends on the last card
+      const tryAdvance = () => {
+        if(!giAuto) return;
+        if(next.disabled){ setTimeout(tryAdvance, 300); return; }   // Next unlocks shortly after feedback
+        next.click();
+        setTimeout(() => { if(giAuto) giVoice.play(); }, 300);
+      };
+      setTimeout(tryAdvance, 900);
+    }});
+    if(giAutoBtn) giAutoBtn.addEventListener('click', () => setGiAuto(!giAuto));
+    window.__giVoiceStop = () => { setGiAuto(false); giVoice.stop(); };
+    const cardsEl = document.getElementById('inq-cards') || document.body;
+    // Card changes (pager, Next, gates, Reset) re-sync the narration.
+    let lastCard = activeCard();
+    new MutationObserver(() => {
+      const cur = activeCard();
+      if(cur !== lastCard){
+        lastCard = cur;
+        if(document.documentElement.classList.contains('gi-off')){ setGiAuto(false); giVoice.stop(); }
+        else giVoice.sync();
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    // In Auto, an answered gate = read the feedback aloud, then onCardDone advances.
+    new MutationObserver(muts => {
+      if(!giAuto) return;
+      for(const m of muts){
+        if(m.attributeName === 'data-answered' && m.target.hasAttribute('data-answered')){
+          const ev = m.target.querySelector('.predict-eval');
+          const t = ev && ev.textContent.trim();
+          setTimeout(() => { if(giAuto){ if(t) giVoice.playLines([t]); else giVoice.play(); } }, 600);
+          return;
+        }
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['data-answered'] });
+  }
+})();
+</script>
+
+<script>
+/* ===== Two-button template + overlay Controls Guide ===== */
+(function(){
+  const giBtn = document.getElementById('btn-gi'), cgBtn = document.getElementById('btn-cg'), root = document.documentElement;
+  if(!giBtn || !cgBtn) return;
+  let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
+  function setCgAuto(on){
+    cgAuto = on;
+    if(nav) nav.querySelector('#cg-auto').classList.toggle('active', on);
+    if(on && cgVoice) cgVoice.play();
+  }
+  const cgSteps = [
+    { sel:'#shell-play',     mode:'veil', title:'Play / Pause',    text:'Runs and pauses the boat’s crossing.' },
+    { sel:'#shell-speed',    mode:'veil', also:['#lbl-speed'], title:'Speed', text:'Sets how fast simulated time runs.' },
+    { sel:'#shell-reset',    mode:'veil', title:'Reset',           text:'Restores the default speeds and heading, and restarts the crossing.' },
+    { sel:'#shell-maximize', mode:'veil', title:'Maximize',        text:'Expands the river view to fill the window.' },
+    { sel:'#toggle-formal',  mode:'veil', title:'Formal equations', text:'Shows or hides the formal equations panel.' },
+    { sel:'#box-vb',         mode:'hide', title:'Boat speed v<sub>bw</sub>', text:'Sets the boat’s own speed through the water.' },
+    { sel:'#box-vc',         mode:'hide', title:'Current speed v<sub>c</sub>', text:'Sets how fast the river flows downstream.' },
+    { sel:'#box-heading',    mode:'hide', title:'Heading θ',       text:'Angles the bow upstream from straight-across.' },
+    { sel:'#panel-readouts', mode:'hide', title:'Readouts',        text:'Live crossing time t and downstream drift Δx.' },
+    { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
+  ];
+  const cel = sel => sel ? document.querySelector(sel) : null;
+  function ensureUi(){
+    if(callout) return;
+    callout = document.createElement('div'); callout.className='cg-callout';
+    callout.setAttribute('data-no-reset','');
+    callout.innerHTML = '<div class="cg-arrow"></div><h5></h5><p></p>';
+    nav = document.createElement('div'); nav.className='cg-nav';
+    nav.setAttribute('data-no-reset','');
+    nav.innerHTML = '<div class="cg-nav-row cg-row-voice">'+
+                      '<span class="cg-listen-lab">Listen</span>'+
+                      '<button id="cg-rew" class="cg-voice" title="Restart narration" aria-label="Restart narration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>'+
+                      '<button id="cg-voice-play" class="cg-voice" data-vstate="idle" title="Read this step aloud" aria-label="Read this step aloud">'+
+                        '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'+
+                        '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'+
+                        '<svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>'+
+                      '</button>'+
+                      '<button id="cg-fwd" class="cg-voice" title="Next step" aria-label="Next step"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-auto" title="Auto walkthrough — narrates every step in sequence" aria-label="Auto walkthrough">Auto</button>'+
+                    '</div>'+
+                    '<div class="cg-nav-row cg-row-nav">'+
+                      '<button id="cg-prev" aria-label="Previous">‹</button>'+
+                      '<button id="cg-pgnext" aria-label="Next">›</button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-next">Next →</button>'+
+                    '</div>';
+    document.body.appendChild(callout); document.body.appendChild(nav);
+    // Voiceover: reads the current step's title + text; forward/rewind stay
+    // card-synced (rewind restarts this step's narration, or steps back from its top).
+    // Auto = hands-free tour: each step is narrated, then the guide advances itself.
+    if(window.__makeCardVoice){
+      cgVoice = window.__makeCardVoice(nav.querySelector('#cg-voice-play'),
+        () => [cgSteps[cgStep].title, cgSteps[cgStep].text],
+        { onCardDone: () => {
+            if(!cgAuto) return;
+            if(cgStep >= cgSteps.length-1){ setCgAuto(false); return; }   // tour ends on the closing card
+            setTimeout(() => {
+              if(!cgAuto) return;
+              cgShow(cgStep+1);
+              setTimeout(() => { if(cgAuto && cgVoice) cgVoice.play(); }, 200);
+            }, 700);
+        }});
+    }
+    nav.querySelector('#cg-auto').addEventListener('click', ()=> setCgAuto(!cgAuto));
+    nav.querySelector('#cg-rew').addEventListener('click', ()=>{
+      if(cgVoice && !cgVoice.atStart()) cgVoice.restart();
+      else cgShow(cgStep-1);
+    });
+    nav.querySelector('#cg-fwd').addEventListener('click', ()=>cgShow(cgStep+1));
+    nav.querySelector('#cg-prev').addEventListener('click', ()=>cgShow(cgStep-1));
+    nav.querySelector('#cg-pgnext').addEventListener('click', ()=>cgShow(cgStep+1));
+    nav.querySelector('#cg-next').addEventListener('click', ()=>{ cgStep >= cgSteps.length-1 ? setCg(false) : cgShow(cgStep+1); });
+    window.addEventListener('resize', positionCallout);
+    window.addEventListener('scroll', positionCallout, true);
+  }
+  function positionCallout(){
+    if(!cgOn || !callout) return;
+    const st = cgSteps[cgStep], t = cel(st.sel), arrow = callout.querySelector('.cg-arrow');
+    callout.classList.remove('arrow-top','arrow-bottom','arrow-left','arrow-right','no-arrow');
+    const cw = callout.offsetWidth||260, ch = callout.offsetHeight||100;
+    let x = innerWidth/2-cw/2, y = innerHeight/2-ch/2;
+    if(!t){ callout.classList.add('no-arrow'); }
+    else{
+      if(t.scrollIntoView) t.scrollIntoView({ block:'nearest', inline:'nearest' });   // short viewports: bring the target on screen first
+      const r = t.getBoundingClientRect();
+      if(r.left > innerWidth*0.66){ x = r.left-cw-14; y = r.top+r.height/2-ch/2; callout.classList.add('arrow-right'); }
+      else { x = r.left+r.width/2-cw/2; y = r.bottom+12;
+        if(y+ch > innerHeight-8){ y = r.top-ch-12; callout.classList.add('arrow-bottom'); } else callout.classList.add('arrow-top'); }
+      x = Math.max(8, Math.min(x, innerWidth-cw-8)); y = Math.max(8, Math.min(y, innerHeight-ch-8));
+      if(arrow){
+        if(callout.classList.contains('arrow-right')||callout.classList.contains('arrow-left')){ arrow.style.left=''; arrow.style.top = Math.max(10, Math.min(r.top+r.height/2-y-6, ch-22))+'px'; }
+        else { arrow.style.top=''; arrow.style.left = Math.max(12, Math.min(r.left+r.width/2-x-6, cw-24))+'px'; }
+      }
+    }
+    callout.style.left = Math.max(8, Math.min(x, innerWidth-cw-8))+'px';
+    callout.style.top  = Math.max(8, Math.min(y, innerHeight-ch-8))+'px';
+  }
+  function cgShow(n){
+    cgStep = Math.max(0, Math.min(n, cgSteps.length-1));
+    cgMax = Math.max(cgMax, cgStep);
+    const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
+    cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
+      t.classList.remove('cg-glow'); t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
+    const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
+    callout.querySelector('h5').innerHTML = cgSteps[cgStep].title;
+    callout.querySelector('p').textContent = cgSteps[cgStep].text;
+    nav.querySelector('#cg-prev').disabled = cgStep<=0;
+    nav.querySelector('#cg-pgnext').disabled = cgStep>=cgSteps.length-1;
+    nav.querySelector('#cg-fwd').disabled    = cgStep>=cgSteps.length-1;
+    nav.querySelector('#cg-next').textContent = cgStep>=cgSteps.length-1 ? 'Done' : 'Next →';
+    if(cgVoice) cgVoice.sync();   // narration follows the card: keeps speaking on change, else re-arms
+    positionCallout();
+  }
+  function setGi(on){
+    root.classList.toggle('gi-off', !on);
+    giBtn.classList.toggle('active', on);
+    if(on){
+      if(cgOn) setCg(false, true);
+      // Show the cards directly — clear any lingering collapsed state
+      if(typeof Shell !== 'undefined' && Shell.setInquiryCollapsed) Shell.setInquiryCollapsed(false);
+      // Restore the inquiry's own step state
+      if(window.__giResume) window.__giResume();
+    } else {
+      if(window.__giVoiceStop) window.__giVoiceStop();
+      // Turning the inquiry off = free exploration: the completed state,
+      // never a mid-inquiry snapshot.
+      if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  function setCg(on, keepGiState){
+    cgOn = on;
+    cgBtn.classList.toggle('active', on);
+    if(on){
+      if(!keepGiState) setGi(false);           // mutual exclusion
+      ensureUi();
+      // Controls guide needs everything visible: lift inquiry-step reveals
+      if(window.__cgReveals) window.__cgReveals(99);
+      if(window.__cgPrepare) window.__cgPrepare();   // sims with scene/mode-dependent controls
+      callout.style.display='block'; nav.style.display='flex';
+      cgShow(cgStep);
+    } else {
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      if(callout){ callout.style.display='none'; nav.style.display='none'; }
+      cgSteps.forEach(st=>[st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(t) t.classList.remove('cg-hidden','cg-veiled','cg-glow'); }));
+      // Hand over: to the inquiry's step state if GI takes over, otherwise
+      // to free exploration (both-off, or guide completed/toggled off).
+      if(keepGiState){ /* setGi(true) runs __giResume right after */ }
+      else if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  window.__giOff = ()=> setGi(false);   // shell's Finish routes here
+  window.__setMode = mode => {           // welcome overlay entry points
+    if(mode === 'controls') setCg(true);
+    else if(mode === 'free') { if(cgOn) setCg(false); setGi(false); }
+    else setGi(true);
+  };
+  // Reset = the state of a fresh page load: Guided Inquiry on at card 1,
+  // Controls Guide off with its session progress cleared. Sim defaults and
+  // the playing state are restored by the shell's own Reset handler.
+  window.__fullReset = ()=>{
+    if(cgAuto) setCgAuto(false);
+    if(cgVoice) cgVoice.stop();
+    if(window.__giVoiceStop) window.__giVoiceStop();
+    if(cgOn) setCg(false, true);        // silent CG off (GI takes over next)
+    cgStep = 0; cgMax = 0;              // guide progress like a fresh load
+    setGi(true);
+    if(typeof Shell !== 'undefined' && Shell.inqShow) Shell.inqShow(0);
+  };
+  giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
+  cgBtn.addEventListener('click', ()=> setCg(!cgOn));
+  const shellReset = document.getElementById('shell-reset');
+  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+})();
+</script>
+
+<script>
+/* ===== Welcome overlay + read-aloud transport (browser speech synthesis) ===== */
+(function(){
+  const ov = document.getElementById('welcome-overlay');
+  if(!ov) return;
+  const $ = id => document.getElementById(id);
+  // Show-once: keep false while the welcome is under review; true for production.
+  const WELCOME_ONCE = false;
+  const WELCOME_KEY = 'welcome:' + (document.title || location.pathname);
+  try { if(WELCOME_ONCE && localStorage.getItem(WELCOME_KEY)) { ov.classList.add('hidden'); return; } } catch(e){}
+  const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
+  const script = [
+    'Welcome to river-boat crossing.',
+    'Here you steer a boat across a flowing river. The boat’s velocity and the current add as vectors — the across component alone sets how long the crossing takes, while the current only drags the landing point downstream.',
+    'Choose how you would like to begin.',
+    'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
+    'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
+    'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
+  ];
+  /* Hero: the velocity triangle drawn honestly — a boat aimed straight across a
+     flowing river. Its heading v_bw points at the far bank, the current v_c drags
+     it downstream, and the accumulating dotted track is the resultant v_bg. */
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const yNear = H*0.88, yFar = H*0.12, xL = W*0.10, xR = W*0.90;
+    // water tint between the banks
+    ctx.fillStyle = LIGHT ? 'rgba(2,132,199,.10)' : 'rgba(96,165,250,.09)';
+    ctx.fillRect(xL, yFar, xR-xL, yNear-yFar);
+    // bank lines
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.30)';
+    ctx.lineWidth = 1;
+    [yNear, yFar].forEach(y => { ctx.beginPath(); ctx.moveTo(xL, y); ctx.lineTo(xR, y); ctx.stroke(); });
+    const x0 = W*0.40;                                   // start point on the near bank
+    // dashed line straight across — where the boat is AIMED
+    ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(x0, yNear); ctx.lineTo(x0, yFar); ctx.stroke();
+    ctx.setLineDash([]);
+    // the velocity triangle at the start: v_bw across, v_c downstream, v_bg the resultant
+    const inkBw = LIGHT ? 'rgba(2,132,199,.9)'  : 'rgba(96,165,250,.9)';    // heading (blue)
+    const inkC  = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';    // current (amber)
+    const inkBg = LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(110,231,183,.95)';  // resultant (emerald)
+    const vbw = (yNear-yFar)*0.42, vc = vbw*0.62;        // triangle legs in px
+    const arrow = (x1,y1,x2,y2,color) => {
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      const a = Math.atan2(y2-y1, x2-x1), h = 8;
+      ctx.beginPath(); ctx.moveTo(x2,y2);
+      ctx.lineTo(x2-h*Math.cos(a-0.4), y2-h*Math.sin(a-0.4));
+      ctx.lineTo(x2-h*Math.cos(a+0.4), y2-h*Math.sin(a+0.4));
+      ctx.closePath(); ctx.fill();
+    };
+    arrow(x0, yNear, x0, yNear-vbw, inkBw);              // v_bw: aimed straight across
+    arrow(x0, yNear-vbw, x0+vc, yNear-vbw, inkC);        // v_c: tip-to-tail downstream
+    arrow(x0, yNear, x0+vc, yNear-vbw, inkBg);           // v_bg closes the triangle
+    // the ground track accumulating dot by dot — the drift builds with the crossing
+    const drift = (vc/vbw)*(yNear-yFar);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const N = 90; let k = 0;
+    function batch(){
+      const per = reduce ? N : 2;
+      for(let s=0;s<per && k<N;s++,k++){
+        const f = (k+0.5)/N;
+        ctx.fillStyle = inkBg;
+        ctx.beginPath(); ctx.arc(x0 + drift*f, yNear - (yNear-yFar)*f, 2.6, 0, 7); ctx.fill();
+      }
+      if(k < N) requestAnimationFrame(batch);
+      else { // the landing point — downstream of where the boat was aimed
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(x0 + drift, yFar, 4, 0, 7); ctx.fill();
+      }
+    }
+    batch();
+  }
+  drawHero();
+  // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  const synth = window.speechSynthesis;
+  // Transport state: current line, char offset inside it (from boundary events), playing flag.
+  let idx = 0, charAt = 0, playing = false, current = null, finished = false;
+
+  // Quality-ranked: Chrome's remote Google voices sound natural; macOS's
+  // local compact voices (Samantha/Daniel/Fred…) are mechanical — last resort.
+  // Same ranking as the card-voiceover engine so all narration shares one voice.
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    return en.find(v => v.name === 'Google US English')
+        || en.find(v => v.name === 'Google UK English Female')
+        || en.find(v => v.name === 'Google UK English Male')
+        || en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name))
+        || en.find(v => v.name === 'Samantha')
+        || en[0] || null;
+  }
+  function render(){
+    playBtn.dataset.state = playing ? 'playing' : (finished ? 'done' : 'idle');
+    playBtn.title = playing ? 'Pause' : (finished ? 'Play again' : (idx===0 && charAt===0 ? 'Play' : 'Resume'));
+    playBtn.setAttribute('aria-label', playBtn.title);
+    playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    prog.textContent = (Math.min(idx, script.length-1)+1) + ' / ' + script.length;
+    const seg = $('welcome-seg');
+    if(seg){ if(!seg.children.length) script.forEach(()=>seg.appendChild(document.createElement('i')));
+      [...seg.children].forEach((el,i)=>{ el.className = i < idx || finished ? 'on' : (i===idx ? 'cur' : ''); }); }
+    prevBtn.disabled = idx===0 && charAt===0 && !playing;
+    nextBtn.disabled = idx>=script.length-1;
+  }
+  // Speak line `idx` starting at `charAt`; chain to the next line on end.
+  function speakCurrent(){
+    if(!synth) return;
+    synth.cancel();
+    const text = script[idx].slice(charAt);
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if(v) u.voice = v;
+    u.rate = 0.98; u.pitch = 1;
+    const base = charAt, myIdx = idx;
+    u.onboundary = e => { if(current === u && typeof e.charIndex === 'number') charAt = base + e.charIndex; };
+    u.onend = () => {
+      if(current !== u || !playing) return;
+      if(myIdx < script.length-1){ idx = myIdx+1; charAt = 0; speakCurrent(); }
+      else { playing = false; finished = true; idx = script.length-1; charAt = 0; render(); }
+    };
+    current = u; finished = false;
+    synth.speak(u);
+    render();
+  }
+  function play(){
+    if(!synth) return;
+    if(finished){ idx = 0; charAt = 0; }
+    playing = true;
+    speakCurrent();                 // resumes from the recorded char offset of the current line
+  }
+  function pause(){
+    if(!synth) return;
+    playing = false;
+    synth.cancel();                 // stop now; idx/charAt keep the position for resume
+    current = null;
+    render();
+  }
+  function jump(delta){
+    idx = Math.max(0, Math.min(script.length-1, idx + delta));
+    charAt = 0; finished = false;
+    if(playing) speakCurrent(); else { synth && synth.cancel(); current = null; render(); }
+  }
+  playBtn.addEventListener('click', () => playing ? pause() : play());
+  prevBtn.addEventListener('click', () => {
+    // Rewind: restart the current line if we're inside it, else go to the previous line
+    if(charAt > 0){ charAt = 0; if(playing) speakCurrent(); else render(); }
+    else jump(-1);
+  });
+  nextBtn.addEventListener('click', () => jump(+1));
+  // No auto-start: narration begins only when the student presses play. The old
+  // auto-attempt fired reliably inside the platform's same-origin iframe, where
+  // the sim inherits the card-click's user activation.
+  if(!synth){ playBtn.disabled = true; prevBtn.disabled = true; nextBtn.disabled = true; prog.textContent = ''; }
+  // Chrome keeps a removed iframe's speech playing (speechSynthesis outlives the
+  // document); cancel everything - welcome player AND card voiceover - on teardown.
+  addEventListener('pagehide', () => { try { speechSynthesis.cancel(); } catch(e){} });
+  render();
+  ov.querySelectorAll('.welcome-mode').forEach(b => b.addEventListener('click', () => {
+    pause();
+    ov.classList.add('hidden');
+    try { if(WELCOME_ONCE) localStorage.setItem(WELCOME_KEY, '1'); } catch(e){}
+    if(window.__setMode) window.__setMode(b.dataset.mode);
+  }));
+})();
+</script>
+</body>
+</html>
