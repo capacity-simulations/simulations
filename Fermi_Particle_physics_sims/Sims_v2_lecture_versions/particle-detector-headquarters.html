@@ -304,6 +304,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-stage{height:100%;min-height:230px;min-width:0;display:grid;grid-template-rows:minmax(0,1fr) minmax(92px,19%);gap:10px;box-sizing:border-box}
 .sim-box-main,.sim-box-strip{min-height:0;box-sizing:border-box}
 .sim-box-main>canvas,.sim-box-strip>canvas{display:block;width:100%;height:100%}
+.sim-stage.sim-strip-off{grid-template-rows:minmax(0,1fr)}
+.sim-stage.sim-strip-off .sim-box-strip{display:none}
 .sim-panel{flex-shrink:0;min-width:0;box-sizing:border-box}
 .sim-panel-title{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:6px 0 8px 6px}
 .sim-ctlbox{background:var(--bg,transparent);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:0 0 10px}
@@ -349,6 +351,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <dl class="shell-info-dl">
   <dt>Concept</dt>
   <dd>Layered detectors identify particles by <em>where</em> they leave energy. Trackers bend charged particles in a magnetic field (curvature gives momentum), the EM calorimeter absorbs electrons and photons, the hadronic calorimeter absorbs protons, neutrons, pions and kaons, and only muons cross everything. Neutrinos leave nothing and are inferred from missing momentum. At a fixed momentum, time of flight over 10 m and the Cherenkov threshold β &gt; 1/n (water: β &gt; 0.75188) split species by mass, because E² − p² = m² is invariant.</dd>
+  <dt>Why two calorimeters</dt>
+  <dd>Electromagnetic showers (e⁻, γ) are compact — bremsstrahlung and pair production stop them in a thin, high-Z layer. Hadronic showers (p, n, π, K) are longer and more irregular because they proceed by the strong force, so they need a much thicker absorber behind that layer. One calorimeter cannot do both jobs: a thin EM calorimeter lets hadrons punch through; a coarse hadronic calorimeter cannot measure e/γ energy well. Hence EM calorimeter in front, HCAL behind.</dd>
   <dt>Serves</dt>
   <dd>Introductory particle / modern physics; anyone learning to read an ATLAS-style event display.</dd>
   <dt>Inquiry</dt>
@@ -426,9 +430,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 </script>
 
   <main class="shell-hero">
-    <div class="sim-stage">
+    <div class="sim-stage" id="simStage">
   <div class="plot-box sim-box-main"><canvas id="simMain"></canvas></div>
-  <div class="plot-box sim-box-strip"><canvas id="simStrip"></canvas></div>
+  <div class="plot-box sim-box-strip" id="stripBox"><canvas id="simStrip"></canvas></div>
 </div>
   </main>
 
@@ -440,7 +444,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
         <div class="inq-step"><h4>1 · Reading the layers</h4>
-          <p>Every collider discovery ends in a detector like this. An e⁻ enters from the left: curved track in the <strong>Tracker</strong>, then a shower in the <strong>EM calorimeter</strong>. Where a particle dumps its energy is its fingerprint.</p></div>
+          <p>Every collider discovery ends in a detector like this. An e⁻ enters from the left: the <strong>Tracker</strong>'s magnetic field bends it — negative charges one way, positive the other — then it showers in the <strong>EM calorimeter</strong>. Where a particle dumps its energy is its fingerprint.</p></div>
 <div class="inq-step" data-gate data-reveal="fire:ph"><h4>2 · Now fire a photon</h4>
           <p>The e⁻ ionized its way through the Tracker. A photon carries no charge. Committing fires one — what will the detector record?</p>
           <button class="choice" data-fb="Neutral kills only the track; the EM calorimeter still absorbs it — watch the shower appear with no track.">Nothing — neutral particles are invisible</button>
@@ -504,6 +508,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <input type="range" id="simMom" min="0.2" max="5" step="0.1" value="1" aria-label="momentum in GeV per c">
     </div>
   </div>
+  <div class="sim-ctlbox">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted);margin:0;">
+      <input type="checkbox" id="stripToggle" checked>
+      Show time-of-flight race
+    </label>
+  </div>
 </div>
 
 <div class="shell-panel sim-panel">
@@ -528,7 +538,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="sim-eq"><div class="sim-eq-cap">Speed and boost</div><span class="sim-eq-tex" id="simEq2"></span></div>
   <div class="sim-eq"><div class="sim-eq-cap">Time of flight</div><span class="sim-eq-tex" id="simEq3"></span></div>
   <div class="sim-eq"><div class="sim-eq-cap">Cherenkov cone</div><span class="sim-eq-tex" id="simEq4"></span></div>
-  <div class="sim-eq"><div class="sim-eq-cap">Tracker bend</div><span class="sim-eq-tex" id="simEq5"></span></div>
+  <div class="sim-eq"><div class="sim-eq-cap">Tracker bend · B = 2 T ⊗ into page (schematic)</div><span class="sim-eq-tex" id="simEq5"></span></div>
 </div>
   </section>
 
@@ -1018,6 +1028,26 @@ window.__audit = { at(momentumGeV) {
       ctx.fillText(t, cx, H - 9);
     };
     lab(L.trk, 'Tracker', 'Tracker');
+    /* Name the field that does the bending. Direction is fixed by the drawn tracks, NOT
+       chosen: the beam runs +x and buildEvent() sends q>0 upward, and F = qv×B with
+       x̂×ẑ = −ŷ then requires Bz < 0, i.e. INTO the page. */
+    (function trackerField() {
+      const zw = L.trk[1] - L.trk[0];
+      ctx.save();
+      ctx.font = '600 12px ' + FONT; ctx.fillStyle = T.muted;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      /* two stacked lines: one string wide enough to carry both facts does not fit the
+         tracker zone, and the single-line fallback dropped the part that matters most */
+      const mid = (L.trk[0] + L.trk[1]) / 2;
+      let l1 = 'B = 2 T ⊗ into page';
+      if (ctx.measureText(l1).width > zw - 6) l1 = 'B = 2 T ⊗';
+      if (ctx.measureText(l1).width <= zw - 4) ctx.fillText(l1, mid, L.yTop + 6);
+      const l2 = 'charge sets the bend direction', l2b = 'charge sets the bend';
+      const t2 = ctx.measureText(l2).width <= zw - 6 ? l2
+               : (ctx.measureText(l2b).width <= zw - 6 ? l2b : null);
+      if (t2) ctx.fillText(t2, mid, L.yTop + 21);
+      ctx.restore();
+    })();
     lab(L.ecal, 'EM calorimeter', 'EM cal');
     lab(L.hcal, 'Hadronic calorimeter', 'HCAL');
     lab([L.mus[0][0], L.mus[2][1]], 'Muon spectrometer', 'Muons');
@@ -1223,7 +1253,7 @@ window.__audit = { at(momentumGeV) {
     if (!ev) return;
     const T = theme();
     drawMain(T);
-    drawStrip(T);
+    if (!stageEl || !stageEl.classList.contains('sim-strip-off')) drawStrip(T);
   }
 
   /* ---------- readouts / UI ---------- */
@@ -1270,6 +1300,13 @@ window.__audit = { at(momentumGeV) {
     ev = buildEvent(true);
     updateReadouts(); drawAll();
   });
+  const stripToggle = document.getElementById('stripToggle');
+  const stageEl = document.getElementById('simStage');
+  function setStripVisible(on) {
+    if (stageEl) stageEl.classList.toggle('sim-strip-off', !on);
+    resizeNow();
+  }
+  if (stripToggle) stripToggle.addEventListener('change', () => setStripVisible(stripToggle.checked));
   /* ---------- guided-inquiry layer: choice feedback + data-reveal hooks ---------- */
   document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
     const evalBox = card.querySelector('.predict-eval');
