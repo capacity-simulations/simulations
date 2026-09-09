@@ -1816,5 +1816,72 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   }));
 })();
 </script>
+<!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
+     Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
+<style>
+  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
+  .qfb-pill:active{transform:translateY(1px) scale(.99)}
+  .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
+  .qfb-backdrop.show{display:flex}
+  .qfb-modal{width:100%;max-width:520px;background:linear-gradient(180deg,#101430 0%,#0a0d22 100%);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55)}
+  .qfb-modal h3{margin:0 0 4px;font-size:1.05rem}
+  .qfb-sub{color:rgba(203,213,255,.72);font-size:.85rem;margin:0 0 14px}
+  .qfb-modal textarea{width:100%;min-height:140px;padding:11px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.32);color:#eef2ff;font:inherit;font-size:.95rem;resize:vertical;outline:none;box-sizing:border-box}
+  .qfb-modal textarea:focus{border-color:rgba(34,211,238,.55)}
+  .qfb-hp{position:absolute;left:-9999px;opacity:0;pointer-events:none}
+  .qfb-row{margin-top:14px;display:flex;gap:10px;justify-content:flex-end;align-items:center}
+  .qfb-msg{flex:1;font-size:.85rem;color:rgba(203,213,255,.72)}
+  .qfb-msg.ok{color:rgba(163,255,189,.95)}
+  .qfb-msg.err{color:#ff9a9a}
+  .qfb-btn2{background:transparent;color:rgba(203,213,255,.72);border:1px solid rgba(255,255,255,.16);padding:9px 14px;border-radius:999px;cursor:pointer;font-weight:600}
+  .qfb-btn2:hover{color:#eef2ff;border-color:#eef2ff}
+  .qfb-btn1{background:#22d3ee;color:rgba(7,9,20,.92);border:0;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:800}
+  .qfb-btn1:disabled{opacity:.55;cursor:not-allowed}
+</style>
+<button class="qfb-pill" id="qfbPill" type="button" title="Report a bug or leave feedback"><span>💬</span><span>Feedback</span></button>
+<div class="qfb-backdrop" id="qfbBackdrop" role="dialog" aria-modal="true" aria-labelledby="qfbTitle">
+  <div class="qfb-modal">
+    <h3 id="qfbTitle">Feedback</h3>
+    <p class="qfb-sub">C157-ohms-law-and-resistance</p>
+    <textarea id="qfbText" placeholder="Describe the issue or suggestion. Include steps to reproduce if it is a bug."></textarea>
+    <input class="qfb-hp" id="qfbHp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+    <div class="qfb-row">
+      <span class="qfb-msg" id="qfbMsg"></span>
+      <button class="qfb-btn2" id="qfbCancel" type="button">Cancel</button>
+      <button class="qfb-btn1" id="qfbSubmit" type="button">Submit</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var FEEDBACK_URL="https://script.google.com/macros/s/AKfycbwxBcHhN-7GirEIJ3_CSSWGRo6R73CL_CRIaFrMCXY1Zgv7NGUsRfRSsm-ef0oZPPC5fg/exec";
+  var COURSE="JEE", SIM="C157-ohms-law-and-resistance";
+  var pill=document.getElementById('qfbPill'),bd=document.getElementById('qfbBackdrop'),
+      txt=document.getElementById('qfbText'),hp=document.getElementById('qfbHp'),
+      msg=document.getElementById('qfbMsg'),sub=document.getElementById('qfbSubmit'),
+      can=document.getElementById('qfbCancel');
+  function open(){txt.value="";hp.value="";msg.textContent="";msg.className="qfb-msg";sub.disabled=false;bd.classList.add('show');setTimeout(function(){txt.focus();},30);}
+  function close(){bd.classList.remove('show');}
+  pill.addEventListener('click',open);
+  can.addEventListener('click',close);
+  bd.addEventListener('click',function(e){if(e.target===bd)close();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&bd.classList.contains('show'))close();});
+  function send(){
+    var message=txt.value.trim();
+    if(!message){msg.textContent="Please type your feedback first.";msg.className="qfb-msg err";return;}
+    sub.disabled=true;msg.textContent="Sending…";msg.className="qfb-msg";
+    var fd=new FormData();
+    fd.append('course',COURSE);fd.append('sim',SIM);fd.append('message',message);fd.append('hp',hp.value);
+    fetch(FEEDBACK_URL,{method:'POST',body:fd}).then(function(r){return r.json().catch(function(){return null;});}).then(function(data){
+      if(data&&data.ok){msg.textContent="Recorded as "+data.version+". Thanks!";msg.className="qfb-msg ok";setTimeout(close,1100);}
+      else if(data&&data.err){msg.textContent="Error: "+data.err;msg.className="qfb-msg err";sub.disabled=false;}
+      else{msg.textContent="Sent. Check the sheet.";msg.className="qfb-msg ok";setTimeout(close,1100);}
+    }).catch(function(){msg.textContent="Network error. Try again.";msg.className="qfb-msg err";sub.disabled=false;});
+  }
+  sub.addEventListener('click',send);
+  txt.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter')send();});
+})();
+</script>
 </body>
 </html>

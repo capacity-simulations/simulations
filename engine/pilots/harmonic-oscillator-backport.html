@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum Harmonic Oscillator — 1D (engine backport)</title>
+<script type="application/json" id="engine-manifest">
+{
+  "manifestVersion": 1,
+  "sim": "qm/harmonic-oscillator-backport",
+  "engine": "1.0.0-dev",
+  "modules": [
+    "core.scale",
+    "core.special",
+    "canvas.fit",
+    "canvas.scale",
+    "canvas.ticks",
+    "canvas.label",
+    "canvas.axes",
+    "canvas.primitives",
+    "controls.bind",
+    "shell",
+    "verify.audit"
+  ],
+  "params": [
+    {
+      "id": "n",
+      "label": "Quantum state n",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "id": "mass",
+      "label": "Mass m",
+      "min": 0.7,
+      "max": 1.2,
+      "step": 0.05,
+      "default": 1
+    },
+    {
+      "id": "omega",
+      "label": "Angular frequency \u03c9",
+      "min": 0.7,
+      "max": 1.2,
+      "step": 0.05,
+      "default": 1
+    }
+  ],
+  "build": {
+    "engineVersion": "1.0.0-dev",
+    "date": "2026-08-05",
+    "hash": "ef347f214db1"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #060E11;
+    --panel: #060E11;
+    --plot-bg: #060E11;
+    --plot-edge: rgba(19, 49, 49, 0.4);
+    --ink: #e2e8f0;
+    --muted: #94a3b8;
+    --edge: rgba(148, 163, 184, 0.35);
+    --accent: #5eead4;
+    --box-bg: rgba(30, 77, 58, 0.15);
+    --box-edge: rgba(30, 77, 58, 0.5);
+    --topbar-bg: #FAF8F4;
+    --topbar-ink: #0f172a;
+  }
+  body.light-theme {
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --plot-bg: #ffffff;
+    --plot-edge: rgba(23, 32, 47, 0.18);
+    --ink: #17202f;
+    --muted: #5b6a7b;
+    --edge: rgba(23, 32, 47, 0.18);
+    --accent: #0f766e;
+    --box-bg: rgba(30, 77, 58, 0.07);
+    --box-edge: rgba(30, 77, 58, 0.3);
+    --topbar-bg: #FAF8F4;
+    --topbar-ink: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 600 14px/1.45 "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #shell { height: 100vh; display: flex; flex-direction: column; }
+  #shell.shell-max { position: fixed; inset: 0; z-index: 40; background: var(--bg); }
+
+  .topbar {
+    height: 62px; min-height: 62px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 24px;
+    background: var(--topbar-bg);
+    border-bottom: 1px solid rgba(19, 49, 49, 0.25);
+    z-index: 20;
+  }
+  .topbar h1 {
+    font-size: 18px; font-weight: 600; letter-spacing: 0.025em;
+    color: var(--topbar-ink); margin: 0 auto 0 0;
+  }
+  .topbar button, .topbar select {
+    height: 36px; padding: 0 16px; white-space: nowrap;
+    border-radius: 6px; font: inherit; font-size: 15px; cursor: pointer;
+    background: #fff; border: 1px solid #cbd5e1; color: #334155;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .topbar button:hover { border-color: #64748b; }
+  #shell-reset { background: #FAF8F4; border-color: #B6820C; color: #B6820C; }
+  #shell-reset:hover { background: #F5EAC4; }
+  #shell-play { background: #fff; border-color: #1E4D3A; color: #1E4D3A; min-width: 88px; }
+  #shell-play:hover { background: #2D6E52; border-color: #2D6E52; color: #fff; }
+
+  .main-grid { flex: 1; display: flex; overflow: hidden; }
+  .hero {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 16px; overflow: hidden;
+  }
+  .plot-panel {
+    flex: 1; position: relative; min-height: 0;
+    background: var(--plot-bg);
+    border: 1px solid var(--plot-edge);
+    border-radius: 12px; overflow: hidden;
+  }
+  .plot-panel canvas { width: 100%; height: 100%; display: block; }
+  .plot-title {
+    position: absolute; top: 10px; left: 16px; z-index: 10; pointer-events: none;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  .plot-title .nc { text-transform: none; letter-spacing: 0.02em; }
+  .plot-legend {
+    position: absolute; top: 10px; right: 16px; z-index: 10; pointer-events: none;
+    display: flex; gap: 16px; font-size: 11px; font-weight: 600; color: var(--muted);
+  }
+  .plot-legend .item { display: flex; align-items: center; gap: 6px; }
+  .plot-legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .sidebar {
+    width: 320px; flex-shrink: 0; z-index: 10;
+    background: var(--panel);
+    border-left: 1px solid var(--edge);
+    overflow-y: auto;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .sidebar-title {
+    font-size: 14px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted); margin: 0;
+    padding-bottom: 10px; border-bottom: 1px solid rgba(19, 49, 49, 0.4);
+  }
+  .section-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 10px 0;
+  }
+  .ctrl-box {
+    background: var(--box-bg);
+    border: 1px solid var(--box-edge);
+    border-radius: 5px; padding: 12px;
+  }
+  .ctrl-box + .ctrl-box { margin-top: 8px; }
+  .ctrl-box--slider {
+    min-height: 73px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .ctrl-box-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 8px;
+  }
+  .ctrl-box-label { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+  .slider-val {
+    min-width: 36px; text-align: right;
+    font: 600 15px "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; font-size: 14px; padding: 6px 0;
+  }
+  .stat-row:first-child { padding-top: 0; }
+  .stat-row:last-child { padding-bottom: 0; }
+  .stat-label { color: var(--muted); font-weight: 600; }
+  .stat-label .dim { font-weight: 400; }
+  .stat-num {
+    color: var(--accent); font-weight: 600; text-align: right;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .equations {
+    text-align: center; font-size: 0.9rem; line-height: 1.7; color: var(--ink);
+    font-family: "STIX Two Math", "Cambria Math", Georgia, serif; font-weight: 400;
+  }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; background: transparent;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+    background: #3b9b8f; cursor: pointer; margin-top: -6px;
+    box-shadow: 0 0 0 2px var(--bg); transition: transform 0.1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type=range]::-webkit-slider-runnable-track {
+    width: 100%; height: 4px; cursor: pointer;
+    background: rgba(30, 77, 58, 0.35); border-radius: 2px;
+  }
+  input[type=range]::-moz-range-track { height: 4px; background: rgba(30, 77, 58, 0.35); border-radius: 2px; }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; background: #3b9b8f;
+    border: none; cursor: pointer; box-shadow: 0 0 0 2px var(--bg);
+  }
+
+  #shell-info-modal {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+  }
+  #shell-info-modal.open, #shell-info-modal[data-open="1"] { display: flex; }
+  #shell-info-modal .modal-card {
+    background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; max-width: 540px; width: calc(100% - 40px);
+    max-height: 80vh; overflow: auto; padding: 22px;
+    font-weight: 400; font-size: 14px; color: var(--ink);
+  }
+  #shell-info-modal h2 { margin-top: 0; font-size: 17px; }
+  #shell-info-close {
+    float: right; background: var(--box-bg); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 6px; padding: 4px 12px;
+    font: inherit; cursor: pointer;
+  }
+  #shell-info-modal ul { padding-left: 20px; }
+  #shell-info-modal li { margin: 6px 0; color: var(--muted); }
+  #shell-info-modal li strong { color: var(--ink); }
+</style>
+<style id="engine-css">
+/* engine CSS v1.0.0-dev (auto-injected; do not edit) */
+/* shell.css (engine-injected) */
+
+/* ============================================================================
+   WIKI SR SIMULATION — GLOBAL SHELL STYLESHEET (inlined)
+   ========================================================================== */
+
+/* ============================================================================
+   WIKI SR SIMULATION — GLOBAL SHELL STYLESHEET
+   ----------------------------------------------------------------------------
+   Drop-in design system for every sim in wiki_SR_sims_v1. It provides:
+     • the design-system theme tokens (dark default + full light-theme override)
+     • the cream 62px GLOBAL top bar (Info · Theme · Maximize · Formal · Speed ·
+       Reset · Play/Pause) — theme-independent
+     • the DYNAMIC sidebar: guided-inquiry stepper (dots + Next/Finish + Skip)
+       that collapses to a restore bar, then the always-present controls + stats
+     • the plot-box hero card, info modal, formal region
+     • design-system components: .ctrl-box sliders, .stat-row, .choice /
+       .predict-eval prediction styling, legend, dividers
+
+   HOW TO USE
+     1. Link this file in <head>:  <link rel="stylesheet" href="simulation-shell.css">
+     2. Follow the HTML skeleton + Shell runtime in SHELL-DESIGN-GUIDE.md.
+     3. Reference implementation: boost-hyperbolic-rotation-shell.html.
+
+   The class/ID names here are the contract — the Shell runtime wires them by
+   name (#shell-play, #inq-next, #aside-inquiry, .inq-step, .shell-panel, …).
+   Do NOT rename them. Fill regions with SIM content; never edit this file per-sim.
+
+   FONTS: the tokens below expect DM Sans SemiBold (UI) + JetBrains Mono SemiBold
+   (numerals). The @font-face rules point at relative .ttf files; for a fully
+   self-contained single HTML file, replace them with base64 data-URI @font-face
+   (see "Fonts" in the guide). A system-font fallback is built into the tokens.
+   ========================================================================== */
+
+/* ---- FONT FACES (swap src for base64 data-URIs to make a sim self-contained) ---- */
+/* src uses local() only: no network fetch, so a sim linking this file raw
+   produces zero resource errors (verify.mjs fails on any console error).
+   The vendor:fonts build step replaces these with embedded data-URI fonts. */
+@font-face{
+  font-family:'DMSansUser';
+  src:local('DM Sans SemiBold'), local('DMSans-SemiBold');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'JetBrainsMonoNums';
+  src:local('JetBrains Mono SemiBold'), local('JetBrainsMono-SemiBold');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+
+/* ============================================================================
+   SHELL CSS — the design system, layout, dynamic sidebar, stepper, components.
+   (Verbatim from the engine shell template; keep in sync with it.)
+   ========================================================================== */
+:root{
+  /* Surfaces (design system) */
+  --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
+  /* Back-compat aliases for the shell's older --panel / --panel-2 / --line names */
+  --panel:var(--surface); --panel-2:#0f1a1d; --line:var(--border);
+  /* Text */
+  --ink:#e2e8f0; --ink-mid:#cbd5e1; --ink-mute:#9ca3af;
+  --text:#e2e8f0; --muted:#cbd5e1; --text-muted:#9ca3af;
+  /* Borders */
+  --border:rgba(19,49,49,.45);
+  /* Accent (teal) */
+  --accent:#3b9b8f; --accent-soft:rgba(59,155,143,.35);
+  /* Control-box (Figma green) */
+  --ctrl-bg:rgba(30,77,58,.15); --ctrl-border:rgba(30,77,58,.50); --track-bg:rgba(30,77,58,.35);
+  /* Top bar — theme-INDEPENDENT cream (stays the same in light/dark) */
+  --topbar-bg:#FAF8F4; --topbar-text:#0f172a; --topbar-border:rgba(19,49,49,.25);
+  --btn-play-bg:#1E4D3A; --btn-play-hover:#2D6E52; --btn-play-text:#fff;
+  --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
+  --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
+  /* SR frame-coding colours (preserved — used by sim canvas drawing) */
+  --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
+  /* Fonts (embedded at final-assembly time — see simFonts.ts) */
+  --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
+  --r:8px;
+}
+/* Light theme — toggled by body.light-theme (shell theme button) or html[data-theme=light] */
+body.light-theme,html[data-theme="light"]{
+  --bg:#e2e8f0; --surface:rgba(248,250,252,.96); --surface-soft:rgba(241,245,249,.96); --panel-bg:#e5e7eb;
+  --panel-2:#e5e7eb;
+  --ink:#0f172a; --ink-mid:#334155; --ink-mute:#6b7280;
+  --text:#0f172a; --muted:#334155; --text-muted:#6b7280;
+  --border:rgba(51,65,85,.18);
+  --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
+  --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
+  --topbar-border:rgba(19,49,49,.20);
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow:hidden;}
+
+#shell{
+  display:grid;
+  grid-template-areas:"header header" "hero aside" "formal formal";
+  grid-template-columns:1fr 320px;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  height:100vh;
+  gap:0;
+}
+#shell.hide-aside{grid-template-areas:"header header" "hero hero" "formal formal";}
+#shell.hide-aside .shell-aside{display:none;}
+#shell.hide-formal .shell-formal{display:none;}
+/* Maximize keeps the cream top bar visible (so the Maximize→Minimize button is
+   always reachable) and collapses only the sidebar + formal; the hero fills the
+   rest. This retires the floating restore button that used to overlap a sim's
+   top-right legend/readout. !important so a stray SIM rule can't re-show them. */
+#shell.shell-max{grid-template-areas:"header" "hero";grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+#shell.shell-max .shell-aside,#shell.shell-max .shell-formal{display:none !important;}
+/* Floating restore is retired — the always-visible header button restores. */
+.shell-exit-max{display:none !important;}
+
+.shell-header{
+  grid-area:header;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;
+  height:62px;min-height:62px;padding:0 18px;background:var(--topbar-bg);
+  border-bottom:1px solid var(--topbar-border);position:relative;z-index:3000;overflow:visible;
+}
+.shell-title{font-size:18px;font-weight:600;color:var(--topbar-text);white-space:nowrap;letter-spacing:.5px;}
+.shell-title span{font-weight:400;color:#475569;font-size:13px;letter-spacing:0;}
+.shell-controls{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto;}
+.shell-group{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.shell-sep{width:1px;height:24px;background:var(--topbar-border);}
+/* Speed label sits on the cream bar — force a dark colour regardless of theme. */
+.shell-header label{color:#475569;font-family:var(--font-sans);}
+
+/* Base button — used on dark surfaces (aside Skip/restore etc.). */
+.shell-btn{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 11px;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;
+}
+.shell-btn:hover{background:rgba(30,77,58,.28);border-color:var(--accent-soft);}
+.shell-btn.primary{background:var(--ctrl-bg);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn.active{background:rgba(59,155,143,.16);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn:disabled{opacity:.4;cursor:not-allowed;}
+.shell-select{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;
+}
+/* Cream top-bar overrides — header buttons read on the light parchment bar. */
+.shell-header .shell-btn{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;padding:0 12px;}
+.shell-header .shell-btn:hover{background:var(--btn-reset-hover);border-color:var(--topbar-border);color:#0f172a;}
+.shell-header .shell-btn.active{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:#fff;}
+.shell-header .shell-select{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;}
+/* Play/Pause — green when playing, white-outline when paused (.paused set by runtime). */
+.shell-header #shell-play{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:var(--btn-play-text);}
+.shell-header #shell-play:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+.shell-header #shell-play.paused{background:var(--btn-paused-bg);border-color:var(--btn-paused-border);color:var(--btn-paused-text);}
+.shell-header #shell-play.paused:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+/* Reset — cream fill, gold border + gold text. */
+.shell-header #shell-reset{background:var(--btn-reset-bg);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-header #shell-reset:hover{background:var(--btn-reset-hover);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-readout{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:var(--accent);
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);padding:4px 9px;border-radius:5px;white-space:nowrap;}
+.shell-readout.danger{color:#fda4af;background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.35);animation:shellPulse 1s infinite;}
+@keyframes shellPulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+.shell-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;
+  background:var(--track-bg);width:150px;cursor:pointer;}
+.shell-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+.shell-range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+
+.shell-hero{grid-area:hero;min-height:0;min-width:0;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:14px;}
+
+.shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:16px;
+  padding:18px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);
+  backdrop-filter:blur(12px);border-left:1px solid rgba(148,163,184,.18);}
+.shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;
+  padding:14px 18px;background:var(--surface-soft);border-top:1px solid var(--border);}
+
+/* Plot-box card for hero canvases (design system). One global maximize only
+   (#shell-maximize) — do NOT add per-plot maximize buttons. */
+.plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
+.plot-box canvas{display:block;width:100%;height:100%;}
+.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
+  letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
+.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
+  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-dot{width:10px;height:10px;border-radius:999px;}
+
+.shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
+.shell-panel-head h3{margin:0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
+.shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
+.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel-body{padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere;font-family:var(--font-sans);}
+
+/* Design-system control + stat components (use INSIDE panels for sliders/stats). */
+.ctrl-box{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:5px;padding:12px;margin-bottom:8px;box-sizing:border-box;}
+.ctrl-box:last-child{margin-bottom:0;}
+.ctrl-box--slider{min-height:73px;display:flex;flex-direction:column;justify-content:center;}
+.ctrl-box--stacked{gap:8px;}
+.ctrl-box--stacked .ctrl-box-label{margin-bottom:0;}
+.ctrl-readout-row{display:flex;flex-wrap:wrap;gap:6px;}
+.ctrl-readout-row .shell-readout{flex:1;text-align:center;min-width:0;}
+.ctrl-box-label{display:block;font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.ctrl-box-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.ctrl-box-head .ctrl-box-label{flex:1;min-width:0;}
+.ctrl-slider-row{display:flex;align-items:center;gap:10px;width:100%;}
+.ctrl-slider-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:6px;background:var(--track-bg);border-radius:3px;outline:none;cursor:pointer;}
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
+.ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
+.slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
+.control-range{font-size:.75rem;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
+.ctrl-box .stat-row:first-child{padding-top:0;}
+.ctrl-box .stat-row:last-child{padding-bottom:0;}
+.stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;}
+.stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
+.stat-value.highlight{font-size:18px;}
+.divider{height:1px;background:var(--border);}
+.note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
+.shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
+
+/* Prediction choices + feedback (guided inquiry). Deliberately NOT green-tinted
+   like the control boxes, so the correct=green / wrong=red states stay high
+   contrast in both themes. The correct answer always pops green — even inside a
+   "Not quite" (wrong) feedback box. */
+.choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;line-height:1.5;
+  padding:10px 12px;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.choice:hover{border-color:var(--accent-soft);}
+.choice:disabled{cursor:default;}
+.choice.correct{background:rgba(52,211,153,.18);border:1px solid #34d399;color:#d1fae5;}
+.choice.wrong{background:rgba(244,63,94,.16);border:1px solid #f43f5e;color:#ffe4e6;}
+.choice.dim{opacity:.55;}
+.predict-eval{margin-top:10px;padding:12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);font-size:13px;line-height:1.6;color:var(--text);display:none;}
+.predict-eval.show{display:block;}
+.predict-eval.correct{background:rgba(52,211,153,.14);border-color:#34d399;}
+.predict-eval.wrong{background:rgba(244,63,94,.12);border-color:#f43f5e;}
+.predict-eval .answer,.predict-eval strong{color:#6ee7b7;font-weight:700;}
+body.light-theme .choice.correct,html[data-theme="light"] .choice.correct{background:rgba(16,185,129,.16);border-color:#059669;color:#065f46;}
+body.light-theme .choice.wrong,html[data-theme="light"] .choice.wrong{background:rgba(244,63,94,.12);border-color:#e11d48;color:#9f1239;}
+body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,html[data-theme="light"] .predict-eval .answer,html[data-theme="light"] .predict-eval strong{color:#047857;}
+
+/* Dynamic sidebar — two zones: guided-inquiry (collapses after answer/skip) + controls/stats. */
+.aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+#aside-controls{flex:1 1 auto;}
+.aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.aside-zone-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.aside-skip{font-size:11px;padding:4px 9px;color:var(--ink-mid);}
+/* Stepper dots — one per inquiry step; shell marks active / done. */
+.inq-dots{display:flex;gap:6px;flex-shrink:0;}
+.inq-dots .inq-dot{flex:1;height:4px;border-radius:2px;background:var(--ctrl-border);transition:background .2s;}
+.inq-dots .inq-dot.active{background:var(--accent);}
+.inq-dots .inq-dot.done{background:var(--accent-soft);}
+/* Inquiry step cards — shell shows ONLY the active one (F3). */
+#inq-cards{flex:1 1 auto;min-height:0;}
+.inq-step{display:none;}
+.inq-step.active{display:block;}
+.inq-nav{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;}
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
+#inq-next{min-width:96px;justify-content:center;}
+.aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
+  color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s;}
+.aside-restore:hover{background:rgba(30,77,58,.28);color:var(--text);}
+#shell.inquiry-collapsed #aside-inquiry{display:none;}
+#shell.inquiry-collapsed #aside-inquiry-restore{display:block;}
+#shell.no-inquiry #aside-inquiry,#shell.no-inquiry #aside-inquiry-restore{display:none !important;}
+
+/* Info modal — source-row context + principles-applied table (shell-owned). */
+.shell-modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.74);backdrop-filter:blur(2px);
+  z-index:200;display:none;align-items:center;justify-content:center;padding:24px;}
+.shell-modal-backdrop.open{display:flex;}
+.shell-modal{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;
+  max-width:720px;width:100%;max-height:84vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.55);}
+.shell-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.shell-modal-head h2{margin:0;font-size:14px;font-weight:700;color:var(--text);}
+.shell-modal-body{padding:16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--ink);}
+.shell-modal-body h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--ink-mute);margin:18px 0 8px;font-weight:600;}
+.shell-modal-body h3:first-child{margin-top:0;}
+.shell-modal-body p{margin:0 0 8px;}
+.shell-info-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 4px;}
+.shell-info-table th,.shell-info-table td{text-align:left;vertical-align:top;padding:6px 8px;
+  border-bottom:1px solid var(--line);}
+.shell-info-table thead th{color:var(--ink-mid);font-weight:600;white-space:nowrap;
+  text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;}
+.shell-info-table td.pid{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--accent);white-space:nowrap;}
+.shell-info-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;}
+.shell-info-dl dt{color:var(--ink-mid);font-weight:600;}
+.shell-info-dl dd{margin:0;}
+
+@media(max-width:1000px){
+  body{overflow:auto;}
+  #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;
+    grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
+  .shell-header{flex-wrap:wrap;height:auto;min-height:62px;padding:8px 14px;}
+  .shell-aside{border-left:none;border-top:1px solid var(--border);}
+}
+
+/* ---- ENGINE ADDITION (beyond the L09-s1 harvest) -------------------------
+   #play-hint pill — wired by the Shell runtime's setPlayLocked() (harvested
+   from CM Galperins_Billiard.html); its contract CSS lives here so the
+   feature works out of the box. Inert when the element is absent. */
+.play-hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.6);color:#fef3c7;
+  padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;z-index:3;
+  display:none;backdrop-filter:blur(6px);}
+.play-hint.show{display:block;}
+body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;background:rgba(251,191,36,.28);}
+
+</style>
+</head>
+<body>
+<div id="shell">
+  <div class="topbar">
+    <h1>Quantum Harmonic Oscillator</h1>
+    <select id="shell-speed" aria-label="Animation speed">
+      <option value="0.1">0.1x</option>
+      <option value="0.25">0.25x</option>
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+    </select>
+    <button id="shell-theme" type="button">Theme</button>
+    <button id="shell-maximize" type="button">Maximize</button>
+    <button id="shell-info" type="button">Info</button>
+    <button id="shell-reset" type="button">Reset</button>
+    <button id="shell-play" type="button">Play</button>
+  </div>
+
+  <div class="main-grid">
+    <div class="hero">
+      <div class="plot-panel">
+        <div class="plot-title">Harmonic Potential &amp; Energy Levels</div>
+        <canvas id="potentialCanvas"></canvas>
+      </div>
+      <div class="plot-panel">
+        <div class="plot-title">Wavefunction <span class="nc">ψ(x,t)</span></div>
+        <div class="plot-legend">
+          <div class="item"><div class="dot" style="background:#60a5fa"></div>Re(ψ)</div>
+          <div class="item"><div class="dot" style="background:#f472b6"></div>Im(ψ)</div>
+        </div>
+        <canvas id="wavefnCanvas"></canvas>
+      </div>
+      <div class="plot-panel">
+        <div class="plot-title">Probability density <span class="nc">|ψ|²</span></div>
+        <div class="plot-legend">
+          <div class="item"><div class="dot" style="background:#34d399"></div>|ψ|²</div>
+        </div>
+        <canvas id="probCanvas"></canvas>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <h2 class="sidebar-title">Controls</h2>
+
+      <section>
+        <h3 class="section-title">Parameters</h3>
+        <div class="ctrl-box">
+          <div class="stat-row">
+            <span class="stat-label">Time</span>
+            <span class="stat-num" id="statTime">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Energy <span class="dim">E<sub>n</sub></span></span>
+            <span class="stat-num" id="statEnergy">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Turning points ±<span class="dim">x</span><sub>tp</sub></span>
+            <span class="stat-num" id="statTurning">±0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Osc. length √(ℏ/mω)</span>
+            <span class="stat-num" id="statOscLen">0</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="section-title">Equations</h3>
+        <div class="ctrl-box">
+          <div class="equations">
+            <div>−(ℏ²/2m)&thinsp;ψ″ + ½&thinsp;mω²x²&thinsp;ψ = Eψ</div>
+            <div>E<sub>n</sub> = (n + ½)&thinsp;ℏω</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="section-title">Physics controls</h3>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <label class="ctrl-box-label" for="n">Quantum state (n)</label>
+            <span id="nVal" class="slider-val">3</span>
+          </div>
+          <input type="range" id="n" min="0" max="30" step="1" value="3">
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <label class="ctrl-box-label" for="mass">Mass (m)</label>
+            <span id="massVal" class="slider-val">1</span>
+          </div>
+          <input type="range" id="mass" min="0.7" max="1.2" step="0.05" value="1">
+        </div>
+        <div class="ctrl-box ctrl-box--slider">
+          <div class="ctrl-box-head">
+            <label class="ctrl-box-label" for="omega">Angular freq (ω)</label>
+            <span id="omegaVal" class="slider-val">1</span>
+          </div>
+          <input type="range" id="omega" min="0.7" max="1.2" step="0.05" value="1">
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div id="shell-info-modal">
+    <div class="modal-card">
+      <button id="shell-info-close" type="button">Close</button>
+      <h2>About this simulation</h2>
+      <p>This simulation models a 1D quantum harmonic oscillator in units where
+        ℏ = 1, with user-controlled mass m and angular frequency ω.</p>
+      <ul>
+        <li><strong>Harmonic potential:</strong> the parabolic potential
+          V(x) = ½&thinsp;mω²x² with the energy levels E<sub>n</sub> = (n + ½)ℏω;
+          the selected level is drawn between its classical turning points.</li>
+        <li><strong>Wavefunction:</strong> the real and imaginary parts of the
+          time-dependent eigenstate ψ(x,t) = ψ<sub>n</sub>(x)&thinsp;e<sup>−iE<sub>n</sub>t/ℏ</sup>.</li>
+        <li><strong>Probability density:</strong> |ψ(x,t)|², which is stationary
+          for an energy eigenstate.</li>
+      </ul>
+      <p>Use the sidebar to change the quantum state n (now 0–30 — the engine's
+        stable Hermite recurrence stays accurate at high n), the mass m, and the
+        angular frequency ω, and watch the eigenstate width and the energy
+        spacing change. The speed control only changes how fast the plotted
+        phase advances on screen.</p>
+    </div>
+  </div>
+</div>
+
+<script id="engine-inline">
+/* ENGINE:BEGIN */
+/* engine v1.0.0-dev | modules: core.scale, core.special, canvas.ticks, canvas.label, canvas.axes, canvas.fit, canvas.primitives, canvas.scale, controls.bind, shell, verify.audit | built 2026-08-05 | sha ef347f214db1 */
+window.Engine = window.Engine || {};
+const Engine = window.Engine;
+
+// ---- module core.scale ----
+Engine.scale = (function () {
+'use strict';
+// core.scale — linear mapping, clamping, and number formatting.
+// Harvest sources: ~12 inline linear-map copies across QM_sims (collapsed to one
+// factory); fmt from Sim_lab_sims/CM_sims/Collisions.html (-0-safe, U+2212 minus).
+// Layer 1: no physics vocabulary — operates on domains, ranges, and values.
+
+const MINUS = '−';
+
+/**
+ * Linear map from [d0,d1] to [r0,r1] with inversion.
+ * makeScale([0,10],[0,500]) -> s ; s(5)=250 ; s.invert(250)=5
+ */
+function makeScale(domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  const k = (r1 - r0) / (d1 - d0);
+  const s = (x) => r0 + (x - d0) * k;
+  s.invert = (y) => d0 + (y - r0) / k;
+  s.domain = [d0, d1];
+  s.range = [r0, r1];
+  return s;
+}
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Format a number for display: fixed digits, trailing zeros trimmed,
+ * "-0.000" scrubbed to "0", true minus sign (U+2212).
+ */
+function fmt(x, digits = 2) {
+  if (!Number.isFinite(x)) return String(x);
+  let s = x.toFixed(digits);
+  if (digits > 0) s = s.replace(/\.?0+$/, '');
+  if (s === '-0' || s === '' || s === '-') s = '0';
+  return s.replace('-', MINUS);
+}
+
+return { makeScale, clamp, lerp, fmt };
+})();
+
+// ---- module core.special ----
+Engine.special = (function () {
+'use strict';
+// core.special — special-function evaluations for series solutions.
+// Harvest sources (Sim_lab_sims/QM_sims/):
+//   hermiteNorm    Harmonic_Oscillator_High_Energies.html computeWavefunction
+//                  L524–584 — the STABLE normalized three-term recurrence on
+//                  psi_n directly (NOT the naive H_n * 1/sqrt(2^n n!) version
+//                  in Harmonic-oscillator.html, which overflows at high n).
+//   assocLegendre  Spherical_harmonics_Explorer.html L247–258 (negative-m
+//                  relation) reconciled with Hydrogen_atom_wavefunctions.html
+//                  L259–277 (|m|-only). BOTH source recurrences include the
+//                  Condon–Shortley phase (the `pmm *= -f*s` Numerical-Recipes
+//                  form); condonShortley=true (engine default, per plan) is
+//                  what both sims compute for m >= 0 and matches
+//                  scipy.special.lpmv. For m < 0 the Explorer applies the full
+//                  P_l^{-m} relation (kept here); Hydrogen substitutes |m|.
+//   assocLaguerre  Hydrogen_atom_wavefunctions.html L248–257.
+//   erf            2d_wavefunction_collapse_measurement.html erfApprox
+//                  L1070–1083 (Abramowitz & Stegun 7.1.26; max abs error
+//                  ~1.5e-7 — display/statistics grade, not quadrature grade).
+// Layer 1: no physics vocabulary — indices, arguments, values.
+
+/**
+ * Normalized Hermite function
+ *   hermiteNorm(n, x) = H_n(x) e^{-x^2/2} / sqrt(2^n n! sqrt(pi)),
+ * evaluated by the numerically stable orthonormal recurrence
+ *   f_0 = pi^{-1/4} e^{-x^2/2},  f_1 = sqrt(2) x f_0,
+ *   f_{k+1} = sqrt(2/(k+1)) x f_k - sqrt(k/(k+1)) f_{k-1}.
+ * Stays in [-1, 1]-scale values for any n (verified to n = 60 vs scipy);
+ * the naive H_n-then-normalize route overflows/loses digits at high n.
+ */
+function hermiteNorm(n, x) {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError(`hermiteNorm: n must be a non-negative integer, got ${n}`);
+  }
+  const f0 = Math.pow(Math.PI, -0.25) * Math.exp((-x * x) / 2);
+  if (n === 0) return f0;
+  let prev = f0;
+  let curr = Math.SQRT2 * x * f0;
+  for (let k = 1; k < n; k++) {
+    const next = Math.sqrt(2 / (k + 1)) * x * curr - Math.sqrt(k / (k + 1)) * prev;
+    prev = curr;
+    curr = next;
+  }
+  return curr;
+}
+
+/**
+ * Associated Legendre function P_l^m(x), integer l >= 0, -l <= m <= l,
+ * x in [-1, 1]. Returns 0 when |m| > l.
+ *
+ * condonShortley = true (default, plan-confirmed): includes the (-1)^m phase —
+ * identical to scipy.special.lpmv and to BOTH harvest sims' recurrences for
+ * m >= 0. condonShortley = false returns (-1)^m times that (phase removed,
+ * for m < 0 too, i.e. divided by (-1)^{|m|}).
+ * Negative m uses P_l^{-m} = (-1)^m (l-m)!/(l+m)! P_l^m (the Explorer's
+ * branch; Hydrogen_atom_wavefunctions instead substitutes |m| — callers
+ * needing that sim's behaviour should pass Math.abs(m) explicitly).
+ */
+function assocLegendre(l, m, x, { condonShortley = true } = {}) {
+  if (!Number.isInteger(l) || l < 0 || !Number.isInteger(m)) {
+    throw new RangeError(`assocLegendre: l must be a non-negative integer and m an integer, got l=${l}, m=${m}`);
+  }
+  const am = Math.abs(m);
+  if (am > l) return 0;
+
+  // Numerical-Recipes upward recurrence for P_am^am .. P_l^am (CS phase built in).
+  let pmm = 1;
+  if (am > 0) {
+    const s = Math.sqrt(Math.max(0, (1 - x) * (1 + x)));
+    let f = 1;
+    for (let i = 1; i <= am; i++) {
+      pmm *= -f * s;
+      f += 2;
+    }
+  }
+  let p;
+  if (l === am) {
+    p = pmm;
+  } else {
+    let pmmp1 = x * (2 * am + 1) * pmm;
+    if (l === am + 1) {
+      p = pmmp1;
+    } else {
+      let pll = 0;
+      for (let ll = am + 2; ll <= l; ll++) {
+        pll = ((2 * ll - 1) * x * pmmp1 - (ll + am - 1) * pmm) / (ll - am);
+        pmm = pmmp1;
+        pmmp1 = pll;
+      }
+      p = pll;
+    }
+  }
+
+  if (m < 0) {
+    // P_l^{-am} = (-1)^{am} (l-am)!/(l+am)! P_l^{am}; ratio as a running
+    // product 1/((l-am+1)...(l+am)) to avoid factorial overflow.
+    let ratio = 1;
+    for (let i = l - am + 1; i <= l + am; i++) ratio /= i;
+    p *= (am % 2 === 0 ? 1 : -1) * ratio;
+  }
+  if (!condonShortley && am % 2 === 1) p = -p;
+  return p;
+}
+
+/**
+ * Generalized (associated) Laguerre polynomial L_n^{(k)}(x) by the standard
+ * three-term recurrence; matches scipy.special.genlaguerre(n, k)(x).
+ * n is the degree (>= 0 integer); k the order parameter.
+ */
+function assocLaguerre(n, k, x) {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError(`assocLaguerre: n must be a non-negative integer, got ${n}`);
+  }
+  if (n === 0) return 1;
+  if (n === 1) return 1 + k - x;
+  let Lp = 1;
+  let Lc = 1 + k - x;
+  for (let i = 1; i < n; i++) {
+    const Ln = ((2 * i + 1 + k - x) * Lc - (i + k) * Lp) / (i + 1);
+    Lp = Lc;
+    Lc = Ln;
+  }
+  return Lc;
+}
+
+/**
+ * Error function erf(x), Abramowitz & Stegun 7.1.26 rational approximation.
+ * Max absolute error ~1.5e-7 over all x (odd in x; -> +/-1 for large |x|).
+ * Adequate for cumulative-mass and display metrics; not for high-precision
+ * quadrature.
+ */
+function erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const p = 0.3275911;
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const t = 1 / (1 + p * ax);
+  const y = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t) * Math.exp(-ax * ax);
+  return sign * y;
+}
+
+return { hermiteNorm, assocLegendre, assocLaguerre, erf };
+})();
+
+// ---- module canvas.ticks ----
+Engine.ticks = (function () {
+'use strict';
+// canvas.ticks — nice tick placement and tick-label formatting for axes.
+// Harvest source: Sim_lab_sims/QM_sims/Single_Gaussian_plot.html genTicks
+// (1/2/5×10ⁿ step selection, dedupe, degenerate-range guard) plus its inline
+// tick-label formatting, generalized to any range. Canvas layer: numbers only.
+
+const MINUS = '−';
+
+/**
+ * Nice tick positions covering [min, max], roughly approxN of them.
+ * Steps are 1, 2, or 5 × 10ⁿ; result is deduped and ascending.
+ * Degenerate range (max ≈ min) returns [min].
+ */
+function niceTicks(min, max, approxN = 8) {
+  if (max - min < 1e-12) return [min];
+  const range = max - min, raw = range / approxN;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw))), r2 = raw / mag;
+  let step;
+  if (r2 <= 1.5) step = mag;
+  else if (r2 <= 3.5) step = 2 * mag;
+  else if (r2 <= 7.5) step = 5 * mag;
+  else step = 10 * mag;
+  const ticks = [];
+  let s = Math.ceil(min / step) * step;
+  for (; s <= max + step * 0.01; s += step) {
+    if (s >= min - step * 0.01 && s <= max + step * 0.01) ticks.push(Math.round(s / step) * step);
+  }
+  const seen = new Set();
+  return ticks.filter((t) => { if (seen.has(t)) return false; seen.add(t); return true; });
+}
+
+/**
+ * Format one tick value for the axis, given the full axis range:
+ * near-zero → "0"; wide ranges → 0–1 decimals; narrow ranges → enough decimals
+ * to distinguish neighbors (uniform per axis); true minus sign (U+2212).
+ */
+function tickLabel(v, range) {
+  if (!Number.isFinite(v)) return String(v);
+  const r = Math.abs(range) || 1;
+  if (Math.abs(v) < r * 1e-9) return '0';
+  let s;
+  if (r > 2) {
+    s = Math.abs(v) >= 10 ? String(Math.round(v)) : v.toFixed(1);
+  } else {
+    const d = Math.max(2, Math.min(6, Math.ceil(-Math.log10(r)) + 2));
+    s = v.toFixed(d);
+  }
+  return s.replace('-', MINUS);
+}
+
+return { niceTicks, tickLabel };
+})();
+
+// ---- module canvas.label ----
+Engine.label = (function () {
+'use strict';
+// canvas.label — text placement helpers, replacing the labelAt name collision:
+// the two CM L4 sims exported incompatible functions under one name, split here.
+// Harvest sources: Sim_lab_sims/CM_sims/L4-Projectile motion.html labelAt
+// (measureText + canvas-bounds clamping, halo, alpha) → textBox;
+// Sim_lab_sims/CM_sims/L4-Forces on objects explorer.html labelAt (radial
+// placement beyond a leader tip, direction-based alignment) → callout.
+// Canvas layer: text, boxes, and pixels only.
+
+function parseAnchor(anchor) {
+  let a = (anchor === 'c' || anchor === 'center') ? '' : String(anchor || 'nw');
+  const vert = a.startsWith('n') ? 'n' : a.startsWith('s') ? 's' : 'c';
+  if (vert !== 'c') a = a.slice(1);
+  const horiz = a === 'w' ? 'w' : a === 'e' ? 'e' : 'c';
+  return { vert, horiz };
+}
+
+/**
+ * Draw text anchored at (x, y), clamped so it never leaves the canvas.
+ * anchor: which point of the text box (x, y) is — 'nw','n','ne','w','c','e',
+ * 'sw','s','se' (default 'nw': text extends right and down).
+ * opts: {anchor, pad=3, color, bg (string, or true for default dark), font,
+ * alpha, halo (string, or true for default light outline)}.
+ * Returns the drawn box {x, y, w, h} in CSS pixels.
+ */
+function textBox(ctx, text, x, y, opts = {}) {
+  const pad = opts.pad != null ? opts.pad : 3;
+  ctx.font = opts.font || '12px system-ui,sans-serif';
+  const tw = ctx.measureText(text).width;
+  const fpx = /(\d+\.?\d*)px/.exec(ctx.font);
+  const th = fpx ? parseFloat(fpx[1]) : 12;
+  const dpr = globalThis.devicePixelRatio || 1;
+  const W = opts.w != null ? opts.w : (ctx.canvas ? ctx.canvas.width / dpr : Infinity);
+  const H = opts.h != null ? opts.h : (ctx.canvas ? ctx.canvas.height / dpr : Infinity);
+  const { vert, horiz } = parseAnchor(opts.anchor);
+  let lx = horiz === 'w' ? x : horiz === 'e' ? x - tw : x - tw / 2;
+  let ty = vert === 'n' ? y : vert === 's' ? y - th : y - th / 2;
+  lx = Math.max(pad, Math.min(lx, W - tw - pad));
+  ty = Math.max(pad, Math.min(ty, H - th - pad));
+  ctx.save();
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  if (opts.bg) {
+    ctx.fillStyle = typeof opts.bg === 'string' ? opts.bg : 'rgba(8,10,14,.82)';
+    ctx.fillRect(lx - pad, ty - pad, tw + 2 * pad, th + 2 * pad);
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  if (opts.halo) {
+    ctx.strokeStyle = typeof opts.halo === 'string' ? opts.halo : 'rgba(255,255,255,.78)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(text, lx, ty);
+  }
+  ctx.fillStyle = opts.color || '#94a3b8';
+  ctx.fillText(text, lx, ty);
+  ctx.restore();
+  return { x: lx - pad, y: ty - pad, w: tw + 2 * pad, h: th + 2 * pad };
+}
+
+/**
+ * Place a label just beyond a tip point, along the anchor→tip direction, so
+ * labels of differently-pointing leaders fan out radially instead of piling up.
+ * anchorXY/tipXY: [x, y] pairs (e.g. an arrow's origin and returned {ex, ey}).
+ * opts: textBox opts plus {off=15 (px beyond tip), leader (draw a thin line
+ * from tip to the label)}. Returns the drawn box {x, y, w, h}.
+ */
+function callout(ctx, text, anchorXY, tipXY, opts = {}) {
+  const [ax, ay] = anchorXY, [tx, ty] = tipXY;
+  let ux = tx - ax, uy = ty - ay;
+  const L = Math.hypot(ux, uy);
+  if (L < 1e-6) { ux = 0; uy = -1; } else { ux /= L; uy /= L; }
+  const off = opts.off != null ? opts.off : 15;
+  const bx = tx + ux * off, by = ty + uy * off;
+  const anchor = ((uy > 0.35 ? 'n' : uy < -0.35 ? 's' : '') +
+                  (ux > 0.35 ? 'w' : ux < -0.35 ? 'e' : '')) || 'c';
+  if (opts.leader) {
+    ctx.save();
+    ctx.strokeStyle = opts.color || '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = opts.alpha != null ? opts.alpha : 0.7;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.restore();
+  }
+  return textBox(ctx, text, bx, by, Object.assign({}, opts, { anchor }));
+}
+
+return { textBox, callout };
+})();
+
+// ---- module canvas.axes ----
+Engine.axes = (function () {
+'use strict';
+// canvas.axes — axis frame/grid/tick rendering and a clipped strip chart.
+// Harvest sources: Sim_lab_sims/CM_sims/L4-Projectile motion.html drawPlot
+// (grid + tick-label + axis-label + frame structure, generalized to any view)
+// and Sim_lab_sims/CM_sims/L17-The damped HO.html draw() (chart frame,
+// clip-rect, multi-series polylines with tip markers), simplified to a
+// reusable component. Canvas layer: values, series, and pixels only.
+
+const {niceTicks, tickLabel} = Engine.ticks;
+const {textBox} = Engine.label;
+/**
+ * Draw grid, ticks, tick labels, axis labels, and frame for a view
+ * (from canvas.scale makeView).
+ * opts: {xLabel, yLabel, xTicks=8, yTicks=5 (approx counts), grid=true,
+ * frame=true, gridColor, frameColor, tickColor, font}.
+ */
+function drawAxes(ctx, view, opts = {}) {
+  const wd = view.world;
+  const [xL, yT] = view.toPx(wd.x0, wd.y1);
+  const [xR, yB] = view.toPx(wd.x1, wd.y0);
+  const grid = opts.grid !== false;
+  const gridColor = opts.gridColor || 'rgba(148,163,184,.28)';
+  const tickColor = opts.tickColor || '#cbd5e1';
+  const font = opts.font || '11px system-ui,sans-serif';
+  const xRange = wd.x1 - wd.x0, yRange = wd.y1 - wd.y0;
+  ctx.lineWidth = 1;
+  for (const x of niceTicks(wd.x0, wd.x1, opts.xTicks || 8)) {
+    const [px] = view.toPx(x, wd.y0);
+    if (grid) {
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath(); ctx.moveTo(px, yT); ctx.lineTo(px, yB); ctx.stroke();
+    }
+    textBox(ctx, tickLabel(x, xRange), px, yB + 5, { anchor: 'n', color: tickColor, font });
+  }
+  for (const y of niceTicks(wd.y0, wd.y1, opts.yTicks || 5)) {
+    const [, py] = view.toPx(wd.x0, y);
+    if (grid) {
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath(); ctx.moveTo(xL, py); ctx.lineTo(xR, py); ctx.stroke();
+    }
+    textBox(ctx, tickLabel(y, yRange), xL - 5, py, { anchor: 'e', color: tickColor, font });
+  }
+  if (opts.frame !== false) {
+    ctx.strokeStyle = opts.frameColor || 'rgba(203,213,225,.4)';
+    ctx.strokeRect(xL, yT, xR - xL, yB - yT);
+  }
+  if (opts.xLabel) textBox(ctx, opts.xLabel, xR, yB + 18, { anchor: 'ne', color: tickColor, font });
+  if (opts.yLabel) textBox(ctx, opts.yLabel, xL, yT - 4, { anchor: 'sw', color: tickColor, font });
+}
+
+/**
+ * Rolling multi-series chart: push samples, draw polylines clipped to the
+ * view's plot rect with a dot at each series tip.
+ * series: [{color, width=2}] — one entry per y-stream.
+ * push(t, ...ys) appends one sample per series; oldest samples are dropped
+ * beyond maxPoints. draw(ctx, view) maps (t, y) through the view.
+ */
+function makeStripChart({ maxPoints = 2000, series = [] } = {}) {
+  const ts = [];
+  const ys = series.map(() => []);
+  return {
+    push(t, ...vals) {
+      ts.push(t);
+      for (let i = 0; i < ys.length; i++) ys[i].push(vals[i]);
+      while (ts.length > maxPoints) {
+        ts.shift();
+        for (const a of ys) a.shift();
+      }
+    },
+    clear() {
+      ts.length = 0;
+      for (const a of ys) a.length = 0;
+    },
+    get length() { return ts.length; },
+    draw(ctx, view) {
+      if (!ts.length) return;
+      const wd = view.world;
+      const [xL, yT] = view.toPx(wd.x0, wd.y1);
+      const [xR, yB] = view.toPx(wd.x1, wd.y0);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(xL, yT, xR - xL, yB - yT); ctx.clip();
+      for (let si = 0; si < series.length; si++) {
+        const s = series[si], a = ys[si];
+        ctx.strokeStyle = s.color || '#38bdf8';
+        ctx.lineWidth = s.width != null ? s.width : 2;
+        ctx.beginPath();
+        for (let i = 0; i < ts.length; i++) {
+          const [px, py] = view.toPx(ts[i], a[i]);
+          if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        }
+        ctx.stroke();
+        const [tx, ty] = view.toPx(ts[ts.length - 1], a[a.length - 1]);
+        ctx.fillStyle = s.color || '#38bdf8';
+        ctx.beginPath(); ctx.arc(tx, ty, 3.5, 0, 6.2832); ctx.fill();
+      }
+      ctx.restore();
+    },
+  };
+}
+
+return { drawAxes, makeStripChart };
+})();
+
+// ---- module canvas.fit ----
+Engine.fit = (function () {
+'use strict';
+// canvas.fit — DPR-aware canvas backing-store sizing.
+// Harvest sources: Sim_lab_sims/CM_sims/L6-The harmonic oscillator.html fit()
+// (setTransform reset before scale — fixes the cumulative-DPR bug) merged with
+// Sim_lab_sims/SR_sims/L09-s1-worldline-length-and-proper-time-shell.html fit()
+// (Math.max(1, …) zero-size guard). Canvas layer: pixels and rectangles only.
+
+/**
+ * Size a canvas's backing store to its CSS box × devicePixelRatio, reset the
+ * context transform, and scale so 1 drawing unit = 1 CSS pixel.
+ * Call at the top of every draw; returns the CSS-pixel size {w, h}.
+ */
+function fit(canvas, ctx) {
+  const dpr = globalThis.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(r.width * dpr));
+  const h = Math.max(1, Math.floor(r.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  return { w: r.width, h: r.height };
+}
+
+return { fit };
+})();
+
+// ---- module canvas.primitives ----
+Engine.primitives = (function () {
+'use strict';
+// canvas.primitives — small shared path/glyph/style helpers.
+// Harvest sources: Sim_lab_sims/CM_sims/L35-Orbits.html roundRect (most
+// parameterized of the ~22 inline copies), Sim_lab_sims/CM_sims/L36-Scattering
+// Extension.html css() (the only cssVar with a fallback), Sim_lab_sims/CM_sims/
+// L6-The harmonic oscillator.html diamond(); dashLine factors out the
+// setLineDash idiom repeated across the corpus. Canvas layer: shapes only.
+
+/**
+ * Rounded-rectangle path; opts.fill / opts.stroke may be true (use the
+ * context's current style) or a style string (set it, then paint).
+ */
+function roundRect(ctx, x, y, w, h, r, opts = {}) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+  if (opts.fill) { if (typeof opts.fill === 'string') ctx.fillStyle = opts.fill; ctx.fill(); }
+  if (opts.stroke) { if (typeof opts.stroke === 'string') ctx.strokeStyle = opts.stroke; ctx.stroke(); }
+}
+
+/**
+ * Dashed line segment; dash state is saved/restored so it never leaks.
+ * opts: {color, width, dash=[5,4], alpha}.
+ */
+function dashLine(ctx, x0, y0, x1, y1, opts = {}) {
+  ctx.save();
+  if (opts.color) ctx.strokeStyle = opts.color;
+  if (opts.width != null) ctx.lineWidth = opts.width;
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  ctx.setLineDash(opts.dash || [5, 4]);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Read a CSS custom property from :root, with a fallback when it is unset
+ * (or when no DOM exists, e.g. under node tests).
+ */
+function cssVar(name, fallback) {
+  if (typeof document === 'undefined') return fallback;
+  const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return s || fallback;
+}
+
+/**
+ * Diamond glyph centered at (x, y) with half-diagonal r; opts.fill /
+ * opts.stroke as in roundRect.
+ */
+function diamond(ctx, x, y, r, opts = {}) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.lineTo(x + r, y);
+  ctx.lineTo(x, y + r);
+  ctx.lineTo(x - r, y);
+  ctx.closePath();
+  if (opts.fill) { if (typeof opts.fill === 'string') ctx.fillStyle = opts.fill; ctx.fill(); }
+  if (opts.stroke) { if (typeof opts.stroke === 'string') ctx.strokeStyle = opts.stroke; ctx.stroke(); }
+}
+
+return { roundRect, dashLine, cssVar, diamond };
+})();
+
+// ---- module canvas.scale ----
+Engine.view = (function () {
+'use strict';
+// canvas.scale — world↔screen view mapping with y-flip and aspect handling.
+// Harvest sources: Sim_lab_sims/SR_sims/L09-s1-worldline-length-and-proper-time-shell.html
+// computeView/toPx/toWorld (aspect-locked, centered plot rect) + Sim_lab_sims/CM_sims/
+// L36-Scattering Extension.html W2S/S2W (forward + inverse pair, needed for dragging).
+// Canvas layer: maps abstract (x, y) coordinates to pixels; no physics vocabulary.
+
+const {makeScale} = Engine.scale;
+function padBox(pad) {
+  if (typeof pad === 'number') return { l: pad, r: pad, t: pad, b: pad };
+  const p = pad || {};
+  return { l: p.l || 0, r: p.r || 0, t: p.t || 0, b: p.b || 0 };
+}
+
+/**
+ * makeView({world:{x0,y0,x1,y1}, screen:{w,h,pad}, aspect:'lock'|'stretch'}) -> view
+ * World y increases UP, screen y increases DOWN — the flip lives here, once.
+ * 'lock'   : one uniform px-per-unit scale (min of both axes), plot centered in
+ *            the padded rect — shapes keep their aspect ratio.
+ * 'stretch': x and y scaled independently to fill the padded rect exactly.
+ * pad: number (all sides) or {l,r,t,b}.
+ */
+function makeView({ world, screen, aspect = 'lock' }) {
+  const { x0, y0, x1, y1 } = world;
+  const { w, h } = screen;
+  const p = padBox(screen.pad);
+  const innerW = Math.max(1, w - p.l - p.r);
+  const innerH = Math.max(1, h - p.t - p.b);
+  let X, Y;
+  if (aspect === 'stretch') {
+    X = makeScale([x0, x1], [p.l, p.l + innerW]);
+    Y = makeScale([y0, y1], [p.t + innerH, p.t]);
+  } else {
+    const s = Math.min(innerW / (x1 - x0), innerH / (y1 - y0));
+    const usedW = (x1 - x0) * s, usedH = (y1 - y0) * s;
+    const offX = p.l + (innerW - usedW) / 2;
+    const offY = p.t + (innerH - usedH) / 2;
+    X = makeScale([x0, x1], [offX, offX + usedW]);
+    Y = makeScale([y0, y1], [offY + usedH, offY]);
+  }
+  return {
+    world: { x0, y0, x1, y1 },
+    screen: { w, h, pad: p },
+    aspect,
+    x: X,
+    y: Y,
+    toPx: (x, y) => [X(x), Y(y)],
+    toWorld: (px, py) => [X.invert(px), Y.invert(py)],
+    pxPerUnit: (X(x1) - X(x0)) / (x1 - x0),
+    pxPerUnitY: (Y(y0) - Y(y1)) / (y1 - y0),
+  };
+}
+
+return { makeView };
+})();
+
+// ---- module controls.bind ----
+Engine.bind = (function () {
+'use strict';
+// controls.bind — declarative control-to-state binding (Layer: controls).
+// Harvest merge: QM_sims/Quantum_tunneling_Plane_Wave.html wireSlider (~L2603;
+// the clamp + NaN guard) × SR_sims/L07-s1-Michelson_Morley_experiment_3D.html
+// bind (~L3050; the state-key + fmt shape). Bounds are read from the input
+// element's own min/max attributes — never duplicated in JS.
+//
+// Each binder returns {set(v), refresh()}:
+//   set(v)    — programmatic write: sanitizes, updates state + element +
+//               readout, and fires onChange (like a user gesture).
+//   refresh() — push the current state[key] back into the UI without firing
+//               onChange (use after external state mutation, e.g. a preset).
+
+const {clamp, fmt} = Engine.scale;
+function mustGet(id, who) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(who + ': no element with id "' + id + '"');
+  return el;
+}
+
+function sanitizeNum(el, v) {
+  let x = typeof v === 'number' ? v : parseFloat(v);
+  const lo = parseFloat(el.min), hi = parseFloat(el.max);
+  if (Number.isNaN(x)) x = Number.isFinite(lo) ? lo : 0;   // PW NaN guard
+  if (Number.isFinite(lo) && Number.isFinite(hi)) x = clamp(x, lo, hi);
+  return x;
+}
+
+/**
+ * Bind a range/number input to state[key].
+ * opts: { out: id-of-readout-element, fmt: v => string, onChange: v => {} }
+ */
+function bindSlider(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindSlider');
+  const out = opts.out ? document.getElementById(opts.out) : null;
+  const format = opts.fmt || (v => fmt(v));
+  const show = v => { if (out) out.textContent = format(v); };
+
+  el.addEventListener('input', () => {
+    const v = sanitizeNum(el, el.value);
+    state[key] = v;
+    show(v);
+    if (opts.onChange) opts.onChange(v);
+  });
+
+  function write(v, fire) {
+    v = sanitizeNum(el, v);
+    state[key] = v;
+    el.value = String(v);
+    show(v);
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  // Boot: seed state from the markup value, or push pre-set state into the UI.
+  if (state[key] === undefined) { state[key] = sanitizeNum(el, el.value); show(state[key]); }
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+/** Bind a checkbox to boolean state[key]. opts: { onChange: v => {} } */
+function bindToggle(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindToggle');
+
+  el.addEventListener('change', () => {
+    state[key] = !!el.checked;
+    if (opts.onChange) opts.onChange(state[key]);
+  });
+
+  function write(v, fire) {
+    v = !!v;
+    state[key] = v;
+    el.checked = v;
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  if (state[key] === undefined) state[key] = !!el.checked;
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+/**
+ * Bind a <select> to state[key]. opts: { parse: str => value, onChange }.
+ * parse defaults to identity (string options); pass parseFloat for numeric.
+ */
+function bindSelect(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindSelect');
+  const parse = opts.parse || (v => v);
+
+  el.addEventListener('change', () => {
+    state[key] = parse(el.value);
+    if (opts.onChange) opts.onChange(state[key]);
+  });
+
+  function write(v, fire) {
+    state[key] = v;
+    el.value = String(v);
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  if (state[key] === undefined) state[key] = parse(el.value);
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+return { bindSlider, bindToggle, bindSelect };
+})();
+
+// ---- module shell ----
+Engine.shell = (function () {
+'use strict';
+// shell/shell.js — the canonical Shell runtime (Layer 3): rAF frame loop,
+// play/pause/speed/reset, maximize, theme, info modal, formal region,
+// collapsible panels, guided-inquiry stepper, lecture mode.
+//
+// Base: SR_sims/L09-s1-worldline-length-and-proper-time-shell.html L618-816
+// (md5-identical in 10 SR files). Every drift feature found across the 57 sim
+// Shell copies is folded in per shell/HARVEST-NOTES.md — include-always
+// features are inert when the DOM lacks the element; behavior splits sit
+// behind cfg flags. Line-harvest sources:
+//   stepUnready                           — CM L37-Kepler's Laws
+//   playLocked / setPlayLocked / #play-hint — CM Galperins_Billiard
+//   setPlayEnabled / currentGated gating  — CM L36-The Energy of the Orbit-new
+//   finishInquiry / onComplete            — CM L9-The pendulum
+//   data-manual-gate opt-out + inqNext export — CM Free-Body Diagram Builder
+//   scroll-steps-to-top                   — SR L10-s2
+//   onExploreMode plumbing (+ aliases)    — SR L00-s1 (aliases: L01-s1, L08-s2)
+//   'fastforward' lecture landing         — SR L19-s2
+//   #shell-speed markup read at boot      — CM L1-Solar System Orbits
+//   stepReady marks current dot done      — CM L35-Orbits
+//   formal-open root class + lecture refit tail — SR L07-s1
+//   fixed-dt accumulator frame mode       — QM Quantum_Tunneling_Gaussian_Wave L2230-2253
+//
+// BUILD ALIASING: the registry entry "shell" carries "alias": "Shell", so
+// build.py emits `window.Shell = Engine.shell;` right after this module's
+// IIFE — the frozen 57-sim API (`Shell.init({...})`, `Shell.stepReady()`,
+// `Shell.step`, ...) keeps working unchanged. The speed/playing/step/totalSteps
+// getter properties of that API are installed onto the built namespace object
+// by init() (see _installGetters below), because the build's plain
+// `return {exports}` shape cannot carry accessors.
+
+const CFG_DEFAULTS = {
+  resumeOnReset: true,        // true → Reset resumes play | false → leave play state alone | 'pause' → force pause
+  autoplay: true,             // start the loop playing after init
+  speed: 1,                   // fallback speed; a #shell-speed markup value wins at boot (CM L1-Solar fix)
+  dtClamp: 0.05,              // max frame dt (seconds) before speed scaling — frame-stall guard
+  lectureLanding: 'last',     // 'last' | 'first' | 'fastforward' (replay every onStep, SR L19-s2)
+  finishFastForward: false,   // Finish/Skip replays remaining onStep(k) before completing (CM L9)
+  resumeOnFinish: false,      // finishInquiry ends with setPlaying(true) (CM L9 tail)
+  resetBeforeFirstStep: true, // onReset before the stepper's first onStep(0) — fixes the step-0 clobber
+  scrollStepsToTop: true,     // scroll #inq-cards to top on step change (inert when pane not scrollable)
+  gateLocksPlay: false,       // data-gate steps also disable ▶ Play until stepReady (CM L36-Energy)
+};
+
+let onFrame = () => {}, onReset = () => {}, onResize = () => {}, onStep = () => {};
+let onComplete = () => {}, onExploreMode = () => {};
+let cfg = Object.assign({}, CFG_DEFAULTS);
+let frame = null;               // opt-in {mode:'fixed', dt, maxSubsteps}
+let root = null;
+let playing = true, speed = 1, last = 0, started = false, acc = 0;
+let inqStep = 0, inqTotal = 0;  // guided-inquiry stepper (shell-owned)
+let playLocked = false;         // Galperins: prediction gate can hold ▶ Play shut
+
+function loop(now) {
+  let dt = (now - last) / 1000;
+  if (dt > cfg.dtClamp) dt = cfg.dtClamp;
+  last = now;
+  if (playing) {
+    if (frame && frame.mode === 'fixed') {
+      // Fixed-dt accumulator (QM QTGW L2230-2253): FPS-independent PDE
+      // stepping with a per-frame substep cap; the backlog is dropped when the
+      // cap hits so a stalled tab never triggers a catch-up burst.
+      acc += dt * speed;
+      let n = Math.floor(acc / frame.dt);
+      const cap = frame.maxSubsteps || 600;
+      if (n > cap) { n = cap; acc = 0; } else { acc -= n * frame.dt; }
+      for (let i = 0; i < n; i++) onFrame(frame.dt);
+    } else {
+      onFrame(dt * speed);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function refit() { onResize(); last = performance.now(); }
+
+function setPlaying(p) {
+  if (p && playLocked) return;   // Galperins: prediction gate holds ▶ shut
+  playing = p; last = performance.now();
+  const b = document.getElementById('shell-play');
+  if (b) { b.textContent = p ? '⏸ Pause' : '▶ Play'; b.classList.toggle('paused', !p); }
+}
+
+// Enable/disable the ▶ Play button without the playLocked hint (CM L36-Energy).
+function setPlayEnabled(on) {
+  const b = document.getElementById('shell-play'); if (b) b.disabled = !on;
+}
+
+// Hard-lock ▶ Play behind a prediction commitment, with the #play-hint pill
+// (CM Galperins_Billiard). Collapsing the inquiry always unlocks.
+function setPlayLocked(locked) {
+  playLocked = locked;
+  const b = document.getElementById('shell-play');
+  const hint = document.getElementById('play-hint');
+  if (b) {
+    b.disabled = locked;
+    b.title = locked ? 'Commit a prediction to unlock' : '';
+  }
+  if (hint) hint.classList.toggle('show', locked);
+  if (locked && playing) setPlaying(false);
+}
+
+function setMaximized(on) {
+  root.classList.toggle('shell-max', on);
+  const maxBtn = document.getElementById('shell-maximize');
+  if (maxBtn) {
+    maxBtn.classList.toggle('active', on);
+    maxBtn.textContent = on ? '⤡ Minimize' : '⛶ Maximize';
+  }
+  requestAnimationFrame(refit);
+}
+
+// "Free exploration" = the guided inquiry is out of the way (collapsed or
+// lecture mode). SIMs use onExploreMode to unlock their full control surface
+// (SR L00-s1); per-sim DOM toggling belongs in that handler, never here.
+function isFreeExplore() {
+  return root.classList.contains('inquiry-collapsed') || root.classList.contains('lecture-mode');
+}
+function notifyExploreMode() { onExploreMode(isFreeExplore()); }
+
+// Dynamic sidebar: collapse the guided-inquiry zone to its restore bar (on
+// answer or Skip) or expand it again (restore-bar click). Refit canvases so
+// the sidebar height change never distorts the hero.
+function setInquiryCollapsed(on) {
+  root.classList.toggle('inquiry-collapsed', on);
+  if (on) setPlayLocked(false);   // Galperins: collapsing always unlocks ▶
+  notifyExploreMode();
+  requestAnimationFrame(refit);
+}
+
+function setLectureMode(on) {
+  root.classList.toggle('lecture-mode', on);
+  const b = document.getElementById('shell-lecture');
+  if (b) b.classList.toggle('active', on);
+  if (on) {
+    const cards = inqCards();
+    if (cards.length) {
+      if (cfg.lectureLanding === 'fastforward') {
+        // SR L19-s2: incremental onStep — replay every step so the lecture
+        // scene matches the fully-revealed post-inquiry state.
+        for (let i = 0; i < cards.length; i++) onStep(i);
+        inqShow(cards.length - 1);
+      } else if (cfg.lectureLanding === 'first') {
+        inqShow(0);
+      } else {
+        inqShow(cards.length - 1);
+      }
+    }
+    setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: lecture never leaves ▶ dead
+  } else {
+    setInquiryCollapsed(false);
+    inqShow(0);
+  }
+  notifyExploreMode();
+  requestAnimationFrame(refit);   // SR L07-s1: refit tail after the mode swap
+}
+
+// ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
+// The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
+// shell shows ONE at a time, builds the dots, and drives the Next/Finish button.
+// A card marked data-gate keeps Next disabled until the student clicks a .choice
+// inside it (auto-detected) or the SIM calls Shell.stepReady(). A card marked
+// data-manual-gate opts out of the .choice auto-detection (FBD) — the SIM must
+// call stepReady() itself.
+function inqCards() { return root.querySelectorAll('#inq-cards .inq-step'); }
+function currentGated() {
+  const card = inqCards()[inqStep];
+  return !!(card && card.hasAttribute('data-gate') && !card.hasAttribute('data-ready'));
+}
+function inqUpdatePager() {
+  const cards = inqCards();
+  const prev = document.getElementById('inq-prev');
+  const pnext = document.getElementById('inq-pager-next');
+  if (prev) prev.disabled = inqStep <= 0;
+  if (pnext) pnext.disabled = inqStep >= cards.length - 1 || (cfg.gateLocksPlay && currentGated());
+}
+function inqShow(n) {
+  const cards = inqCards();
+  if (!cards.length) return;
+  inqStep = Math.max(0, Math.min(n, cards.length - 1));
+  cards.forEach((c, i) => c.classList.toggle('active', i === inqStep));
+  root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === inqStep);
+    d.classList.toggle('done', i < inqStep);
+  });
+  const next = document.getElementById('inq-next');
+  if (next) {
+    next.disabled = currentGated();
+    next.textContent = (inqStep >= cards.length - 1) ? 'Finish' : 'Next →';
+  }
+  if (cfg.gateLocksPlay) {   // L36-Energy: gate ▶ Play behind the current step
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  inqUpdatePager();
+  onStep(inqStep);
+  if (cfg.scrollStepsToTop) {   // SR L10-s2: long cards land scrolled to the top
+    const host = document.getElementById('inq-cards');
+    if (host) host.scrollTop = 0;
+  }
+  requestAnimationFrame(refit);
+}
+function inqPrev() {
+  if (inqStep > 0) inqShow(inqStep - 1);
+}
+function inqPagerNext() {
+  const cards = inqCards();
+  if (inqStep < cards.length - 1) inqShow(inqStep + 1);
+}
+function inqNext() {
+  const cards = inqCards();
+  if (inqStep >= cards.length - 1) finishInquiry();   // Finish = completed state + hide the inquiry
+  else inqShow(inqStep + 1);
+}
+// Finish OR Skip (CM L9): optionally fast-forward through any remaining steps
+// (applying each onStep so the scene ends in the SAME fully-revealed state as
+// completing the inquiry), let the SIM set up free exploration via
+// onComplete(), collapse the zone, and optionally leave the sim playing.
+// With default flags this reduces to the canonical Finish (collapse only).
+function finishInquiry() {
+  const cards = inqCards();
+  if (cfg.finishFastForward && cards.length) {
+    for (let k = inqStep + 1; k < cards.length; k++) onStep(k);
+    inqStep = cards.length - 1;
+    root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === inqStep);
+      d.classList.toggle('done', i < inqStep);
+    });
+  }
+  onComplete();
+  setInquiryCollapsed(true);
+  if (cfg.resumeOnFinish) setPlaying(true);
+}
+// SIM may call this to satisfy a data-gate step's requirement (e.g. "watched").
+function stepReady() {
+  const card = inqCards()[inqStep];
+  if (card) card.setAttribute('data-ready', '');
+  const next = document.getElementById('inq-next'); if (next) next.disabled = false;
+  // CM L35-Orbits: mark this dot as done immediately upon commit.
+  const dot = root.querySelectorAll('#inq-dots .inq-dot')[inqStep];
+  if (dot) dot.classList.add('done');
+  if (cfg.gateLocksPlay) { setPlayEnabled(true); inqUpdatePager(); }
+}
+// Revoke the current card's readiness (CM L37-Kepler's Laws) — e.g. the
+// student withdrew a committed prediction.
+function stepUnready() {
+  const card = inqCards()[inqStep];
+  if (card) card.removeAttribute('data-ready');
+  const next = document.getElementById('inq-next');
+  // Mirror inqShow: only disable Next when the card actually gates.
+  if (next) next.disabled = !!(card && card.hasAttribute('data-gate'));
+  if (cfg.gateLocksPlay) {
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+    inqUpdatePager();
+  }
+}
+
+function wire() {
+  const play = document.getElementById('shell-play');
+  const reset = document.getElementById('shell-reset');
+  const spd = document.getElementById('shell-speed');
+  const maxBtn = document.getElementById('shell-maximize');
+  const skip = document.getElementById('aside-inquiry-skip');
+  const restore = document.getElementById('aside-inquiry-restore');
+  const tFormal = document.getElementById('toggle-formal');
+
+  if (play) play.addEventListener('click', () => { if (!play.disabled) setPlaying(!playing); });
+  // Reset zeroes state; whether the loop then plays is cfg-driven (tri-state).
+  if (reset) reset.addEventListener('click', () => {
+    onReset(); last = performance.now(); acc = 0;
+    if (cfg.resumeOnReset === 'pause') setPlaying(false);
+    else if (cfg.resumeOnReset) setPlaying(true);
+    // resumeOnReset:false → leave the play state as the student had it
+  });
+  if (spd) {
+    // CM L1-Solar fix: honor the select's authored markup value at boot.
+    speed = parseFloat(spd.value) || cfg.speed;
+    spd.addEventListener('change', e => { speed = parseFloat(e.target.value) || cfg.speed; });
+  }
+
+  if (maxBtn) maxBtn.addEventListener('click', () => setMaximized(!root.classList.contains('shell-max')));
+
+  const infoBtn = document.getElementById('shell-info');
+  const infoModal = document.getElementById('shell-info-modal');
+  const infoClose = document.getElementById('shell-info-close');
+  function setInfo(open) { if (infoModal) infoModal.classList.toggle('open', open); }
+  if (infoBtn) infoBtn.addEventListener('click', () => setInfo(true));
+  if (infoClose) infoClose.addEventListener('click', () => setInfo(false));
+  if (infoModal) infoModal.addEventListener('click', e => { if (e.target === infoModal) setInfo(false); });
+
+  // Light/dark theme toggle (default dark). Swaps the icon and refits canvases.
+  const themeBtn = document.getElementById('shell-theme');
+  if (themeBtn) themeBtn.addEventListener('click', () => {
+    const light = document.body.classList.toggle('light-theme');
+    themeBtn.textContent = light ? '☀' : '☾';
+    requestAnimationFrame(refit);
+  });
+
+  const lecture = document.getElementById('shell-lecture');
+  if (lecture) lecture.addEventListener('click', () => setLectureMode(!root.classList.contains('lecture-mode')));
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (infoModal && infoModal.classList.contains('open')) setInfo(false);
+    else if (root.classList.contains('shell-max')) setMaximized(false);
+  });
+
+  // Skip collapses the inquiry (CM L37); under finishFastForward it goes through
+  // finishInquiry so the scene still ends fully revealed (CM L9's contract).
+  if (skip) skip.addEventListener('click', () => {
+    if (cfg.finishFastForward) finishInquiry();
+    else setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: Skip unlocks ▶
+  });
+  if (restore) restore.addEventListener('click', () => setLectureMode(false));
+  // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
+  const inqNextBtn = document.getElementById('inq-next');
+  if (inqNextBtn) inqNextBtn.addEventListener('click', inqNext);
+  const inqPrevBtn = document.getElementById('inq-prev');
+  if (inqPrevBtn) inqPrevBtn.addEventListener('click', inqPrev);
+  const inqPagerNextBtn = document.getElementById('inq-pager-next');
+  if (inqPagerNextBtn) inqPagerNextBtn.addEventListener('click', inqPagerNext);
+  // Auto-gate: a .choice click inside the active gated card enables Next —
+  // unless the card opts out with data-manual-gate (FBD; the SIM then gates
+  // via stepReady()/stepUnready() itself).
+  const cardsHost = document.getElementById('inq-cards');
+  if (cardsHost) cardsHost.addEventListener('click', e => {
+    const ch = e.target.closest('.choice'); if (!ch) return;
+    const card = ch.closest('.inq-step');
+    if (card && card.classList.contains('active') && !card.hasAttribute('data-manual-gate')) {
+      stepReady();
+    }
+  });
+  if (tFormal) tFormal.addEventListener('click', () => {
+    const hidden = root.classList.toggle('hide-formal');
+    root.classList.toggle('formal-open', !hidden);   // SR L07-s1: lets sim CSS make room
+    tFormal.classList.toggle('active', !hidden);
+    requestAnimationFrame(refit);
+  });
+
+  root.querySelectorAll('.shell-panel-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('collapsed');
+      requestAnimationFrame(refit);
+    });
+  });
+
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(refit, 80); });
+}
+
+// The frozen 57-sim API reads Shell.speed/.playing/.step/.totalSteps as getter
+// properties. The build's `return {exports}` object cannot carry accessors, so
+// install them on the built namespace (Engine.shell === window.Shell) here.
+function _installGetters() {
+  const w = (typeof window !== 'undefined') ? window : null;
+  const ns = w && ((w.Engine && w.Engine.shell) || w.Shell);
+  if (!ns || Object.getOwnPropertyDescriptor(ns, 'speed')) return;
+  Object.defineProperties(ns, {
+    speed:      { get: () => speed,    configurable: true },
+    playing:    { get: () => playing,  configurable: true },
+    step:       { get: () => inqStep,  configurable: true },
+    totalSteps: { get: () => inqTotal, configurable: true },
+  });
+}
+
+function init(opts) {
+  opts = opts || {};
+  onFrame = opts.onFrame || onFrame; onReset = opts.onReset || onReset;
+  onResize = opts.onResize || onResize; onStep = opts.onStep || onStep;
+  onComplete = opts.onComplete || onComplete;
+  // onExploreMode aliases kept for the SR variants (L01-s1 used onLectureMode,
+  // L08-s2 used onInquiryCollapsed) — all fire on the same free-explore signal.
+  onExploreMode = opts.onExploreMode || opts.onLectureMode || opts.onInquiryCollapsed || onExploreMode;
+  cfg = Object.assign({}, CFG_DEFAULTS, opts.cfg || {});
+  frame = opts.frame || null;
+  root = document.getElementById('shell');
+  playing = !!cfg.autoplay;
+  speed = cfg.speed;
+  acc = 0;
+  wire();
+  // Build the guided-inquiry stepper from the .inq-step cards the SIM supplied.
+  const cards = inqCards();
+  inqTotal = cards.length;
+  // DECIDED (HARVEST-NOTES): reset-first is correct — the canonical step-first
+  // order let onReset clobber the step-0 scene. The flag exists only for
+  // exact-fidelity backports of old SR sims.
+  if (cfg.resetBeforeFirstStep) { onReset(); onResize(); }
+  if (inqTotal > 0) {
+    const dots = document.getElementById('inq-dots');
+    if (dots) { dots.innerHTML = ''; for (let i = 0; i < inqTotal; i++) { const d = document.createElement('span'); d.className = 'inq-dot'; dots.appendChild(d); } }
+    inqShow(0);
+  } else {
+    root.classList.add('no-inquiry');   // no inquiry → hide the whole zone + restore bar
+  }
+  if (!cfg.resetBeforeFirstStep) { onResize(); onReset(); }
+  last = performance.now();
+  // DECIDED: init always ends with setPlaying(autoplay) — re-syncs the Play
+  // button label after onReset regardless of what onReset touched.
+  setPlaying(playing);
+  if (cfg.gateLocksPlay) {   // L36-Energy: a gated first card locks ▶ at boot
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  _installGetters();
+  if (!started) { started = true; requestAnimationFrame(loop); }
+}
+
+// Test/debug snapshot of shell state — never call from sim logic; sims use the
+// Shell.speed/.playing/.step/.totalSteps getters instead.
+function _state() {
+  return {
+    playing, speed, step: inqStep, totalSteps: inqTotal, playLocked,
+    cfg: Object.assign({}, cfg),
+  };
+}
+
+return { refit, setPlaying, setPlayEnabled, setPlayLocked, setLectureMode, inqNext, stepReady, stepUnready, init, _state };
+})();
+window.Shell = Engine.shell;
+
+// ---- module verify.audit ----
+Engine.audit = (function () {
+'use strict';
+// verify.audit — the __audit machine-verification surface (Layer: verify).
+// Formalizes the window.__audit convention already present ad-hoc in 35 sims
+// (SR `__audit.at(beta)` in 23 files, CM orbit audits in 12). This module is
+// contract, not framework: one call installs the surface verify.mjs drives.
+//
+// defineAudit(opts, target) works without a browser: pass any globalThis-like
+// target (default globalThis) — node tests inject a mock {document, Event}.
+
+/* Parse the inert #engine-manifest JSON block, or null when absent/invalid. */
+function readManifest(target) {
+  const doc = target && target.document;
+  if (!doc || typeof doc.getElementById !== 'function') return null;
+  const el = doc.getElementById('engine-manifest');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/* Default setParam: drive the control through the SAME code path as the UI.
+ * controls.bind listens for 'input' on the element (see controls/bind.js
+ * bindSlider), so setting .value and dispatching 'input' exercises the
+ * sanitize/clamp/state/onChange chain exactly like a user gesture. When the
+ * manifest carries a params schema, only its ids are accepted. */
+function makeSetParam(target, manifest) {
+  return function setParam(id, value) {
+    const doc = target && target.document;
+    if (!doc) throw new Error('audit.setParam: no document in this context');
+    if (manifest && Array.isArray(manifest.params) &&
+        !manifest.params.some((p) => p.id === id)) {
+      throw new Error('audit.setParam: "' + id + '" is not in the manifest params schema');
+    }
+    const el = doc.getElementById(id);
+    if (!el) throw new Error('audit.setParam: no control element "' + id + '"');
+    el.value = String(value);
+    const Ev = target.Event || (typeof Event !== 'undefined' ? Event : null);
+    el.dispatchEvent(Ev ? new Ev('input', { bubbles: true }) : { type: 'input' });
+    return el.value;
+  };
+}
+
+/**
+ * Install the audit surface: target.__audit =
+ *   {version: 1, manifest, probes, invariants, state, setParam, run()}.
+ * - probes: pure numeric functions, exposed as-is.
+ * - invariants: each fn MUST return {ok, value, expected, tol}; run()
+ *   aggregates them into {pass, results:[{name, ok, value, expected, tol}]}.
+ *   A throwing invariant is recorded as ok:false, never rethrown.
+ * - state: optional live-state accessor object (or null).
+ * - setParam(id, v): defaults to the UI-code-path helper above.
+ * Returns the audit object (also handed to guards via registerWith).
+ */
+function defineAudit(opts = {}, target = globalThis) {
+  const probes = opts.probes || {};
+  const invariants = opts.invariants || {};
+  const state = opts.state || null;
+  const manifest = readManifest(target);
+
+  const audit = {
+    version: 1,
+    manifest,
+    probes,
+    invariants,
+    state,
+    setParam: opts.setParam || makeSetParam(target, manifest),
+    run() {
+      const results = [];
+      for (const name of Object.keys(invariants)) {
+        let r;
+        try {
+          r = invariants[name]() || {};
+        } catch (e) {
+          r = { ok: false, value: String((e && e.message) || e), expected: null, tol: null };
+        }
+        results.push({ name, ok: !!r.ok, value: r.value, expected: r.expected, tol: r.tol });
+      }
+      return { pass: results.every((x) => x.ok), results };
+    },
+  };
+  if (target) target.__audit = audit;
+  return audit;
+}
+
+return { defineAudit };
+})();
+
+/* ENGINE:END */
+</script>
+
+<script>
+(function () {
+'use strict';
+
+var S = Engine.scale;
+
+// ---- constants (slider bounds live on the inputs; read, never duplicate) ---
+var HBAR = 1.0;
+var nEl = document.getElementById('n');
+var massEl = document.getElementById('mass');
+var omegaEl = document.getElementById('omega');
+var N_MAX = +nEl.max;
+var MU_MIN = (+massEl.min) * (+omegaEl.min) / HBAR;
+var MU_MAX = (+massEl.max) * (+omegaEl.max) / HBAR;
+var PLOT_X_MARGIN = 1.12;
+var XMAX = Math.sqrt((2 * N_MAX + 1) / MU_MIN) * PLOT_X_MARGIN;
+var POT_E_Y_MAX = (N_MAX + 0.5) * HBAR * (+omegaEl.max) * 1.08;
+
+// ---- physics ---------------------------------------------------------------
+// psi_n(x) = mu^{1/4} · hermiteNorm(n, sqrt(mu)·x), mu = m·omega/hbar.
+// hermiteNorm is the engine's stable orthonormal recurrence (safe to n = 60),
+// replacing the original sim's naive H_n + logNorm route.
+function psiOf(n, x, mu) {
+  return Math.pow(mu, 0.25) * Engine.special.hermiteNorm(n, Math.sqrt(mu) * x);
+}
+
+var state = {};
+function muNow() { return state.mass * state.omega / HBAR; }
+function energyOf(n) { return (n + 0.5) * HBAR * state.omega; }
+function turningPointOf(n) {
+  return Math.sqrt(2 * energyOf(n) / (state.mass * state.omega * state.omega));
+}
+
+// ---- fixed y-ranges (envelope over the whole reachable parameter box) ------
+// max_x |psi_n| = mu^{1/4} · max_xi |hermiteNorm(n, xi)|, monotone in mu, so
+// scan the dimensionless Hermite functions once and scale by MU_MAX.
+var PSI_Y_MAX, PROB_Y_MAX;
+(function () {
+  var xiMax = Math.sqrt(MU_MAX) * XMAX;
+  var mx = 0;
+  for (var n = 0; n <= N_MAX; n++) {
+    for (var i = 0; i <= 1200; i++) {
+      var xi = -xiMax + 2 * xiMax * i / 1200;
+      var h = Math.abs(Engine.special.hermiteNorm(n, xi));
+      if (h > mx) mx = h;
+    }
+  }
+  PSI_Y_MAX = Math.pow(MU_MAX, 0.25) * mx * 1.02;
+  PROB_Y_MAX = Math.sqrt(MU_MAX) * mx * mx * 1.02;
+})();
+
+// ---- drawn grid (shared by rendering and the audit integrals) --------------
+var NX = 801;
+var xs = new Float64Array(NX);
+var DX = 2 * XMAX / (NX - 1);
+for (var gi = 0; gi < NX; gi++) xs[gi] = -XMAX + gi * DX;
+
+var psiArr = new Float64Array(NX);       // psi_n(x) for the current n, mu
+function rebuildPsi() {
+  var mu = muNow();
+  for (var i = 0; i < NX; i++) psiArr[i] = psiOf(state.n, xs[i], mu);
+}
+
+function sampledPsi(n) {                 // fresh array on the same drawn grid
+  var mu = muNow();
+  var a = new Float64Array(NX);
+  for (var i = 0; i < NX; i++) a[i] = psiOf(n, xs[i], mu);
+  return a;
+}
+
+function trapz(f) {                      // trapezoid on the drawn grid
+  var s = 0.5 * (f(0) + f(NX - 1));
+  for (var i = 1; i < NX - 1; i++) s += f(i);
+  return s * DX;
+}
+
+// ---- state / DOM -----------------------------------------------------------
+var time = 0;
+var els = {
+  time: document.getElementById('statTime'),
+  energy: document.getElementById('statEnergy'),
+  turning: document.getElementById('statTurning'),
+  oscLen: document.getElementById('statOscLen')
+};
+
+function updateStats() {
+  els.energy.textContent = S.fmt(energyOf(state.n), 2);
+  els.turning.textContent = '±' + S.fmt(turningPointOf(state.n), 2);
+  els.oscLen.textContent = S.fmt(1 / Math.sqrt(muNow()), 3);
+  els.time.textContent = S.fmt(time, 2);
+}
+
+// ---- canvases --------------------------------------------------------------
+var potCanvas = document.getElementById('potentialCanvas');
+var wfCanvas = document.getElementById('wavefnCanvas');
+var probCanvas = document.getElementById('probCanvas');
+var potCtx = potCanvas.getContext('2d');
+var wfCtx = wfCanvas.getContext('2d');
+var probCtx = probCanvas.getContext('2d');
+
+var PAD = { l: 52, r: 18, t: 30, b: 30 };
+
+function palette() {
+  var light = document.body.classList.contains('light-theme');
+  return light ? {
+    grid: 'rgba(23,32,47,0.07)', frame: 'rgba(23,32,47,0.25)',
+    tick: '#5b6a7b', text: '#334155',
+    pot: '#7c3aed', potFill: 'rgba(124,58,237,0.07)',
+    re: '#2563eb', im: '#db2777',
+    prob: '#059669', probFill: 'rgba(5,150,105,0.10)',
+    levelSel: '#2563eb', levelDim: 'rgba(71,85,105,0.22)', levelLbl: '#64748b'
+  } : {
+    grid: 'rgba(148,163,184,0.08)', frame: 'rgba(203,213,225,0.25)',
+    tick: '#94a3b8', text: '#e2e8f0',
+    pot: '#a855f7', potFill: 'rgba(168,85,247,0.06)',
+    re: '#60a5fa', im: '#f472b6',
+    prob: '#34d399', probFill: 'rgba(52,211,153,0.12)',
+    levelSel: '#60a5fa', levelDim: 'rgba(148,163,184,0.15)', levelLbl: '#64748b'
+  };
+}
+
+function makePlotView(w, h, y0, y1) {
+  return Engine.view.makeView({
+    world: { x0: -XMAX, y0: y0, x1: XMAX, y1: y1 },
+    screen: { w: w, h: h, pad: { l: PAD.l, r: PAD.r, t: PAD.t, b: PAD.b } },
+    aspect: 'stretch'
+  });
+}
+
+function clipToPlot(ctx, view) {
+  var tl = view.toPx(view.world.x0, view.world.y1);
+  var br = view.toPx(view.world.x1, view.world.y0);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(tl[0], tl[1], br[0] - tl[0], br[1] - tl[1]);
+  ctx.clip();
+}
+
+function traceGrid(ctx, view, yFn) {      // polyline over the drawn grid
+  ctx.beginPath();
+  for (var i = 0; i < NX; i++) {
+    var p = view.toPx(xs[i], yFn(i));
+    if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+  }
+}
+
+function drawArrowheadsBetween(ctx, view, x1, x2, y, color) {
+  var p1 = view.toPx(x1, y), p2 = view.toPx(x2, y);
+  var a = 6;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p1[0] + a, p1[1] - a * 0.5);
+  ctx.lineTo(p1[0] + a, p1[1] + a * 0.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(p2[0], p2[1]); ctx.lineTo(p2[0] - a, p2[1] - a * 0.5);
+  ctx.lineTo(p2[0] - a, p2[1] + a * 0.5); ctx.closePath(); ctx.fill();
+}
+
+function drawPotential() {
+  var f = Engine.fit.fit(potCanvas, potCtx);
+  if (f.w <= 0 || f.h <= 0) return;
+  var ctx = potCtx, col = palette();
+  ctx.clearRect(0, 0, f.w, f.h);
+  var view = makePlotView(f.w, f.h, 0, POT_E_Y_MAX);
+  Engine.axes.drawAxes(ctx, view, {
+    xLabel: 'x', xTicks: 8, yTicks: 5,
+    gridColor: col.grid, frameColor: col.frame, tickColor: col.tick
+  });
+  clipToPlot(ctx, view);
+
+  // V(x) = 1/2 m omega^2 x^2, with a soft fill underneath
+  var mw2 = state.mass * state.omega * state.omega;
+  var Vof = function (i) { return 0.5 * mw2 * xs[i] * xs[i]; };
+  ctx.shadowColor = col.pot; ctx.shadowBlur = 6;
+  ctx.strokeStyle = col.pot; ctx.lineWidth = 2.5;
+  traceGrid(ctx, view, Vof);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  traceGrid(ctx, view, Vof);
+  var b0 = view.toPx(XMAX, 0), b1 = view.toPx(-XMAX, 0);
+  ctx.lineTo(b0[0], b0[1]); ctx.lineTo(b1[0], b1[1]); ctx.closePath();
+  ctx.fillStyle = col.potFill; ctx.fill();
+
+  // energy levels between classical turning points
+  for (var n = 0; n <= N_MAX; n++) {
+    var En = energyOf(n);
+    if (En > POT_E_Y_MAX) break;
+    var xtp = Math.sqrt(2 * En / mw2);
+    var sel = (n === state.n);
+    if (sel) {
+      Engine.primitives.dashLine(ctx, view.toPx(-xtp, En)[0], view.toPx(-xtp, En)[1],
+                                 view.toPx(xtp, En)[0], view.toPx(xtp, En)[1],
+                                 { color: col.levelSel, width: 2.5, dash: [6, 4] });
+      drawArrowheadsBetween(ctx, view, -xtp, xtp, En, col.levelSel);
+    } else {
+      var q1 = view.toPx(-xtp, En), q2 = view.toPx(xtp, En);
+      ctx.strokeStyle = col.levelDim; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke();
+    }
+    if (sel || n % 5 === 0) {
+      var lp = view.toPx(-xtp, En);
+      Engine.label.textBox(ctx, 'n=' + n, Math.max(lp[0] - 6, PAD.l + 30), lp[1] - 3, {
+        anchor: 'se', color: sel ? col.levelSel : col.levelLbl,
+        font: (sel ? '600 11px ' : '600 9px ') + 'ui-monospace, monospace'
+      });
+    }
+  }
+  ctx.restore();
+}
+
+function drawWavefunction() {
+  var f = Engine.fit.fit(wfCanvas, wfCtx);
+  if (f.w <= 0 || f.h <= 0) return;
+  var ctx = wfCtx, col = palette();
+  ctx.clearRect(0, 0, f.w, f.h);
+  var view = makePlotView(f.w, f.h, -PSI_Y_MAX, PSI_Y_MAX);
+  Engine.axes.drawAxes(ctx, view, {
+    xLabel: 'x', xTicks: 8, yTicks: 4,
+    gridColor: col.grid, frameColor: col.frame, tickColor: col.tick
+  });
+  clipToPlot(ctx, view);
+  var ph = energyOf(state.n) * time / HBAR;      // psi(x,t) = psi_n(x) e^{-i E t / hbar}
+  var c = Math.cos(ph), s = -Math.sin(ph);
+  ctx.strokeStyle = col.re; ctx.lineWidth = 2.5;
+  traceGrid(ctx, view, function (i) { return psiArr[i] * c; });
+  ctx.stroke();
+  ctx.strokeStyle = col.im; ctx.lineWidth = 2.5;
+  traceGrid(ctx, view, function (i) { return psiArr[i] * s; });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawProbability() {
+  var f = Engine.fit.fit(probCanvas, probCtx);
+  if (f.w <= 0 || f.h <= 0) return;
+  var ctx = probCtx, col = palette();
+  ctx.clearRect(0, 0, f.w, f.h);
+  var view = makePlotView(f.w, f.h, 0, PROB_Y_MAX);
+  Engine.axes.drawAxes(ctx, view, {
+    xLabel: 'x', xTicks: 8, yTicks: 4,
+    gridColor: col.grid, frameColor: col.frame, tickColor: col.tick
+  });
+  clipToPlot(ctx, view);
+  var dens = function (i) { return psiArr[i] * psiArr[i]; };
+  traceGrid(ctx, view, dens);
+  var b0 = view.toPx(XMAX, 0), b1 = view.toPx(-XMAX, 0);
+  ctx.lineTo(b0[0], b0[1]); ctx.lineTo(b1[0], b1[1]); ctx.closePath();
+  ctx.fillStyle = col.probFill; ctx.fill();
+  ctx.strokeStyle = col.prob; ctx.lineWidth = 2.5;
+  traceGrid(ctx, view, dens);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawAll() {
+  drawPotential();
+  drawWavefunction();
+  drawProbability();
+}
+
+// ---- controls (bounds live on the input elements only) ---------------------
+function onParamChange() {
+  rebuildPsi();
+  updateStats();
+  drawAll();
+}
+Engine.bind.bindSlider(state, 'n', 'n', {
+  out: 'nVal', fmt: function (v) { return S.fmt(v, 0); }, onChange: onParamChange
+});
+Engine.bind.bindSlider(state, 'mass', 'mass', {
+  out: 'massVal', fmt: function (v) { return S.fmt(v, 2); }, onChange: onParamChange
+});
+Engine.bind.bindSlider(state, 'omega', 'omega', {
+  out: 'omegaVal', fmt: function (v) { return S.fmt(v, 2); }, onChange: onParamChange
+});
+
+rebuildPsi();
+
+// ---- audit surface (machine-verification contract) -------------------------
+Engine.audit.defineAudit({
+  probes: {
+    energy: function (n) { return energyOf(n == null ? state.n : n); },
+    turningPoint: function (n) { return turningPointOf(n == null ? state.n : n); },
+    psiAt: function (n, x) { return psiOf(n == null ? state.n : n, x, muNow()); },
+    oscLength: function () { return 1 / Math.sqrt(muNow()); },
+    simTime: function () { return time; }
+  },
+  invariants: {
+    // ∫|psi_n|^2 dx = 1, trapezoid on the drawn grid. Tolerance 5e-4: at the
+    // worst reachable corner (n = 30, mu = 0.49) the plotted window truncates
+    // 6.8e-5 of the probability (measured); 5e-4 gives ~7x headroom while
+    // still catching any real normalization error.
+    normalization: function () {
+      var v = trapz(function (i) { return psiArr[i] * psiArr[i]; });
+      return { ok: Math.abs(v - 1) < 5e-4, value: v, expected: 1, tol: 5e-4 };
+    },
+    // ∫ psi_0 psi_1 dx = 0 (exact by parity on the symmetric grid).
+    orthogonality01: function () {
+      var p0 = sampledPsi(0), p1 = sampledPsi(1);
+      var v = trapz(function (i) { return p0[i] * p1[i]; });
+      return { ok: Math.abs(v) < 1e-8, value: v, expected: 0, tol: 1e-8 };
+    },
+    // E_{n+1} - E_n = hbar·omega, exact for the closed-form spectrum.
+    levelSpacing: function () {
+      var v = energyOf(state.n + 1) - energyOf(state.n);
+      var ex = HBAR * state.omega;
+      return { ok: Math.abs(v - ex) < 1e-12, value: v, expected: ex, tol: 1e-12 };
+    }
+  },
+  state: state
+});
+
+// ---- shell -----------------------------------------------------------------
+// Original behavior preserved: autoplay on load, reset resumes playing,
+// speed only advances the plotted phase faster/slower (Shell scales dt).
+Shell.init({
+  onFrame: function (dt) {
+    time += dt;
+    els.time.textContent = S.fmt(time, 2);
+    drawAll();
+  },
+  onReset: function () {
+    time = 0;
+    updateStats();
+    drawAll();
+  },
+  onResize: function () {
+    drawAll();
+  },
+  cfg: { autoplay: true, resumeOnReset: true }
+});
+
+updateStats();
+drawAll();
+})();
+</script>
+</body>
+</html>

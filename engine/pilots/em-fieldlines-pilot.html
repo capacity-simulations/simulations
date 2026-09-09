@@ -1,0 +1,2107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Electric Field Lines of Point Charges</title>
+<script type="application/json" id="engine-manifest">
+{
+  "manifestVersion": 1,
+  "sim": "em/fieldlines-explorer",
+  "engine": "1.0.0-dev",
+  "modules": [
+    "canvas.fit",
+    "core.scale",
+    "core.integrate",
+    "controls.bind",
+    "domain.em-fields",
+    "shell",
+    "verify.audit"
+  ],
+  "params": [
+    {
+      "id": "q1",
+      "label": "Charge q\u2081 magnitude",
+      "min": 0.5,
+      "max": 3,
+      "step": 0.1,
+      "default": 1
+    },
+    {
+      "id": "q2",
+      "label": "Charge q\u2082 magnitude",
+      "min": 0.5,
+      "max": 3,
+      "step": 0.1,
+      "default": 1
+    },
+    {
+      "id": "sep",
+      "label": "Separation d",
+      "min": 0.6,
+      "max": 4,
+      "step": 0.2,
+      "default": 2
+    }
+  ],
+  "build": {
+    "engineVersion": "1.0.0-dev",
+    "date": "2026-08-05",
+    "hash": "aca0af6b1a5d"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #0e1420;
+    --panel: #161e2e;
+    --panel-2: #1b2436;
+    --ink: #e8edf7;
+    --muted: #93a1b8;
+    --edge: #2a3650;
+    --accent: #4cc9f0;
+    --pos: #f0668c;
+    --neg: #4cc9f0;
+    --equip: #7bd88f;
+  }
+  body.light-theme {
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --panel-2: #eef1f8;
+    --ink: #17202f;
+    --muted: #5b6a7b;
+    --edge: #d5dbea;
+    --accent: #0f7fae;
+    --pos: #c2325f;
+    --neg: #0f7fae;
+    --equip: #1e8f4d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  #shell { max-width: 1180px; margin: 0 auto; padding: 10px 14px 24px; }
+  #shell.shell-max { position: fixed; inset: 0; max-width: none; z-index: 40; background: var(--bg); overflow: auto; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 0 10px;
+  }
+  .topbar h1 { font-size: 17px; margin: 0 auto 0 0; font-weight: 600; }
+  .topbar button, .topbar select {
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 7px;
+    padding: 5px 11px; font: inherit; cursor: pointer;
+  }
+  .topbar button:hover { border-color: var(--accent); }
+  #aside-inquiry-restore { display: none; }
+  #shell.inquiry-collapsed #aside-inquiry-restore { display: inline-block; }
+
+  .main-grid { display: flex; gap: 14px; align-items: stretch; }
+  .hero { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  #aside-inquiry {
+    flex: 0 0 300px; background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: 12px; align-self: flex-start;
+  }
+  #shell.inquiry-collapsed #aside-inquiry,
+  #shell.no-inquiry #aside-inquiry,
+  #shell.lecture-mode #aside-inquiry { display: none; }
+
+  .shell-panel {
+    background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: 12px;
+  }
+  .shell-panel-head { font-weight: 600; margin: 0 0 8px; font-size: 13px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; }
+
+  #plot { width: 100%; height: 460px; display: block; border-radius: 8px; background: var(--panel); }
+
+  .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; align-items: end; }
+  .ctl label { display: block; font-size: 13px; margin-bottom: 3px; }
+  .ctl input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .ctl select {
+    width: 100%; background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 7px; padding: 5px 8px; font: inherit;
+  }
+  .ctl .val { font-variant-numeric: tabular-nums; color: var(--accent); }
+  .toggle-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .fine { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .readout-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; }
+  .readout-row .ro { min-width: 120px; }
+  .ro b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ro .lab { display: block; color: var(--muted); font-size: 12px; }
+
+  /* inquiry */
+  #inq-dots { display: flex; gap: 6px; margin-bottom: 10px; }
+  #inq-dots .inq-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--edge); }
+  #inq-dots .inq-dot.active { background: var(--accent); }
+  #inq-dots .inq-dot.done { background: var(--muted); }
+  .inq-step { display: none; }
+  .inq-step.active { display: block; }
+  .inq-step h3 { margin: 0 0 6px; font-size: 14px; }
+  .inq-step p { margin: 0 0 8px; }
+  .inq-pager { display: flex; justify-content: space-between; margin-top: 10px; }
+  .inq-pager button, #aside-inquiry-skip {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--edge);
+    border-radius: 7px; padding: 5px 11px; font: inherit; cursor: pointer;
+  }
+  .inq-pager button:disabled { opacity: 0.4; cursor: default; }
+  .aside-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .aside-head b { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+  /* info modal */
+  #shell-info-modal {
+    position: fixed; inset: 0; background: rgba(8, 12, 20, 0.65);
+    display: none; align-items: center; justify-content: center; z-index: 60;
+  }
+  #shell-info-modal.open { display: flex; }
+  #shell-info-modal .modal-card {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--edge);
+    border-radius: 12px; max-width: 560px; margin: 20px; padding: 18px 20px;
+  }
+  #shell-info-modal h2 { margin-top: 0; font-size: 17px; }
+  #shell-info-close { float: right; background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
+
+  @media (max-width: 860px) {
+    .main-grid { flex-direction: column; }
+    #aside-inquiry { flex-basis: auto; width: 100%; }
+    .controls-grid { grid-template-columns: 1fr; }
+  }
+</style>
+<style id="engine-css">
+/* engine CSS v1.0.0-dev (auto-injected; do not edit) */
+/* shell.css (engine-injected) */
+
+/* ============================================================================
+   WIKI SR SIMULATION — GLOBAL SHELL STYLESHEET (inlined)
+   ========================================================================== */
+
+/* ============================================================================
+   WIKI SR SIMULATION — GLOBAL SHELL STYLESHEET
+   ----------------------------------------------------------------------------
+   Drop-in design system for every sim in wiki_SR_sims_v1. It provides:
+     • the design-system theme tokens (dark default + full light-theme override)
+     • the cream 62px GLOBAL top bar (Info · Theme · Maximize · Formal · Speed ·
+       Reset · Play/Pause) — theme-independent
+     • the DYNAMIC sidebar: guided-inquiry stepper (dots + Next/Finish + Skip)
+       that collapses to a restore bar, then the always-present controls + stats
+     • the plot-box hero card, info modal, formal region
+     • design-system components: .ctrl-box sliders, .stat-row, .choice /
+       .predict-eval prediction styling, legend, dividers
+
+   HOW TO USE
+     1. Link this file in <head>:  <link rel="stylesheet" href="simulation-shell.css">
+     2. Follow the HTML skeleton + Shell runtime in SHELL-DESIGN-GUIDE.md.
+     3. Reference implementation: boost-hyperbolic-rotation-shell.html.
+
+   The class/ID names here are the contract — the Shell runtime wires them by
+   name (#shell-play, #inq-next, #aside-inquiry, .inq-step, .shell-panel, …).
+   Do NOT rename them. Fill regions with SIM content; never edit this file per-sim.
+
+   FONTS: the tokens below expect DM Sans SemiBold (UI) + JetBrains Mono SemiBold
+   (numerals). The @font-face rules point at relative .ttf files; for a fully
+   self-contained single HTML file, replace them with base64 data-URI @font-face
+   (see "Fonts" in the guide). A system-font fallback is built into the tokens.
+   ========================================================================== */
+
+/* ---- FONT FACES (swap src for base64 data-URIs to make a sim self-contained) ---- */
+/* src uses local() only: no network fetch, so a sim linking this file raw
+   produces zero resource errors (verify.mjs fails on any console error).
+   The vendor:fonts build step replaces these with embedded data-URI fonts. */
+@font-face{
+  font-family:'DMSansUser';
+  src:local('DM Sans SemiBold'), local('DMSans-SemiBold');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'JetBrainsMonoNums';
+  src:local('JetBrains Mono SemiBold'), local('JetBrainsMono-SemiBold');
+  font-weight:600; font-style:normal; font-display:swap;
+}
+
+/* ============================================================================
+   SHELL CSS — the design system, layout, dynamic sidebar, stepper, components.
+   (Verbatim from the engine shell template; keep in sync with it.)
+   ========================================================================== */
+:root{
+  /* Surfaces (design system) */
+  --bg:#060E11; --surface:rgba(6,14,17,.95); --surface-soft:rgba(6,14,17,.92); --panel-bg:#060E11;
+  /* Back-compat aliases for the shell's older --panel / --panel-2 / --line names */
+  --panel:var(--surface); --panel-2:#0f1a1d; --line:var(--border);
+  /* Text */
+  --ink:#e2e8f0; --ink-mid:#cbd5e1; --ink-mute:#9ca3af;
+  --text:#e2e8f0; --muted:#cbd5e1; --text-muted:#9ca3af;
+  /* Borders */
+  --border:rgba(19,49,49,.45);
+  /* Accent (teal) */
+  --accent:#3b9b8f; --accent-soft:rgba(59,155,143,.35);
+  /* Control-box (Figma green) */
+  --ctrl-bg:rgba(30,77,58,.15); --ctrl-border:rgba(30,77,58,.50); --track-bg:rgba(30,77,58,.35);
+  /* Top bar — theme-INDEPENDENT cream (stays the same in light/dark) */
+  --topbar-bg:#FAF8F4; --topbar-text:#0f172a; --topbar-border:rgba(19,49,49,.25);
+  --btn-play-bg:#1E4D3A; --btn-play-hover:#2D6E52; --btn-play-text:#fff;
+  --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
+  --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
+  /* SR frame-coding colours (preserved — used by sim canvas drawing) */
+  --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
+  /* Fonts (embedded at final-assembly time — see simFonts.ts) */
+  --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
+  --r:8px;
+}
+/* Light theme — toggled by body.light-theme (shell theme button) or html[data-theme=light] */
+body.light-theme,html[data-theme="light"]{
+  --bg:#e2e8f0; --surface:rgba(248,250,252,.96); --surface-soft:rgba(241,245,249,.96); --panel-bg:#e5e7eb;
+  --panel-2:#e5e7eb;
+  --ink:#0f172a; --ink-mid:#334155; --ink-mute:#6b7280;
+  --text:#0f172a; --muted:#334155; --text-muted:#6b7280;
+  --border:rgba(51,65,85,.18);
+  --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
+  --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
+  --topbar-border:rgba(19,49,49,.20);
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow:hidden;}
+
+#shell{
+  display:grid;
+  grid-template-areas:"header header" "hero aside" "formal formal";
+  grid-template-columns:1fr 320px;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  height:100vh;
+  gap:0;
+}
+#shell.hide-aside{grid-template-areas:"header header" "hero hero" "formal formal";}
+#shell.hide-aside .shell-aside{display:none;}
+#shell.hide-formal .shell-formal{display:none;}
+/* Maximize keeps the cream top bar visible (so the Maximize→Minimize button is
+   always reachable) and collapses only the sidebar + formal; the hero fills the
+   rest. This retires the floating restore button that used to overlap a sim's
+   top-right legend/readout. !important so a stray SIM rule can't re-show them. */
+#shell.shell-max{grid-template-areas:"header" "hero";grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+#shell.shell-max .shell-aside,#shell.shell-max .shell-formal{display:none !important;}
+/* Floating restore is retired — the always-visible header button restores. */
+.shell-exit-max{display:none !important;}
+
+.shell-header{
+  grid-area:header;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;
+  height:62px;min-height:62px;padding:0 18px;background:var(--topbar-bg);
+  border-bottom:1px solid var(--topbar-border);position:relative;z-index:3000;overflow:visible;
+}
+.shell-title{font-size:18px;font-weight:600;color:var(--topbar-text);white-space:nowrap;letter-spacing:.5px;}
+.shell-title span{font-weight:400;color:#475569;font-size:13px;letter-spacing:0;}
+.shell-controls{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto;}
+.shell-group{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.shell-sep{width:1px;height:24px;background:var(--topbar-border);}
+/* Speed label sits on the cream bar — force a dark colour regardless of theme. */
+.shell-header label{color:#475569;font-family:var(--font-sans);}
+
+/* Base button — used on dark surfaces (aside Skip/restore etc.). */
+.shell-btn{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 11px;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;
+}
+.shell-btn:hover{background:rgba(30,77,58,.28);border-color:var(--accent-soft);}
+.shell-btn.primary{background:var(--ctrl-bg);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn.active{background:rgba(59,155,143,.16);border-color:var(--accent-soft);color:var(--accent);}
+.shell-btn:disabled{opacity:.4;cursor:not-allowed;}
+.shell-select{
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);color:var(--text);
+  font:inherit;font-family:var(--font-sans);font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;
+}
+/* Cream top-bar overrides — header buttons read on the light parchment bar. */
+.shell-header .shell-btn{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;padding:0 12px;}
+.shell-header .shell-btn:hover{background:var(--btn-reset-hover);border-color:var(--topbar-border);color:#0f172a;}
+.shell-header .shell-btn.active{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:#fff;}
+.shell-header .shell-select{background:#fff;border:1px solid var(--topbar-border);color:#334155;height:36px;}
+/* Play/Pause — green when playing, white-outline when paused (.paused set by runtime). */
+.shell-header #shell-play{background:var(--btn-play-bg);border-color:var(--btn-play-bg);color:var(--btn-play-text);}
+.shell-header #shell-play:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+.shell-header #shell-play.paused{background:var(--btn-paused-bg);border-color:var(--btn-paused-border);color:var(--btn-paused-text);}
+.shell-header #shell-play.paused:hover{background:var(--btn-play-hover);border-color:var(--btn-play-hover);color:#fff;}
+/* Reset — cream fill, gold border + gold text. */
+.shell-header #shell-reset{background:var(--btn-reset-bg);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-header #shell-reset:hover{background:var(--btn-reset-hover);border-color:var(--btn-reset-border);color:var(--btn-reset-text);}
+.shell-readout{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:var(--accent);
+  background:var(--ctrl-bg);border:1px solid var(--ctrl-border);padding:4px 9px;border-radius:5px;white-space:nowrap;}
+.shell-readout.danger{color:#fda4af;background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.35);animation:shellPulse 1s infinite;}
+@keyframes shellPulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+.shell-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;
+  background:var(--track-bg);width:150px;cursor:pointer;}
+.shell-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+.shell-range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);}
+
+.shell-hero{grid-area:hero;min-height:0;min-width:0;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:14px;}
+
+.shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:16px;
+  padding:18px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);
+  backdrop-filter:blur(12px);border-left:1px solid rgba(148,163,184,.18);}
+.shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;
+  padding:14px 18px;background:var(--surface-soft);border-top:1px solid var(--border);}
+
+/* Plot-box card for hero canvases (design system). One global maximize only
+   (#shell-maximize) — do NOT add per-plot maximize buttons. */
+.plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
+.plot-box canvas{display:block;width:100%;height:100%;}
+.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
+  letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
+.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
+  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-dot{width:10px;height:10px;border-radius:999px;}
+
+.shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
+.shell-panel-head h3{margin:0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.shell-caret{color:var(--ink-mute);font-size:11px;transition:transform .15s;}
+.shell-panel.collapsed .shell-caret{transform:rotate(-90deg);}
+.shell-panel.collapsed .shell-panel-body{display:none;}
+.shell-panel-body{padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere;font-family:var(--font-sans);}
+
+/* Design-system control + stat components (use INSIDE panels for sliders/stats). */
+.ctrl-box{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:5px;padding:12px;margin-bottom:8px;box-sizing:border-box;}
+.ctrl-box:last-child{margin-bottom:0;}
+.ctrl-box--slider{min-height:73px;display:flex;flex-direction:column;justify-content:center;}
+.ctrl-box--stacked{gap:8px;}
+.ctrl-box--stacked .ctrl-box-label{margin-bottom:0;}
+.ctrl-readout-row{display:flex;flex-wrap:wrap;gap:6px;}
+.ctrl-readout-row .shell-readout{flex:1;text-align:center;min-width:0;}
+.ctrl-box-label{display:block;font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.ctrl-box-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.ctrl-box-head .ctrl-box-label{flex:1;min-width:0;}
+.ctrl-slider-row{display:flex;align-items:center;gap:10px;width:100%;}
+.ctrl-slider-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:6px;background:var(--track-bg);border-radius:3px;outline:none;cursor:pointer;}
+.ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
+.ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
+.slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
+.control-range{font-size:.75rem;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
+.ctrl-box .stat-row:first-child{padding-top:0;}
+.ctrl-box .stat-row:last-child{padding-bottom:0;}
+.stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;}
+.stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;}
+.stat-value.highlight{font-size:18px;}
+.divider{height:1px;background:var(--border);}
+.note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
+.shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
+
+/* Prediction choices + feedback (guided inquiry). Deliberately NOT green-tinted
+   like the control boxes, so the correct=green / wrong=red states stay high
+   contrast in both themes. The correct answer always pops green — even inside a
+   "Not quite" (wrong) feedback box. */
+.choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font:inherit;font-family:var(--font-sans);font-size:13px;line-height:1.5;
+  padding:10px 12px;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.choice:hover{border-color:var(--accent-soft);}
+.choice:disabled{cursor:default;}
+.choice.correct{background:rgba(52,211,153,.18);border:1px solid #34d399;color:#d1fae5;}
+.choice.wrong{background:rgba(244,63,94,.16);border:1px solid #f43f5e;color:#ffe4e6;}
+.choice.dim{opacity:.55;}
+.predict-eval{margin-top:10px;padding:12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);font-size:13px;line-height:1.6;color:var(--text);display:none;}
+.predict-eval.show{display:block;}
+.predict-eval.correct{background:rgba(52,211,153,.14);border-color:#34d399;}
+.predict-eval.wrong{background:rgba(244,63,94,.12);border-color:#f43f5e;}
+.predict-eval .answer,.predict-eval strong{color:#6ee7b7;font-weight:700;}
+body.light-theme .choice.correct,html[data-theme="light"] .choice.correct{background:rgba(16,185,129,.16);border-color:#059669;color:#065f46;}
+body.light-theme .choice.wrong,html[data-theme="light"] .choice.wrong{background:rgba(244,63,94,.12);border-color:#e11d48;color:#9f1239;}
+body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,html[data-theme="light"] .predict-eval .answer,html[data-theme="light"] .predict-eval strong{color:#047857;}
+
+/* Dynamic sidebar — two zones: guided-inquiry (collapses after answer/skip) + controls/stats. */
+.aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+#aside-controls{flex:1 1 auto;}
+.aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
+.aside-zone-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
+.aside-skip{font-size:11px;padding:4px 9px;color:var(--ink-mid);}
+/* Stepper dots — one per inquiry step; shell marks active / done. */
+.inq-dots{display:flex;gap:6px;flex-shrink:0;}
+.inq-dots .inq-dot{flex:1;height:4px;border-radius:2px;background:var(--ctrl-border);transition:background .2s;}
+.inq-dots .inq-dot.active{background:var(--accent);}
+.inq-dots .inq-dot.done{background:var(--accent-soft);}
+/* Inquiry step cards — shell shows ONLY the active one (F3). */
+#inq-cards{flex:1 1 auto;min-height:0;}
+.inq-step{display:none;}
+.inq-step.active{display:block;}
+.inq-nav{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;}
+.inq-pager{display:flex;align-items:center;gap:8px;}
+.inq-pager-btn{min-width:36px;padding:6px 11px;justify-content:center;font-size:13px;line-height:1;}
+#inq-next{min-width:96px;justify-content:center;}
+.aside-restore{display:none;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
+  color:var(--ink-mid);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s;}
+.aside-restore:hover{background:rgba(30,77,58,.28);color:var(--text);}
+#shell.inquiry-collapsed #aside-inquiry{display:none;}
+#shell.inquiry-collapsed #aside-inquiry-restore{display:block;}
+#shell.no-inquiry #aside-inquiry,#shell.no-inquiry #aside-inquiry-restore{display:none !important;}
+
+/* Info modal — source-row context + principles-applied table (shell-owned). */
+.shell-modal-backdrop{position:fixed;inset:0;background:rgba(4,6,10,.74);backdrop-filter:blur(2px);
+  z-index:200;display:none;align-items:center;justify-content:center;padding:24px;}
+.shell-modal-backdrop.open{display:flex;}
+.shell-modal{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;
+  max-width:720px;width:100%;max-height:84vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.55);}
+.shell-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.shell-modal-head h2{margin:0;font-size:14px;font-weight:700;color:var(--text);}
+.shell-modal-body{padding:16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--ink);}
+.shell-modal-body h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--ink-mute);margin:18px 0 8px;font-weight:600;}
+.shell-modal-body h3:first-child{margin-top:0;}
+.shell-modal-body p{margin:0 0 8px;}
+.shell-info-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 4px;}
+.shell-info-table th,.shell-info-table td{text-align:left;vertical-align:top;padding:6px 8px;
+  border-bottom:1px solid var(--line);}
+.shell-info-table thead th{color:var(--ink-mid);font-weight:600;white-space:nowrap;
+  text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;}
+.shell-info-table td.pid{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--accent);white-space:nowrap;}
+.shell-info-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;}
+.shell-info-dl dt{color:var(--ink-mid);font-weight:600;}
+.shell-info-dl dd{margin:0;}
+
+@media(max-width:1000px){
+  body{overflow:auto;}
+  #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;
+    grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
+  .shell-header{flex-wrap:wrap;height:auto;min-height:62px;padding:8px 14px;}
+  .shell-aside{border-left:none;border-top:1px solid var(--border);}
+}
+
+/* ---- ENGINE ADDITION (beyond the L09-s1 harvest) -------------------------
+   #play-hint pill — wired by the Shell runtime's setPlayLocked() (harvested
+   from CM Galperins_Billiard.html); its contract CSS lives here so the
+   feature works out of the box. Inert when the element is absent. */
+.play-hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.6);color:#fef3c7;
+  padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;z-index:3;
+  display:none;backdrop-filter:blur(6px);}
+.play-hint.show{display:block;}
+body.light-theme .play-hint,html[data-theme="light"] .play-hint{color:#78350f;background:rgba(251,191,36,.28);}
+
+</style>
+</head>
+<body>
+<div id="shell">
+  <div class="topbar">
+    <h1>Electric Field Lines of Point Charges</h1>
+    <button id="shell-reset" type="button">Reset</button>
+    <button id="aside-inquiry-restore" type="button">Show inquiry</button>
+    <button id="shell-theme" type="button">Theme</button>
+    <button id="shell-maximize" type="button">Maximize</button>
+    <button id="shell-info" type="button">Info</button>
+  </div>
+
+  <div class="main-grid">
+    <div class="hero">
+      <canvas id="plot"></canvas>
+
+      <div class="shell-panel">
+        <div class="shell-panel-head">Probe readouts</div>
+        <div class="readout-row">
+          <div class="ro"><span class="lab">|E| at (1.5, 1)</span><b id="eProbeVal">&#8211;</b></div>
+          <div class="ro"><span class="lab">V at (1.5, 1)</span><b id="vProbeVal">&#8211;</b></div>
+          <div class="ro"><span class="lab">Field lines drawn</span><b id="lineCountVal">&#8211;</b></div>
+          <div class="ro"><span class="lab">Net charge</span><b id="netVal">&#8211;</b></div>
+        </div>
+        <div class="fine">Natural units: k = 1, charge in units of e. Field lines are
+          geometric curves tangent to <b>E</b> &mdash; a test charge does <em>not</em> move
+          along them.</div>
+      </div>
+
+      <div class="shell-panel">
+        <div class="shell-panel-head">Controls</div>
+        <div class="controls-grid">
+          <div class="ctl">
+            <label for="preset">Configuration</label>
+            <select id="preset">
+              <option value="single">Single + charge</option>
+              <option value="dipole" selected>Dipole (+q&#8321;, &#8722;q&#8322;)</option>
+              <option value="like">Two like charges (+q&#8321;, +q&#8322;)</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <label for="q1">q&#8321; magnitude = <span class="val" id="q1Val"></span></label>
+            <input type="range" id="q1" min="0.5" max="3" step="0.1" value="1">
+          </div>
+          <div class="ctl">
+            <label for="q2">q&#8322; magnitude = <span class="val" id="q2Val"></span></label>
+            <input type="range" id="q2" min="0.5" max="3" step="0.1" value="1">
+          </div>
+          <div class="ctl">
+            <label for="sep">Separation d = <span class="val" id="sepVal"></span></label>
+            <input type="range" id="sep" min="0.6" max="4" step="0.2" value="2">
+          </div>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="showEquip" checked>
+          <label for="showEquip">Show equipotentials (always perpendicular to the field lines)</label>
+        </div>
+        <div class="fine">Line count per charge scales with |q| (8 lines per unit charge).
+          The single-charge configuration uses q&#8321; only.</div>
+      </div>
+    </div>
+
+    <aside id="aside-inquiry">
+      <div class="aside-head">
+        <b>Guided inquiry</b>
+        <button id="aside-inquiry-skip" type="button">Skip</button>
+      </div>
+      <div id="inq-dots"></div>
+      <div id="inq-cards">
+        <div class="inq-step">
+          <h3>1 &middot; Read the dipole picture</h3>
+          <p>Field lines leave the positive charge radially, curve through space, and
+            land on the negative charge. The green rings are equipotentials &mdash;
+            surfaces of constant V. Check by eye: every crossing between a line and a
+            ring is a right angle.</p>
+          <p class="fine">The one line launched straight away from the negative charge
+            escapes to the boundary instead &mdash; not every line finds the far charge.</p>
+        </div>
+        <div class="inq-step">
+          <h3>2 &middot; Like charges repel the lines too</h3>
+          <p>Switch the configuration to <em>two like charges</em>. Now no line connects
+            the charges: the lines bend away from the midpoint, where the two fields
+            cancel (a stagnation point). The equipotentials merge into peanut-shaped
+            curves around both charges.</p>
+        </div>
+        <div class="inq-step">
+          <h3>3 &middot; Line count encodes charge</h3>
+          <p>Raise q&#8321; and watch the number of lines leaving that charge grow in
+            proportion &mdash; that is Gauss's law in cartoon form. Changing the
+            separation reshapes the geometry but never changes how many lines each
+            charge owns.</p>
+        </div>
+      </div>
+      <div class="inq-pager">
+        <button id="inq-prev" type="button">Back</button>
+        <button id="inq-pager-next" type="button">Next</button>
+      </div>
+      <button id="inq-next" type="button" hidden>Next</button>
+    </aside>
+  </div>
+
+  <div id="shell-info-modal">
+    <div class="modal-card">
+      <button id="shell-info-close" type="button">Close</button>
+      <h2>About this simulation</h2>
+      <p>The electric field of 1&ndash;2 point charges by Coulomb superposition in
+        natural units (k = 1, charge in units of e). Field lines are traced by
+        integrating the normalized field direction with fixed arc-length RK4 steps;
+        they start on a small circle around each charge, with a count proportional
+        to |q|, and stop on a charge, at the boundary, or at a stagnation point.</p>
+      <p>Equipotential curves V(x, y) = const are extracted by marching squares and
+        refined onto the exact level; electrostatics guarantees they cross field
+        lines at right angles, since <b>E</b> = &#8722;&#8711;V.</p>
+      <p>Everything here is static: these are pictures of the field's geometry.
+        Nothing flows along a field line, and a released test charge would follow
+        the Lorentz force, not the line it starts on.</p>
+    </div>
+  </div>
+</div>
+
+<script id="engine-inline">
+/* ENGINE:BEGIN */
+/* engine v1.0.0-dev | modules: core.integrate, core.scale, canvas.fit, controls.bind, domain.em-fields, shell, verify.audit | built 2026-08-05 | sha aca0af6b1a5d */
+window.Engine = window.Engine || {};
+const Engine = window.Engine;
+
+// ---- module core.integrate ----
+Engine.integrate = (function () {
+'use strict';
+// core.integrate — time steppers for array state. Semantics-free: state,
+// derivative, position-rate, event vocabulary only.
+// Harvest sources (Sim_lab_sims/):
+//   stepRK4          CM_sims/L16-Friction-in-3d.html rk4() (~L904), generalized
+//                    from fixed 4-component state to any array length/type.
+//   stepVerlet       CM_sims/L37-Kepler's Laws.html stepVerlet() (~L574),
+//                    generalized from {x,y,vx,vy} fields to arrays.
+//   stepSemiImplicit CM_sims/L4-Forces on objects explorer.html physics()
+//                    (~L1234) idiom: rate += a*dt THEN pos += rate*dt.
+//   stepRotate       CM_sims/L30-Coriolis on a Rotating Sphere.html stepParcel()
+//                    (~L1111) exact planar rotation.
+//   stepAdaptive     CM_sims/L36-Scattering Extension.html computeTrack/safeDt
+//                    (~L825) — its radius-based dt heuristic generalized to a
+//                    problem-agnostic step-doubling error estimate.
+//   makeEventStepper CM_sims/Galperins_Billiard.html nextEvent/advance/
+//                    resolveWall/resolveBB/step (~L796–885), generalized to
+//                    caller-supplied detect/resolve pairs.
+
+/* Allocate a fresh array of the same kind (number[] or Float64Array) as y. */
+function alloc(y, n) {
+  return Array.isArray(y) ? new Array(n) : new y.constructor(n);
+}
+
+/**
+ * One classical RK4 step. deriv(y, t) -> array of dy/dt.
+ * Returns a NEW array of the same kind as y; never mutates y.
+ */
+function stepRK4(deriv, y, t, h) {
+  const n = y.length;
+  const tmp = alloc(y, n);
+  const k1 = deriv(y, t);
+  for (let i = 0; i < n; i++) tmp[i] = y[i] + 0.5 * h * k1[i];
+  const k2 = deriv(tmp, t + 0.5 * h);
+  const tmp2 = alloc(y, n);
+  for (let i = 0; i < n; i++) tmp2[i] = y[i] + 0.5 * h * k2[i];
+  const k3 = deriv(tmp2, t + 0.5 * h);
+  const tmp3 = alloc(y, n);
+  for (let i = 0; i < n; i++) tmp3[i] = y[i] + h * k3[i];
+  const k4 = deriv(tmp3, t + h);
+  const out = alloc(y, n);
+  for (let i = 0; i < n; i++) {
+    out[i] = y[i] + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
+  }
+  return out;
+}
+
+/**
+ * One velocity-Verlet step, IN PLACE on pos and rate arrays.
+ * accel(pos) -> array (must depend on pos only for the method's
+ * time-reversibility/energy behaviour to hold). The first accel result is
+ * copied before pos moves, so accel may reuse an internal buffer.
+ */
+function stepVerlet(accel, pos, vel, h) {
+  const n = pos.length;
+  const a0 = alloc(pos, n);
+  const aRaw = accel(pos);
+  for (let i = 0; i < n; i++) a0[i] = aRaw[i];
+  for (let i = 0; i < n; i++) pos[i] += vel[i] * h + 0.5 * a0[i] * h * h;
+  const a1 = accel(pos);
+  for (let i = 0; i < n; i++) vel[i] += 0.5 * (a0[i] + a1[i]) * h;
+}
+
+/**
+ * One semi-implicit (symplectic) Euler step, IN PLACE:
+ * rate is updated first, then position moves with the NEW rate.
+ * accel(pos, vel) -> array (may depend on vel, e.g. damping terms).
+ */
+function stepSemiImplicit(accel, pos, vel, h) {
+  const n = pos.length;
+  const a = accel(pos, vel);
+  for (let i = 0; i < n; i++) vel[i] += a[i] * h;
+  for (let i = 0; i < n; i++) pos[i] += vel[i] * h;
+}
+
+/**
+ * Exact planar rotation of vec = [x, y] by angle (radians, counter-clockwise).
+ * Returns a NEW 2-array of the same kind as vec.
+ *
+ * Why a dedicated stepper (rationale from the L30 source comment): advancing a
+ * pure rotation with forward Euler multiplies the norm by sqrt(1 + (w*dt)^2)
+ * EVERY step — a systematic injection of magnitude. Applying the closed-form
+ * rotation matrix instead preserves the norm to machine precision for any
+ * step size.
+ *
+ * v1 supports planar rotation only: pass axis = null (or call with
+ * (vec, angle)). A non-null axis throws until 3D rotation lands.
+ */
+function stepRotate(vec, axis, angle) {
+  if (angle === undefined) { angle = axis; axis = null; }
+  if (axis != null) {
+    throw new RangeError('stepRotate v1 supports planar rotation only — pass axis = null');
+  }
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const out = alloc(vec, 2);
+  out[0] = vec[0] * c - vec[1] * s;
+  out[1] = vec[0] * s + vec[1] * c;
+  return out;
+}
+
+/**
+ * One adaptive RK4 step with step-doubling error control.
+ * Compares a full step against two half steps; the classical step-doubling
+ * estimate err = |y_two_halves - y_full| / (2^4 - 1) per component is tested
+ * against tol * (1 + |y_i|) (mixed absolute/relative). On reject the step
+ * shrinks and retries; at h <= hMin the step is accepted regardless (the
+ * caller pins the floor). Returns { y, hUsed, hNext } — y is a NEW array
+ * (two-half-steps result, no extrapolation); never mutates the input.
+ */
+function stepAdaptive(deriv, y, t, h, { tol = 1e-8, hMin = 1e-12, hMax = Infinity } = {}) {
+  const SAFETY = 0.9, SHRINK_MIN = 0.2, GROW_MAX = 5, EXP = 0.2; // 1/(order+1)
+  const n = y.length;
+  h = Math.min(Math.max(h, hMin), hMax);
+  for (;;) {
+    const yFull = stepRK4(deriv, y, t, h);
+    const yMid = stepRK4(deriv, y, t, 0.5 * h);
+    const y2 = stepRK4(deriv, yMid, t + 0.5 * h, 0.5 * h);
+    let ratio = 0;
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(y2[i]) || !Number.isFinite(yFull[i])) { ratio = Infinity; break; }
+      const err = Math.abs(y2[i] - yFull[i]) / 15;
+      const scale = tol * (1 + Math.abs(y2[i]));
+      const r = err / scale;
+      if (r > ratio) ratio = r;
+    }
+    if (ratio <= 1 || h <= hMin * (1 + 1e-12)) {
+      let grow = ratio > 0 ? SAFETY * Math.pow(ratio, -EXP) : GROW_MAX;
+      if (grow > GROW_MAX) grow = GROW_MAX;
+      if (grow < SHRINK_MIN) grow = SHRINK_MIN;
+      const hNext = Math.min(Math.max(h * grow, hMin), hMax);
+      return { y: y2, hUsed: h, hNext };
+    }
+    let shrink = SAFETY * Math.pow(ratio, -EXP);
+    if (!(shrink >= SHRINK_MIN)) shrink = SHRINK_MIN; // also catches ratio = Infinity
+    h = Math.max(hMin, h * shrink);
+  }
+}
+
+/**
+ * Event-driven stepper: exact free advance between discrete events.
+ *   makeEventStepper({ state, advance, events, maxEventsPerStep }) -> { step, state }
+ *   - advance(state, dt): move state forward dt with no event in between.
+ *   - events: [{ detect(state) -> time-to-event | null, resolve(state) }].
+ *     detect returns the time until that event under the CURRENT state, or
+ *     null when the event cannot occur; resolve mutates state at the event.
+ *   - Ties go to the earliest-listed event (source: wall beats block–block).
+ *   - maxEventsPerStep caps resolutions per step() call (Zeno guard, from the
+ *     source's per-frame event cap); when the cap hits, the remaining interval
+ *     is dropped for this call — state stays consistent at the last event.
+ * step(dt) -> { events, spent }: number of events resolved and time advanced.
+ */
+function makeEventStepper({ state = {}, advance, events = [], maxEventsPerStep = 10000 }) {
+  function step(dt) {
+    let remaining = dt;
+    let count = 0;
+    while (remaining > 0) {
+      let tMin = Infinity, hit = null;
+      for (const ev of events) {
+        const te = ev.detect(state);
+        if (te != null && Number.isFinite(te) && te >= 0 && te < tMin) {
+          tMin = te; hit = ev;
+        }
+      }
+      if (!hit || tMin >= remaining) {
+        advance(state, remaining);
+        return { events: count, spent: dt };
+      }
+      if (count >= maxEventsPerStep) {
+        return { events: count, spent: dt - remaining };
+      }
+      advance(state, tMin);
+      remaining -= tMin;
+      hit.resolve(state);
+      count++;
+    }
+    return { events: count, spent: dt };
+  }
+  return { step, state };
+}
+
+return { stepRK4, stepVerlet, stepSemiImplicit, stepRotate, stepAdaptive, makeEventStepper };
+})();
+
+// ---- module core.scale ----
+Engine.scale = (function () {
+'use strict';
+// core.scale — linear mapping, clamping, and number formatting.
+// Harvest sources: ~12 inline linear-map copies across QM_sims (collapsed to one
+// factory); fmt from Sim_lab_sims/CM_sims/Collisions.html (-0-safe, U+2212 minus).
+// Layer 1: no physics vocabulary — operates on domains, ranges, and values.
+
+const MINUS = '−';
+
+/**
+ * Linear map from [d0,d1] to [r0,r1] with inversion.
+ * makeScale([0,10],[0,500]) -> s ; s(5)=250 ; s.invert(250)=5
+ */
+function makeScale(domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  const k = (r1 - r0) / (d1 - d0);
+  const s = (x) => r0 + (x - d0) * k;
+  s.invert = (y) => d0 + (y - r0) / k;
+  s.domain = [d0, d1];
+  s.range = [r0, r1];
+  return s;
+}
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Format a number for display: fixed digits, trailing zeros trimmed,
+ * "-0.000" scrubbed to "0", true minus sign (U+2212).
+ */
+function fmt(x, digits = 2) {
+  if (!Number.isFinite(x)) return String(x);
+  let s = x.toFixed(digits);
+  if (digits > 0) s = s.replace(/\.?0+$/, '');
+  if (s === '-0' || s === '' || s === '-') s = '0';
+  return s.replace('-', MINUS);
+}
+
+return { makeScale, clamp, lerp, fmt };
+})();
+
+// ---- module canvas.fit ----
+Engine.fit = (function () {
+'use strict';
+// canvas.fit — DPR-aware canvas backing-store sizing.
+// Harvest sources: Sim_lab_sims/CM_sims/L6-The harmonic oscillator.html fit()
+// (setTransform reset before scale — fixes the cumulative-DPR bug) merged with
+// Sim_lab_sims/SR_sims/L09-s1-worldline-length-and-proper-time-shell.html fit()
+// (Math.max(1, …) zero-size guard). Canvas layer: pixels and rectangles only.
+
+/**
+ * Size a canvas's backing store to its CSS box × devicePixelRatio, reset the
+ * context transform, and scale so 1 drawing unit = 1 CSS pixel.
+ * Call at the top of every draw; returns the CSS-pixel size {w, h}.
+ */
+function fit(canvas, ctx) {
+  const dpr = globalThis.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(r.width * dpr));
+  const h = Math.max(1, Math.floor(r.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  return { w: r.width, h: r.height };
+}
+
+return { fit };
+})();
+
+// ---- module controls.bind ----
+Engine.bind = (function () {
+'use strict';
+// controls.bind — declarative control-to-state binding (Layer: controls).
+// Harvest merge: QM_sims/Quantum_tunneling_Plane_Wave.html wireSlider (~L2603;
+// the clamp + NaN guard) × SR_sims/L07-s1-Michelson_Morley_experiment_3D.html
+// bind (~L3050; the state-key + fmt shape). Bounds are read from the input
+// element's own min/max attributes — never duplicated in JS.
+//
+// Each binder returns {set(v), refresh()}:
+//   set(v)    — programmatic write: sanitizes, updates state + element +
+//               readout, and fires onChange (like a user gesture).
+//   refresh() — push the current state[key] back into the UI without firing
+//               onChange (use after external state mutation, e.g. a preset).
+
+const {clamp, fmt} = Engine.scale;
+function mustGet(id, who) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(who + ': no element with id "' + id + '"');
+  return el;
+}
+
+function sanitizeNum(el, v) {
+  let x = typeof v === 'number' ? v : parseFloat(v);
+  const lo = parseFloat(el.min), hi = parseFloat(el.max);
+  if (Number.isNaN(x)) x = Number.isFinite(lo) ? lo : 0;   // PW NaN guard
+  if (Number.isFinite(lo) && Number.isFinite(hi)) x = clamp(x, lo, hi);
+  return x;
+}
+
+/**
+ * Bind a range/number input to state[key].
+ * opts: { out: id-of-readout-element, fmt: v => string, onChange: v => {} }
+ */
+function bindSlider(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindSlider');
+  const out = opts.out ? document.getElementById(opts.out) : null;
+  const format = opts.fmt || (v => fmt(v));
+  const show = v => { if (out) out.textContent = format(v); };
+
+  el.addEventListener('input', () => {
+    const v = sanitizeNum(el, el.value);
+    state[key] = v;
+    show(v);
+    if (opts.onChange) opts.onChange(v);
+  });
+
+  function write(v, fire) {
+    v = sanitizeNum(el, v);
+    state[key] = v;
+    el.value = String(v);
+    show(v);
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  // Boot: seed state from the markup value, or push pre-set state into the UI.
+  if (state[key] === undefined) { state[key] = sanitizeNum(el, el.value); show(state[key]); }
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+/** Bind a checkbox to boolean state[key]. opts: { onChange: v => {} } */
+function bindToggle(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindToggle');
+
+  el.addEventListener('change', () => {
+    state[key] = !!el.checked;
+    if (opts.onChange) opts.onChange(state[key]);
+  });
+
+  function write(v, fire) {
+    v = !!v;
+    state[key] = v;
+    el.checked = v;
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  if (state[key] === undefined) state[key] = !!el.checked;
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+/**
+ * Bind a <select> to state[key]. opts: { parse: str => value, onChange }.
+ * parse defaults to identity (string options); pass parseFloat for numeric.
+ */
+function bindSelect(state, id, key, opts = {}) {
+  const el = mustGet(id, 'bindSelect');
+  const parse = opts.parse || (v => v);
+
+  el.addEventListener('change', () => {
+    state[key] = parse(el.value);
+    if (opts.onChange) opts.onChange(state[key]);
+  });
+
+  function write(v, fire) {
+    state[key] = v;
+    el.value = String(v);
+    if (fire && opts.onChange) opts.onChange(v);
+    return v;
+  }
+  if (state[key] === undefined) state[key] = parse(el.value);
+  else write(state[key], false);
+
+  return { set: v => write(v, true), refresh: () => write(state[key], false) };
+}
+
+return { bindSlider, bindToggle, bindSelect };
+})();
+
+// ---- module domain.em-fields ----
+Engine.em = (function () {
+'use strict';
+// domain.em-fields — 2D electro/magnetostatics (namespace Engine.em).
+// FIRST FRESH DOMAIN MODULE (plan M8): no harvest source exists — written
+// directly against the core APIs (core.integrate stepRK4/stepRotate).
+//
+// Units convention: k = 1 (natural units), charge q in units of e. So a point
+// charge contributes E = q r_hat / r^2 and V = q / r; force on a test charge
+// is F = q E. B is a single out-of-plane number Bz (field along +z); the
+// in-plane Lorentz force is F = q (E + v x Bz z_hat).
+//
+// Softening: every Coulomb sum uses r^2 -> r^2 + softening^2 (Plummer form)
+// so field/potential stay finite exactly AT a charge; the default 1e-9 is
+// far below any drawing or physics scale (perturbs r = 1 values at 1e-18).
+//
+// Field lines vs trajectories: traceFieldLine integrates the NORMALIZED field
+// direction with fixed arc-length RK4 steps — a pure GEOMETRIC curve, tangent
+// to E everywhere, parametrized by arc length. It is not a motion and nothing
+// moves along it; charged-particle MOTION is stepParticle, which integrates
+// the Lorentz force (and follows E only in the massless-overdamped limit,
+// which this module does not model).
+//
+// Pure magnetic motion: with E ~ 0 the exact update is a rotation — advancing
+// v with RK4 (or Euler) multiplies |v| by (1 + O((w dt)^k)) EVERY step, a
+// systematic energy injection that spirals the orbit outward. stepParticle
+// therefore switches to core.integrate stepRotate (norm-preserving closed
+// form) whenever |E| at the particle is below pureBEps; the cyclotron
+// radius mv/(qB) and period 2 pi m / (qB) are then exact to float rounding.
+
+const {stepRK4, stepRotate} = Engine.integrate;
+/**
+ * Validate a charge list: [{q, x, y}, ...] with finite numbers (q in units
+ * of e, k = 1). Returns a NEW array of plain {q, x, y} objects — the
+ * canonical input to every other function here. Throws RangeError otherwise.
+ */
+function makeCharges(list) {
+  if (!Array.isArray(list)) {
+    throw new RangeError('makeCharges: expected an array of {q, x, y}');
+  }
+  return list.map((c, i) => {
+    if (!c || typeof c !== 'object') {
+      throw new RangeError(`makeCharges: charge ${i} is not an object`);
+    }
+    const { q, x, y } = c;
+    if (!Number.isFinite(q) || !Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new RangeError(
+        `makeCharges: charge ${i} needs finite q, x, y — got {q: ${q}, x: ${x}, y: ${y}}`);
+    }
+    return { q, x, y };
+  });
+}
+
+/**
+ * Electric field [Ex, Ey] at (x, y): Coulomb superposition
+ * E = sum_i q_i (r - r_i) / (|r - r_i|^2 + softening^2)^(3/2), k = 1.
+ */
+function fieldAt(charges, x, y, { softening = 1e-9 } = {}) {
+  const s2 = softening * softening;
+  let Ex = 0, Ey = 0;
+  for (let i = 0; i < charges.length; i++) {
+    const dx = x - charges[i].x, dy = y - charges[i].y;
+    const r2 = dx * dx + dy * dy + s2;
+    const inv = charges[i].q / (r2 * Math.sqrt(r2));
+    Ex += dx * inv;
+    Ey += dy * inv;
+  }
+  return [Ex, Ey];
+}
+
+/**
+ * Electric potential at (x, y): V = sum_i q_i / sqrt(|r - r_i|^2 +
+ * softening^2), k = 1 (zero reference at infinity). grad V = -E exactly
+ * (same softening in both).
+ */
+function potentialAt(charges, x, y, { softening = 1e-9 } = {}) {
+  const s2 = softening * softening;
+  let V = 0;
+  for (let i = 0; i < charges.length; i++) {
+    const dx = x - charges[i].x, dy = y - charges[i].y;
+    V += charges[i].q / Math.sqrt(dx * dx + dy * dy + s2);
+  }
+  return V;
+}
+
+/* Index of the first charge within stopRadius of (x, y), else -1. */
+function chargeWithin(charges, x, y, stopRadius) {
+  const r2 = stopRadius * stopRadius;
+  for (let i = 0; i < charges.length; i++) {
+    const dx = x - charges[i].x, dy = y - charges[i].y;
+    if (dx * dx + dy * dy <= r2) return i;
+  }
+  return -1;
+}
+
+/**
+ * Trace one field line from (x0, y0): RK4 (core.integrate stepRK4) on the
+ * NORMALIZED field direction, so each step advances a fixed arc length
+ * stepSize. dir = +1 follows E (toward negative charges), -1 follows -E.
+ * Stops when the line comes within stopRadius of a charge, leaves bounds,
+ * meets a stagnation point (|E| < 1e-12), or after maxSteps.
+ * Returns points = [[x, y], ...] with two annotations: points.stop =
+ * 'charge' | 'bounds' | 'stagnation' | 'maxSteps' and points.charge =
+ * index of the terminating charge (-1 otherwise).
+ * Keep stopRadius >= stepSize or a step can jump across the stop disc.
+ * A field line is a geometric curve — never a particle trajectory.
+ */
+function traceFieldLine(charges, x0, y0, {
+  dir = +1,
+  maxSteps = 2000,
+  stepSize = 0.02,
+  stopRadius = 0.05,
+  bounds = { xMin: -1e3, xMax: 1e3, yMin: -1e3, yMax: 1e3 },
+  softening = 1e-9,
+} = {}) {
+  if (dir !== 1 && dir !== -1) {
+    throw new RangeError(`traceFieldLine: dir must be +1 or -1, got ${dir}`);
+  }
+  const deriv = (p) => {
+    const [Ex, Ey] = fieldAt(charges, p[0], p[1], { softening });
+    const m = Math.hypot(Ex, Ey);
+    if (m < 1e-30) return [0, 0];
+    return [(dir * Ex) / m, (dir * Ey) / m];
+  };
+  let p = [x0, y0];
+  const points = [[x0, y0]];
+  let stop = 'maxSteps';
+  let chargeIdx = -1;
+  for (let i = 0; i < maxSteps; i++) {
+    const [Ex, Ey] = fieldAt(charges, p[0], p[1], { softening });
+    if (Math.hypot(Ex, Ey) < 1e-12) { stop = 'stagnation'; break; }
+    p = stepRK4(deriv, p, i * stepSize, stepSize);
+    points.push([p[0], p[1]]);
+    const ci = chargeWithin(charges, p[0], p[1], stopRadius);
+    if (ci >= 0) { stop = 'charge'; chargeIdx = ci; break; }
+    if (p[0] < bounds.xMin || p[0] > bounds.xMax ||
+        p[1] < bounds.yMin || p[1] > bounds.yMax) { stop = 'bounds'; break; }
+  }
+  points.stop = stop;
+  points.charge = chargeIdx;
+  return points;
+}
+
+/**
+ * Standard field-line seeding: for each charge with q != 0, n points evenly
+ * spaced on a circle of seedRadius around it, n = max(1, round(perCharge *
+ * |q|)) — line count proportional to |q|. Positive charges seed dir = +1
+ * (lines leave), negative dir = -1 (trace the arriving lines backward).
+ * Returns [{x, y, dir}]. Keep seedRadius > traceFieldLine's stopRadius.
+ */
+function fieldLineSeeds(charges, { perCharge = 8, seedRadius = 0.1 } = {}) {
+  const seeds = [];
+  for (let i = 0; i < charges.length; i++) {
+    const c = charges[i];
+    if (c.q === 0) continue;
+    const n = Math.max(1, Math.round(perCharge * Math.abs(c.q)));
+    const dir = c.q > 0 ? 1 : -1;
+    for (let k = 0; k < n; k++) {
+      const a = (2 * Math.PI * k) / n;
+      seeds.push({ x: c.x + seedRadius * Math.cos(a), y: c.y + seedRadius * Math.sin(a), dir });
+    }
+  }
+  return seeds;
+}
+
+/* Marching-squares case table: caseIndex -> list of [edgeA, edgeB] pairs.
+ * Corners: c0 = (x0,y0), c1 = (x1,y0), c2 = (x1,y1), c3 = (x0,y1); bit set
+ * when corner value > level. Edges: 0 bottom (c0-c1), 1 right (c1-c2),
+ * 2 top (c3-c2), 3 left (c0-c3). Cases 5/10 are ambiguous — resolved by the
+ * cell-center average at runtime. */
+const MS_TABLE = {
+  1: [[3, 0]], 2: [[0, 1]], 3: [[3, 1]], 4: [[1, 2]], 6: [[0, 2]],
+  7: [[3, 2]], 8: [[2, 3]], 9: [[0, 2]], 11: [[1, 2]], 12: [[3, 1]],
+  13: [[0, 1]], 14: [[3, 0]],
+};
+
+/**
+ * Equipotential contour V(x, y) = level by marching squares on a grid.nx x
+ * grid.ny cell grid over bounds. Each crossing vertex is then corrected onto
+ * the exact level with `refine` Newton steps along grad V (= -E), so vertices
+ * satisfy V = level far beyond linear interpolation. Returns segments =
+ * [[[xA, yA], [xB, yB]], ...] (unordered; ambiguous saddle cells resolved by
+ * the cell-center value). Equipotentials cross field lines at right angles.
+ * NOTE: generic scalar-field contouring — a future core/contour module could
+ * absorb the marching-squares core; only the refine step is EM-specific.
+ */
+function equipotentialAt(charges, level, {
+  bounds = { xMin: -5, xMax: 5, yMin: -5, yMax: 5 },
+  grid = {},
+  softening = 1e-9,
+  refine = 2,
+} = {}) {
+  const nx = grid.nx || 96, ny = grid.ny || 96;
+  if (!(nx >= 2) || !(ny >= 2)) {
+    throw new RangeError(`equipotentialAt: grid must be at least 2x2, got ${nx}x${ny}`);
+  }
+  if (!(bounds.xMax > bounds.xMin) || !(bounds.yMax > bounds.yMin)) {
+    throw new RangeError('equipotentialAt: bounds must satisfy xMin < xMax and yMin < yMax');
+  }
+  const dx = (bounds.xMax - bounds.xMin) / nx;
+  const dy = (bounds.yMax - bounds.yMin) / ny;
+  const vals = new Float64Array((nx + 1) * (ny + 1));
+  for (let j = 0; j <= ny; j++) {
+    const y = bounds.yMin + j * dy;
+    for (let i = 0; i <= nx; i++) {
+      vals[j * (nx + 1) + i] = potentialAt(charges, bounds.xMin + i * dx, y, { softening });
+    }
+  }
+
+  const refineVertex = (p) => {
+    for (let k = 0; k < refine; k++) {
+      const V = potentialAt(charges, p[0], p[1], { softening });
+      const [Ex, Ey] = fieldAt(charges, p[0], p[1], { softening });
+      const e2 = Ex * Ex + Ey * Ey;
+      if (!(e2 > 1e-30) || !Number.isFinite(V)) break;
+      // grad V = -E, so the Newton correction -(V - level) grad V / |grad V|^2
+      // is +(V - level) E / |E|^2.
+      p[0] += ((V - level) * Ex) / e2;
+      p[1] += ((V - level) * Ey) / e2;
+    }
+    return p;
+  };
+
+  const segments = [];
+  for (let j = 0; j < ny; j++) {
+    const y0 = bounds.yMin + j * dy, y1 = y0 + dy;
+    for (let i = 0; i < nx; i++) {
+      const x0 = bounds.xMin + i * dx, x1 = x0 + dx;
+      const v00 = vals[j * (nx + 1) + i], v10 = vals[j * (nx + 1) + i + 1];
+      const v01 = vals[(j + 1) * (nx + 1) + i], v11 = vals[(j + 1) * (nx + 1) + i + 1];
+      if (!Number.isFinite(v00) || !Number.isFinite(v10) ||
+          !Number.isFinite(v01) || !Number.isFinite(v11)) continue;
+      const idx = (v00 > level ? 1 : 0) | (v10 > level ? 2 : 0) |
+                  (v11 > level ? 4 : 0) | (v01 > level ? 8 : 0);
+      if (idx === 0 || idx === 15) continue;
+      let pairs;
+      if (idx === 5 || idx === 10) {
+        const centerAbove = (v00 + v10 + v11 + v01) / 4 > level;
+        if (idx === 5) pairs = centerAbove ? [[0, 1], [2, 3]] : [[3, 0], [1, 2]];
+        else pairs = centerAbove ? [[3, 0], [1, 2]] : [[0, 1], [2, 3]];
+      } else {
+        pairs = MS_TABLE[idx];
+      }
+      const edgePoint = (e) => {
+        let t;
+        switch (e) {
+          case 0: t = (level - v00) / (v10 - v00); return [x0 + t * dx, y0];
+          case 1: t = (level - v10) / (v11 - v10); return [x1, y0 + t * dy];
+          case 2: t = (level - v01) / (v11 - v01); return [x0 + t * dx, y1];
+          default: t = (level - v00) / (v01 - v00); return [x0, y0 + t * dy];
+        }
+      };
+      for (const [a, b] of pairs) {
+        segments.push([refineVertex(edgePoint(a)), refineVertex(edgePoint(b))]);
+      }
+    }
+  }
+  return segments;
+}
+
+/**
+ * In-plane Lorentz force for out-of-plane B: F = q (E + v x Bz z_hat) =
+ * [q (Ex + vy Bz), q (Ey - vx Bz)]. E = [Ex, Ey], v = [vx, vy], B = Bz.
+ */
+function lorentzForce(q, E, B, v) {
+  if (!E || E.length !== 2 || !v || v.length !== 2) {
+    throw new RangeError('lorentzForce: E and v must be 2-component [x, y] vectors');
+  }
+  return [q * (E[0] + v[1] * B), q * (E[1] - v[0] * B)];
+}
+
+/**
+ * Validated particle state {q, m, x, y, vx, vy} (m > 0; velocities default
+ * 0) — the state stepParticle advances IN PLACE.
+ */
+function makeChargedParticle({ q, m, x, y, vx = 0, vy = 0 }) {
+  if (!Number.isFinite(m) || !(m > 0)) {
+    throw new RangeError(`makeChargedParticle: m must be a positive finite number, got ${m}`);
+  }
+  for (const [name, v] of [['q', q], ['x', x], ['y', y], ['vx', vx], ['vy', vy]]) {
+    if (!Number.isFinite(v)) {
+      throw new RangeError(`makeChargedParticle: ${name} must be a finite number, got ${v}`);
+    }
+  }
+  return { q, m, x, y, vx, vy };
+}
+
+/**
+ * Advance a particle by dt IN PLACE under the Lorentz force from the charge
+ * superposition (fieldAt), a uniform out-of-plane Bz, and an optional
+ * uniform applied field E0 = [Ex, Ey] (e.g. for E x B drift setups).
+ *
+ * Route (documented, test-relied-on):
+ *  - |E| <= pureBEps at the particle: PURE MAGNETIC motion. RK4 is the wrong
+ *    tool here — it inflates |v| every step and spirals the orbit outward —
+ *    so the velocity is rotated with core.integrate stepRotate (exact,
+ *    norm-preserving) by -omega dt, omega = q Bz / m, and the position moves
+ *    along the exact circular chord. Cyclotron radius m|v|/(|q| Bz) and
+ *    period 2 pi m / (q Bz) hold to float rounding for any dt.
+ *  - otherwise: one core.integrate stepRK4 step on [x, y, vx, vy] with
+ *    dv/dt = lorentzForce/m. Returns p.
+ */
+function stepParticle(p, charges, Bz, dt, {
+  softening = 1e-9, E0 = null, pureBEps = 1e-12,
+} = {}) {
+  const eAt = (x, y) => {
+    const E = fieldAt(charges, x, y, { softening });
+    if (E0) { E[0] += E0[0]; E[1] += E0[1]; }
+    return E;
+  };
+  const Ehere = eAt(p.x, p.y);
+  if (Math.hypot(Ehere[0], Ehere[1]) <= pureBEps) {
+    const omega = (p.q * Bz) / p.m;         // signed cyclotron frequency
+    if (omega === 0) {                       // no force at all: free flight
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      return p;
+    }
+    const theta = -omega * dt;               // velocity rotation angle (CCW)
+    // Exact chord: displacement = (2 sin(omega dt / 2) / omega) * R(theta/2) v.
+    const vHalf = stepRotate([p.vx, p.vy], null, 0.5 * theta);
+    const f = (2 * Math.sin(0.5 * omega * dt)) / omega;
+    p.x += f * vHalf[0];
+    p.y += f * vHalf[1];
+    const vNew = stepRotate([p.vx, p.vy], null, theta);
+    p.vx = vNew[0];
+    p.vy = vNew[1];
+    return p;
+  }
+  const deriv = (s) => {
+    const F = lorentzForce(p.q, eAt(s[0], s[1]), Bz, [s[2], s[3]]);
+    return [s[2], s[3], F[0] / p.m, F[1] / p.m];
+  };
+  const out = stepRK4(deriv, [p.x, p.y, p.vx, p.vy], 0, dt);
+  p.x = out[0]; p.y = out[1]; p.vx = out[2]; p.vy = out[3];
+  return p;
+}
+
+return { makeCharges, fieldAt, potentialAt, traceFieldLine, fieldLineSeeds, equipotentialAt, lorentzForce, makeChargedParticle, stepParticle };
+})();
+
+// ---- module shell ----
+Engine.shell = (function () {
+'use strict';
+// shell/shell.js — the canonical Shell runtime (Layer 3): rAF frame loop,
+// play/pause/speed/reset, maximize, theme, info modal, formal region,
+// collapsible panels, guided-inquiry stepper, lecture mode.
+//
+// Base: SR_sims/L09-s1-worldline-length-and-proper-time-shell.html L618-816
+// (md5-identical in 10 SR files). Every drift feature found across the 57 sim
+// Shell copies is folded in per shell/HARVEST-NOTES.md — include-always
+// features are inert when the DOM lacks the element; behavior splits sit
+// behind cfg flags. Line-harvest sources:
+//   stepUnready                           — CM L37-Kepler's Laws
+//   playLocked / setPlayLocked / #play-hint — CM Galperins_Billiard
+//   setPlayEnabled / currentGated gating  — CM L36-The Energy of the Orbit-new
+//   finishInquiry / onComplete            — CM L9-The pendulum
+//   data-manual-gate opt-out + inqNext export — CM Free-Body Diagram Builder
+//   scroll-steps-to-top                   — SR L10-s2
+//   onExploreMode plumbing (+ aliases)    — SR L00-s1 (aliases: L01-s1, L08-s2)
+//   'fastforward' lecture landing         — SR L19-s2
+//   #shell-speed markup read at boot      — CM L1-Solar System Orbits
+//   stepReady marks current dot done      — CM L35-Orbits
+//   formal-open root class + lecture refit tail — SR L07-s1
+//   fixed-dt accumulator frame mode       — QM Quantum_Tunneling_Gaussian_Wave L2230-2253
+//
+// BUILD ALIASING: the registry entry "shell" carries "alias": "Shell", so
+// build.py emits `window.Shell = Engine.shell;` right after this module's
+// IIFE — the frozen 57-sim API (`Shell.init({...})`, `Shell.stepReady()`,
+// `Shell.step`, ...) keeps working unchanged. The speed/playing/step/totalSteps
+// getter properties of that API are installed onto the built namespace object
+// by init() (see _installGetters below), because the build's plain
+// `return {exports}` shape cannot carry accessors.
+
+const CFG_DEFAULTS = {
+  resumeOnReset: true,        // true → Reset resumes play | false → leave play state alone | 'pause' → force pause
+  autoplay: true,             // start the loop playing after init
+  speed: 1,                   // fallback speed; a #shell-speed markup value wins at boot (CM L1-Solar fix)
+  dtClamp: 0.05,              // max frame dt (seconds) before speed scaling — frame-stall guard
+  lectureLanding: 'last',     // 'last' | 'first' | 'fastforward' (replay every onStep, SR L19-s2)
+  finishFastForward: false,   // Finish/Skip replays remaining onStep(k) before completing (CM L9)
+  resumeOnFinish: false,      // finishInquiry ends with setPlaying(true) (CM L9 tail)
+  resetBeforeFirstStep: true, // onReset before the stepper's first onStep(0) — fixes the step-0 clobber
+  scrollStepsToTop: true,     // scroll #inq-cards to top on step change (inert when pane not scrollable)
+  gateLocksPlay: false,       // data-gate steps also disable ▶ Play until stepReady (CM L36-Energy)
+};
+
+let onFrame = () => {}, onReset = () => {}, onResize = () => {}, onStep = () => {};
+let onComplete = () => {}, onExploreMode = () => {};
+let cfg = Object.assign({}, CFG_DEFAULTS);
+let frame = null;               // opt-in {mode:'fixed', dt, maxSubsteps}
+let root = null;
+let playing = true, speed = 1, last = 0, started = false, acc = 0;
+let inqStep = 0, inqTotal = 0;  // guided-inquiry stepper (shell-owned)
+let playLocked = false;         // Galperins: prediction gate can hold ▶ Play shut
+
+function loop(now) {
+  let dt = (now - last) / 1000;
+  if (dt > cfg.dtClamp) dt = cfg.dtClamp;
+  last = now;
+  if (playing) {
+    if (frame && frame.mode === 'fixed') {
+      // Fixed-dt accumulator (QM QTGW L2230-2253): FPS-independent PDE
+      // stepping with a per-frame substep cap; the backlog is dropped when the
+      // cap hits so a stalled tab never triggers a catch-up burst.
+      acc += dt * speed;
+      let n = Math.floor(acc / frame.dt);
+      const cap = frame.maxSubsteps || 600;
+      if (n > cap) { n = cap; acc = 0; } else { acc -= n * frame.dt; }
+      for (let i = 0; i < n; i++) onFrame(frame.dt);
+    } else {
+      onFrame(dt * speed);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function refit() { onResize(); last = performance.now(); }
+
+function setPlaying(p) {
+  if (p && playLocked) return;   // Galperins: prediction gate holds ▶ shut
+  playing = p; last = performance.now();
+  const b = document.getElementById('shell-play');
+  if (b) { b.textContent = p ? '⏸ Pause' : '▶ Play'; b.classList.toggle('paused', !p); }
+}
+
+// Enable/disable the ▶ Play button without the playLocked hint (CM L36-Energy).
+function setPlayEnabled(on) {
+  const b = document.getElementById('shell-play'); if (b) b.disabled = !on;
+}
+
+// Hard-lock ▶ Play behind a prediction commitment, with the #play-hint pill
+// (CM Galperins_Billiard). Collapsing the inquiry always unlocks.
+function setPlayLocked(locked) {
+  playLocked = locked;
+  const b = document.getElementById('shell-play');
+  const hint = document.getElementById('play-hint');
+  if (b) {
+    b.disabled = locked;
+    b.title = locked ? 'Commit a prediction to unlock' : '';
+  }
+  if (hint) hint.classList.toggle('show', locked);
+  if (locked && playing) setPlaying(false);
+}
+
+function setMaximized(on) {
+  root.classList.toggle('shell-max', on);
+  const maxBtn = document.getElementById('shell-maximize');
+  if (maxBtn) {
+    maxBtn.classList.toggle('active', on);
+    maxBtn.textContent = on ? '⤡ Minimize' : '⛶ Maximize';
+  }
+  requestAnimationFrame(refit);
+}
+
+// "Free exploration" = the guided inquiry is out of the way (collapsed or
+// lecture mode). SIMs use onExploreMode to unlock their full control surface
+// (SR L00-s1); per-sim DOM toggling belongs in that handler, never here.
+function isFreeExplore() {
+  return root.classList.contains('inquiry-collapsed') || root.classList.contains('lecture-mode');
+}
+function notifyExploreMode() { onExploreMode(isFreeExplore()); }
+
+// Dynamic sidebar: collapse the guided-inquiry zone to its restore bar (on
+// answer or Skip) or expand it again (restore-bar click). Refit canvases so
+// the sidebar height change never distorts the hero.
+function setInquiryCollapsed(on) {
+  root.classList.toggle('inquiry-collapsed', on);
+  if (on) setPlayLocked(false);   // Galperins: collapsing always unlocks ▶
+  notifyExploreMode();
+  requestAnimationFrame(refit);
+}
+
+function setLectureMode(on) {
+  root.classList.toggle('lecture-mode', on);
+  const b = document.getElementById('shell-lecture');
+  if (b) b.classList.toggle('active', on);
+  if (on) {
+    const cards = inqCards();
+    if (cards.length) {
+      if (cfg.lectureLanding === 'fastforward') {
+        // SR L19-s2: incremental onStep — replay every step so the lecture
+        // scene matches the fully-revealed post-inquiry state.
+        for (let i = 0; i < cards.length; i++) onStep(i);
+        inqShow(cards.length - 1);
+      } else if (cfg.lectureLanding === 'first') {
+        inqShow(0);
+      } else {
+        inqShow(cards.length - 1);
+      }
+    }
+    setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: lecture never leaves ▶ dead
+  } else {
+    setInquiryCollapsed(false);
+    inqShow(0);
+  }
+  notifyExploreMode();
+  requestAnimationFrame(refit);   // SR L07-s1: refit tail after the mode swap
+}
+
+// ---- Guided-inquiry stepper (shell-owned, so Next/Finish are always wired) ----
+// The SIM supplies sequential <div class="inq-step"> cards in #inq-cards. The
+// shell shows ONE at a time, builds the dots, and drives the Next/Finish button.
+// A card marked data-gate keeps Next disabled until the student clicks a .choice
+// inside it (auto-detected) or the SIM calls Shell.stepReady(). A card marked
+// data-manual-gate opts out of the .choice auto-detection (FBD) — the SIM must
+// call stepReady() itself.
+function inqCards() { return root.querySelectorAll('#inq-cards .inq-step'); }
+function currentGated() {
+  const card = inqCards()[inqStep];
+  return !!(card && card.hasAttribute('data-gate') && !card.hasAttribute('data-ready'));
+}
+function inqUpdatePager() {
+  const cards = inqCards();
+  const prev = document.getElementById('inq-prev');
+  const pnext = document.getElementById('inq-pager-next');
+  if (prev) prev.disabled = inqStep <= 0;
+  if (pnext) pnext.disabled = inqStep >= cards.length - 1 || (cfg.gateLocksPlay && currentGated());
+}
+function inqShow(n) {
+  const cards = inqCards();
+  if (!cards.length) return;
+  inqStep = Math.max(0, Math.min(n, cards.length - 1));
+  cards.forEach((c, i) => c.classList.toggle('active', i === inqStep));
+  root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === inqStep);
+    d.classList.toggle('done', i < inqStep);
+  });
+  const next = document.getElementById('inq-next');
+  if (next) {
+    next.disabled = currentGated();
+    next.textContent = (inqStep >= cards.length - 1) ? 'Finish' : 'Next →';
+  }
+  if (cfg.gateLocksPlay) {   // L36-Energy: gate ▶ Play behind the current step
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  inqUpdatePager();
+  onStep(inqStep);
+  if (cfg.scrollStepsToTop) {   // SR L10-s2: long cards land scrolled to the top
+    const host = document.getElementById('inq-cards');
+    if (host) host.scrollTop = 0;
+  }
+  requestAnimationFrame(refit);
+}
+function inqPrev() {
+  if (inqStep > 0) inqShow(inqStep - 1);
+}
+function inqPagerNext() {
+  const cards = inqCards();
+  if (inqStep < cards.length - 1) inqShow(inqStep + 1);
+}
+function inqNext() {
+  const cards = inqCards();
+  if (inqStep >= cards.length - 1) finishInquiry();   // Finish = completed state + hide the inquiry
+  else inqShow(inqStep + 1);
+}
+// Finish OR Skip (CM L9): optionally fast-forward through any remaining steps
+// (applying each onStep so the scene ends in the SAME fully-revealed state as
+// completing the inquiry), let the SIM set up free exploration via
+// onComplete(), collapse the zone, and optionally leave the sim playing.
+// With default flags this reduces to the canonical Finish (collapse only).
+function finishInquiry() {
+  const cards = inqCards();
+  if (cfg.finishFastForward && cards.length) {
+    for (let k = inqStep + 1; k < cards.length; k++) onStep(k);
+    inqStep = cards.length - 1;
+    root.querySelectorAll('#inq-dots .inq-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === inqStep);
+      d.classList.toggle('done', i < inqStep);
+    });
+  }
+  onComplete();
+  setInquiryCollapsed(true);
+  if (cfg.resumeOnFinish) setPlaying(true);
+}
+// SIM may call this to satisfy a data-gate step's requirement (e.g. "watched").
+function stepReady() {
+  const card = inqCards()[inqStep];
+  if (card) card.setAttribute('data-ready', '');
+  const next = document.getElementById('inq-next'); if (next) next.disabled = false;
+  // CM L35-Orbits: mark this dot as done immediately upon commit.
+  const dot = root.querySelectorAll('#inq-dots .inq-dot')[inqStep];
+  if (dot) dot.classList.add('done');
+  if (cfg.gateLocksPlay) { setPlayEnabled(true); inqUpdatePager(); }
+}
+// Revoke the current card's readiness (CM L37-Kepler's Laws) — e.g. the
+// student withdrew a committed prediction.
+function stepUnready() {
+  const card = inqCards()[inqStep];
+  if (card) card.removeAttribute('data-ready');
+  const next = document.getElementById('inq-next');
+  // Mirror inqShow: only disable Next when the card actually gates.
+  if (next) next.disabled = !!(card && card.hasAttribute('data-gate'));
+  if (cfg.gateLocksPlay) {
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+    inqUpdatePager();
+  }
+}
+
+function wire() {
+  const play = document.getElementById('shell-play');
+  const reset = document.getElementById('shell-reset');
+  const spd = document.getElementById('shell-speed');
+  const maxBtn = document.getElementById('shell-maximize');
+  const skip = document.getElementById('aside-inquiry-skip');
+  const restore = document.getElementById('aside-inquiry-restore');
+  const tFormal = document.getElementById('toggle-formal');
+
+  if (play) play.addEventListener('click', () => { if (!play.disabled) setPlaying(!playing); });
+  // Reset zeroes state; whether the loop then plays is cfg-driven (tri-state).
+  if (reset) reset.addEventListener('click', () => {
+    onReset(); last = performance.now(); acc = 0;
+    if (cfg.resumeOnReset === 'pause') setPlaying(false);
+    else if (cfg.resumeOnReset) setPlaying(true);
+    // resumeOnReset:false → leave the play state as the student had it
+  });
+  if (spd) {
+    // CM L1-Solar fix: honor the select's authored markup value at boot.
+    speed = parseFloat(spd.value) || cfg.speed;
+    spd.addEventListener('change', e => { speed = parseFloat(e.target.value) || cfg.speed; });
+  }
+
+  if (maxBtn) maxBtn.addEventListener('click', () => setMaximized(!root.classList.contains('shell-max')));
+
+  const infoBtn = document.getElementById('shell-info');
+  const infoModal = document.getElementById('shell-info-modal');
+  const infoClose = document.getElementById('shell-info-close');
+  function setInfo(open) { if (infoModal) infoModal.classList.toggle('open', open); }
+  if (infoBtn) infoBtn.addEventListener('click', () => setInfo(true));
+  if (infoClose) infoClose.addEventListener('click', () => setInfo(false));
+  if (infoModal) infoModal.addEventListener('click', e => { if (e.target === infoModal) setInfo(false); });
+
+  // Light/dark theme toggle (default dark). Swaps the icon and refits canvases.
+  const themeBtn = document.getElementById('shell-theme');
+  if (themeBtn) themeBtn.addEventListener('click', () => {
+    const light = document.body.classList.toggle('light-theme');
+    themeBtn.textContent = light ? '☀' : '☾';
+    requestAnimationFrame(refit);
+  });
+
+  const lecture = document.getElementById('shell-lecture');
+  if (lecture) lecture.addEventListener('click', () => setLectureMode(!root.classList.contains('lecture-mode')));
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (infoModal && infoModal.classList.contains('open')) setInfo(false);
+    else if (root.classList.contains('shell-max')) setMaximized(false);
+  });
+
+  // Skip collapses the inquiry (CM L37); under finishFastForward it goes through
+  // finishInquiry so the scene still ends fully revealed (CM L9's contract).
+  if (skip) skip.addEventListener('click', () => {
+    if (cfg.finishFastForward) finishInquiry();
+    else setInquiryCollapsed(true);
+    if (cfg.gateLocksPlay) setPlayEnabled(true);   // L36-Energy: Skip unlocks ▶
+  });
+  if (restore) restore.addEventListener('click', () => setLectureMode(false));
+  // Next / Finish — shell-driven step advance (Finish collapses the inquiry).
+  const inqNextBtn = document.getElementById('inq-next');
+  if (inqNextBtn) inqNextBtn.addEventListener('click', inqNext);
+  const inqPrevBtn = document.getElementById('inq-prev');
+  if (inqPrevBtn) inqPrevBtn.addEventListener('click', inqPrev);
+  const inqPagerNextBtn = document.getElementById('inq-pager-next');
+  if (inqPagerNextBtn) inqPagerNextBtn.addEventListener('click', inqPagerNext);
+  // Auto-gate: a .choice click inside the active gated card enables Next —
+  // unless the card opts out with data-manual-gate (FBD; the SIM then gates
+  // via stepReady()/stepUnready() itself).
+  const cardsHost = document.getElementById('inq-cards');
+  if (cardsHost) cardsHost.addEventListener('click', e => {
+    const ch = e.target.closest('.choice'); if (!ch) return;
+    const card = ch.closest('.inq-step');
+    if (card && card.classList.contains('active') && !card.hasAttribute('data-manual-gate')) {
+      stepReady();
+    }
+  });
+  if (tFormal) tFormal.addEventListener('click', () => {
+    const hidden = root.classList.toggle('hide-formal');
+    root.classList.toggle('formal-open', !hidden);   // SR L07-s1: lets sim CSS make room
+    tFormal.classList.toggle('active', !hidden);
+    requestAnimationFrame(refit);
+  });
+
+  root.querySelectorAll('.shell-panel-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('collapsed');
+      requestAnimationFrame(refit);
+    });
+  });
+
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(refit, 80); });
+}
+
+// The frozen 57-sim API reads Shell.speed/.playing/.step/.totalSteps as getter
+// properties. The build's `return {exports}` object cannot carry accessors, so
+// install them on the built namespace (Engine.shell === window.Shell) here.
+function _installGetters() {
+  const w = (typeof window !== 'undefined') ? window : null;
+  const ns = w && ((w.Engine && w.Engine.shell) || w.Shell);
+  if (!ns || Object.getOwnPropertyDescriptor(ns, 'speed')) return;
+  Object.defineProperties(ns, {
+    speed:      { get: () => speed,    configurable: true },
+    playing:    { get: () => playing,  configurable: true },
+    step:       { get: () => inqStep,  configurable: true },
+    totalSteps: { get: () => inqTotal, configurable: true },
+  });
+}
+
+function init(opts) {
+  opts = opts || {};
+  onFrame = opts.onFrame || onFrame; onReset = opts.onReset || onReset;
+  onResize = opts.onResize || onResize; onStep = opts.onStep || onStep;
+  onComplete = opts.onComplete || onComplete;
+  // onExploreMode aliases kept for the SR variants (L01-s1 used onLectureMode,
+  // L08-s2 used onInquiryCollapsed) — all fire on the same free-explore signal.
+  onExploreMode = opts.onExploreMode || opts.onLectureMode || opts.onInquiryCollapsed || onExploreMode;
+  cfg = Object.assign({}, CFG_DEFAULTS, opts.cfg || {});
+  frame = opts.frame || null;
+  root = document.getElementById('shell');
+  playing = !!cfg.autoplay;
+  speed = cfg.speed;
+  acc = 0;
+  wire();
+  // Build the guided-inquiry stepper from the .inq-step cards the SIM supplied.
+  const cards = inqCards();
+  inqTotal = cards.length;
+  // DECIDED (HARVEST-NOTES): reset-first is correct — the canonical step-first
+  // order let onReset clobber the step-0 scene. The flag exists only for
+  // exact-fidelity backports of old SR sims.
+  if (cfg.resetBeforeFirstStep) { onReset(); onResize(); }
+  if (inqTotal > 0) {
+    const dots = document.getElementById('inq-dots');
+    if (dots) { dots.innerHTML = ''; for (let i = 0; i < inqTotal; i++) { const d = document.createElement('span'); d.className = 'inq-dot'; dots.appendChild(d); } }
+    inqShow(0);
+  } else {
+    root.classList.add('no-inquiry');   // no inquiry → hide the whole zone + restore bar
+  }
+  if (!cfg.resetBeforeFirstStep) { onResize(); onReset(); }
+  last = performance.now();
+  // DECIDED: init always ends with setPlaying(autoplay) — re-syncs the Play
+  // button label after onReset regardless of what onReset touched.
+  setPlaying(playing);
+  if (cfg.gateLocksPlay) {   // L36-Energy: a gated first card locks ▶ at boot
+    setPlayEnabled(!currentGated());
+    if (currentGated()) setPlaying(false);
+  }
+  _installGetters();
+  if (!started) { started = true; requestAnimationFrame(loop); }
+}
+
+// Test/debug snapshot of shell state — never call from sim logic; sims use the
+// Shell.speed/.playing/.step/.totalSteps getters instead.
+function _state() {
+  return {
+    playing, speed, step: inqStep, totalSteps: inqTotal, playLocked,
+    cfg: Object.assign({}, cfg),
+  };
+}
+
+return { refit, setPlaying, setPlayEnabled, setPlayLocked, setLectureMode, inqNext, stepReady, stepUnready, init, _state };
+})();
+window.Shell = Engine.shell;
+
+// ---- module verify.audit ----
+Engine.audit = (function () {
+'use strict';
+// verify.audit — the __audit machine-verification surface (Layer: verify).
+// Formalizes the window.__audit convention already present ad-hoc in 35 sims
+// (SR `__audit.at(beta)` in 23 files, CM orbit audits in 12). This module is
+// contract, not framework: one call installs the surface verify.mjs drives.
+//
+// defineAudit(opts, target) works without a browser: pass any globalThis-like
+// target (default globalThis) — node tests inject a mock {document, Event}.
+
+/* Parse the inert #engine-manifest JSON block, or null when absent/invalid. */
+function readManifest(target) {
+  const doc = target && target.document;
+  if (!doc || typeof doc.getElementById !== 'function') return null;
+  const el = doc.getElementById('engine-manifest');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/* Default setParam: drive the control through the SAME code path as the UI.
+ * controls.bind listens for 'input' on the element (see controls/bind.js
+ * bindSlider), so setting .value and dispatching 'input' exercises the
+ * sanitize/clamp/state/onChange chain exactly like a user gesture. When the
+ * manifest carries a params schema, only its ids are accepted. */
+function makeSetParam(target, manifest) {
+  return function setParam(id, value) {
+    const doc = target && target.document;
+    if (!doc) throw new Error('audit.setParam: no document in this context');
+    if (manifest && Array.isArray(manifest.params) &&
+        !manifest.params.some((p) => p.id === id)) {
+      throw new Error('audit.setParam: "' + id + '" is not in the manifest params schema');
+    }
+    const el = doc.getElementById(id);
+    if (!el) throw new Error('audit.setParam: no control element "' + id + '"');
+    el.value = String(value);
+    const Ev = target.Event || (typeof Event !== 'undefined' ? Event : null);
+    el.dispatchEvent(Ev ? new Ev('input', { bubbles: true }) : { type: 'input' });
+    return el.value;
+  };
+}
+
+/**
+ * Install the audit surface: target.__audit =
+ *   {version: 1, manifest, probes, invariants, state, setParam, run()}.
+ * - probes: pure numeric functions, exposed as-is.
+ * - invariants: each fn MUST return {ok, value, expected, tol}; run()
+ *   aggregates them into {pass, results:[{name, ok, value, expected, tol}]}.
+ *   A throwing invariant is recorded as ok:false, never rethrown.
+ * - state: optional live-state accessor object (or null).
+ * - setParam(id, v): defaults to the UI-code-path helper above.
+ * Returns the audit object (also handed to guards via registerWith).
+ */
+function defineAudit(opts = {}, target = globalThis) {
+  const probes = opts.probes || {};
+  const invariants = opts.invariants || {};
+  const state = opts.state || null;
+  const manifest = readManifest(target);
+
+  const audit = {
+    version: 1,
+    manifest,
+    probes,
+    invariants,
+    state,
+    setParam: opts.setParam || makeSetParam(target, manifest),
+    run() {
+      const results = [];
+      for (const name of Object.keys(invariants)) {
+        let r;
+        try {
+          r = invariants[name]() || {};
+        } catch (e) {
+          r = { ok: false, value: String((e && e.message) || e), expected: null, tol: null };
+        }
+        results.push({ name, ok: !!r.ok, value: r.value, expected: r.expected, tol: r.tol });
+      }
+      return { pass: results.every((x) => x.ok), results };
+    },
+  };
+  if (target) target.__audit = audit;
+  return audit;
+}
+
+return { defineAudit };
+})();
+
+/* ENGINE:END */
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var EM = Engine.em;
+  var S = Engine.scale;
+
+  // ---- fixed configuration -------------------------------------------------
+  var X_HALF = 6;                       // visible world half-width
+  var PER_CHARGE = 8;                   // field lines per unit |q|
+  var SEED_R = 0.14, STOP_R = 0.1, STEP = 0.04, MAX_STEPS = 3000;
+  var TRACE_BOUNDS = { xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+  var EQUIP_BOUNDS = { xMin: -6.2, xMax: 6.2, yMin: -4.2, yMax: 4.2 };
+  var EQUIP_GRID = { nx: 150, ny: 102 };
+  var EQUIP_LEVELS = [0.12, 0.25, 0.5, 1.0];
+  var PROBE = { x: 1.5, y: 1 };         // fixed readout/audit probe point
+  var DEFAULTS = { preset: 'dipole', q1: 1, q2: 1, sep: 2, showEquip: true };
+
+  var canvas = document.getElementById('plot');
+  var ctx = canvas.getContext('2d');
+  var els = {
+    eProbe: document.getElementById('eProbeVal'),
+    vProbe: document.getElementById('vProbeVal'),
+    lineCount: document.getElementById('lineCountVal'),
+    net: document.getElementById('netVal')
+  };
+
+  // ---- state + scene -------------------------------------------------------
+  var state = {};                       // preset, q1, q2, sep, showEquip
+  var scene = { charges: [], lines: [], contours: [] };
+
+  function chargesFor() {
+    var h = state.sep / 2;
+    if (state.preset === 'single') {
+      return EM.makeCharges([{ q: state.q1, x: 0, y: 0 }]);
+    }
+    if (state.preset === 'like') {
+      return EM.makeCharges([{ q: state.q1, x: h, y: 0 }, { q: state.q2, x: -h, y: 0 }]);
+    }
+    return EM.makeCharges([{ q: state.q1, x: h, y: 0 }, { q: -state.q2, x: -h, y: 0 }]);
+  }
+
+  function rebuildScene() {
+    scene.charges = chargesFor();
+    var seeds = EM.fieldLineSeeds(scene.charges, { perCharge: PER_CHARGE, seedRadius: SEED_R });
+    scene.lines = seeds.map(function (s) {
+      var pts = EM.traceFieldLine(scene.charges, s.x, s.y, {
+        dir: s.dir, stepSize: STEP, stopRadius: STOP_R,
+        maxSteps: MAX_STEPS, bounds: TRACE_BOUNDS
+      });
+      return { pts: pts, dir: s.dir };
+    });
+    scene.contours = [];
+    if (state.showEquip) {
+      var hasPos = scene.charges.some(function (c) { return c.q > 0; });
+      var hasNeg = scene.charges.some(function (c) { return c.q < 0; });
+      EQUIP_LEVELS.forEach(function (lv) {
+        if (hasPos) scene.contours.push({ level: lv, segs: EM.equipotentialAt(scene.charges, lv, { bounds: EQUIP_BOUNDS, grid: EQUIP_GRID }) });
+        if (hasNeg) scene.contours.push({ level: -lv, segs: EM.equipotentialAt(scene.charges, -lv, { bounds: EQUIP_BOUNDS, grid: EQUIP_GRID }) });
+      });
+    }
+  }
+
+  function netCharge() {
+    var n = 0;
+    scene.charges.forEach(function (c) { n += c.q; });
+    return n;
+  }
+
+  // ---- readouts ------------------------------------------------------------
+  function updateReadouts() {
+    var E = EM.fieldAt(scene.charges, PROBE.x, PROBE.y);
+    els.eProbe.textContent = S.fmt(Math.hypot(E[0], E[1]), 3);
+    els.vProbe.textContent = S.fmt(EM.potentialAt(scene.charges, PROBE.x, PROBE.y), 3);
+    els.lineCount.textContent = String(scene.lines.length);
+    els.net.textContent = S.fmt(netCharge(), 1);
+  }
+
+  // ---- drawing -------------------------------------------------------------
+  function palette() {
+    var light = document.body.classList.contains('light-theme');
+    return light ? {
+      line: 'rgba(23,32,47,0.55)', equip: 'rgba(30,143,77,0.6)',
+      pos: '#c2325f', neg: '#0f7fae', glyph: '#ffffff', text: '#5b6a7b'
+    } : {
+      line: 'rgba(232,237,247,0.5)', equip: 'rgba(123,216,143,0.55)',
+      pos: '#f0668c', neg: '#4cc9f0', glyph: '#0e1420', text: '#93a1b8'
+    };
+  }
+
+  function draw() {
+    var size = Engine.fit.fit(canvas, ctx);
+    var W = size.w, H = size.h;
+    if (W <= 0 || H <= 0) return;
+    ctx.clearRect(0, 0, W, H);
+    var col = palette();
+    var yHalf = X_HALF * H / W;         // equal aspect
+    var X = S.makeScale([-X_HALF, X_HALF], [0, W]);
+    var Y = S.makeScale([-yHalf, yHalf], [H, 0]);
+
+    // equipotential contours
+    ctx.strokeStyle = col.equip;
+    ctx.lineWidth = 1;
+    scene.contours.forEach(function (c) {
+      ctx.beginPath();
+      c.segs.forEach(function (seg) {
+        ctx.moveTo(X(seg[0][0]), Y(seg[0][1]));
+        ctx.lineTo(X(seg[1][0]), Y(seg[1][1]));
+      });
+      ctx.stroke();
+    });
+
+    // field lines (static geometry; direction shown by fixed chevrons)
+    ctx.strokeStyle = col.line;
+    ctx.lineWidth = 1.2;
+    scene.lines.forEach(function (ln) {
+      var pts = ln.pts;
+      if (pts.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(X(pts[0][0]), Y(pts[0][1]));
+      for (var i = 1; i < pts.length; i++) ctx.lineTo(X(pts[i][0]), Y(pts[i][1]));
+      ctx.stroke();
+    });
+    ctx.fillStyle = col.line;
+    scene.lines.forEach(function (ln) {
+      [0.35, 0.7].forEach(function (f) {
+        var pts = ln.pts;
+        var i = Math.floor(f * (pts.length - 1));
+        if (i < 1 || i >= pts.length) return;
+        // chevron pointing along E: traversal direction times the trace dir
+        var dx = (pts[i][0] - pts[i - 1][0]) * ln.dir;
+        var dy = (pts[i][1] - pts[i - 1][1]) * ln.dir;
+        var m = Math.hypot(dx, dy);
+        if (m < 1e-12) return;
+        var px = X(pts[i][0]), py = Y(pts[i][1]);
+        var ux = dx / m, uy = -dy / m;  // screen-space direction (y flips)
+        ctx.beginPath();
+        ctx.moveTo(px + 5 * ux, py + 5 * uy);
+        ctx.lineTo(px - 3 * ux + 3.5 * uy, py - 3 * uy - 3.5 * ux);
+        ctx.lineTo(px - 3 * ux - 3.5 * uy, py - 3 * uy + 3.5 * ux);
+        ctx.closePath();
+        ctx.fill();
+      });
+    });
+
+    // charges
+    scene.charges.forEach(function (c) {
+      var r = 9 + 3 * Math.min(3, Math.abs(c.q));
+      ctx.fillStyle = c.q >= 0 ? col.pos : col.neg;
+      ctx.beginPath();
+      ctx.arc(X(c.x), Y(c.y), r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = col.glyph;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(X(c.x) - r * 0.45, Y(c.y));
+      ctx.lineTo(X(c.x) + r * 0.45, Y(c.y));
+      if (c.q >= 0) {
+        ctx.moveTo(X(c.x), Y(c.y) - r * 0.45);
+        ctx.lineTo(X(c.x), Y(c.y) + r * 0.45);
+      }
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    });
+
+    // probe point marker
+    ctx.fillStyle = col.text;
+    ctx.beginPath();
+    ctx.arc(X(PROBE.x), Y(PROBE.y), 3, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('probe', X(PROBE.x) + 6, Y(PROBE.y) - 4);
+  }
+
+  // ---- controls (bounds live on the input elements only) -------------------
+  function onParamChange() {
+    rebuildScene();
+    updateReadouts();
+    draw();
+  }
+  var bind = {
+    preset: Engine.bind.bindSelect(state, 'preset', 'preset', { onChange: onParamChange }),
+    q1: Engine.bind.bindSlider(state, 'q1', 'q1', {
+      out: 'q1Val', fmt: function (v) { return S.fmt(v, 1); }, onChange: onParamChange
+    }),
+    q2: Engine.bind.bindSlider(state, 'q2', 'q2', {
+      out: 'q2Val', fmt: function (v) { return S.fmt(v, 1); }, onChange: onParamChange
+    }),
+    sep: Engine.bind.bindSlider(state, 'sep', 'sep', {
+      out: 'sepVal', fmt: function (v) { return S.fmt(v, 1); }, onChange: onParamChange
+    }),
+    showEquip: Engine.bind.bindToggle(state, 'showEquip', 'showEquip', { onChange: onParamChange })
+  };
+
+  rebuildScene();                       // scene must exist before the audit
+
+  // ---- audit surface (machine-verification contract) -----------------------
+  Engine.audit.defineAudit({
+    probes: {
+      fieldAtPoint: function (x, y) {
+        if (x === undefined) { x = PROBE.x; y = PROBE.y; }
+        return EM.fieldAt(scene.charges, x, y);
+      },
+      potentialAtPoint: function (x, y) {
+        if (x === undefined) { x = PROBE.x; y = PROBE.y; }
+        return EM.potentialAt(scene.charges, x, y);
+      },
+      lineCount: function () { return scene.lines.length; },
+      netCharge: netCharge
+    },
+    invariants: {
+      // Far-field falloff exponent measured on the y-axis at r and 2r:
+      // n_eff = log(|E(r)|/|E(2r)|)/log 2 must match the multipole expectation
+      // (3 when the net charge cancels — dipole; 2 otherwise — monopole).
+      // Tolerance 0.1 covers the mixed monopole/dipole correction ~ p/(net*r)
+      // at r = 50 for every sweep corner (worst case q1 = 0.5: ~0.043).
+      dipoleFalloff: function () {
+        var r1 = 50, r2 = 100;
+        var E1 = EM.fieldAt(scene.charges, 0, r1);
+        var E2 = EM.fieldAt(scene.charges, 0, r2);
+        var nEff = Math.log(Math.hypot(E1[0], E1[1]) / Math.hypot(E2[0], E2[1])) / Math.LN2;
+        var expected = Math.abs(netCharge()) < 1e-9 ? 3 : 2;
+        return { ok: Math.abs(nEff - expected) < 0.1, value: nEff, expected: expected, tol: 0.1 };
+      },
+      // Seeded line count: max(1, round(perCharge*|q|)) per nonzero charge.
+      lineCount: function () {
+        var expected = 0;
+        scene.charges.forEach(function (c) {
+          if (c.q !== 0) expected += Math.max(1, Math.round(PER_CHARGE * Math.abs(c.q)));
+        });
+        return { ok: scene.lines.length === expected, value: scene.lines.length, expected: expected, tol: 0 };
+      }
+    },
+    state: state
+  });
+
+  // ---- shell (static explorer: no play loop; draw on change/resize) --------
+  Shell.init({
+    onFrame: function () {},            // nothing evolves in time — static fields
+    onReset: function () {
+      bind.preset.set(DEFAULTS.preset);
+      bind.q1.set(DEFAULTS.q1);
+      bind.q2.set(DEFAULTS.q2);
+      bind.sep.set(DEFAULTS.sep);
+      bind.showEquip.set(DEFAULTS.showEquip);
+    },
+    onResize: function () {
+      draw();
+    },
+    cfg: { autoplay: false, resumeOnReset: false }
+  });
+
+  updateReadouts();
+  draw();
+})();
+</script>
+</body>
+</html>

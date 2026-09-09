@@ -1,0 +1,569 @@
+---
+description: Add a "Controls Tutorial" onboarding flow to a single-file interactive physics/quantum simulation HTML page. Use whenever the user asks to add a controls tutorial, control walkthrough, guided controls, onboarding cards, progressive control unlock, or a "Hide Controls Tutorial" toggle to a simulation — even if they only say "add the tutorial like the Stern–Gerlach one" or "do the same controls cards for this sim". The result is a card zone at the top of the sidebar that reveals each control sequentially (hidden → revealed + spotlighted, so card and control are always co-visible), a readouts stage, and a title-bar on/off button.
+globs: ["*.html"]
+alwaysApply: false
+---
+
+# Add a CONTROLS TUTORIAL to a simulation page
+
+Retrofit an existing single-file simulation HTML page with a sequential
+"Controls" tutorial. The reference implementation was built and verified on
+`stern-gerlach-controls-tutorial.html`; this rule reproduces that exact final
+behavior on other sims. **Copy the canonical blocks in §Insert below verbatim;
+only adapt the parts marked ADAPT. Do not re-invent the mechanics.**
+
+## What the finished feature does (acceptance criteria)
+
+1. **Card zone at the top of the sidebar** ("Controls" header + small Skip
+   button, slim progress dots, exactly ONE visible card at a time, footer nav:
+   `‹` `›` pager on the left, primary `Next →` button on the right that reads
+   `Done` on the last card).
+2. **Card + control simultaneously visible, always.** This is the core
+   requirement (students scrolled past hidden controls and never knew they
+   were there). Achieve it by progressive reveal: every sidebar element
+   covered by the tutorial — controls AND readout panels (statistics,
+   legends) — starts fully hidden (`.ctl-hidden`, `display: none`). Reaching
+   a card reveals its element directly beneath the card zone; earlier
+   elements stay visible. Readout panels are NOT controls: hide them from the
+   start and introduce them in ONE dedicated stage placed just before the
+   final card. Title-bar elements (e.g. a global Reset) cannot be hidden
+   without shifting the bar — dim-lock those instead (`.ctl-locked`: ~28%
+   opacity, `pointer-events: none`). A `maxSeen` variable tracks the furthest
+   card reached, so navigating BACK never re-hides or re-locks anything.
+3. **Spotlight, no auto-scroll.** The current card's element(s) get
+   `.ctl-spotlight` — an accent-colored pulsing glow, visible from the very
+   first card since the element renders adjacent to the zone. Do NOT call
+   `scrollIntoView`: the card must stay readable (both halves were explicit
+   user corrections — auto-scroll hid the card; dim-only lock left the
+   spotlight below the fold). On the readouts stage, glow the INNER data
+   boxes (stat box, legend box, mode banner), never the broad section
+   outlines: one box → one glow; readouts scattered across several boxes →
+   glow them all together. The controller supports this via a per-step
+   `spotlight` list that overrides `targets` for the glow only. The spotlight
+   rule must not force a border-radius — each box keeps its own.
+4. **Title-bar toggle, no sidebar restore bar.** The tutorial is VISIBLE by
+   default on page load (button boots in the `.active` state). A single
+   button in the title bar turns the tutorial on and off. Label swaps
+   between `🧭 Hide Controls Tutorial` (visible, `.active` filled state) and
+   `🧭 Controls Tutorial` (hidden, plain). There is no separate restore
+   element inside the sidebar.
+5. **Hide = fully usable sim; re-show = resume the tutorial state.** Hiding
+   the tutorial (via the title-bar toggle, Skip, or Done on the last card)
+   reveals + unlocks EVERYTHING (including readout panels) and clears every
+   highlight — the sim must never be left half-disabled or half-hidden. But
+   hiding must NOT advance tutorial progress (`maxSeen` stays untouched):
+   re-showing resumes at the card the student left with ONLY the elements
+   introduced up to that card visible, later ones re-hidden and title-bar
+   lockables re-dimmed. Skip after 3 controls → reopen shows exactly those 3
+   controls on card 3. Only completing the tutorial (Done) leaves everything
+   introduced on reopen.
+6. **Button design** matches the SR-shell "Lecture" pattern: white 36px pill,
+   `1px solid rgba(19,49,49,.25)` border, slate `#334155` text, 13px/600
+   sans, hover `#F5EAC4`, active state filled `#1E4D3A` with white text
+   (hover `#2D6E52`).
+
+## STEP 1 — Map the sim
+
+- Open the target HTML file. Identify: the sidebar/right-panel container,
+  every user-facing control (selects, sliders, toggle buttons), every READOUT
+  panel (statistics, legends, live indicators — display-only sections), any
+  global reset button, and the sim's accent color + font variables. Classify
+  each sidebar element as control or readout: controls get one card each;
+  readouts share one "Readouts" stage before the final card and stay hidden
+  until then.
+- List the controls **in the order they appear in the panel, top to bottom**.
+  The tutorial follows the existing layout order. Do NOT reorder the sim's
+  DOM to fit a pedagogical sequence — layout changes are a separate decision
+  the user must ask for explicitly.
+- Ensure each control's wrapper element has an `id` (add ids like `ctlSpin`,
+  `ctlField` if missing). Standalone buttons (reset, mode toggles) can be
+  targeted by their own id.
+- Hide-vs-dim is decided by LOCATION, not by role: a reset button in the
+  SIDEBAR is `hideable` like any control; only elements in the title bar go
+  in `lockable`. If the sim has no title bar, put the tutorial toggle in
+  whatever persistent header/topbar it does have.
+- Topbar transport controls (Play/Pause, speed selector) ARE tutorial content
+  when the sim animates: they go in `lockable` and get cards like any
+  control, ordered where the student first needs them — usually a Play card
+  first, since nothing moves without it. A sim that renders statically (no
+  play loop) has no transport cards.
+- Hide the control boxes and readout sections, but keep the sidebar's own
+  section heading for the controls area (e.g. "Apparatus Controls") visible
+  from boot — it frames where the revealed controls appear.
+- Static/help panels (keyboard-shortcut lists, usage hints) are neither
+  controls nor readouts: add their id to `hideable` with NO step targets —
+  hidden for the whole tutorial, auto-revealed on hide/skip/done, never given
+  a card (same mechanism as guided-inquiry zones).
+- Sections whose visibility the SIM ITSELF manages (mode tabs switching panel
+  sections): never add those sections or their contents to `hideable` — the
+  tutorial must not fight the sim's show/hide logic. Introduce the mode
+  switch as a control card, cover the elements of the BOOT mode, and let the
+  readouts card's copy mention what the other mode shows in the same space.
+- If the sidebar already carries a "Controls" heading of its own, title the
+  zone "Controls Tutorial" instead of "Controls" to avoid stacked duplicate
+  headings.
+- A bare button sitting in a wrapper div: put the id on the WRAPPER for
+  hide/reveal (hiding only the button strands an empty spacing div) but
+  spotlight the BUTTON itself via the step's `spotlight` list.
+- Readout boxes that stand alone (not inside a section with other content)
+  can be step `targets` directly — reveal target and glow target coincide,
+  no separate `spotlight` list needed.
+- Check for name collisions before inserting: if the target sim already uses
+  any `.ctl-*` class or `ctlZone`/`ctlDots`/`ctlCards`/`ctlPrev`/`ctlPgNext`/
+  `ctlNext`/`ctlSkip`/`ctlTutorialToggle` id, rename this rule's versions
+  with a prefix consistently across CSS, markup, and JS.
+
+## STEP 2 — Insert the three canonical blocks
+
+### 2a. CSS — tutorial zone, lock, spotlight (before `</style>`)
+
+ADAPT: every `#3b9b8f` / `rgba(59,155,143,…)` is the sim accent — swap for
+the target sim's accent so dots, glow, and "Try:" tags match its theme. The
+collapse rule `.ctl-collapsed .ctl-zone` is deliberately panel-agnostic — do
+NOT scope it to the sim's panel class. `var(--font-sans)` must exist in the
+target (or replace with its sans font stack). Dark-panel text colors
+(`#e5e7eb`, `#b6c2cf`) suit a dark sidebar; lighten for light sims. If the
+sim has a LIGHT/DARK THEME TOGGLE, hard-coded colors are wrong in one theme:
+map the block's literals to the sim's CSS variables instead — accent literals
+→ its `--accent` (and `--accent-bg` for button fills), heading and body text
+→ its `--text-primary`/`--text-secondary`, zone border → its `--border`.
+Keep the title-bar button palette (§2b) as-is — it is the cross-sim house
+style, not per-sim theming.
+
+    /* ===== Controls tutorial (card structure, mirrors guided-inquiry shell) ===== */
+    .ctl-zone { padding: 16px 18px; border-bottom: 1px solid rgba(19, 49, 49, 0.4); }
+    .ctl-zone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .ctl-zone-head h3 {
+        margin: 0; flex: 1; font-size: 12px; font-weight: 700; color: #e5e7eb;
+        text-transform: uppercase; letter-spacing: 1.2px; font-family: var(--font-sans);
+    }
+    .ctl-skip {
+        width: auto !important; margin: 0 !important; padding: 4px 10px !important;
+        font-size: 11px !important; letter-spacing: 0.04em; color: #94a3b8 !important;
+        background: transparent !important; border: 1px solid rgba(148,163,184,0.3) !important;
+        border-radius: 6px !important; cursor: pointer;
+    }
+    .ctl-skip:hover { color: #e2e8f0 !important; border-color: rgba(148,163,184,0.55) !important; }
+    .ctl-dots { display: flex; gap: 6px; margin-bottom: 12px; }
+    .ctl-dot { flex: 1; height: 4px; border-radius: 2px; background: rgba(148,163,184,0.22); transition: background .2s; }
+    .ctl-dot.done   { background: rgba(59,155,143,0.45); }
+    .ctl-dot.active { background: #3b9b8f; }
+    .ctl-step { display: none; }
+    .ctl-step.active { display: block; animation: ctlFade .25s ease; }
+    @keyframes ctlFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .ctl-step h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #e2e8f0; font-family: var(--font-sans); }
+    .ctl-step h4 .ctl-step-tag { color: #3b9b8f; }
+    .ctl-try { margin-top: 7px !important; }
+    .ctl-try .ctl-try-tag { color: #3b9b8f; font-weight: 700; }
+    .ctl-step p { margin: 0; font-size: 12.5px; line-height: 1.55; color: #b6c2cf; font-family: var(--font-sans); }
+    .ctl-step p b, .ctl-step p strong { color: #e2e8f0; }
+    .ctl-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+    .ctl-pager { display: flex; gap: 8px; }
+    .ctl-nav button {
+        width: auto !important; margin: 0 !important; padding: 6px 12px !important;
+        font-size: 12.5px !important; font-weight: 600; border-radius: 6px !important;
+        background: rgba(30, 77, 58, 0.18) !important; border: 1px solid rgba(59,155,143,0.45) !important;
+        color: #cfe9e4 !important; cursor: pointer; line-height: 1;
+    }
+    .ctl-nav button:hover:not(:disabled) { background: rgba(59,155,143,0.28) !important; }
+    .ctl-nav button:disabled { opacity: .35; cursor: default; }
+    .ctl-nav .ctl-pager-btn { min-width: 34px; text-align: center; }
+    #ctlNext { min-width: 88px; text-align: center; }
+    .ctl-collapsed .ctl-zone { display: none; }
+
+    /* Progressive control exposure: sidebar elements are HIDDEN until their
+       card introduces them, so the current control always sits directly under
+       the tutorial card (card + spotlight simultaneously visible, no scroll). */
+    .ctl-hidden { display: none !important; }
+    .ctl-locked { opacity: 0.28; pointer-events: none; filter: saturate(0.4); transition: opacity .25s, filter .25s; }
+    .ctl-spotlight {
+        border-color: #3b9b8f !important; border-radius: 6px;
+        box-shadow: 0 0 0 1px #3b9b8f, 0 0 14px rgba(59,155,143,0.55);
+        animation: ctlPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes ctlPulse {
+        0%, 100% { box-shadow: 0 0 0 1px #3b9b8f, 0 0 10px rgba(59,155,143,0.4); }
+        50%      { box-shadow: 0 0 0 2px #3b9b8f, 0 0 20px rgba(59,155,143,0.75); }
+    }
+
+### 2b. CSS — title-bar buttons (house style, do NOT retheme per sim)
+
+    /* SR-shell style header buttons (white pill, 36px, filled dark-green when active) */
+    .title-bar-btn {
+        background: #fff;
+        border: 1px solid rgba(19, 49, 49, 0.25);
+        color: #334155;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: var(--font-sans);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background .15s, border-color .15s, color .15s;
+    }
+    .title-bar-btn:hover { background: #F5EAC4; color: #0f172a; }
+    .title-bar-btn.active { background: #1E4D3A; border-color: #1E4D3A; color: #fff; }
+    .title-bar-btn.active:hover { background: #2D6E52; border-color: #2D6E52; }
+
+If (and only if) the sim has an existing header hover-hints checkbox to
+restyle: keep its hidden checkbox and event wiring untouched, wrap it in a
+`title-bar-btn` label, and drive the active look with CSS `:has()` — preserve
+inverted logic if the sim has it (unchecked = feature ON):
+
+    .explore-btn { position: relative; }
+    .explore-btn input { position: absolute; opacity: 0; pointer-events: none; }
+    .explore-btn input:focus-visible ~ .explore-btn-text { outline: 2px solid #3b9b8f; outline-offset: 4px; border-radius: 4px; }
+    .explore-btn:has(input:not(:checked)) { background: #1E4D3A; border-color: #1E4D3A; color: #fff; }
+    .explore-btn:has(input:not(:checked)):hover { background: #2D6E52; border-color: #2D6E52; }
+
+### 2c. Markup — card zone (FIRST child of the sidebar container)
+
+ADAPT: card count, numbering, titles, copy (per STEP 3 template). Keep ids
+`ctlZone/ctlDots/ctlCards/ctlPrev/ctlPgNext/ctlNext/ctlSkip` exactly — the
+controller binds to them. Example cards shown are from the Stern–Gerlach
+reference; write this sim's own.
+
+    <div class="ctl-zone" id="ctlZone">
+        <div class="ctl-zone-head">
+            <h3>Controls</h3>
+            <button type="button" class="ctl-skip" id="ctlSkip" title="Unlock every control and hide the tutorial">Skip</button>
+        </div>
+        <div class="ctl-dots" id="ctlDots"></div>
+        <div class="ctl-zone-body" id="ctlCards">
+
+            <div class="ctl-step">
+                <h4><span class="ctl-step-tag">1 ·</span> Total Spin (j)</h4>
+                <p>Sets the spin <b>j</b> of the atoms in the beam. The screen shows <b>2j&nbsp;+&nbsp;1</b> bands — one per allowed m<sub>j</sub> value.</p>
+                <p class="ctl-try"><span class="ctl-try-tag">Try:</span> pick <b>j = 1</b> and count three bands.</p>
+            </div>
+
+            <!-- …one card per control, then ONE Readouts card… -->
+
+            <div class="ctl-step">
+                <h4><span class="ctl-step-tag">✓</span> All controls unlocked</h4>
+                <p>Explore freely. Reopen this tutorial any time from the <b>title-bar</b> button.</p>
+            </div>
+
+        </div>
+        <div class="ctl-nav">
+            <div class="ctl-pager">
+                <button type="button" id="ctlPrev" class="ctl-pager-btn" aria-label="Previous" disabled>&lt;</button>
+                <button type="button" id="ctlPgNext" class="ctl-pager-btn" aria-label="Next">&gt;</button>
+            </div>
+            <button type="button" id="ctlNext">Next →</button>
+        </div>
+    </div>
+
+**If the sidebar already has a guided-inquiry / lesson card zone** (many
+shell sims do): place `ctl-zone` ABOVE it, give the inquiry zone an id, and
+add that id to `hideable` WITHOUT putting it in any step's `targets`. Effect:
+the inquiry stays hidden while the controls tutorial is visible (learn the
+controls first) and appears automatically whenever the tutorial is hidden,
+skipped, or completed. Never hide the sim's meta-UI header buttons (Lecture,
+Info ⓘ, Formal ∑, theme toggles) and never add them to `lockable` — they are
+not tutorial content; leave them fully functional.
+
+### 2d. Markup — title-bar toggle
+
+Place beside existing header controls, in the LEFT/title-side cluster
+directly beside the info (i) icon or existing header toggles — NOT in the
+right-side action cluster with Reset. Starts `.active` because the tutorial
+is visible on load:
+
+    <button type="button" class="title-bar-btn active" id="ctlTutorialToggle" title="Show or hide the controls tutorial">🧭 Hide Controls Tutorial</button>
+
+### 2e. JS — controller (before `</body>`)
+
+Insert exactly as shown — INCLUDING the `<script>` wrapper (without it the
+controller is inert page text and nothing runs). ADAPT only:
+
+- `steps`: one entry per card, `targets` = element id(s) that card
+  reveals/unlocks; second-to-last entry is the readouts stage (all
+  readout-SECTION ids as `targets`, plus a `spotlight` list of the inner
+  data-box ids), final done-card entry is `{ targets: [] }`. If the sim has
+  no readout panels, drop the readouts entry entirely (and its card) — the
+  arrays and dots derive from `steps`/cards automatically.
+- `spotlight` (optional per step): the ids that get the glow, when they
+  differ from `targets`. For readouts, reveal whole sections via `targets`
+  but glow ONLY the inner boxes that visually contain the data — never the
+  broad section outline. Give those inner boxes ids if they lack them.
+- `hideable`: every SIDEBAR id (controls + readout sections + any inquiry
+  zone / help panel with no step targets).
+- `lockable`: TITLE-BAR ids only.
+- `panel` selector if the sidebar container isn't `.right-panel`.
+
+Semantics that must survive adaptation: `maxSeen` governs reveal/unlock
+(back-nav never re-hides or re-locks); NO scrollIntoView; `setVisible(false)`
+reveals + unlocks everything and clears highlights but MUST NOT modify
+`maxSeen` — hiding is temporary full exposure, not completion; `setVisible(true)`
+just calls `apply()`; Done, Skip, and the title-bar toggle all route through
+`setVisible`.
+
+    <script>
+    /* ===== Controls tutorial controller ===== */
+    (function () {
+        // targets = elements revealed/unlocked by the card.
+        // spotlight (optional) = elements that get the glow; defaults to targets.
+        const steps = [
+            { targets: ['ctlSpin'] },
+            { targets: ['ctlField'] },
+            { targets: ['ctlRate'] },
+            { targets: ['classicalToggle'] },
+            { targets: ['headerReset'] },
+            { targets: ['ctlStats', 'ctlLegend'],
+              spotlight: ['modeIndicator', 'ctlStatsBox', 'ctlLegendBox'] }, // readouts stage
+            { targets: [] } // done card
+        ];
+        const spotlightable = Array.from(new Set(
+            steps.flatMap(st => st.spotlight || st.targets)));
+        // Sidebar elements: fully hidden until their card introduces them.
+        const hideable = ['ctlSpin', 'ctlField', 'ctlRate', 'classicalToggle', 'ctlStats', 'ctlLegend'];
+        // Title-bar elements can't be hidden without shifting the bar: dim-lock instead.
+        const lockable = ['headerReset'];
+        const zone = document.getElementById('ctlZone');
+        const panel = document.querySelector('.right-panel');
+        const cards = Array.from(document.querySelectorAll('#ctlCards .ctl-step'));
+        const dotsHost = document.getElementById('ctlDots');
+        const prevBtn = document.getElementById('ctlPrev');
+        const pgNext = document.getElementById('ctlPgNext');
+        const nextBtn = document.getElementById('ctlNext');
+        const skipBtn = document.getElementById('ctlSkip');
+        const tutToggle = document.getElementById('ctlTutorialToggle');
+        let step = 0, maxSeen = 0;
+
+        cards.forEach(() => {
+            const d = document.createElement('div');
+            d.className = 'ctl-dot';
+            dotsHost.appendChild(d);
+        });
+        const dots = Array.from(dotsHost.children);
+
+        function el(id) { return document.getElementById(id); }
+
+        function apply() {
+            cards.forEach((c, i) => c.classList.toggle('active', i === step));
+            dots.forEach((d, i) => {
+                d.classList.toggle('active', i === step);
+                d.classList.toggle('done', i < step);
+            });
+            prevBtn.disabled = step <= 0;
+            pgNext.disabled = step >= cards.length - 1;
+            nextBtn.textContent = step >= cards.length - 1 ? 'Done' : 'Next →';
+
+            // Everything introduced up to the furthest step reached stays visible
+            const introduced = new Set();
+            for (let i = 0; i <= maxSeen; i++) steps[i].targets.forEach(t => introduced.add(t));
+            hideable.forEach(id => el(id).classList.toggle('ctl-hidden', !introduced.has(id)));
+            lockable.forEach(id => el(id).classList.toggle('ctl-locked', !introduced.has(id)));
+
+            // Spotlight only the current card's element(s)
+            spotlightable.forEach(id => el(id).classList.remove('ctl-spotlight'));
+            // No auto-scroll: let the student read the card first, then scroll themselves.
+            (steps[step].spotlight || steps[step].targets)
+                .forEach(id => el(id).classList.add('ctl-spotlight'));
+        }
+
+        function show(n) {
+            step = Math.max(0, Math.min(n, cards.length - 1));
+            maxSeen = Math.max(maxSeen, step);
+            apply();
+        }
+
+        function setVisible(on) {
+            panel.classList.toggle('ctl-collapsed', !on);
+            tutToggle.textContent = on ? '\u{1F9ED} Hide Controls Tutorial' : '\u{1F9ED} Controls Tutorial';
+            tutToggle.classList.toggle('active', on);
+            if (!on) {
+                // Hiding the tutorial reveals + unlocks everything and clears
+                // highlights — but does NOT touch maxSeen, so tutorial progress
+                // is preserved while hidden.
+                hideable.forEach(id => el(id).classList.remove('ctl-hidden'));
+                lockable.forEach(id => el(id).classList.remove('ctl-locked'));
+                spotlightable.forEach(id => el(id).classList.remove('ctl-spotlight'));
+            } else {
+                apply();   // restore reveal state from maxSeen + current spotlight
+            }
+        }
+
+        prevBtn.addEventListener('click', () => show(step - 1));
+        pgNext.addEventListener('click', () => show(step + 1));
+        nextBtn.addEventListener('click', () => {
+            if (step >= cards.length - 1) setVisible(false);
+            else show(step + 1);
+        });
+        skipBtn.addEventListener('click', () => setVisible(false));
+        tutToggle.addEventListener('click', () =>
+            setVisible(panel.classList.contains('ctl-collapsed')));
+
+        show(0);
+    })();
+    </script>
+
+## STEP 3 — Write the cards
+
+One card per control, in panel order — except tightly-coupled pairs (a toggle
+plus its own rate/amount slider, e.g. Auto Measure + its per-second rate)
+which share ONE card with both elements revealed and spotlighted together.
+Then ONE "Readouts" card that reveals all readout panels together; then a
+final `✓ All controls unlocked` card. If the sim has NO readout panels, skip
+the Readouts stage entirely — controls then done card. Number cards
+`1 ·, 2 ·, …` continuing through the Readouts card; the final card's tag is
+`✓`. Every card follows this exact template:
+
+    <h4><span class="ctl-step-tag">N ·</span> Control Name</h4>
+    <p>[WHAT IT SETS — one sentence, plain language first, symbols like
+       ∂B/∂z only as a parenthetical] [OBSERVABLE EFFECT — what visibly
+       changes on screen, with the key quantity in <b>bold</b>]</p>
+    <p class="ctl-try"><span class="ctl-try-tag">Try:</span> [ONE concrete
+       action with a specific value, e.g. "pick <b>j = 1</b> and count
+       three bands."]</p>
+
+Copy rules (all user-validated):
+
+- **25–45 words per card, total.** If a card exceeds this, cut adjectives and
+  physics-speak, not the Try line.
+- **Try actions must not imply magic numbers.** For sliders, ask for a
+  qualitative extreme ("drag it to its maximum") — never a bare value like
+  "set it to 6 T/m", which reads as if that number were special. A specific
+  value is allowed ONLY when the number itself is the lesson (e.g. "pick
+  j = 1 and count three bands", where 2j + 1 = 3 is the point).
+- Describe the effect as **what the student sees on screen**, not
+  beam/internal-state language ("the screen shows 2j + 1 bands", not "the
+  beam splits into 2j + 1 channels").
+- If a control changes appearance when used (e.g. a button that relabels
+  itself), say so in one clause — self-relabeling buttons confuse students.
+- If a control changes no physics (e.g. emission rate), state that explicitly
+  ("changes **no physics** — only how fast the pattern builds").
+- A reset card explains *why*: "so the new pattern isn't mixed with the old
+  one." No location hints — the spotlight is the location cue.
+- Final card: everything is unlocked, explore freely, and reopen "any time
+  from the **title-bar** button". Never reference UI that no longer exists.
+- If a control's visible effect depends on a LATER control's setting (e.g. an
+  animation-speed slider whose motion only shows in a view mode introduced
+  next), the card must still be true at its own moment — find what IS
+  observable right then (often the more interesting physics point, e.g.
+  "|ψ|² never moves — probability doesn't depend on phase").
+- **Every factual claim in a card must be verified against THIS sim's actual
+  code/behavior** before shipping — slider ranges, what a readout counts,
+  what stays constant. Never inherit a claim from another sim's cards; in
+  bulk runs this is the main source of silently wrong copy.
+
+## STEP 4 — Verify before delivering
+
+If the bundled verifier is available (repo path
+`controls-tutorial-skill-v2/scripts/verify.js`; requires `npm i jsdom` once),
+run it — exit code 0 = ship, 1 = fix before delivering:
+
+    node controls-tutorial-skill-v2/scripts/verify.js <patched.html> --baseline <original.html>
+
+`--baseline` matters: sims that load KaTeX/Three.js from CDNs throw in jsdom
+regardless of the tutorial — those pre-existing errors are subtracted so only
+errors the tutorial introduced fail the build.
+
+If the script is not available, verify the same invariants by hand in a
+headless jsdom walkthrough (boot with `runScripts:'dangerously'`, stub
+`getContext`, instrument `scrollIntoView`), asserting in order:
+
+1. **Boot:** card 0 active, ONLY the first control visible in the sidebar
+   (every other control and all readout sections carry `.ctl-hidden`), first
+   control spotlighted, title-bar lockables dimmed, toggle `.active` with a
+   "Hide" label, dots count == card count, no scroll fired.
+2. **Forward walk:** reveal is monotone (hidden set only shrinks); every
+   non-final card has ≥1 spotlight; a spotlighted element is never hidden;
+   final card has NO spotlight and the Next button reads `Done`.
+3. **Back-nav** from a mid card: hidden/locked sets stay at the
+   furthest-step state (nothing re-hides or re-locks); spotlight matches the
+   forward pass for that card.
+4. **Mid-tutorial hide → re-show** (test this in a FRESH pass BEFORE the
+   last card is ever reached — testing after a full walk cannot catch the
+   maxSeen regression): hide → everything revealed + unlocked, no spotlight,
+   `#ctlZone` computed display is `none`, toggle inactive with swapped
+   label; re-show → same card, hidden/locked/spotlight sets exactly
+   restored. Repeat the same check via **Skip**.
+5. **Done:** collapses the zone; reopen lands on the final card with only
+   untargeted hideables (inquiry zone, help panels) hidden.
+6. **Zero `scrollIntoView` calls ever**, and no NEW runtime errors relative
+   to the original file.
+
+Two things no script can judge — check manually per sim: the readouts stage
+glows inner data boxes rather than section outlines, and the card copy's
+factual claims hold for this sim.
+
+Deliver the modified HTML as a new file (`<simname>-controls-tutorial.html`)
+— never overwrite the original in place.
+
+## Bulk application (a batch of sims)
+
+- Process one sim at a time and re-run the FULL workflow for each: map,
+  classify, insert, write copy, verify. Never reuse another sim's `steps`
+  arrays, ids, accent color, or card text — structural similarity between
+  sims is not id similarity.
+- Always boot the ORIGINAL file first to collect its pre-existing jsdom
+  errors, and pass it via `--baseline` when verifying the patched file.
+- A sim that fails any invariant does not ship with the batch — fix it or
+  set it aside; never lower the bar to keep a batch moving.
+- Keep a per-sim note of anything that forced a deviation from this rule (a
+  layout that resisted the FIRST-child rule, a control that fit neither
+  hideable nor lockable). Deviations are skill feedback: report them to the
+  user at the end of the batch rather than silently improvising differently
+  in each file.
+
+## Common pitfalls (each one happened during the reference build)
+
+- Dim-only locking with readout panels left visible — the readouts push the
+  controls below the fold and students never see the spotlight. Hide
+  un-introduced sidebar elements entirely; dim-lock is for the title bar only.
+- Overlay/popover tutorials look tempting for co-visibility but are fragile
+  across sim layouts and block interaction with the control being taught —
+  rejected during the reference build; keep the in-sidebar reveal.
+- Adding `scrollIntoView` on spotlight — it hides the card. Don't.
+- Leaving a sidebar "restore" element after moving the toggle to the title
+  bar — one affordance only.
+- Card text referencing removed UI ("the bar below") — re-read every card
+  after structural changes.
+- Restyling an existing header toggle (e.g. a hover-hints switch): keep its
+  hidden checkbox and event wiring untouched; wrap it in a `title-bar-btn`
+  label and drive the active look with CSS `:has()`. Preserve inverted logic
+  if the sim has it (unchecked = feature ON).
+- Forgetting that `Done`, `Skip`, and the title-bar toggle must all route
+  through the same `setVisible(false)` path so unlock behavior is identical.
+- The collapse rule must stay panel-agnostic: `.ctl-collapsed .ctl-zone
+  { display: none; }` with NO panel class prefix. An early version hardcoded
+  `.right-panel...` — on any sim with a different panel class the zone
+  silently never hides, and toggling appears to hide the controls/readouts
+  instead of the cards. Verify the zone's computed display; keep the rule
+  prefix-free.
+- Pasting the controller without its `<script>` wrapper — it becomes inert
+  page text, nothing runs, and verification fails with "dots (0)". Keep the
+  wrapper.
+- Setting `maxSeen = last` inside `setVisible(false)` to force full
+  exposure — that marks everything as introduced, so reopening after a
+  mid-way Skip wrongly shows the whole sidebar instead of the saved tutorial
+  state. Full exposure while hidden comes from removing the classes, never
+  from advancing `maxSeen`.
+
+## Self-check
+
+- [ ] Card zone is the FIRST child of the sidebar; one card per control in
+      panel order (coupled pairs share one card); one Readouts stage before
+      the final `✓` card (omitted only if the sim has no readouts).
+- [ ] Every covered sidebar element boots `.ctl-hidden`; title-bar lockables
+      boot `.ctl-locked`; current card's elements glow `.ctl-spotlight`; no
+      `scrollIntoView` anywhere.
+- [ ] `maxSeen` semantics intact: back-nav never re-hides; hide/Skip/Done all
+      route through `setVisible(false)`; hiding never touches `maxSeen`;
+      re-show resumes the exact saved state.
+- [ ] Title-bar toggle boots `.active` / "🧭 Hide Controls Tutorial"; no
+      sidebar restore element; house-style button palette untouched.
+- [ ] Any existing guided-inquiry zone is in `hideable` with no step targets;
+      meta-UI header buttons (Lecture, ⓘ, ∑, theme) untouched.
+- [ ] Card copy: 25–45 words, no magic numbers in Try lines, on-screen
+      language, every claim verified against THIS sim's code.
+- [ ] Verifier passes (or the manual invariant walkthrough in STEP 4 does);
+      delivered as a new `<simname>-controls-tutorial.html` file.
