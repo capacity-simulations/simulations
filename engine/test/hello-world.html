@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engine hello-world</title>
+<script type="application/json" id="engine-manifest">
+{
+  "manifestVersion": 1,
+  "sim": "test/hello-world",
+  "engine": "1.0.0-dev",
+  "modules": [
+    "core.scale",
+    "verify.audit"
+  ],
+  "params": [
+    {
+      "id": "x",
+      "label": "x",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "default": 5
+    }
+  ],
+  "build": {
+    "engineVersion": "1.0.0-dev",
+    "date": "2026-08-05",
+    "hash": "cfe1aac6b6b7"
+  }
+}
+</script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  canvas { border: 1px solid #888; display: block; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Engine hello-world</h1>
+<label>x: <input type="range" id="x" min="0" max="10" step="0.1" value="5"></label>
+<span id="xVal"></span>
+<canvas id="c" width="600" height="60"></canvas>
+
+<script id="engine-inline">
+/* ENGINE:BEGIN */
+/* engine v1.0.0-dev | modules: core.scale, verify.audit | built 2026-08-05 | sha cfe1aac6b6b7 */
+window.Engine = window.Engine || {};
+const Engine = window.Engine;
+
+// ---- module core.scale ----
+Engine.scale = (function () {
+'use strict';
+// core.scale — linear mapping, clamping, and number formatting.
+// Harvest sources: ~12 inline linear-map copies across QM_sims (collapsed to one
+// factory); fmt from Sim_lab_sims/CM_sims/Collisions.html (-0-safe, U+2212 minus).
+// Layer 1: no physics vocabulary — operates on domains, ranges, and values.
+
+const MINUS = '−';
+
+/**
+ * Linear map from [d0,d1] to [r0,r1] with inversion.
+ * makeScale([0,10],[0,500]) -> s ; s(5)=250 ; s.invert(250)=5
+ */
+function makeScale(domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  const k = (r1 - r0) / (d1 - d0);
+  const s = (x) => r0 + (x - d0) * k;
+  s.invert = (y) => d0 + (y - r0) / k;
+  s.domain = [d0, d1];
+  s.range = [r0, r1];
+  return s;
+}
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Format a number for display: fixed digits, trailing zeros trimmed,
+ * "-0.000" scrubbed to "0", true minus sign (U+2212).
+ */
+function fmt(x, digits = 2) {
+  if (!Number.isFinite(x)) return String(x);
+  let s = x.toFixed(digits);
+  if (digits > 0) s = s.replace(/\.?0+$/, '');
+  if (s === '-0' || s === '' || s === '-') s = '0';
+  return s.replace('-', MINUS);
+}
+
+return { makeScale, clamp, lerp, fmt };
+})();
+
+// ---- module verify.audit ----
+Engine.audit = (function () {
+'use strict';
+// verify.audit — the __audit machine-verification surface (Layer: verify).
+// Formalizes the window.__audit convention already present ad-hoc in 35 sims
+// (SR `__audit.at(beta)` in 23 files, CM orbit audits in 12). This module is
+// contract, not framework: one call installs the surface verify.mjs drives.
+//
+// defineAudit(opts, target) works without a browser: pass any globalThis-like
+// target (default globalThis) — node tests inject a mock {document, Event}.
+
+/* Parse the inert #engine-manifest JSON block, or null when absent/invalid. */
+function readManifest(target) {
+  const doc = target && target.document;
+  if (!doc || typeof doc.getElementById !== 'function') return null;
+  const el = doc.getElementById('engine-manifest');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/* Default setParam: drive the control through the SAME code path as the UI.
+ * controls.bind listens for 'input' on the element (see controls/bind.js
+ * bindSlider), so setting .value and dispatching 'input' exercises the
+ * sanitize/clamp/state/onChange chain exactly like a user gesture. When the
+ * manifest carries a params schema, only its ids are accepted. */
+function makeSetParam(target, manifest) {
+  return function setParam(id, value) {
+    const doc = target && target.document;
+    if (!doc) throw new Error('audit.setParam: no document in this context');
+    if (manifest && Array.isArray(manifest.params) &&
+        !manifest.params.some((p) => p.id === id)) {
+      throw new Error('audit.setParam: "' + id + '" is not in the manifest params schema');
+    }
+    const el = doc.getElementById(id);
+    if (!el) throw new Error('audit.setParam: no control element "' + id + '"');
+    el.value = String(value);
+    const Ev = target.Event || (typeof Event !== 'undefined' ? Event : null);
+    el.dispatchEvent(Ev ? new Ev('input', { bubbles: true }) : { type: 'input' });
+    return el.value;
+  };
+}
+
+/**
+ * Install the audit surface: target.__audit =
+ *   {version: 1, manifest, probes, invariants, state, setParam, run()}.
+ * - probes: pure numeric functions, exposed as-is.
+ * - invariants: each fn MUST return {ok, value, expected, tol}; run()
+ *   aggregates them into {pass, results:[{name, ok, value, expected, tol}]}.
+ *   A throwing invariant is recorded as ok:false, never rethrown.
+ * - state: optional live-state accessor object (or null).
+ * - setParam(id, v): defaults to the UI-code-path helper above.
+ * Returns the audit object (also handed to guards via registerWith).
+ */
+function defineAudit(opts = {}, target = globalThis) {
+  const probes = opts.probes || {};
+  const invariants = opts.invariants || {};
+  const state = opts.state || null;
+  const manifest = readManifest(target);
+
+  const audit = {
+    version: 1,
+    manifest,
+    probes,
+    invariants,
+    state,
+    setParam: opts.setParam || makeSetParam(target, manifest),
+    run() {
+      const results = [];
+      for (const name of Object.keys(invariants)) {
+        let r;
+        try {
+          r = invariants[name]() || {};
+        } catch (e) {
+          r = { ok: false, value: String((e && e.message) || e), expected: null, tol: null };
+        }
+        results.push({ name, ok: !!r.ok, value: r.value, expected: r.expected, tol: r.tol });
+      }
+      return { pass: results.every((x) => x.ok), results };
+    },
+  };
+  if (target) target.__audit = audit;
+  return audit;
+}
+
+return { defineAudit };
+})();
+
+/* ENGINE:END */
+</script>
+
+<script>
+(function () {
+  'use strict';
+  const { makeScale, fmt } = Engine.scale;
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+  const X = makeScale([0, 10], [10, 590]);
+  const slider = document.getElementById('x');
+  const out = document.getElementById('xVal');
+
+  function draw() {
+    const x = parseFloat(slider.value);
+    out.textContent = fmt(x, 1);
+    ctx.clearRect(0, 0, 600, 60);
+    ctx.strokeStyle = '#888';
+    ctx.beginPath(); ctx.moveTo(10, 30); ctx.lineTo(590, 30); ctx.stroke();
+    ctx.fillStyle = '#c33';
+    ctx.beginPath(); ctx.arc(X(x), 30, 8, 0, 2 * Math.PI); ctx.fill();
+  }
+  slider.addEventListener('input', draw);
+  draw();
+
+  // Mandatory machine-verification surface (verify.mjs drives it).
+  Engine.audit.defineAudit({
+    probes: { x: () => parseFloat(slider.value) },
+    invariants: {
+      xInRange: () => {
+        const x = parseFloat(slider.value);
+        return { ok: x >= 0 && x <= 10, value: x, expected: '0..10', tol: 0 };
+      },
+    },
+  });
+})();
+</script>
+</body>
+</html>

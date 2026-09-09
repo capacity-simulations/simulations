@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Relativity domain fixture</title>
+<script type="application/json" id="engine-manifest">
+{
+  "manifestVersion": 1,
+  "sim": "test/rel-fixture",
+  "engine": "1.0.0-dev",
+  "modules": [
+    "core.scale",
+    "canvas.fit",
+    "canvas.scale",
+    "canvas.ticks",
+    "canvas.label",
+    "canvas.primitives",
+    "domain.relativity",
+    "domain.relativity-diagram",
+    "verify.audit"
+  ],
+  "params": [
+    {
+      "id": "beta",
+      "label": "\u03b2 = v/c",
+      "min": -0.95,
+      "max": 0.95,
+      "step": 0.05,
+      "default": 0.6
+    }
+  ],
+  "build": {
+    "engineVersion": "1.0.0-dev",
+    "date": "2026-08-05",
+    "hash": "1258bca0011d"
+  }
+}
+</script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; background: #0b1020; color: #cbd5e1; }
+  canvas { display: block; margin-top: 1rem; width: 520px; height: 520px; background: #070c18; border: 1px solid #26324b; }
+  label { font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Relativity domain fixture</h1>
+<p>Domain-layer reference: spacetime diagram drawn entirely through
+Engine.rel / Engine.relDiagram (events draggable; right-click deletes).</p>
+<label>β: <input type="range" id="beta" min="-0.95" max="0.95" step="0.05" value="0.6"></label>
+<span id="betaVal"></span>
+<canvas id="c"></canvas>
+
+<script id="engine-inline">
+/* ENGINE:BEGIN */
+/* engine v1.0.0-dev | modules: core.scale, canvas.fit, canvas.label, canvas.primitives, canvas.scale, canvas.ticks, domain.relativity, domain.relativity-diagram, verify.audit | built 2026-08-05 | sha 1258bca0011d */
+window.Engine = window.Engine || {};
+const Engine = window.Engine;
+
+// ---- module core.scale ----
+Engine.scale = (function () {
+'use strict';
+// core.scale — linear mapping, clamping, and number formatting.
+// Harvest sources: ~12 inline linear-map copies across QM_sims (collapsed to one
+// factory); fmt from Sim_lab_sims/CM_sims/Collisions.html (-0-safe, U+2212 minus).
+// Layer 1: no physics vocabulary — operates on domains, ranges, and values.
+
+const MINUS = '−';
+
+/**
+ * Linear map from [d0,d1] to [r0,r1] with inversion.
+ * makeScale([0,10],[0,500]) -> s ; s(5)=250 ; s.invert(250)=5
+ */
+function makeScale(domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  const k = (r1 - r0) / (d1 - d0);
+  const s = (x) => r0 + (x - d0) * k;
+  s.invert = (y) => d0 + (y - r0) / k;
+  s.domain = [d0, d1];
+  s.range = [r0, r1];
+  return s;
+}
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Format a number for display: fixed digits, trailing zeros trimmed,
+ * "-0.000" scrubbed to "0", true minus sign (U+2212).
+ */
+function fmt(x, digits = 2) {
+  if (!Number.isFinite(x)) return String(x);
+  let s = x.toFixed(digits);
+  if (digits > 0) s = s.replace(/\.?0+$/, '');
+  if (s === '-0' || s === '' || s === '-') s = '0';
+  return s.replace('-', MINUS);
+}
+
+return { makeScale, clamp, lerp, fmt };
+})();
+
+// ---- module canvas.fit ----
+Engine.fit = (function () {
+'use strict';
+// canvas.fit — DPR-aware canvas backing-store sizing.
+// Harvest sources: Sim_lab_sims/CM_sims/L6-The harmonic oscillator.html fit()
+// (setTransform reset before scale — fixes the cumulative-DPR bug) merged with
+// Sim_lab_sims/SR_sims/L09-s1-worldline-length-and-proper-time-shell.html fit()
+// (Math.max(1, …) zero-size guard). Canvas layer: pixels and rectangles only.
+
+/**
+ * Size a canvas's backing store to its CSS box × devicePixelRatio, reset the
+ * context transform, and scale so 1 drawing unit = 1 CSS pixel.
+ * Call at the top of every draw; returns the CSS-pixel size {w, h}.
+ */
+function fit(canvas, ctx) {
+  const dpr = globalThis.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(r.width * dpr));
+  const h = Math.max(1, Math.floor(r.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  return { w: r.width, h: r.height };
+}
+
+return { fit };
+})();
+
+// ---- module canvas.label ----
+Engine.label = (function () {
+'use strict';
+// canvas.label — text placement helpers, replacing the labelAt name collision:
+// the two CM L4 sims exported incompatible functions under one name, split here.
+// Harvest sources: Sim_lab_sims/CM_sims/L4-Projectile motion.html labelAt
+// (measureText + canvas-bounds clamping, halo, alpha) → textBox;
+// Sim_lab_sims/CM_sims/L4-Forces on objects explorer.html labelAt (radial
+// placement beyond a leader tip, direction-based alignment) → callout.
+// Canvas layer: text, boxes, and pixels only.
+
+function parseAnchor(anchor) {
+  let a = (anchor === 'c' || anchor === 'center') ? '' : String(anchor || 'nw');
+  const vert = a.startsWith('n') ? 'n' : a.startsWith('s') ? 's' : 'c';
+  if (vert !== 'c') a = a.slice(1);
+  const horiz = a === 'w' ? 'w' : a === 'e' ? 'e' : 'c';
+  return { vert, horiz };
+}
+
+/**
+ * Draw text anchored at (x, y), clamped so it never leaves the canvas.
+ * anchor: which point of the text box (x, y) is — 'nw','n','ne','w','c','e',
+ * 'sw','s','se' (default 'nw': text extends right and down).
+ * opts: {anchor, pad=3, color, bg (string, or true for default dark), font,
+ * alpha, halo (string, or true for default light outline)}.
+ * Returns the drawn box {x, y, w, h} in CSS pixels.
+ */
+function textBox(ctx, text, x, y, opts = {}) {
+  const pad = opts.pad != null ? opts.pad : 3;
+  ctx.font = opts.font || '12px system-ui,sans-serif';
+  const tw = ctx.measureText(text).width;
+  const fpx = /(\d+\.?\d*)px/.exec(ctx.font);
+  const th = fpx ? parseFloat(fpx[1]) : 12;
+  const dpr = globalThis.devicePixelRatio || 1;
+  const W = opts.w != null ? opts.w : (ctx.canvas ? ctx.canvas.width / dpr : Infinity);
+  const H = opts.h != null ? opts.h : (ctx.canvas ? ctx.canvas.height / dpr : Infinity);
+  const { vert, horiz } = parseAnchor(opts.anchor);
+  let lx = horiz === 'w' ? x : horiz === 'e' ? x - tw : x - tw / 2;
+  let ty = vert === 'n' ? y : vert === 's' ? y - th : y - th / 2;
+  lx = Math.max(pad, Math.min(lx, W - tw - pad));
+  ty = Math.max(pad, Math.min(ty, H - th - pad));
+  ctx.save();
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  if (opts.bg) {
+    ctx.fillStyle = typeof opts.bg === 'string' ? opts.bg : 'rgba(8,10,14,.82)';
+    ctx.fillRect(lx - pad, ty - pad, tw + 2 * pad, th + 2 * pad);
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  if (opts.halo) {
+    ctx.strokeStyle = typeof opts.halo === 'string' ? opts.halo : 'rgba(255,255,255,.78)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(text, lx, ty);
+  }
+  ctx.fillStyle = opts.color || '#94a3b8';
+  ctx.fillText(text, lx, ty);
+  ctx.restore();
+  return { x: lx - pad, y: ty - pad, w: tw + 2 * pad, h: th + 2 * pad };
+}
+
+/**
+ * Place a label just beyond a tip point, along the anchor→tip direction, so
+ * labels of differently-pointing leaders fan out radially instead of piling up.
+ * anchorXY/tipXY: [x, y] pairs (e.g. an arrow's origin and returned {ex, ey}).
+ * opts: textBox opts plus {off=15 (px beyond tip), leader (draw a thin line
+ * from tip to the label)}. Returns the drawn box {x, y, w, h}.
+ */
+function callout(ctx, text, anchorXY, tipXY, opts = {}) {
+  const [ax, ay] = anchorXY, [tx, ty] = tipXY;
+  let ux = tx - ax, uy = ty - ay;
+  const L = Math.hypot(ux, uy);
+  if (L < 1e-6) { ux = 0; uy = -1; } else { ux /= L; uy /= L; }
+  const off = opts.off != null ? opts.off : 15;
+  const bx = tx + ux * off, by = ty + uy * off;
+  const anchor = ((uy > 0.35 ? 'n' : uy < -0.35 ? 's' : '') +
+                  (ux > 0.35 ? 'w' : ux < -0.35 ? 'e' : '')) || 'c';
+  if (opts.leader) {
+    ctx.save();
+    ctx.strokeStyle = opts.color || '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = opts.alpha != null ? opts.alpha : 0.7;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.restore();
+  }
+  return textBox(ctx, text, bx, by, Object.assign({}, opts, { anchor }));
+}
+
+return { textBox, callout };
+})();
+
+// ---- module canvas.primitives ----
+Engine.primitives = (function () {
+'use strict';
+// canvas.primitives — small shared path/glyph/style helpers.
+// Harvest sources: Sim_lab_sims/CM_sims/L35-Orbits.html roundRect (most
+// parameterized of the ~22 inline copies), Sim_lab_sims/CM_sims/L36-Scattering
+// Extension.html css() (the only cssVar with a fallback), Sim_lab_sims/CM_sims/
+// L6-The harmonic oscillator.html diamond(); dashLine factors out the
+// setLineDash idiom repeated across the corpus. Canvas layer: shapes only.
+
+/**
+ * Rounded-rectangle path; opts.fill / opts.stroke may be true (use the
+ * context's current style) or a style string (set it, then paint).
+ */
+function roundRect(ctx, x, y, w, h, r, opts = {}) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+  if (opts.fill) { if (typeof opts.fill === 'string') ctx.fillStyle = opts.fill; ctx.fill(); }
+  if (opts.stroke) { if (typeof opts.stroke === 'string') ctx.strokeStyle = opts.stroke; ctx.stroke(); }
+}
+
+/**
+ * Dashed line segment; dash state is saved/restored so it never leaks.
+ * opts: {color, width, dash=[5,4], alpha}.
+ */
+function dashLine(ctx, x0, y0, x1, y1, opts = {}) {
+  ctx.save();
+  if (opts.color) ctx.strokeStyle = opts.color;
+  if (opts.width != null) ctx.lineWidth = opts.width;
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  ctx.setLineDash(opts.dash || [5, 4]);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Read a CSS custom property from :root, with a fallback when it is unset
+ * (or when no DOM exists, e.g. under node tests).
+ */
+function cssVar(name, fallback) {
+  if (typeof document === 'undefined') return fallback;
+  const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return s || fallback;
+}
+
+/**
+ * Diamond glyph centered at (x, y) with half-diagonal r; opts.fill /
+ * opts.stroke as in roundRect.
+ */
+function diamond(ctx, x, y, r, opts = {}) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.lineTo(x + r, y);
+  ctx.lineTo(x, y + r);
+  ctx.lineTo(x - r, y);
+  ctx.closePath();
+  if (opts.fill) { if (typeof opts.fill === 'string') ctx.fillStyle = opts.fill; ctx.fill(); }
+  if (opts.stroke) { if (typeof opts.stroke === 'string') ctx.strokeStyle = opts.stroke; ctx.stroke(); }
+}
+
+return { roundRect, dashLine, cssVar, diamond };
+})();
+
+// ---- module canvas.scale ----
+Engine.view = (function () {
+'use strict';
+// canvas.scale — world↔screen view mapping with y-flip and aspect handling.
+// Harvest sources: Sim_lab_sims/SR_sims/L09-s1-worldline-length-and-proper-time-shell.html
+// computeView/toPx/toWorld (aspect-locked, centered plot rect) + Sim_lab_sims/CM_sims/
+// L36-Scattering Extension.html W2S/S2W (forward + inverse pair, needed for dragging).
+// Canvas layer: maps abstract (x, y) coordinates to pixels; no physics vocabulary.
+
+const {makeScale} = Engine.scale;
+function padBox(pad) {
+  if (typeof pad === 'number') return { l: pad, r: pad, t: pad, b: pad };
+  const p = pad || {};
+  return { l: p.l || 0, r: p.r || 0, t: p.t || 0, b: p.b || 0 };
+}
+
+/**
+ * makeView({world:{x0,y0,x1,y1}, screen:{w,h,pad}, aspect:'lock'|'stretch'}) -> view
+ * World y increases UP, screen y increases DOWN — the flip lives here, once.
+ * 'lock'   : one uniform px-per-unit scale (min of both axes), plot centered in
+ *            the padded rect — shapes keep their aspect ratio.
+ * 'stretch': x and y scaled independently to fill the padded rect exactly.
+ * pad: number (all sides) or {l,r,t,b}.
+ */
+function makeView({ world, screen, aspect = 'lock' }) {
+  const { x0, y0, x1, y1 } = world;
+  const { w, h } = screen;
+  const p = padBox(screen.pad);
+  const innerW = Math.max(1, w - p.l - p.r);
+  const innerH = Math.max(1, h - p.t - p.b);
+  let X, Y;
+  if (aspect === 'stretch') {
+    X = makeScale([x0, x1], [p.l, p.l + innerW]);
+    Y = makeScale([y0, y1], [p.t + innerH, p.t]);
+  } else {
+    const s = Math.min(innerW / (x1 - x0), innerH / (y1 - y0));
+    const usedW = (x1 - x0) * s, usedH = (y1 - y0) * s;
+    const offX = p.l + (innerW - usedW) / 2;
+    const offY = p.t + (innerH - usedH) / 2;
+    X = makeScale([x0, x1], [offX, offX + usedW]);
+    Y = makeScale([y0, y1], [offY + usedH, offY]);
+  }
+  return {
+    world: { x0, y0, x1, y1 },
+    screen: { w, h, pad: p },
+    aspect,
+    x: X,
+    y: Y,
+    toPx: (x, y) => [X(x), Y(y)],
+    toWorld: (px, py) => [X.invert(px), Y.invert(py)],
+    pxPerUnit: (X(x1) - X(x0)) / (x1 - x0),
+    pxPerUnitY: (Y(y0) - Y(y1)) / (y1 - y0),
+  };
+}
+
+return { makeView };
+})();
+
+// ---- module canvas.ticks ----
+Engine.ticks = (function () {
+'use strict';
+// canvas.ticks — nice tick placement and tick-label formatting for axes.
+// Harvest source: Sim_lab_sims/QM_sims/Single_Gaussian_plot.html genTicks
+// (1/2/5×10ⁿ step selection, dedupe, degenerate-range guard) plus its inline
+// tick-label formatting, generalized to any range. Canvas layer: numbers only.
+
+const MINUS = '−';
+
+/**
+ * Nice tick positions covering [min, max], roughly approxN of them.
+ * Steps are 1, 2, or 5 × 10ⁿ; result is deduped and ascending.
+ * Degenerate range (max ≈ min) returns [min].
+ */
+function niceTicks(min, max, approxN = 8) {
+  if (max - min < 1e-12) return [min];
+  const range = max - min, raw = range / approxN;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw))), r2 = raw / mag;
+  let step;
+  if (r2 <= 1.5) step = mag;
+  else if (r2 <= 3.5) step = 2 * mag;
+  else if (r2 <= 7.5) step = 5 * mag;
+  else step = 10 * mag;
+  const ticks = [];
+  let s = Math.ceil(min / step) * step;
+  for (; s <= max + step * 0.01; s += step) {
+    if (s >= min - step * 0.01 && s <= max + step * 0.01) ticks.push(Math.round(s / step) * step);
+  }
+  const seen = new Set();
+  return ticks.filter((t) => { if (seen.has(t)) return false; seen.add(t); return true; });
+}
+
+/**
+ * Format one tick value for the axis, given the full axis range:
+ * near-zero → "0"; wide ranges → 0–1 decimals; narrow ranges → enough decimals
+ * to distinguish neighbors (uniform per axis); true minus sign (U+2212).
+ */
+function tickLabel(v, range) {
+  if (!Number.isFinite(v)) return String(v);
+  const r = Math.abs(range) || 1;
+  if (Math.abs(v) < r * 1e-9) return '0';
+  let s;
+  if (r > 2) {
+    s = Math.abs(v) >= 10 ? String(Math.round(v)) : v.toFixed(1);
+  } else {
+    const d = Math.max(2, Math.min(6, Math.ceil(-Math.log10(r)) + 2));
+    s = v.toFixed(d);
+  }
+  return s.replace('-', MINUS);
+}
+
+return { niceTicks, tickLabel };
+})();
+
+// ---- module domain.relativity ----
+Engine.rel = (function () {
+'use strict';
+// domain.relativity — special-relativity kinematics. c = 1 everywhere: beta is
+// v/c, ct carries time. Physics only — no canvas, no DOM (diagram.js draws).
+// Harvest sources (Sim_lab_sims/SR_sims/), provenance per plan M6:
+//   gamma            one name retiring the 8 drifted spellings across 27 files
+//                    (gam, gamma, gammaOf, g, ...); |beta| >= 1 guard added.
+//   boost2/unboost2  L18-s1-tachyon-causality-violation-shell.html
+//                    toFrame/fromFrame L827-828 (best of the 12 spellings of
+//                    the 2D boost across 15 files) = the -new trio's boost
+//                    (L18-s2-...-new.html L358), argument order (ct, x).
+//   boost4/minkowskiNormSq  L13-s1-lorentz-transformations-on-vectors-shell
+//                    .html boost/mdot L830-831, extended from (V0, V1) to a
+//                    full [ct, x, y, z] boost along x.
+//   interval         -new trio interval/classify (L18-s2-new L357-358) with
+//                    DIAGRAM-HARVEST fix #10: the baked-in |ds2| < 0.035
+//                    threshold becomes an input-relative / caller epsilon.
+//   rapidity/betaFromRapidity  hyperbolic parametrization (L10-s2, L13-s1).
+//   addVelocities    relativistic composition — the ONLY sanctioned way to
+//                    combine velocities in this domain.
+//   properTimeAlong  L09-s1-worldline-length-and-proper-time-shell.html
+//                    seg/pathInfo L864-882: tau = sum sqrt(dct^2 - dx^2);
+//                    a spacelike segment makes tau undefined -> NaN (the
+//                    source zeroed the segment and raised a valid=false flag).
+
+/** Lorentz factor 1/sqrt(1 - beta^2). Throws RangeError for |beta| >= 1
+ * (also rejects NaN) — no tachyonic gamma ever leaves this module. */
+function gamma(beta) {
+  if (!(Math.abs(beta) < 1)) {
+    throw new RangeError('gamma: |beta| must be < 1, got ' + beta);
+  }
+  return 1 / Math.sqrt(1 - beta * beta);
+}
+
+/**
+ * 2D Lorentz boost S -> S' (frame S' moving at +beta along x, as seen in S):
+ *   ct' = g (ct - beta x),  x' = g (x - beta ct).
+ * Returns [ctPrime, xPrime].
+ */
+function boost2(ct, x, beta) {
+  const g = gamma(beta);
+  return [g * (ct - beta * x), g * (x - beta * ct)];
+}
+
+/** Inverse 2D boost S' -> S: exactly boost2 with -beta. Returns [ct, x]. */
+function unboost2(ct, x, beta) {
+  return boost2(ct, x, -beta);
+}
+
+/**
+ * 4-vector boost along x: V = [ct, x, y, z] -> V' (new array).
+ * Transverse components pass through unchanged.
+ */
+function boost4(V, beta) {
+  if (!V || V.length !== 4) {
+    throw new RangeError('boost4: V must be a 4-component [ct, x, y, z] vector');
+  }
+  const g = gamma(beta);
+  return [g * (V[0] - beta * V[1]), g * (V[1] - beta * V[0]), V[2], V[3]];
+}
+
+/**
+ * Minkowski norm squared with the (-,+,+,+) signature of the L13 source mdot:
+ *   -ct^2 + x^2 + y^2 + z^2. Boost-invariant.
+ * NOTE the diagram/interval convention is the OPPOSITE sign (ds2 = dct^2-dx^2,
+ * timelike positive) — do not mix the two; interval() documents its own sign.
+ */
+function minkowskiNormSq(V) {
+  if (!V || V.length !== 4) {
+    throw new RangeError('minkowskiNormSq: V must be a 4-component [ct, x, y, z] vector');
+  }
+  return -V[0] * V[0] + V[1] * V[1] + V[2] * V[2] + V[3] * V[3];
+}
+
+/**
+ * Classify a separation (dct, dx): ds2 = dct^2 - dx^2 (timelike POSITIVE —
+ * the diagram sims' convention, opposite of minkowskiNormSq).
+ * kind: 'timelike' | 'spacelike' | 'lightlike' with |ds2| <= eps lightlike.
+ * eps: opts.lightlikeEps when given (diagram code passes one derived from its
+ * snap grid — fix #10); otherwise relative to the inputs' magnitude, so an
+ * exactly-null separation survives float noise but nothing physical is eaten.
+ */
+function interval(dct, dx, opts = {}) {
+  const ds2 = dct * dct - dx * dx;
+  const eps = opts.lightlikeEps != null
+    ? opts.lightlikeEps
+    : 1e-12 * Math.max(dct * dct + dx * dx, 1);
+  const kind = Math.abs(ds2) <= eps ? 'lightlike' : ds2 > 0 ? 'timelike' : 'spacelike';
+  return { ds2, kind };
+}
+
+/** Rapidity phi = atanh(beta). Throws RangeError for |beta| >= 1. */
+function rapidity(beta) {
+  if (!(Math.abs(beta) < 1)) {
+    throw new RangeError('rapidity: |beta| must be < 1, got ' + beta);
+  }
+  return Math.atanh(beta);
+}
+
+/** Inverse of rapidity: beta = tanh(phi). Rapidities ADD under composition. */
+function betaFromRapidity(phi) {
+  return Math.tanh(phi);
+}
+
+/**
+ * Relativistic velocity composition (u + v)/(1 + u v), u and v in units of c.
+ * Accepts |u|, |v| <= 1 (light itself composes to c); |result| <= 1 always.
+ * Throws RangeError beyond c or for the undefined u = -v = ±1 case.
+ */
+function addVelocities(u, v) {
+  if (!(Math.abs(u) <= 1) || !(Math.abs(v) <= 1)) {
+    throw new RangeError('addVelocities: |u| and |v| must be <= 1 (units of c)');
+  }
+  const denom = 1 + u * v;
+  if (denom === 0) {
+    throw new RangeError('addVelocities: composition undefined for u = -v = ±1');
+  }
+  const w = (u + v) / denom;
+  return w > 1 ? 1 : w < -1 ? -1 : w;
+}
+
+/* Accept {ct, x} objects or [ct, x] pairs for polyline points. */
+function pointCtX(p) {
+  if (Array.isArray(p) || ArrayBuffer.isView(p)) return [p[0], p[1]];
+  return [p.ct, p.x];
+}
+
+/**
+ * Proper time along a polyline worldline: sum of sqrt(dct^2 - dx^2) over
+ * consecutive points ({ct, x} or [ct, x]). A lightlike segment contributes 0;
+ * any spacelike segment (|dx| > |dct|) makes proper time undefined -> NaN.
+ * The straight timelike path between fixed endpoints is MAXIMAL (L09 physics).
+ */
+function properTimeAlong(points) {
+  let tau = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [ct0, x0] = pointCtX(points[i]);
+    const [ct1, x1] = pointCtX(points[i + 1]);
+    const dct = ct1 - ct0, dx = x1 - x0;
+    const s2 = dct * dct - dx * dx;
+    if (s2 < 0) return NaN;
+    tau += Math.sqrt(s2);
+  }
+  return tau;
+}
+
+return { gamma, boost2, unboost2, boost4, minkowskiNormSq, interval, rapidity, betaFromRapidity, addVelocities, properTimeAlong };
+})();
+
+// ---- module domain.relativity-diagram ----
+Engine.relDiagram = (function () {
+'use strict';
+// domain.relativity-diagram — the spacetime-diagram toolkit (namespace
+// Engine.relDiagram). Canvas-facing companion to domain.relativity: draws
+// axes/grids/light cones/worldlines/events in a DECLARED frame and provides
+// the pure geometry (calibration ticks, clipping, normalization, pair
+// classification, drag state machine) node-testably. c = 1: world coords are
+// (x, ct) with ct up; screen mapping comes from a canvas.scale makeView.
+//
+// Harvest per domains/relativity/DIAGRAM-HARVEST.md (user ruling: the -new
+// trio is live; -shell code is physics-reviewed and harvested where richer):
+//   drawSGrid / drawSAxes      -new/L05:364,366 (four-quadrant, NOT the
+//                              -shell bottom-pinned frame)
+//   drawPrimeGrid              -new/L18:366 (γ-spaced; sole source)
+//   drawPrimeAxes + ticks      -new/L18:369 (tilted axes; hyperbola
+//                              calibration ticks at (γk, γβk) / (γβk, γk))
+//   primeTickPositions         the tick math of -new/L18:369 factored PURE
+//   drawLightCone              -new/L18:370 (filled future wedge + dashed 45°
+//                              lines) wrapped in rect/clip per -shell:896-913
+//   clipSegment                -shell:850-860 Liang–Barsky (no equivalent in
+//                              the canvas layer; -new rayExit was origin-only)
+//   normalizeWorldline         -shell:780-787 normalizeWL + 799-804
+//                              addWorldline (time-forward ordering — fixes
+//                              the -new v/c sign bug), + x tie-break
+//   drawWorldline              -shell:946-970 drawWorldlines (superluminal
+//                              dashing + ⚠ label, endpoint handles, clipped)
+//   drawEventMarker            -new/L05:372 marker + -shell:1059-1084 radial
+//                              label placement (direction from origin)
+//   classifyPair               -new/L18:356-358 interval/classify/order with
+//                              fix #10: thresholds RELATIVE to the snap grid
+//                              (source baked |ds²|<0.035, |cΔt|<0.015 — the
+//                              values for snapUnit 0.25, kept as ratios)
+//   makeDraggableEvents        -shell:1095-1155 (nearest-match hit-testing,
+//                              4px click-vs-drag threshold, long-press +
+//                              right-click delete, pointer capture) with
+//                              -shell's snap-on-drop feel (continuous drag,
+//                              round at pointer-up) and injectable element/
+//                              timers so node drives it with synthetic events
+// Fixes applied at harvest (see DIAGRAM-HARVEST.md): #2 the S′ path is a live
+// export (was unreachable in -new/L05), #4 time-forward v/c, #6 ONE clamp
+// source (view.world — no baked ±5.5/±8), #7 every primitive clips to the
+// viewport, #8 nearest-event hit-testing, #10 snap-relative thresholds.
+// Content (event lists, presets, copy) is a SIM parameter, never module state
+// (fix #3); the module never reads the DOM or theme — colors come in as opts
+// (fix #11 lives sim-side: pass beta explicitly on every call, no hidden v).
+
+const {gamma, interval} = Engine.rel;
+const {clamp} = Engine.scale;
+const {textBox} = Engine.label;
+const {dashLine} = Engine.primitives;
+/* ---------- small local helpers (no exports) ---------- */
+
+function strokeLine(ctx, x1, y1, x2, y2, color, width) {
+  ctx.save();
+  if (color) ctx.strokeStyle = color;
+  if (width != null) ctx.lineWidth = width;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.restore();
+}
+
+/* Signed v/c formatting of the source sims (fmtV): +0.00 / −0.75 / ∞. */
+function fmtV(v) {
+  if (!Number.isFinite(v)) return '∞';
+  const r = Math.round(v * 100) / 100;
+  return (r < 0 ? '−' : '+') + Math.abs(r).toFixed(2);
+}
+
+/* Clip the px-space plot rect of a view (used to fence filled shapes). */
+function clipToView(ctx, view) {
+  const b = view.world;
+  const [px0, py0] = view.toPx(b.x0, b.y1);   // top-left (world y up)
+  const [px1, py1] = view.toPx(b.x1, b.y0);   // bottom-right
+  ctx.beginPath(); ctx.rect(px0, py0, px1 - px0, py1 - py0); ctx.clip();
+}
+
+/* ---------- pure geometry ---------- */
+
+/**
+ * Hyperbola calibration ticks for the tilted S′ axes (PURE, world coords).
+ * Ticks mark proper unit intervals: on the x′ axis at (γk, γβk), on the ct′
+ * axis at (γβk, γk), k = ±1..±kMax — each satisfies x² − ct² = ±k² exactly
+ * (the invariant hyperbolae through the S ticks). Throws via gamma for
+ * |beta| >= 1. Returns {xAxis: [{k, x, ct}...], ctAxis: [{k, x, ct}...]}.
+ */
+function primeTickPositions(beta, kMax = 5) {
+  const g = gamma(beta);
+  const xAxis = [], ctAxis = [];
+  for (let n = 1; n <= kMax; n++) {
+    for (const k of [-n, n]) {
+      xAxis.push({ k, x: g * k, ct: g * beta * k });
+      ctAxis.push({ k, x: g * beta * k, ct: g * k });
+    }
+  }
+  return { xAxis, ctAxis };
+}
+
+/**
+ * Liang–Barsky clip of the segment (x1,y1)-(x2,y2) to box {x0,y0,x1,y1}
+ * (x0<x1, y0<y1, any 2D coords). opts.extend clips the INFINITE line through
+ * the two points instead (the -shell worldline behaviour). Returns
+ * {x1,y1,x2,y2} ordered along the input direction, or null when nothing is
+ * inside. A degenerate (point) input returns the point if inside, else null.
+ */
+function clipSegment(x1, y1, x2, y2, box, opts = {}) {
+  const dx = x2 - x1, dy = y2 - y1;
+  if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12) {
+    const inside = x1 >= box.x0 - 1e-12 && x1 <= box.x1 + 1e-12 &&
+                   y1 >= box.y0 - 1e-12 && y1 <= box.y1 + 1e-12;
+    return inside ? { x1, y1, x2, y2 } : null;
+  }
+  let t0 = opts.extend ? -Infinity : 0;
+  let t1 = opts.extend ? Infinity : 1;
+  const cs = [[-dx, x1 - box.x0], [dx, box.x1 - x1], [-dy, y1 - box.y0], [dy, box.y1 - y1]];
+  for (const [p, q] of cs) {
+    if (Math.abs(p) < 1e-12) { if (q < 0) return null; }
+    else {
+      const r = q / p;
+      if (p < 0) { if (r > t0) t0 = r; }
+      else { if (r < t1) t1 = r; }
+    }
+  }
+  if (t0 > t1) return null;
+  return { x1: x1 + t0 * dx, y1: y1 + t0 * dy, x2: x1 + t1 * dx, y2: y1 + t1 * dy };
+}
+
+/**
+ * Time-forward normalization of a worldline given as two clicked endpoints
+ * {x, ct} in ANY order (fix #4: the -new files computed v/c in click order,
+ * flipping its sign). Orders by ct ascending (ties by x, so the result is
+ * click-order invariant even for simultaneous endpoints). Returns
+ * {x1, ct1, x2, ct2, v, superluminal}: v = dx/dct time-forward (Infinity for
+ * a simultaneous pair, NaN for a degenerate point); superluminal per the
+ * -shell guard |v| > 1 + 1e-9.
+ */
+function normalizeWorldline(p1, p2) {
+  let a = p1, b = p2;
+  if (b.ct < a.ct || (b.ct === a.ct && b.x < a.x)) { const t = a; a = b; b = t; }
+  const dct = b.ct - a.ct, dx = b.x - a.x;
+  const v = dct === 0 ? (dx === 0 ? NaN : Infinity) : dx / dct;
+  return {
+    x1: a.x, ct1: a.ct, x2: b.x, ct2: b.ct, v,
+    superluminal: Math.abs(v) > 1 + 1e-9,
+  };
+}
+
+/**
+ * Classify a pair of events {x, ct} (interval + temporal order) with
+ * thresholds RELATIVE to the snap grid (fix #10). opts.snapUnit (default
+ * 0.25, the -new sims' grid) scales both: lightlikeEps = 0.56·snapUnit²
+ * and simultaneityEps = 0.06·snapUnit — exactly the source's tuned 0.035 /
+ * 0.015 at snapUnit 0.25. Returns {dct, dx, ds2, kind, order} with kind
+ * 'timelike'|'spacelike'|'lightlike' and order 'simultaneous'|'e1-first'|
+ * 'e2-first' (a frame-DEPENDENT statement for spacelike pairs — label it
+ * with its frame).
+ */
+function classifyPair(e1, e2, opts = {}) {
+  const snapUnit = opts.snapUnit != null ? opts.snapUnit : 0.25;
+  const dct = e2.ct - e1.ct, dx = e2.x - e1.x;
+  const { ds2, kind } = interval(dct, dx, { lightlikeEps: 0.56 * snapUnit * snapUnit });
+  const tEps = 0.06 * snapUnit;
+  const order = Math.abs(dct) <= tEps ? 'simultaneous' : dct > 0 ? 'e1-first' : 'e2-first';
+  return { dct, dx, ds2, kind, order };
+}
+
+/* ---------- drawing (all take ctx + a canvas.scale view; all clipped) ---------- */
+
+/**
+ * Unit grid of the S frame across the view box. opts: {color, width, step}.
+ */
+function drawSGrid(ctx, view, opts = {}) {
+  const b = view.world;
+  const color = opts.color || 'rgba(148,163,184,.20)';
+  const width = opts.width != null ? opts.width : 1;
+  const step = opts.step || 1;
+  for (let gx = Math.ceil(b.x0 / step) * step; gx <= b.x1 + 1e-9; gx += step) {
+    strokeLine(ctx, ...view.toPx(gx, b.y0), ...view.toPx(gx, b.y1), color, width);
+  }
+  for (let gy = Math.ceil(b.y0 / step) * step; gy <= b.y1 + 1e-9; gy += step) {
+    strokeLine(ctx, ...view.toPx(b.x0, gy), ...view.toPx(b.x1, gy), color, width);
+  }
+}
+
+/**
+ * Four-quadrant S axes through the origin with integer tick marks, numeric
+ * labels, and 'x' / 'ct' axis labels (-new sAxes; negative-ct supported).
+ * opts: {color, tickColor, font, labelFont, labels=true}.
+ */
+function drawSAxes(ctx, view, opts = {}) {
+  const b = view.world;
+  const axis = opts.color || '#cbd5e1';
+  const tick = opts.tickColor || '#94a3b8';
+  const hasX = b.y0 <= 0 && b.y1 >= 0;   // the x axis lives at ct = 0
+  const hasCt = b.x0 <= 0 && b.x1 >= 0;  // the ct axis lives at x = 0
+  if (hasX) strokeLine(ctx, ...view.toPx(b.x0, 0), ...view.toPx(b.x1, 0), axis, 1.8);
+  if (hasCt) strokeLine(ctx, ...view.toPx(0, b.y0), ...view.toPx(0, b.y1), axis, 1.8);
+  ctx.save();
+  ctx.fillStyle = tick;
+  ctx.font = opts.font || '600 10px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  if (hasX) {
+    for (let i = Math.ceil(b.x0); i <= b.x1 + 1e-9; i++) {
+      if (!i) continue;
+      const [px, py] = view.toPx(i, 0);
+      strokeLine(ctx, px, py - 3, px, py + 3, tick, 1);
+      ctx.fillText(String(i), px - 4, py + 15);
+    }
+  }
+  if (hasCt) {
+    for (let i = Math.ceil(b.y0); i <= b.y1 + 1e-9; i++) {
+      if (!i) continue;
+      const [px, py] = view.toPx(0, i);
+      strokeLine(ctx, px - 3, py, px + 3, py, tick, 1);
+      ctx.fillText(String(i), px + 7, py + 3);
+    }
+  }
+  ctx.restore();
+  if (opts.labels !== false) {
+    const fontOpts = { color: axis, font: opts.labelFont, bg: opts.labelBg };
+    if (hasX) textBox(ctx, 'x', view.toPx(b.x1, 0)[0] - 14, view.toPx(b.x1, 0)[1] - 16, fontOpts);
+    if (hasCt) textBox(ctx, 'ct', view.toPx(0, b.y1)[0] + 8, view.toPx(0, b.y1)[1] + 4, fontOpts);
+  }
+}
+
+/**
+ * γ-spaced grid of the S′ frame (frame velocity beta as seen in S): dashed
+ * lines of constant ct′ (ct = βx + k/γ) and constant x′ (x = βct + k/γ) at
+ * unit S′ spacing, generated to exactly cover — and clipped to — the view
+ * box (fixes #6/#7; the source drew a fixed ±7 set to extent 10 unclipped).
+ * opts: {color, width, dash}.
+ */
+function drawPrimeGrid(ctx, view, beta, opts = {}) {
+  const g = gamma(beta);
+  const b = view.world;
+  const color = opts.color || 'rgba(45,212,191,.52)';
+  const width = opts.width != null ? opts.width : 1.2;
+  const dash = opts.dash || [3, 4];
+  const corners = [[b.x0, b.y0], [b.x0, b.y1], [b.x1, b.y0], [b.x1, b.y1]];
+  const draw = (seg) => {
+    if (seg) dashLine(ctx, ...view.toPx(seg.x1, seg.y1), ...view.toPx(seg.x2, seg.y2), { color, width, dash });
+  };
+  let lo = Infinity, hi = -Infinity;   // constant-ct′ lines: ct − βx = k/γ
+  for (const [cx, cy] of corners) { const q = cy - beta * cx; if (q < lo) lo = q; if (q > hi) hi = q; }
+  for (let k = Math.ceil(lo * g); k <= Math.floor(hi * g); k++) {
+    const q = k / g;
+    draw(clipSegment(b.x0, beta * b.x0 + q, b.x1, beta * b.x1 + q, b, { extend: true }));
+  }
+  lo = Infinity; hi = -Infinity;       // constant-x′ lines: x − βct = k/γ
+  for (const [cx, cy] of corners) { const q = cx - beta * cy; if (q < lo) lo = q; if (q > hi) hi = q; }
+  for (let k = Math.ceil(lo * g); k <= Math.floor(hi * g); k++) {
+    const q = k / g;
+    draw(clipSegment(beta * b.y0 + q, b.y0, beta * b.y1 + q, b.y1, b, { extend: true }));
+  }
+}
+
+/**
+ * Tilted S′ axes (ct′: x = βct; x′: ct = βx) through the origin, clipped to
+ * the view, with hyperbola calibration ticks (primeTickPositions) and ct′/x′
+ * labels at the positive-direction viewport exit (-new primeAxes; the rayExit
+ * label anchor is clipSegment's forward endpoint here). Ticks/labels are
+ * suppressed below opts.tickMinBeta (default 0.02) where S′ ≈ S.
+ * opts: {color, kMax=5, tickMinBeta, labels=true, font}.
+ */
+function drawPrimeAxes(ctx, view, beta, opts = {}) {
+  const b = view.world;
+  const c = opts.color || '#2dd4bf';
+  const ct = clipSegment(beta * b.y0, b.y0, beta * b.y1, b.y1, b, { extend: true });
+  if (ct) strokeLine(ctx, ...view.toPx(ct.x1, ct.y1), ...view.toPx(ct.x2, ct.y2), c, 2.2);
+  const xa = clipSegment(b.x0, beta * b.x0, b.x1, beta * b.x1, b, { extend: true });
+  if (xa) strokeLine(ctx, ...view.toPx(xa.x1, xa.y1), ...view.toPx(xa.x2, xa.y2), c, 2.2);
+  const minBeta = opts.tickMinBeta != null ? opts.tickMinBeta : 0.02;
+  if (Math.abs(beta) <= minBeta) return;
+  const ticks = primeTickPositions(beta, opts.kMax != null ? opts.kMax : 5);
+  ctx.save();
+  ctx.fillStyle = c;
+  for (const t of ticks.xAxis.concat(ticks.ctAxis)) {
+    if (t.x < b.x0 || t.x > b.x1 || t.ct < b.y0 || t.ct > b.y1) continue;
+    const [px, py] = view.toPx(t.x, t.ct);
+    ctx.fillRect(px - 2.3, py - 2.3, 4.6, 4.6);
+  }
+  ctx.restore();
+  if (opts.labels !== false) {
+    const lblOpts = { color: c, font: opts.font, bg: true };
+    const ctEnd = clipSegment(0, 0, beta, 1, b, { extend: true });
+    const xEnd = clipSegment(0, 0, 1, beta, b, { extend: true });
+    if (ctEnd) {
+      const [px, py] = view.toPx(ctEnd.x2, ctEnd.y2);
+      textBox(ctx, 'ct′', px + (beta >= 0 ? 8 : -24), py + 8, lblOpts);
+    }
+    if (xEnd) {
+      const [px, py] = view.toPx(xEnd.x2, xEnd.y2);
+      textBox(ctx, 'x′', px - 20, py + (beta >= 0 ? 12 : -24), lblOpts);
+    }
+  }
+}
+
+/**
+ * Light cone anchored at event {x, ct} (null/omitted → origin): dashed 45°
+ * lines through the event, plus the filled future wedge when
+ * opts.filledFuture. The whole cone is fenced by a px-space clip of the view
+ * rect (the -shell rect/clip fix — the -new version drew past the plot).
+ * opts: {filledFuture, color, fillStyle, dash}.
+ */
+function drawLightCone(ctx, view, event, opts = {}) {
+  const e = event || { x: 0, ct: 0 };
+  const b = view.world;
+  const color = opts.color || 'rgba(250,204,21,.82)';
+  const dash = opts.dash || [6, 5];
+  const reach = (b.x1 - b.x0) + (b.y1 - b.y0);   // beyond any corner from any interior point
+  ctx.save();
+  clipToView(ctx, view);
+  if (opts.filledFuture) {
+    ctx.fillStyle = opts.fillStyle || 'rgba(250,204,21,.055)';
+    ctx.beginPath();
+    ctx.moveTo(...view.toPx(e.x, e.ct));
+    ctx.lineTo(...view.toPx(e.x - reach, e.ct + reach));
+    ctx.lineTo(...view.toPx(e.x + reach, e.ct + reach));
+    ctx.closePath();
+    ctx.fill();
+  }
+  dashLine(ctx, ...view.toPx(e.x - reach, e.ct - reach), ...view.toPx(e.x + reach, e.ct + reach),
+    { color, width: 1.5, dash });
+  dashLine(ctx, ...view.toPx(e.x - reach, e.ct + reach), ...view.toPx(e.x + reach, e.ct - reach),
+    { color, width: 1.5, dash });
+  ctx.restore();
+}
+
+/**
+ * Draw one worldline from two endpoints {x, ct} (any click order — always
+ * normalized first, fix #4) clipped to the view. Superluminal lines render
+ * dashed with an '⚠ |v|>c' warning appended to the v/c label. opts:
+ * {color, width, name (label prefix), label=true, handles=true,
+ * extend (clip the infinite line, -shell style)}. Returns the
+ * normalizeWorldline record so callers can read v/superluminal.
+ */
+function drawWorldline(ctx, view, p1, p2, opts = {}) {
+  const wl = normalizeWorldline(p1, p2);
+  const b = view.world;
+  const color = opts.color || '#2dd4bf';
+  const seg = clipSegment(wl.x1, wl.ct1, wl.x2, wl.ct2, b, { extend: !!opts.extend });
+  if (!seg) return wl;
+  const [X1, Y1] = view.toPx(seg.x1, seg.y1);
+  const [X2, Y2] = view.toPx(seg.x2, seg.y2);
+  if (wl.superluminal) {
+    dashLine(ctx, X1, Y1, X2, Y2, { color, width: opts.width != null ? opts.width : 2.5, dash: [7, 5] });
+  } else {
+    strokeLine(ctx, X1, Y1, X2, Y2, color, opts.width != null ? opts.width : 2.5);
+  }
+  if (opts.handles !== false) {
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    for (const [hx, hct] of [[wl.x1, wl.ct1], [wl.x2, wl.ct2]]) {
+      if (hx < b.x0 || hx > b.x1 || hct < b.y0 || hct > b.y1) continue;
+      const [px, py] = view.toPx(hx, hct);
+      ctx.beginPath(); ctx.rect(px - 4, py - 4, 8, 8); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (opts.label !== false) {
+    const txt = (opts.name ? opts.name + ': ' : '') + 'v/c = ' + fmtV(wl.v) +
+      (wl.superluminal ? '  ⚠ |v|>c' : '');
+    textBox(ctx, txt, (X1 + X2) / 2 + 8, (Y1 + Y2) / 2 - 6, {
+      color: wl.superluminal ? '#fda4af' : color,
+      font: opts.font, bg: true, w: view.screen.w, h: view.screen.h,
+    });
+  }
+  return wl;
+}
+
+/**
+ * Event marker {x, ct} with radially-placed label (-shell placement: pushed
+ * along the origin→event direction so labels of different events fan out,
+ * then clamped to the canvas by textBox). opts: {color, r=6.5, selected,
+ * label (string; falsy → no label), from ({x,ct} radial anchor, default
+ * origin), font}.
+ */
+function drawEventMarker(ctx, view, ev, opts = {}) {
+  const color = opts.color || ev.color || '#2dd4bf';
+  const r = opts.r != null ? opts.r : 6.5;
+  const [px, py] = view.toPx(ev.x, ev.ct);
+  ctx.save();
+  if (opts.selected) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(px, py, r + 4.5, 0, 2 * Math.PI); ctx.stroke();
+  }
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(px, py, r, 0, 2 * Math.PI); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+  if (opts.label) {
+    const from = opts.from || { x: 0, ct: 0 };
+    const [ox, oy] = view.toPx(from.x, from.ct);
+    let vx = px - ox, vy = py - oy;
+    const L = Math.hypot(vx, vy);
+    if (L < 1e-9) { vx = 0; vy = -1; } else { vx /= L; vy /= L; }
+    textBox(ctx, opts.label, px + vx * 13, py + vy * 13, {
+      anchor: 'c', color, bg: true, font: opts.font,
+      w: view.screen.w, h: view.screen.h,
+    });
+  }
+}
+
+/* ---------- interaction ---------- */
+
+/**
+ * Drag/select/delete state machine for an array of events [{x, ct, ...}]
+ * (mutated in place). Returns plain handlers {pointerdown, pointermove,
+ * pointerup, pointercancel, contextmenu} — attach them to a canvas, or drive
+ * them with synthetic {clientX, clientY, pointerId, pointerType, button}
+ * objects in node. Behaviour (-shell 1095-1155 + harvest fixes):
+ *   - nearest event within hitRadius px wins, not the first match (fix #8);
+ *   - continuous (unsnapped) drag, snapped to snapUnit at pointer-up;
+ *   - < clickThreshold px of motion = a click → onChange {type:'select'};
+ *   - touch long-press (longPressMs, cancelled by motion) and right-click
+ *     (contextmenu) delete the event → onChange {type:'delete'};
+ *   - positions clamp to view.world (ONE clamp source, fix #6);
+ *   - pointer capture through opts.element when it provides the API.
+ * opts: {events, view, onChange({type:'drag'|'drop'|'select'|'delete', event,
+ * index}), hitRadius=12, clickThreshold=4, longPressMs=600, snapUnit=0.25,
+ * element, setTimeout, clearTimeout (injectable timers for tests)}.
+ */
+function makeDraggableEvents(opts) {
+  const events = opts.events;
+  const view = opts.view;
+  const onChange = opts.onChange || (() => {});
+  const hitRadius = opts.hitRadius != null ? opts.hitRadius : 12;
+  const clickThreshold = opts.clickThreshold != null ? opts.clickThreshold : 4;
+  const longPressMs = opts.longPressMs != null ? opts.longPressMs : 600;
+  const snapUnit = opts.snapUnit != null ? opts.snapUnit : 0.25;
+  const element = opts.element || null;
+  const setT = opts.setTimeout || ((fn, ms) => setTimeout(fn, ms));
+  const clearT = opts.clearTimeout || ((id) => clearTimeout(id));
+
+  let drag = null, longTimer = null;
+
+  function rel(e) {
+    const r = element && element.getBoundingClientRect
+      ? element.getBoundingClientRect() : { left: 0, top: 0 };
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+  function nearest(px, py) {
+    let best = -1, bd = hitRadius;
+    for (let i = 0; i < events.length; i++) {
+      const [ex, ey] = view.toPx(events[i].x, events[i].ct);
+      const d = Math.hypot(px - ex, py - ey);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  const b = view.world;
+  const snap = (v) => (snapUnit > 0 ? Math.round(v / snapUnit) * snapUnit : v);
+  function place(ev, x, ct) {
+    ev.x = clamp(x, b.x0, b.x1);
+    ev.ct = clamp(ct, b.y0, b.y1);
+  }
+  function removeAt(i) {
+    const ev = events.splice(i, 1)[0];
+    onChange({ type: 'delete', event: ev, index: i });
+  }
+
+  function pointerdown(e) {
+    if (e.button === 2) return;   // right button → contextmenu path
+    const [px, py] = rel(e);
+    const i = nearest(px, py);
+    if (i < 0) return;
+    if (element && element.setPointerCapture) {
+      try { element.setPointerCapture(e.pointerId); } catch (_) { /* detached */ }
+    }
+    drag = { index: i, moved: false, x0: px, y0: py };
+    if (e.pointerType === 'touch') {
+      clearT(longTimer);
+      longTimer = setT(() => {
+        if (drag && !drag.moved) { const i2 = drag.index; drag = null; removeAt(i2); }
+      }, longPressMs);
+    }
+  }
+  function pointermove(e) {
+    if (!drag) return;
+    const [px, py] = rel(e);
+    if (!drag.moved && Math.hypot(px - drag.x0, py - drag.y0) > clickThreshold) {
+      drag.moved = true;
+      clearT(longTimer);
+    }
+    if (!drag.moved) return;
+    const ev = events[drag.index];
+    if (!ev) { drag = null; return; }
+    const [wx, wct] = view.toWorld(px, py);
+    place(ev, wx, wct);   // continuous while dragging; snap happens on drop
+    onChange({ type: 'drag', event: ev, index: drag.index });
+  }
+  function pointerup(e) {
+    clearT(longTimer);
+    if (!drag) return;
+    const ev = events[drag.index];
+    if (ev) {
+      if (!drag.moved) {
+        onChange({ type: 'select', event: ev, index: drag.index });
+      } else {
+        place(ev, snap(ev.x), snap(ev.ct));   // -shell snap-on-drop feel
+        onChange({ type: 'drop', event: ev, index: drag.index });
+      }
+    }
+    if (element && element.releasePointerCapture) {
+      try { element.releasePointerCapture(e.pointerId); } catch (_) { /* ok */ }
+    }
+    drag = null;
+  }
+  function pointercancel() { clearT(longTimer); drag = null; }
+  function contextmenu(e) {
+    if (e.preventDefault) e.preventDefault();
+    const [px, py] = rel(e);
+    const i = nearest(px, py);
+    if (i >= 0) removeAt(i);
+  }
+
+  return {
+    pointerdown, pointermove, pointerup, pointercancel, contextmenu,
+    _state: () => ({ dragging: !!drag, moved: !!(drag && drag.moved) }),
+  };
+}
+
+return { primeTickPositions, clipSegment, normalizeWorldline, classifyPair, drawSGrid, drawSAxes, drawPrimeGrid, drawPrimeAxes, drawLightCone, drawWorldline, drawEventMarker, makeDraggableEvents };
+})();
+
+// ---- module verify.audit ----
+Engine.audit = (function () {
+'use strict';
+// verify.audit — the __audit machine-verification surface (Layer: verify).
+// Formalizes the window.__audit convention already present ad-hoc in 35 sims
+// (SR `__audit.at(beta)` in 23 files, CM orbit audits in 12). This module is
+// contract, not framework: one call installs the surface verify.mjs drives.
+//
+// defineAudit(opts, target) works without a browser: pass any globalThis-like
+// target (default globalThis) — node tests inject a mock {document, Event}.
+
+/* Parse the inert #engine-manifest JSON block, or null when absent/invalid. */
+function readManifest(target) {
+  const doc = target && target.document;
+  if (!doc || typeof doc.getElementById !== 'function') return null;
+  const el = doc.getElementById('engine-manifest');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch (e) { return null; }
+}
+
+/* Default setParam: drive the control through the SAME code path as the UI.
+ * controls.bind listens for 'input' on the element (see controls/bind.js
+ * bindSlider), so setting .value and dispatching 'input' exercises the
+ * sanitize/clamp/state/onChange chain exactly like a user gesture. When the
+ * manifest carries a params schema, only its ids are accepted. */
+function makeSetParam(target, manifest) {
+  return function setParam(id, value) {
+    const doc = target && target.document;
+    if (!doc) throw new Error('audit.setParam: no document in this context');
+    if (manifest && Array.isArray(manifest.params) &&
+        !manifest.params.some((p) => p.id === id)) {
+      throw new Error('audit.setParam: "' + id + '" is not in the manifest params schema');
+    }
+    const el = doc.getElementById(id);
+    if (!el) throw new Error('audit.setParam: no control element "' + id + '"');
+    el.value = String(value);
+    const Ev = target.Event || (typeof Event !== 'undefined' ? Event : null);
+    el.dispatchEvent(Ev ? new Ev('input', { bubbles: true }) : { type: 'input' });
+    return el.value;
+  };
+}
+
+/**
+ * Install the audit surface: target.__audit =
+ *   {version: 1, manifest, probes, invariants, state, setParam, run()}.
+ * - probes: pure numeric functions, exposed as-is.
+ * - invariants: each fn MUST return {ok, value, expected, tol}; run()
+ *   aggregates them into {pass, results:[{name, ok, value, expected, tol}]}.
+ *   A throwing invariant is recorded as ok:false, never rethrown.
+ * - state: optional live-state accessor object (or null).
+ * - setParam(id, v): defaults to the UI-code-path helper above.
+ * Returns the audit object (also handed to guards via registerWith).
+ */
+function defineAudit(opts = {}, target = globalThis) {
+  const probes = opts.probes || {};
+  const invariants = opts.invariants || {};
+  const state = opts.state || null;
+  const manifest = readManifest(target);
+
+  const audit = {
+    version: 1,
+    manifest,
+    probes,
+    invariants,
+    state,
+    setParam: opts.setParam || makeSetParam(target, manifest),
+    run() {
+      const results = [];
+      for (const name of Object.keys(invariants)) {
+        let r;
+        try {
+          r = invariants[name]() || {};
+        } catch (e) {
+          r = { ok: false, value: String((e && e.message) || e), expected: null, tol: null };
+        }
+        results.push({ name, ok: !!r.ok, value: r.value, expected: r.expected, tol: r.tol });
+      }
+      return { pass: results.every((x) => x.ok), results };
+    },
+  };
+  if (target) target.__audit = audit;
+  return audit;
+}
+
+return { defineAudit };
+})();
+
+/* ENGINE:END */
+</script>
+
+<script>
+(function () {
+  'use strict';
+  const { fmt } = Engine.scale;
+  const rel = Engine.rel;
+  const D = Engine.relDiagram;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const slider = document.getElementById('beta');
+  const out = document.getElementById('betaVal');
+
+  const state = { beta: parseFloat(slider.value) };
+  const events = [
+    { x: -1, ct: 2, label: 'E₁', color: '#2dd4bf' },
+    { x: 2, ct: 2, label: 'E₂', color: '#fb7185' },
+  ];
+  let view = null, handlers = null;
+
+  function makeSceneView() {
+    const { w, h } = Engine.fit.fit(canvas, ctx);
+    return Engine.view.makeView({
+      world: { x0: -6, y0: -6, x1: 6, y1: 6 },
+      screen: { w, h, pad: 14 },
+    });
+  }
+
+  function draw() {
+    view = makeSceneView();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    D.drawSGrid(ctx, view);
+    D.drawPrimeGrid(ctx, view, state.beta);
+    D.drawSAxes(ctx, view);
+    D.drawPrimeAxes(ctx, view, state.beta);
+    D.drawLightCone(ctx, view, events[0], { filledFuture: true });
+    if (events.length >= 2) {
+      D.drawWorldline(ctx, view, events[0], events[1], { color: '#a78bfa', name: 'W₁' });
+      const pair = D.classifyPair(events[0], events[1]);
+      const [dctP] = rel.boost2(pair.dct, pair.dx, state.beta);
+      D.drawEventMarker(ctx, view, events[0], { label: events[0].label, color: events[0].color });
+      D.drawEventMarker(ctx, view, events[1], { label: events[1].label, color: events[1].color });
+      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui, sans-serif';
+      ctx.fillText('Δs² = ' + fmt(pair.ds2) + ' (' + pair.kind + ')  ·  in S: ' + pair.order +
+        '  ·  cΔt′ = ' + fmt(dctP), 12, 18);
+    } else {
+      events.forEach(e => D.drawEventMarker(ctx, view, e, { label: e.label, color: e.color }));
+    }
+    out.textContent = fmt(state.beta) + '  (γ = ' + fmt(rel.gamma(state.beta), 3) + ')';
+  }
+
+  function rewire() {
+    handlers = D.makeDraggableEvents({
+      events, view, element: canvas,
+      onChange: () => { draw(); rewire(); },   // view rebuilt each draw
+    });
+  }
+  ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'contextmenu'].forEach(t =>
+    canvas.addEventListener(t, e => handlers && handlers[t] && handlers[t](e)));
+
+  slider.addEventListener('input', () => { state.beta = parseFloat(slider.value); draw(); });
+  window.addEventListener('resize', draw);
+  draw();
+  rewire();
+
+  // Mandatory machine-verification surface: gamma exposed as a probe, boost
+  // invariance as an invariant (verify.mjs drives setParam sweeps on #beta).
+  Engine.audit.defineAudit({
+    probes: {
+      gamma: (beta) => rel.gamma(beta != null ? beta : state.beta),
+      at: (beta) => ({ gamma: rel.gamma(beta) }),
+    },
+    invariants: {
+      intervalInvariant: () => {
+        const pair = D.classifyPair(events[0], events[1]);
+        const [dctP, dxP] = rel.boost2(pair.dct, pair.dx, state.beta);
+        const ds2P = dctP * dctP - dxP * dxP;
+        return { ok: Math.abs(ds2P - pair.ds2) < 1e-9, value: ds2P, expected: pair.ds2, tol: 1e-9 };
+      },
+      betaSubluminal: () => ({
+        ok: Math.abs(state.beta) < 1, value: state.beta, expected: '(-1, 1)', tol: 0,
+      }),
+    },
+    state,
+  });
+})();
+</script>
+</body>
+</html>

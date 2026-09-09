@@ -1,0 +1,51 @@
+---
+description: Bundle of all four JEE sim user-version layers (guided-inquiry button contract, controls-tutorial overlay, welcome overlay, card voiceover + Auto). Apply when converting a sim in Module-*/ or a root L-series sim into its user version under sim-use-builds/.
+globs: ["sim-use-builds/**/*.html"]
+alwaysApply: false
+---
+
+# JEE sim → user version (four layers, one sim per agent)
+
+Full procedure, verify gates and output contract: **`.cursor/commands/jee-sim-user-version.md`** — read it before editing. This rule is the short form for when the command isn't invoked explicitly.
+
+## What you are building
+
+One sim → `sim-use-builds/<same-basename>.html`, carrying four layers applied in this order:
+
+1. **Guided-inquiry button contract** — `#shell-lecture` and all lecture machinery replaced by the `#btn-gi` / `#btn-cg` pair (mutually exclusive, GI boots active); hooks `__giOff` / `__freeExplore` / `__giResume` / `__cgReveals` published from the sim's scope; Finish routes through `__giOff`. Card content is **copy-polish only** (trim >90-word cards, >60-word feedback — never restructure).
+2. **Controls tutorial** — purple callout walking every control/readout one at a time, hidden-until-its-turn, `__fullReset` wired additively to Reset.
+3. **Welcome overlay** — three glass mode cards over a per-sim hero canvas drawn from the sim's own equations, plus the read-aloud player.
+4. **Card voiceover + Auto** — Listen row above `.inq-nav`, two-row controls-guide nav, shared speech engine; Auto walks each flow hands-free and **never answers a prediction** for the student.
+
+## Specification (single source of truth — copy the blocks, don't re-derive)
+
+- `Sim_use_version_skills/guided-inquiry/SKILL.md` + `references/implementation.md`
+- `Sim_use_version_skills/controls-tutorial/SKILL.md` + `references/implementation.md` (§1–§4 base layers, **§6** voiceover, §6.4 identifier map, §6.4b watcher shells, §6.5 Chrome TTS pitfalls)
+- `Sim_use_version_skills/welcome-overlay/SKILL.md` + `references/implementation.md`
+
+Validated exemplars: **C-series** → `sim-use-builds/C203-refraction-and-snells-law.html`; **L-series** → `sim-use-builds/L30-the-coriolis-force.html`.
+
+## Non-negotiable
+
+- Never modify the original sim — `cp` first, edit only the copy. Other agents work sibling files in parallel; no repo-wide replacements.
+- Small targeted edits only. A whole-file write of a ~300 KB sim fails mid-response and corrupts the output.
+- No git operations.
+- Never introduce third-party sim-source names (PhET, Collision Lab, Gases Intro, Pickup Coil, Colorado…) — these files were scrubbed for copyright. Re-grep before reporting.
+- Physics kernel, `window.__audit`, `engine-manifest` / `engine-inline` / `shell-runtime` blocks stay byte-identical apart from the sanctioned deltas.
+
+## Gates — all must pass before reporting
+
+```bash
+cd Sim_use_version_skills                       # jsdom lives here
+node guided-inquiry/scripts/verify.js    '../sim-use-builds/<b>.html' --baseline '../<original>'
+node controls-tutorial/scripts/verify.js '../sim-use-builds/<b>.html' --baseline '../<original>'
+node welcome-overlay/scripts/verify.js   '../sim-use-builds/<b>.html'
+```
+
+Then the **mandatory real-Chrome flow probe** (jsdom cannot see a boot-time exception that kills both flows):
+
+```bash
+python3 -m http.server 8734 ; node tools/flow-probe.mjs 9500 <basename>.html
+```
+
+Plus `node --check` on every inline script, unique ids (`btn-gi`, `btn-cg`, `inq-voice`, `inq-auto`, `cg-auto`, `cg-rew`, `cg-fwd`, `cg-voice-play`, `welcome-overlay` — exactly once each), all hooks present, copyright grep clean, original unchanged. Never ship with a lowered bar; if a gate can't pass, stop and say why.
