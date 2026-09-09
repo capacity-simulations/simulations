@@ -299,6 +299,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-stage{flex:1 1 auto;min-height:0;width:100%;display:block;}
 .sim-h{font-size:14px;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
 .sim-ctl label{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--text);margin-bottom:4px;gap:8px;}
+/* checkbox rows opt out of the slider label's space-between, which would fling the box
+   away from its text; keep them left-grouped and vertically centred instead. */
+.sim-ctl label.sim-check{justify-content:flex-start;align-items:center;gap:8px;margin-bottom:0;cursor:pointer;}
+.sim-ctl label.sim-check input{margin:0;flex:0 0 auto;cursor:pointer;}
 .sim-val{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;}
 .sim-ctl input[type=range]{width:100%;box-sizing:border-box;}
 .sim-btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
@@ -484,6 +488,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <div class="sim-ctl">
             <label for="polSlider">Spin polarization P <span id="polVal" class="sim-val">0.00</span></label>
             <input type="range" id="polSlider" min="0" max="100" step="1" value="0">
+          </div>
+          <div class="sim-ctl">
+            <label class="sim-check" for="coilChk"><input type="checkbox" id="coilChk" checked> Show solenoid rings</label>
           </div>
           <div class="sim-note ht-hide">P is set by the crystal's <b>temperature</b>: P = Brillouin(μB/kT), strongly non-linear — this slider sets P directly. The coil current <b>I</b> and the field <b>B</b> are held <b>fixed</b> (drawn schematic, not to scale), as in Wu's run. Press <b>▶ Play</b> to run the source; counts reset when you change P.</div>
         </div>
@@ -827,7 +834,7 @@ function fNums(px,w){ return (w||700)+' '+px+'px '+TH.nums; }
 
 /* ===== state ===== */
 const S = {
-  P:0, mirror:false, anti:false,
+  P:0, mirror:false, anti:false, coil:true,
   spins:[], electrons:[],
   nUp:0, nDn:0, total:0,
   bins:new Array(24).fill(0),
@@ -1020,11 +1027,14 @@ function drawApp(cx, mir, weight){
   c.globalAlpha=0.55*W; c.strokeStyle=TH.muted; c.lineWidth=1.5; c.stroke();
   c.restore();
 
-  /* coil back strands */
+  /* coil back strands — optional: I and B always transform together (curM === bM), so the
+     rings carry no direction information the B arrow does not already show. */
+  if(S.coil){
   c.save();
   c.strokeStyle=TH.muted; c.globalAlpha=(busy?0.22:0.34)*W; c.lineWidth=Math.max(1.4,1.6*sc);
   zs.forEach(z=>{ c.beginPath(); c.ellipse(cx,PY(z),88*sc,15*sc,0,Math.PI,2*Math.PI); c.stroke(); });
   c.restore();
+  }
 
   /* nuclear spins (pseudovectors: x kept, z flipped in mirror) */
   const aw = Math.max(1.1,1.3*sc), al = 12*sc, hs = Math.max(6,6.5*sc);
@@ -1046,7 +1056,10 @@ function drawApp(cx, mir, weight){
   c.beginPath(); c.moveTo(PX(-86),cy); c.lineTo(PX(-60),cy); c.stroke(); c.restore();
   txt(c, PX(-96), cy+5, 'J', fSans(14,700), TH.spin);
 
-  /* coil front strands + current arrows (true vector: flips under P, back under C) */
+  /* coil front strands + current arrows (true vector: flips under P, back under C).
+     Gated as ONE unit with the back strands: orphaned current triangles floating with no
+     coil to run along would read as a new object rather than a hidden one. */
+  if(S.coil){
   c.save();
   c.strokeStyle=TH.muted; c.globalAlpha=(busy?0.55:0.85)*W; c.lineWidth=Math.max(1.4,1.8*sc);
   zs.forEach(z=>{ c.beginPath(); c.ellipse(cx,PY(z),88*sc,15*sc,0,0,Math.PI); c.stroke(); });
@@ -1058,6 +1071,7 @@ function drawApp(cx, mir, weight){
   /* current label — drawn in BOTH panels, pointing the way that panel's I runs */
   txt(c, cx + curM*(tSz+9), PY(57)+15*sc+5, 'I', 'italic '+fSans(13,700), TH.muted,
       curM>0?'left':'right');
+  }
 
   /* electrons / positrons (true vectors: pure image reflection) */
   for(const e of S.electrons){
@@ -1149,7 +1163,10 @@ function drawKey(){
   const boxW = Math.min(LG.w-16, inner + 2*padX);
   const boxH = 24;
   const boxX = Math.max(8, LG.w - 8 - boxW);
-  const boxY = 8;
+  /* In mirror mode the RIGHT panel's title sits at y≈20 and its subtitle at y≈35, centred
+     on 3·w/4 — which runs straight under a key pinned at y=8. Drop below that band so the
+     "MIRROR IMAGE — what parity predicts" heading stays readable. */
+  const boxY = S.mirror ? 46 : 8;
   /* box outline */
   c.save();
   c.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1188,7 +1205,7 @@ function verdict(){
   if(!wuSignal())  /* significant magnitude but not the A·P·β signal (wrong sign / P≈0 fluctuation) — stay numeric */
     return {t:'𝒜 = '+m.a.toFixed(3)+' ± '+m.s.toFixed(3), c:TH.text};
   return S.anti ? {t:'✓ CP mirror matches the data', c:GOOD}
-                : {t:'✗ Mirror disagrees with the data', c:BAD};
+                : {t:'✗ Mirror predicts the opposite — parity violated', c:BAD};
 }
 
 function drawAll(){
@@ -1281,6 +1298,8 @@ function syncControls(){
   mirrorBtn.setAttribute('aria-pressed', S.mirror?'true':'false');
   antiBtn.textContent = '+ Charge conjugation: '+(S.anti?'ON':'OFF');
   antiBtn.setAttribute('aria-pressed', S.anti?'true':'false');
+  const cc = document.getElementById('coilChk');
+  if(cc) cc.checked = S.coil;
 }
 function setState(o){
   /* o.keep: preserve the accumulated counts when P is unchanged (same physics
@@ -1306,6 +1325,11 @@ function wireControls(){
     S.P = polSlider.value/100;
     resampleSpins(); clearCounts();
     syncControls(); updateReadouts(); drawAll(); drawDist();
+  });
+  const coilChk = document.getElementById('coilChk');
+  if(coilChk) coilChk.addEventListener('change', ()=>{
+    S.coil = coilChk.checked;   /* purely cosmetic: no counts, no physics state touched */
+    drawAll();
   });
   mirrorBtn.addEventListener('click', ()=>{
     S.mirror = !S.mirror;
