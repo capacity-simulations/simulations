@@ -388,8 +388,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
         <label style="font-size:11px;">Speed</label>
         <select id="shell-speed" class="shell-select">
-          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option>
         </select>
       </div>
       <div class="shell-sep"></div>
@@ -857,6 +857,20 @@ window.__audit = { at(momentumGeV) {
     const beta = E > 0 ? p / E : 1;
     return { E, KE: E - m, beta, gamma: m > 0 ? E / m : Infinity, t: TOF_D / (beta * C), tL: TOF_D / C };
   }
+
+  /* FIXED animation scale — seconds of animation per second of real time-of-flight.
+     Anchored so the slowest case the slider can reach (heaviest particle at P_MIN)
+     still fills RACE_DUR. The key point is that it does NOT depend on p, so a
+     particle's on-screen speed now tracks its REAL speed.
+     Previously dur was RACE_DUR * kin.t / (slowest lane AT THAT p). Since every
+     particle tends to β = 1 as p rises, that denominator shrank and fast particles
+     appeared to slow down: a neutrino — always travelling at exactly c — animated
+     3.5x slower at p = 5 than at p = 0.2, while a proton held ~2.5 s at both ends
+     even though its real speed went 0.21c → 0.98c. */
+  const P_MIN = 0.2;
+  const M_MAX = Math.max.apply(null, Object.keys(PARTS).map(k => PARTS[k].m));
+  const TOF_REF = kinematics(M_MAX, P_MIN).t;
+  const RACE_K = RACE_DUR / TOF_REF;
   function theme() {
     const cs = getComputedStyle(document.body);
     const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
@@ -958,16 +972,18 @@ window.__audit = { at(momentumGeV) {
 
     /* SYNC: detector transit ends exactly when this particle's own TOF lane crosses 10 m,
        so the top head and the bold racer below arrive together (one particle, two views). */
-    let tMax = TOF_D / C;
-    for (const k of laneKeys()) tMax = Math.max(tMax, kinematics(PARTS[k].m, p).t);
-    tMax *= 1.04;
-    const dur = Math.max(0.7, RACE_DUR * kin.t / tMax);
+    const dur = Math.max(0.35, kin.t * RACE_K);
+    /* Cycle ends when the SLOWEST lane has finished, so the loop still has no dead
+       air even though each particle now moves at its own honest speed. */
+    let tSlow = TOF_D / C;
+    for (const k of laneKeys()) tSlow = Math.max(tSlow, kinematics(PARTS[k].m, p).t);
+    const cycle = Math.max(dur, tSlow * RACE_K);
     return {
       P, p, kin, L, pts, totalLen, segs, glow, dep, mR,
       exits: (P.kind === 'mu' || P.kind === 'nu'),
       sTrkMid: sAtX((L.trk[0] + L.trk[1]) / 2),
       trkXs: [1, 2, 3, 4].map(i => L.trk[0] + tw * i / 5),
-      clock: instant ? 1e9 : 0, dur
+      clock: instant ? 1e9 : 0, dur, cycle
     };
   }
   function rebuildKeepClock() {
@@ -1200,8 +1216,10 @@ window.__audit = { at(momentumGeV) {
       const p = PARTS[k], kk = kinematics(p.m, state.p);
       rows.push({ key: k, sym: p.sym, col: p.color, beta: kk.beta, q: p.q, t: kk.t });
     }
-    const tMax = Math.max.apply(null, rows.map(r => r.t)) * 1.04;
-    const tReal = Math.min(ev.clock, RACE_DUR) / RACE_DUR * tMax;
+    /* Same fixed scale as the detector transit above — one particle, two views,
+       still arriving together, but now on an absolute clock rather than one
+       renormalised to whichever lane happens to be slowest at this momentum. */
+    const tReal = ev.clock / RACE_K;
 
     ctx.save(); ctx.strokeStyle = T.border; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     ctx.beginPath(); ctx.moveTo(finX, yA - 4); ctx.lineTo(finX, yB); ctx.stroke(); ctx.restore();
@@ -1354,7 +1372,7 @@ window.__audit = { at(momentumGeV) {
     lastFrame = performance.now();
     dt = Math.min(Math.max(dt || 0, 0), 0.1);
     ev.clock += dt;
-    if (ev.clock >= Math.max(ev.dur, RACE_DUR) + HOLD) {
+    if (ev.clock >= (ev.cycle || ev.dur) + HOLD) {
       state.fireCount++;
       ev = buildEvent(false);
     }
