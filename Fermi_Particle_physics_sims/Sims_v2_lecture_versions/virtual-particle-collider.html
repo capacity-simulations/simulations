@@ -201,6 +201,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 /* Dynamic sidebar — two zones: guided-inquiry (collapses after answer/skip) + controls/stats. */
 .aside-zone{flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
 #aside-controls{flex:1 1 auto;}
+/* These control panels hold raw .sim-* content rather than .shell-panel-body, so they
+   inherited no padding — "Beams" and its siblings sat flush against their own borders. */
+#aside-controls{gap:14px;}
+#aside-controls .shell-panel{padding:12px;}
 .aside-zone-head{display:flex;align-items:center;gap:8px;padding:0 2px;}
 .aside-zone-head h3{margin:0;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mid);font-weight:600;flex:1;}
 .aside-skip{font-size:11px;padding:4px 9px;color:var(--ink-mid);}
@@ -525,6 +529,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <tr><td>lost to boost</td><td id="simWaste">0.00 GeV</td></tr>
     </table>
   </details>
+  <div class="sim-box">
+    <label class="sim-check"><input type="checkbox" id="simShowPlot" checked><span>Show σ(√s) plot</span></label>
+  </div>
 </div>
     </div>
   </aside>
@@ -800,7 +807,7 @@ var THR = [
 ];
 var T_CYCLE = 2.6;
 
-var S = { E1: 5, E2: 5, link: true, L: 1, eff: 0.9, t: 0, cy: 0.55, evCos: 0.35, evSign: 1 };
+var S = { E1: 5, E2: 5, link: true, L: 1, eff: 0.9, t: 0, cy: 0.55, evCos: 0.35, evSign: 1, showPlot: true };
 
 /* ===== physics ===== */
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -834,7 +841,8 @@ var cv = $id('simMainCv'), ctx = cv.getContext('2d');
 var els = {
   e1: $id('simE1'), e2: $id('simE2'), link: $id('simLink'), lum: $id('simLum'), eff: $id('simEff'),
   e1v: $id('simE1Val'), e2v: $id('simE2Val'), lumv: $id('simLumVal'), effv: $id('simEffVal'),
-  rs: $id('simRoots'), sg: $id('simSigma'), ev: $id('simEvents'), ws: $id('simWaste')
+  rs: $id('simRoots'), sg: $id('simSigma'), ev: $id('simEvents'), ws: $id('simWaste'),
+  showPlot: $id('simShowPlot')
 };
 var W = 0, H = 0;
 
@@ -872,6 +880,7 @@ function updateUI(){
 function syncControls(){
   els.e1.value = Math.log10(S.E1); els.e2.value = Math.log10(S.E2);
   els.lum.value = Math.log10(S.L); els.eff.value = S.eff; els.link.checked = S.link;
+  if (els.showPlot) els.showPlot.checked = S.showPlot;
 }
 function pauseShell(){ try { if (window.Shell && Shell.setPlaying) Shell.setPlaying(false); } catch (e) {} }
 
@@ -888,6 +897,9 @@ els.e2.addEventListener('input', function(){
 });
 els.lum.addEventListener('input', function(){ pauseShell(); S.L = clamp(Math.pow(10, +els.lum.value), 0.01, 100); updateUI(); draw(); });
 els.eff.addEventListener('input', function(){ pauseShell(); S.eff = clamp(+els.eff.value, 0, 1); updateUI(); draw(); });
+/* View-only toggle: no pauseShell(), no state change — just redraw with the band
+   on or off, so hiding the plot never disturbs a run in progress. */
+if (els.showPlot) els.showPlot.addEventListener('change', function(){ S.showPlot = els.showPlot.checked; draw(); });
 els.link.addEventListener('change', function(){
   S.link = els.link.checked;
   if (S.link){ S.E2 = S.E1; els.e2.value = els.e1.value; }
@@ -930,7 +942,9 @@ function draw(){
   var fBig = Math.max(17, Math.min(26, H * 0.042));
   var FAM = 'px system-ui,sans-serif';
   var headH = fBig + Math.max(10, H * 0.02);
-  var sceneTop = headH, sceneBot = H * 0.52;
+  /* With the plot hidden the collision scene takes the whole canvas instead of
+     leaving an empty band — only the bottom axis margin is reserved. */
+  var sceneTop = headH, sceneBot = S.showPlot ? H * 0.52 : H - Math.max(14, H * 0.03);
   var chipRow = Math.max(17, Math.min(23, H * 0.034));
   var chipsTop = sceneBot + Math.max(4, H * 0.012);
   var plotTop = chipsTop + 2 * chipRow + 10;
@@ -1111,6 +1125,7 @@ function draw(){
   }
 
   /* ---- chart: sigma vs sqrt(s), thresholds, operating point ---- */
+  if (!S.showPlot) return;   /* toggled off; the scene above already used the full height */
   var X0 = Math.log10(0.1), X1 = Math.log10(500), LX = plotR - plotL;
   var Y0 = -4, Y1 = 4.4, LY = plotBot - plotTop;
   function xOf(v){ return plotL + (Math.log10(Math.max(v, 1e-6)) - X0) / (X1 - X0) * LX; }
@@ -1191,12 +1206,17 @@ function draw(){
     ctx.fillText('Z\u2070 pole ' + MZ.toFixed(1) + ' GeV', xz, plotTop + 12);
     ctx.restore();
   }
-  /* γ/Z curve (from muon threshold up); sampled every px so the 2.5 GeV-wide Z peak is resolved */
+  /* γ/Z curve, from the muon threshold up. One sample per pixel was NOT enough: the
+     x-axis is log 0.1→500 GeV, so a pixel near the pole spans ~0.65 GeV and the whole
+     Γ_Z = 2.50 GeV resonance got only 3–6 vertices — drawn as a triangular spike.
+     A quarter-pixel step puts ~15 samples across the width, and round joins stop the
+     remaining segments from showing corners. */
   var xs = Math.max(plotL, xOf(THR[0].m));
   ctx.strokeStyle = P.accent; ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   var first = true, px2, v2;
-  for (px2 = xs; px2 <= plotR; px2 += 1){
+  for (px2 = xs; px2 <= plotR; px2 += 0.25){
     v2 = Math.pow(10, X0 + (px2 - plotL) / LX * (X1 - X0));
     y = yOf(sigNb(v2));
     if (first){ ctx.moveTo(px2, y); first = false; } else ctx.lineTo(px2, y);

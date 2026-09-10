@@ -308,6 +308,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-stage.sim-strip-off .sim-box-strip{display:none}
 .sim-panel{flex-shrink:0;min-width:0;box-sizing:border-box}
 .sim-panel-title{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:6px 0 8px 6px}
+/* Collapsible panel head title, matched to .sim-panel-title so both panels read alike. */
+.shell-panel-head h3.sim-head-title{font-size:14px;font-weight:700;letter-spacing:.04em;color:var(--muted);}
 .sim-ctlbox{background:var(--bg,transparent);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:0 0 10px}
 .sim-ctlbox:last-child{margin-bottom:0}
 .sim-ctlbox>*:first-child{margin-top:0}
@@ -388,8 +390,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
         <label style="font-size:11px;">Speed</label>
         <select id="shell-speed" class="shell-select">
-          <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option>
         </select>
       </div>
       <div class="shell-sep"></div>
@@ -459,7 +461,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <div class="predict-eval"></div></div>
 <div class="inq-step" data-gate data-reveal="fire:nu"><h4>4 · The invisible particle</h4>
           <p>Every species so far left some mark. Beta decay's other product, the neutrino, is next — committing fires a ν. What will the detector record?</p>
-          <button class="choice" data-correct data-fb="No charge, no strong force, almost no interaction — the red <strong>missing p</strong> arrow is its only witness.">Nothing — only missing momentum gives it away</button>
+          <button class="choice" data-correct data-fb="No charge, no strong force, almost no interaction — the red <strong>missing momentum</strong> arrow is its only witness.">Nothing — only missing momentum gives it away</button>
           <button class="choice" data-fb="Tracks need charge; the ν has none — the Tracker stays dark.">A faint track in the Tracker</button>
           <button class="choice" data-fb="That is the neutron's signature — neutral hadrons still feel the strong force; the ν doesn't.">A late shower in the HCAL</button>
           <div class="predict-eval"></div></div>
@@ -517,7 +519,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 </div>
 
 <div class="shell-panel sim-panel">
-  <div class="sim-panel-title">Measured</div>
+  <div class="shell-panel-head"><h3 class="sim-head-title">Measured</h3><span class="shell-caret">▾</span></div>
+  <div class="shell-panel-body">
   <div class="sim-ctlbox">
     <div class="sim-readouts">
       <div class="sim-r"><span>Energy E</span><b id="roE">—</b></div>
@@ -526,6 +529,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div class="sim-r"><span>Cherenkov n=1.33</span><b id="roCh">—</b></div>
       <div class="sim-r"><span>Signature</span><b id="roSig">—</b></div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -857,6 +861,20 @@ window.__audit = { at(momentumGeV) {
     const beta = E > 0 ? p / E : 1;
     return { E, KE: E - m, beta, gamma: m > 0 ? E / m : Infinity, t: TOF_D / (beta * C), tL: TOF_D / C };
   }
+
+  /* FIXED animation scale — seconds of animation per second of real time-of-flight.
+     Anchored so the slowest case the slider can reach (heaviest particle at P_MIN)
+     still fills RACE_DUR. The key point is that it does NOT depend on p, so a
+     particle's on-screen speed now tracks its REAL speed.
+     Previously dur was RACE_DUR * kin.t / (slowest lane AT THAT p). Since every
+     particle tends to β = 1 as p rises, that denominator shrank and fast particles
+     appeared to slow down: a neutrino — always travelling at exactly c — animated
+     3.5x slower at p = 5 than at p = 0.2, while a proton held ~2.5 s at both ends
+     even though its real speed went 0.21c → 0.98c. */
+  const P_MIN = 0.2;
+  const M_MAX = Math.max.apply(null, Object.keys(PARTS).map(k => PARTS[k].m));
+  const TOF_REF = kinematics(M_MAX, P_MIN).t;
+  const RACE_K = RACE_DUR / TOF_REF;
   function theme() {
     const cs = getComputedStyle(document.body);
     const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
@@ -958,16 +976,18 @@ window.__audit = { at(momentumGeV) {
 
     /* SYNC: detector transit ends exactly when this particle's own TOF lane crosses 10 m,
        so the top head and the bold racer below arrive together (one particle, two views). */
-    let tMax = TOF_D / C;
-    for (const k of laneKeys()) tMax = Math.max(tMax, kinematics(PARTS[k].m, p).t);
-    tMax *= 1.04;
-    const dur = Math.max(0.7, RACE_DUR * kin.t / tMax);
+    const dur = Math.max(0.35, kin.t * RACE_K);
+    /* Cycle ends when the SLOWEST lane has finished, so the loop still has no dead
+       air even though each particle now moves at its own honest speed. */
+    let tSlow = TOF_D / C;
+    for (const k of laneKeys()) tSlow = Math.max(tSlow, kinematics(PARTS[k].m, p).t);
+    const cycle = Math.max(dur, tSlow * RACE_K);
     return {
       P, p, kin, L, pts, totalLen, segs, glow, dep, mR,
       exits: (P.kind === 'mu' || P.kind === 'nu'),
       sTrkMid: sAtX((L.trk[0] + L.trk[1]) / 2),
       trkXs: [1, 2, 3, 4].map(i => L.trk[0] + tw * i / 5),
-      clock: instant ? 1e9 : 0, dur
+      clock: instant ? 1e9 : 0, dur, cycle
     };
   }
   function rebuildKeepClock() {
@@ -1036,16 +1056,10 @@ window.__audit = { at(momentumGeV) {
       ctx.save();
       ctx.font = '600 12px ' + FONT; ctx.fillStyle = T.muted;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      /* two stacked lines: one string wide enough to carry both facts does not fit the
-         tracker zone, and the single-line fallback dropped the part that matters most */
       const mid = (L.trk[0] + L.trk[1]) / 2;
       let l1 = 'B = 2 T ⊗ into page';
       if (ctx.measureText(l1).width > zw - 6) l1 = 'B = 2 T ⊗';
-      if (ctx.measureText(l1).width <= zw - 4) ctx.fillText(l1, mid, L.yTop + 6);
-      const l2 = 'charge sets the bend direction', l2b = 'charge sets the bend';
-      const t2 = ctx.measureText(l2).width <= zw - 6 ? l2
-               : (ctx.measureText(l2b).width <= zw - 6 ? l2b : null);
-      if (t2) ctx.fillText(t2, mid, L.yTop + 21);
+      if (ctx.measureText(l1).width <= zw - 4) ctx.fillText(l1, mid, L.yTop + 14);
       ctx.restore();
     })();
     lab(L.ecal, 'EM calorimeter', 'EM cal');
@@ -1172,7 +1186,11 @@ window.__audit = { at(momentumGeV) {
       const yEnd = ev.pts[ev.pts.length - 1].y;
       if (P.kind === 'nu') {
         arrowDraw(ctx, L.mus[2][0], Math.min(W - 4, L.mus[2][1] + 14), yEnd, '#ef4444', true);
-        chipDraw(ctx, T, 'missing p', (L.mus[2][0] + L.mus[2][1]) / 2, yEnd - 26, W);
+        /* BELOW the axis: the species tag above sits at tagPt.y - 24 and this used to be
+           at yEnd - 26, i.e. 2 px apart at the same x — for a neutrino the track ends on
+           the axis so the two chips landed on top of each other. Also spelled out:
+           "missing p" reads as "missing proton" when p is also a particle button. */
+        chipDraw(ctx, T, 'missing momentum', (L.mus[2][0] + L.mus[2][1]) / 2, yEnd + 30, W);
       } else {
         arrowDraw(ctx, L.mus[2][1] - 20, Math.min(W - 4, L.mus[2][1] + 14), yEnd, P.color, false);
       }
@@ -1206,8 +1224,10 @@ window.__audit = { at(momentumGeV) {
       const p = PARTS[k], kk = kinematics(p.m, state.p);
       rows.push({ key: k, sym: p.sym, col: p.color, beta: kk.beta, q: p.q, t: kk.t });
     }
-    const tMax = Math.max.apply(null, rows.map(r => r.t)) * 1.04;
-    const tReal = Math.min(ev.clock, RACE_DUR) / RACE_DUR * tMax;
+    /* Same fixed scale as the detector transit above — one particle, two views,
+       still arriving together, but now on an absolute clock rather than one
+       renormalised to whichever lane happens to be slowest at this momentum. */
+    const tReal = ev.clock / RACE_K;
 
     ctx.save(); ctx.strokeStyle = T.border; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     ctx.beginPath(); ctx.moveTo(finX, yA - 4); ctx.lineTo(finX, yB); ctx.stroke(); ctx.restore();
@@ -1360,7 +1380,7 @@ window.__audit = { at(momentumGeV) {
     lastFrame = performance.now();
     dt = Math.min(Math.max(dt || 0, 0), 0.1);
     ev.clock += dt;
-    if (ev.clock >= Math.max(ev.dur, RACE_DUR) + HOLD) {
+    if (ev.clock >= (ev.cycle || ev.dur) + HOLD) {
       state.fireCount++;
       ev = buildEvent(false);
     }

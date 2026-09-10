@@ -761,7 +761,13 @@ var EMIN=5e-4, EMAX=12, E0=8e-4;
 var LAD_LO=3e-4, LAD_HI=15;          /* ladder axis range (GeV) */
 var B_FIELD=1.0;                     /* tesla, into the page — declared on canvas */
 var CHAMBER_M=0.40;                  /* chamber width in metres — declared on canvas */
-var PH_U_RATE=0.62;                  /* photon: fraction of the entry-to-vertex gap per second */
+/* PH_START — the photon only traverses this fraction of the chamber-wall-to-nucleus
+   gap, so it spends less time in transit. PH_U_RATE is scaled inversely (0.62/0.5),
+   which leaves its on-screen SPEED (rate x gap) at the original 0.620 px-units/s.
+   That matters: cScreen() below is that same speed, and the pair tracks advance at
+   v = beta*c_screen — so track growth and the v = beta*c relation are unaffected. */
+var PH_START=0.5;
+var PH_U_RATE=1.24;                  /* photon: fraction of its (shortened) approach per second */
 function LG(x){ return Math.log10(x); }
 
 /* Real, observable charged particle–antiparticle channels. Free quarks are NOT
@@ -815,7 +821,9 @@ function yOfE(lad,E){
 }
 /* On-screen "speed of light": exactly the photon's drawn speed, so a beta=1
    track advances at the same rate as the photon that made it. */
-function cScreen(g){ return PH_U_RATE*Math.max(60,(g.nx-(g.ch.x+8))); }
+function phGap(g){ return Math.max(60,(g.nx-(g.ch.x+8)))*PH_START; }
+function phX0(g){ return g.nx-phGap(g); }
+function cScreen(g){ return PH_U_RATE*phGap(g); }   /* = 0.62 x full gap, exactly as before */
 /* r = p/(qB); p in GeV/c, B in tesla  ->  r[m] = p/(0.299792458 B). */
 function radiusPx(p, ch){ return (p/(0.299792458*B_FIELD))*(ch.w/CHAMBER_M); }
 
@@ -1005,7 +1013,7 @@ function drawPhotons(g,T){
   for(i=0;i<state.photons.length;i++){ ph=state.photons[i]; if(ph.u<1&&ph.u>leadU){leadU=ph.u;lead=ph;} }
   for(i=0;i<state.photons.length;i++){
     ph=state.photons[i];
-    var x0=ch.x+8;
+    var x0=phX0(g);
     var hx = ph.u<=1 ? x0+(g.nx-x0)*ph.u : g.nx+(g.nx-x0)*(ph.u-1);
     if(hx>ch.x+ch.w-8) continue;
     var tail=Math.min(90,hx-x0);
