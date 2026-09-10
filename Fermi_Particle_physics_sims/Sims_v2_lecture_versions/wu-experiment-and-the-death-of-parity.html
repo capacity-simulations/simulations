@@ -492,6 +492,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <div class="sim-ctl">
             <label class="sim-check" for="coilChk"><input type="checkbox" id="coilChk" checked> Show solenoid rings</label>
           </div>
+          <div class="sim-ctl">
+            <label class="sim-check" for="spinChk"><input type="checkbox" id="spinChk" checked> Show individual spins</label>
+          </div>
           <div class="sim-note ht-hide">P is set by the crystal's <b>temperature</b>: P = Brillouin(μB/kT), strongly non-linear — this slider sets P directly. The coil current <b>I</b> and the field <b>B</b> are held <b>fixed</b> (drawn schematic, not to scale), as in Wu's run. Press <b>▶ Play</b> to run the source; counts reset when you change P.</div>
         </div>
       </div>
@@ -834,7 +837,7 @@ function fNums(px,w){ return (w||700)+' '+px+'px '+TH.nums; }
 
 /* ===== state ===== */
 const S = {
-  P:0, mirror:false, anti:false, coil:true,
+  P:0, mirror:false, anti:false, coil:true, showSpins:true,
   spins:[], electrons:[],
   nUp:0, nDn:0, total:0,
   bins:new Array(24).fill(0),
@@ -1044,17 +1047,46 @@ function drawApp(cx, mir, weight){
   for(const sp of S.spins){
     const dx = Math.sin(sp.th), dz = spinM*Math.cos(sp.th);
     const bx = PX(sp.x), by = PY(sp.z);
-    arrow(c, bx-dx*al, by+dz*al, bx+dx*al, by-dz*al, aw, TH.spin, hs, headCol);
+    /* Arrows are optional; the nuclei themselves are not. Hiding the dots too would
+       read as "the sample is empty" rather than "the individual axes are hidden". */
+    if(S.showSpins) arrow(c, bx-dx*al, by+dz*al, bx+dx*al, by-dz*al, aw, TH.spin, hs, headCol);
     /* draw the nucleus AFTER the arrow so it sits above the shaft — makes each nucleus a clear anchor */
     c.fillStyle = TH.text; c.beginPath(); c.arc(bx,by,nucR,0,6.2832); c.fill();
     c.strokeStyle = TH.bg;  c.lineWidth = 1.2; c.stroke();
   }
   c.restore();
 
-  /* spin-axis label with leader (J = nuclear spin, distinct colour from B) */
-  c.save(); c.globalAlpha=0.85*W; c.strokeStyle=TH.spin; c.lineWidth=1.2;
-  c.beginPath(); c.moveTo(PX(-86),cy); c.lineTo(PX(-60),cy); c.stroke(); c.restore();
-  txt(c, PX(-96), cy+5, 'J', fSans(14,700), TH.spin);
+  /* Resultant nuclear spin ⟨J⟩ — the vector mean of the individual axes, drawn on the
+     LEFT so it mirrors the fixed B arrow on the right and the two can be compared.
+     Its length is the polarization: full at P = 1, vanishing as the axes disorder.
+     Averaged from the SAME sp.th values the decay sampler uses, so the arrow can
+     never disagree with the asymmetry it produces. */
+  {
+    /* Magnitude is the POLARIZATION itself, not the mean of the 37 drawn arrows.
+       Those 37 stand in for ~10^20 nuclei, so their vector mean carries 1/sqrt(37)
+       ≈ 0.16 of sampling noise — at P = 0 that drew a small but clearly non-zero
+       arrow pointing in a random direction, implying an alignment that does not
+       exist. S.P is exactly what sampleSpinTheta() and the asymmetry both use. */
+    const mag = Math.max(0, Math.min(1, S.P));
+    const jx = PX(-104), JL = 42*sc;
+    c.save(); c.globalAlpha = W;
+    if(mag < 0.02){
+      /* Near-zero NET spin. Draw a ring, never a stub arrow: a shrunken arrow reads
+         as "these nuclei have little spin", when in fact each still carries J = 5 —
+         the ensemble is simply disordered. */
+      c.strokeStyle = TH.spin; c.lineWidth = 2; c.globalAlpha = 0.7*W;
+      c.beginPath(); c.arc(jx, cy, 9, 0, 6.2832); c.stroke();
+      c.globalAlpha = W;
+      txt(c, jx, cy-18, 'net \u27E8J\u27E9 \u2248 0', fSans(12,700), TH.spin, 'center');
+      txt(c, jx, cy+26, 'axes disordered', fSans(11,600), TH.muted, 'center');
+    } else {
+      const dirZ = spinM;   /* sampleSpinTheta() clusters about th = 0, i.e. +z */
+      const len  = JL * mag;
+      arrow(c, jx, cy + dirZ*len, jx, cy - dirZ*len, 3.5, TH.spin, 12);
+      txt(c, jx, cy - dirZ*len + (dirZ>0 ? -9 : 20), 'net \u27E8J\u27E9', fSans(13,700), TH.spin, 'center');
+    }
+    c.restore();
+  }
 
   /* coil front strands + current arrows (true vector: flips under P, back under C).
      Gated as ONE unit with the back strands: orphaned current triangles floating with no
@@ -1300,6 +1332,8 @@ function syncControls(){
   antiBtn.setAttribute('aria-pressed', S.anti?'true':'false');
   const cc = document.getElementById('coilChk');
   if(cc) cc.checked = S.coil;
+  const sc2 = document.getElementById('spinChk');
+  if(sc2) sc2.checked = S.showSpins;
 }
 function setState(o){
   /* o.keep: preserve the accumulated counts when P is unchanged (same physics
@@ -1329,6 +1363,13 @@ function wireControls(){
   const coilChk = document.getElementById('coilChk');
   if(coilChk) coilChk.addEventListener('change', ()=>{
     S.coil = coilChk.checked;   /* purely cosmetic: no counts, no physics state touched */
+    drawAll();
+  });
+  const spinChk = document.getElementById('spinChk');
+  if(spinChk) spinChk.addEventListener('change', ()=>{
+    /* View only. sp.th still drives every decay, so the counts and the asymmetry are
+       identical whether or not the individual axes are drawn. */
+    S.showSpins = spinChk.checked;
     drawAll();
   });
   mirrorBtn.addEventListener('click', ()=>{
