@@ -816,7 +816,9 @@ const FS = 'ui-sans-serif,system-ui,sans-serif';
 
 /* ---------- dom ---------- */
 const cv = document.getElementById('sim-canvas');
-const ctx = cv.getContext('2d');
+/* willReadFrequently: draw() samples one pixel per frame to test whether the surface
+   painted over the ball (see the occlusion echo), so the canvas is read every frame. */
+const ctx = cv.getContext('2d', { willReadFrequently: true });
 const $id = s => document.getElementById(s);
 const el = {
   mu2: $id('sim-mu2'), mu2v: $id('sim-mu2-val'),
@@ -829,10 +831,17 @@ const el = {
 };
 
 /* ---------- state ---------- */
+/* Default camera. The 3-D horizontal is u = x·cos(yaw) − y·sin(yaw), so the SIGN of
+   cos(yaw) decides which way Re φ runs on screen. The old −2.25 rad gave cos = −0.628,
+   i.e. Re φ increasing LEFTWARDS, while the cross-section strip below always draws Re φ
+   increasing rightwards (xr: −R→+R) — so the ball and the slice dot ran in opposite
+   directions. −0.892 rad is the exact x-mirror of the old view: cos flips to +0.628 while
+   sin stays −0.778, so depth ordering and the oblique look are unchanged. */
+const YAW0 = -0.892;
 const S = {
   mu2: -2, fric: 0, x: 1, y: 0, vx: 0, vy: 0,
   v: 1, Vmin: -1, m2r: 8, m2a: 0, broken: true,
-  yaw: -2.25, dragging: false, moved: false, dragX: 0, dragY: 0, yaw0: 0,
+  yaw: YAW0, dragging: false, moved: false, dragX: 0, dragY: 0, yaw0: 0,
   trail: [], kfx: null, judge: -1, pred: null,
   metered: false, revealed: false, kicked: false,
   ghost: null, ghostPx: null, note: null, wall: 0
@@ -1196,10 +1205,11 @@ function draw() {
 
   const Lx = -0.45, Ly = -0.35, Lz = 0.82;
   const ballW = S.x * sA + S.y * cA;
-  let ballDone = false;
+  let ballDone = false, quadsOverBall = 0;
   for (let k = 0; k < NQ; k++) {
     const q = ORDER[k];
     if (!ballDone && QD[q] * 0.5 >= ballW) { ballLayer(); ballDone = true; }
+    else if (ballDone) quadsOverBall++;
     const i = (q / NA) | 0, j = q - i * NA, j2 = (j + 1) % NA;
     const a = i * NA + j, b = i * NA + j2, c2 = (i + 1) * NA + j2, d2 = (i + 1) * NA + j;
     const nx = NX[a] * cA - NY[a] * sA, ny = NX[a] * sA + NY[a] * cA;
@@ -1222,6 +1232,47 @@ function draw() {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   if (!ballDone) ballLayer();
+
+  /* Occlusion echo. The camera looks at the bowl almost edge-on (TILT is clamped to
+     0.16–0.46 rad), so for half of every oscillation the ball passes behind the near rim
+     and the surface quads painted after it hide it completely — card 1's "the ball just
+     falls back and oscillates" then has nothing to watch. Depth ordering above is correct
+     and stays; this only adds a faint see-through marker at the ball's true projected
+     position whenever surface was painted over it, so φ is never lost mid-swing. */
+  let ballHidden = false;
+  if (ballDone && quadsOverBall > 0) {
+    /* Ask the canvas directly rather than guessing from depth order: if the ball's own
+       centre pixel is no longer its red, a surface quad painted over it. One pixel per
+       frame, and it is exact at every yaw, tilt and μ². */
+    const tr2 = S.x * S.x + S.y * S.y;
+    prj(S.x, S.y, Vp2(tr2) + 0.012 * ZSPAN, o);
+    const dpr = cv.width / LW;
+    const sxp = Math.round(o[0] * dpr), syp = Math.round(o[1] * dpr);
+    if (sxp >= 0 && syp >= 0 && sxp < cv.width && syp < cv.height) {
+      try {
+        const d = ctx.getImageData(sxp, syp, 1, 1).data;
+        ballHidden = !(d[0] > 140 && d[1] < 130 && d[2] < 120);
+      } catch (e) { ballHidden = true; }   /* tainted/blocked read: fail safe to visible marker */
+    }
+  }
+  if (ballHidden) {
+    const er2 = S.x * S.x + S.y * S.y;
+    prj(S.x, S.y, Vp2(er2) + 0.012 * ZSPAN, o);
+    const ebr = Math.max(6, Math.min(11, LW * 0.008 + 4));
+    ctx.save();
+    /* dark halo first: the ring has to stay legible over the bright yellow high-V surface
+       as well as over the dark background beyond the rim */
+    ctx.globalAlpha = 0.45; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(o[0], o[1], ebr, 0, TWO_PI); ctx.stroke();
+    ctx.globalAlpha = 0.9;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = COL_BALL; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(o[0], o[1], ebr, 0, TWO_PI); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = COL_BALL;
+    ctx.beginPath(); ctx.arc(o[0], o[1], ebr * 0.32, 0, TWO_PI); ctx.fill();
+    ctx.restore();
+  }
 
   spokes();
 
@@ -1482,7 +1533,7 @@ function onReset() {
   let k = 4;
   try { if (Shell.totalSteps > 0) k = Shell.step; } catch (e) {}
   applyPre(PRE[Math.max(0, Math.min(PRE.length - 1, k))]);
-  S.yaw = -2.25; S.pred = null;
+  S.yaw = YAW0; S.pred = null;
   draw();
 }
 function onComplete() {
@@ -1515,7 +1566,10 @@ cv.addEventListener('pointermove', e => {
   if (!S.dragging) return;
   const dx = e.clientX - S.dragX;
   if (Math.abs(dx) > 4 || Math.abs(e.clientY - S.dragY) > 4) S.moved = true;
-  S.yaw = S.yaw0 + dx * 0.006;
+  /* MINUS: a surface point projects to screen-x ∝ cos(φ₀ + yaw), so the point facing the
+     viewer (φ₀ + yaw = π/2) goes to cos(π/2 + δ) = −sin δ — i.e. it slid LEFT when the
+     finger went right. Decrementing yaw makes the near face follow the drag. */
+  S.yaw = S.yaw0 - dx * 0.006;
   draw();
 });
 cv.addEventListener('pointerup', e => {

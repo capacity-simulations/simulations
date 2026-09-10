@@ -443,7 +443,7 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
           <p>The <strong>α source</strong> fires 5 MeV α particles at a 0.40 µm <strong>gold foil</strong>; the ring of <strong>ZnS screen</strong> flashes wherever an α lands. Where will they land?</p>
           <button class="choice" data-fb="Almost — but keep an eye on <strong>counts θ &gt; 90°</strong>: the biggest surprise of 1909 hides there.">All straight through, undeflected</button>
           <button class="choice" data-fb="The foil is mostly empty space — about half the α are not deflected even 1° (see <strong>scattered ≥ 1°</strong>).">All smeared by a few degrees</button>
-          <button class="choice" data-correct data-fb="Committed — yet after 20,000 α, <strong>counts θ &gt; 90°</strong> still reads 0: how rare must “a few” be?">Nearly all straight through, a rare few bounced back</button>
+          <button class="choice" data-correct data-fb="Committed — the beam is firing now. Watch <strong>counts θ &gt; 90°</strong> as <strong>α fired</strong> climbs past 20,000: it has barely left zero. How rare must “a few” be?">Nearly all straight through, a rare few bounced back</button>
           <div class="predict-eval"></div></div>
 <div class="inq-step" data-gate data-run="p:0.193,N:3000000,seed:8">
           <h4>2 · How rare is “bounced back”?</h4>
@@ -1265,8 +1265,16 @@ var STEPS=[
   {p:0.193,N:3000000,plum:false,flat:false,seed:8},  /* 4 · same run (answer ticks the sin⁴ test) */
   {p:0.193,N:3000000,plum:false,flat:false,seed:8}   /* 5 · same run (answer jumps to 0.500 GeV/c) */
 ];
+/* Runs at or below this are earned live from the beam instead of being pre-filled;
+   larger ones would take minutes at 10 k α/s, so they stay fast-forwarded. */
+var LIVE_FILL_MAX=50000;
+function beamRunning(on){ try{ if(SH&&SH.setPlaying) SH.setPlaying(!!on); }catch(e){} }
+
 function onStep(i){ i=Math.max(0,Math.min(STEPS.length-1,i|0)); var s=STEPS[i];
-  st.showPlum=!!s.plum; st.flat=!!s.flat; applyRun(s.p,s.N,s.seed); syncUI(); updateCounts(); draw(); }
+  st.showPlum=!!s.plum; st.flat=!!s.flat; applyRun(s.p,s.N,s.seed); syncUI(); updateCounts(); draw();
+  /* Every card OPENS on the frozen snapshot its prose describes ("α fired reads 20.0 k",
+     "Press ▶ Play"), so navigation always pauses; the student's answer is what starts the beam. */
+  beamRunning(false); }
 
 /* Completed / lecture state: open EMPTY and PAUSED (same scene as Card 1) — the student clicks ▶ Play to fire.
    Pre-populating dots + histogram was flagged as confusing; the blank chamber makes the "watch it happen" moment explicit. */
@@ -1314,7 +1322,16 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(function(card){
     if(spec){ var m={}; spec.split(',').forEach(function(kv){ var a=kv.split(':'); m[a[0]]=a[1]; });
       if('plum' in m) st.showPlum=(m.plum==='1');
       if('flat' in m) st.flat=(m.flat==='1');
-      if('N' in m) applyRun(parseFloat(m.p)||st.p, parseInt(m.N,10)||0, parseInt(m.seed,10)||1);
+      if('N' in m){
+        var Nt=parseInt(m.N,10)||0, pv=parseFloat(m.p)||st.p, sd=parseInt(m.seed,10)||1;
+        /* A lit ZnS screen means α are arriving NOW, so a reveal may never hand back a
+           populated detector on a stopped beam. Small targets are earned live (the beam
+           runs and the flashes accumulate); only runs too large to watch are pre-filled,
+           and those still resume the beam so the scene stays self-consistent. */
+        if(Nt>0&&Nt<=LIVE_FILL_MAX) applyRun(pv,0,sd);
+        else applyRun(pv,Nt,sd);
+        if(Nt>0) beamRunning(true);
+      }
       syncUI(); updateCounts(); draw(); }
   }); });
 });
