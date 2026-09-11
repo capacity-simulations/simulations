@@ -152,7 +152,13 @@ Three `<script>` blocks before `</body>`, in this order:
 
 ### 4. Controls Guide `cgSteps`
 Every control and readout gets a step or a written in-code reason (meta-UI
-only: info tooltip, theme toggle, the feedback pill). Top-bar → `veil`;
+only: info tooltip, theme toggle, the feedback pill). **The sidebar must
+open EMPTY at step 1**: every `.ctrl-box`/readout box appears in `cgSteps`
+so it stays hidden until its turn — section headings (PARAMETERS, DISPLAY,
+STATE PROPERTIES…) remain visible, their contents do not. A whole readout
+box gets ONE step covering the box, not a step per row. The layout probe
+fails any box left visible at step 1 — that is exactly a missed `cgSteps`
+entry. Top-bar → `veil`;
 sidebar boxes → `hide`; canvas panels inside grid/flex rows → `veil` (a
 collapsed track leaves a stale canvas backing store). Couple related controls
 with `also`. ≤15 words per step. Closing card `sel:null`.

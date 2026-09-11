@@ -108,6 +108,26 @@ for (const f of args) {
   if (await p.evaluate(() => !!document.getElementById('btn-cg'))) {
     await p.evaluate(() => document.getElementById('btn-cg').click());
     await new Promise(r => setTimeout(r, 600));
+    // COVERAGE CONTRACT: at guide step 1 the sidebar opens EMPTY — every
+    // control/readout box is hidden until its turn (section headings may
+    // stay). A visible, unveiled .ctrl-box at step 1 means it was left out
+    // of cgSteps (the exact bug: State Properties + Eigenstate never hidden).
+    // Tolerance 1: the glowing step-1 target itself may be a sidebar box.
+    const uncovered = await p.evaluate(() => {
+      const side = document.querySelector('.sidebar') || document.querySelector('.shell-aside') || document.querySelector('aside');
+      if (!side) return null;
+      const boxes = [...side.querySelectorAll('.ctrl-box, .sim-ctl.sim-box, .panel-block > .ctrl-box')];
+      const seen = new Set();
+      const vis = boxes.filter(b => { if (seen.has(b)) return false; seen.add(b);
+        const cs = getComputedStyle(b); const r = b.getBoundingClientRect();
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && r.height > 4 &&
+               !b.classList.contains('cg-hidden') && !b.classList.contains('cg-veiled') &&
+               !b.closest('.cg-hidden'); });
+      return { total: boxes.length, visible: vis.length,
+               names: vis.slice(0, 4).map(b => b.id || (b.textContent || '').trim().slice(0, 24)) };
+    });
+    if (uncovered && uncovered.visible > 1)
+      errs.push(`sidebar not empty at guide step 1 — ${uncovered.visible}/${uncovered.total} boxes visible (uncovered by cgSteps): ${uncovered.names.join(', ')}`);
     const nav = await p.evaluate(() => { const e = document.querySelector('.cg-nav');
       if (!e || getComputedStyle(e).display === 'none') return null;
       const r = e.getBoundingClientRect();
