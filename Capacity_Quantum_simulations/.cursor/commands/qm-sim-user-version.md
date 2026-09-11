@@ -42,7 +42,7 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
 
 | Exemplar | Why it matters |
 |---|---|
-| `Sims_user_versions/sim-use-builds/infinite-potential-well.html` | **The QM pilot — your MECHANICS template.** All four layers on a QM sim, all gates passing. Copy its structure: standalone inquiry machinery, controller shape, voice engine placement, pill fix. Its CARD CONTENT (8 cards, forward-pointing feedback) predates the SME grammar — for what cards say, `golden-flows.md` governs. |
+| `Sims_user_versions/sim-use-builds/infinite-potential-well.html` | **The QM pilot — your PRIMARY template, mechanics AND content.** All four layers + the SME-grammar deck (frame + 5 questions: classical baseline, commit-fired reveal, degeneracy distractors, staged readout) + every layout contract (zone above the CONTROLS header, buttons in the left cluster, centered docked nav, sidebar-opens-empty cgSteps). All gates passing. |
 | `../Final_JEE_sims/Sim_use_version_skills/examples/Double-slit-experiment.welcome-cards.html` | Three base layers on a QM Three.js sim (predates the voice layer). |
 | `../Final_JEE_sims/Module-01-Kinematics/C025-projectile-motion-ground-to-ground.html` | JEE reference for the **voice engine + Auto** (§6) — the validated source of `__makeCardVoice`. |
 | `../Final_JEE_sims/Module-13-Optics/C203-refraction-and-snells-law.html` | JEE reference for the full four-layer C-series build. |
