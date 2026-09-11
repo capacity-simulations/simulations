@@ -1,63 +1,118 @@
 ---
 name: guided-inquiry
-description: Restructure, refine, or add a Guided Inquiry card zone (POE — Predict/Observe/Explain — cards with gated multiple-choice predictions) in a single-file simulation HTML page built on the L-series shell (inq-dots, inq-step cards, choice buttons, predict-eval feedback). Use this skill whenever the user asks to restructure guided inquiry, refine inquiry/predict questions, fix inquiry cards, add a missing guided-inquiry section, or make inquiry cards more precise — even phrased as "do the inquiry like the L1 solar-system one". The result follows a strict card grammar with short, misconception-targeted questions, staged reveals so answers can never be looked up before commitment, and a top-bar 🧭 Guided Inquiry button that owns the zone's visibility (paired with the 🎛 Controls Guide button when both exist).
+description: Restructure, refine, or add a Guided Inquiry card zone (a FRAME card plus 3–5 gated multiple-choice questions in the SME grammar) in a single-file simulation HTML page built on the L-series shell (inq-dots, inq-step cards, choice buttons, predict-eval feedback). Use this skill whenever the user asks to restructure guided inquiry, refine inquiry/predict questions, fix inquiry cards, add a missing guided-inquiry section, or make inquiry cards more precise — even phrased as "do the inquiry like the Stern-Gerlach golden flow". The result follows the SME card grammar (references/golden-flows.md is canonical): question-before-observation, classical-baseline first, answers that resolve on the spot, plain physics prose with zero UI choreography, and a top-bar 🧭 Guided Inquiry button that owns the zone's visibility (paired with the 🎛 Controls Guide button when both exist).
 ---
 
 # Guided Inquiry for Simulation Pages
 
 Restructure or add the Guided Inquiry zone of an L-series shell sim to the
-validated card grammar. The reference implementation is
-`L1-Solar_System_Orbits-inquiry-v2.html` (validated by the user); its
-mechanics blocks are in `references/implementation.md`.
+SME card grammar. **The canonical exemplar set is
+`references/golden-flows.md`** — ten flows written by the senior physics
+SME (validated 9 Sept 2026). When this skill and an instinct disagree, the
+golden flows win. Mechanics blocks (gating, wiring, hooks) are unchanged in
+`references/implementation.md`.
 
-**Read `references/implementation.md` before writing any code or cards.**
-Copy its patterns; adapt only the parts marked ADAPT.
+**Read `references/golden-flows.md` AND `references/implementation.md`
+before writing any code or cards.** Copy the mechanics patterns; write the
+card content to the grammar below.
 
-## The card grammar (validated — do not improvise new card types)
+## The card grammar (SME-validated — do not improvise new card types)
 
-The arc: **ORIENT → (PREDICT → OBSERVE → RESOLVE) × 2 → SYNTHESIS**,
-usually 6–8 cards. One concept per POE cycle, ordered easy → hard. The
-final RESOLVE and SYNTHESIS may share one card when both stay short.
+The arc: **FRAME → Q1 (baseline) → chained questions**, typically
+**4–6 cards total** (frame + 3–5 questions + optional interstitials).
+Hard max 6. Never pad to reach a count — the SME's decks run 3–5 cards.
 
 | Type | Job | Hard rules | Budget |
 |---|---|---|---|
-| ORIENT | What's on screen + one action to begin | Names conventions (scale, enlarged icons); ends in a concrete start action | ≤60 words |
-| PREDICT | One committed question about ONE observable | `data-gate`d; sim paused; stem NEVER leaks the answer and NEVER invites looking a value up; 3–4 choices; EVERY distractor is a named misconception, never filler | stem ≤40, choices ≤20 each |
-| OBSERVE | One concrete action + a question about what they see | Asks, never tells — the answer arrives only in the next card; pins the state it assumes (selection, scene, view) | ≤60 words |
-| RESOLVE | The principle, after the observation | Names the formal law; ties to what was just seen | ≤60 words |
-| EXTEND (optional) | A "make X happen" challenge using controls | Assumes controls are known (controls tutorial runs first) | ≤60 words |
-| SYNTHESIS | The one sentence they leave with | Exactly one idea, plainly stated | ≤30 words |
+| FRAME | Define the apparatus and its physical quantities, symbolically | Physics first, UI never (the Controls Guide owns UI reading); one situating clause if a sibling sim precedes this one ("…instead of just a single stage"); shown before the spectacle — the boot state must not decide any pending question | ≤3 sentences |
+| QUESTION | One committed question about ONE observable | `data-gate`d; 3–4 choices; each question changes exactly ONE thing in the apparatus vs the previous card; tests an inference or a representation-reading, never a lookup, never trivia, never a UI operation; stem is neutral — no classifying word that entails the answer; answers concrete and countable where possible ("how many regions are lit?") | stem ≤40 words, choices ≤ ~8 words |
+| INTERSTITIAL | One connective fact between questions | A single declarative sentence that sets up the next question's premise | 1 sentence |
+| OBSERVE-COMPARE | Post-question observation as a comparison task | Asks the student to notice or compare ("How is it different from the critically damped case?"); NEVER states the conclusion; pins the state it assumes | ≤40 words |
+| TELL (naming only) | Attach the formal name to something already seen | Permitted ONLY for naming and definitions ("this oscillation is the massive radial mode") — behaviour must always be asked, never told | ≤2 sentences |
 
-Per-choice feedback rules (≤50 words each):
-- Name the intuition's origin ("everyday friction trains you to expect…").
-- Point at what in the sim confirms/refutes it — **forward** ("watch r and
-  v on the next card"), never fully resolving; the RESOLVE card keeps its
-  job. Naming the correct choice is fine (the UI highlights it anyway).
+**Question ladder** (the golden flows' consistent ordering):
+1. **Q1 = the naive/classical baseline** wherever one exists — what
+   pre-quantum / pre-relativistic / everyday intuition predicts; the sim
+   then breaks it. Q1 must be answerable from prior intuition alone, with
+   no sim-specific vocabulary.
+2. A deck may **cold-open on its flagship prediction** (settle race,
+   constant-force speed limit) — allowed exactly when that question is
+   intuition-answerable. A predict requiring the sim's own definitions
+   cannot lead.
+3. Later questions climb: mechanism → generalization → quantitative
+   scaling, each modifying one apparatus element and reading one
+   observable.
+4. On a generalization question, include at least one distractor that is
+   consistent with everything seen so far (SG's 1/j vs 2j+1 both fit
+   j = ½ → 2 bands), so the sim — not memory — must decide.
+
+Per-choice feedback rules (1–2 sentences each):
+- **The answer resolves on the spot.** Name the principle plainly and
+  completely: "B. The magnetic field serves as a measurement device that
+  collapses the wavefunction onto eigenstates of σ_z." There is no
+  separate resolve card to protect.
+- **Claims strictly licensed by the evidence shown so far.** Young's
+  interference licenses "classically, light behaves like a wave" — not
+  "classical physics is inadequate." Never over-claim.
+- Distractors are rival physical mechanisms ("the particle's charge causes
+  the split"), never filler, never jokes; wrong-answer feedback names why
+  that mechanism fails here.
 - Keep and reuse the sim's rebuttal mechanics (ghost objects, mode flips)
   — they are the strongest feedback the sim has.
 
-## Two structural rules that outrank copy
+**Language rules (the "mechanical" fix — absolute):**
+- Zero UI-choreography prose. Banned: "Commit to…", "Your answer
+  fires/unmasks/recolors…", "watch **X** pull ahead", bold-control-name
+  stage direction. Instructions are minimal imperatives naming physical
+  objects: "Place an X magnet after the first Z magnet."
+- Questions refer to physics objects, never UI objects ("which mode
+  remains?", not "which row will not move?").
+- Declarative physics prose throughout; no gamification, no meta-narration
+  of the reveal machinery.
 
-1. **No lookup before commitment.** If a readout, list, or label anywhere
-   on screen would let the student read off a PREDICT answer, stage its
-   reveal to AFTER that card (the shell's `applyStepReveals` pattern). A
-   stem that says "click X to read Y… now predict Y" is testing clicking,
-   not physics.
-2. **State pinning.** Every OBSERVE card declares the state it assumes and
-   `onStep` sets it (select the body, switch the scene/view, pause/play).
-   Never rely on the student having left the sim in the right state.
+## Structural rules that outrank copy
+
+1. **Question before observation — inviolable.** No card may show or run
+   the phenomenon a later question asks about. When a current deck watches
+   first and asks second, MOVE the question in front (the SME did exactly
+   this to two decks); do not soften the question instead.
+2. **No lookup before commitment** (fact questions only). If a readout or
+   label would let the student read off an answer, stage its reveal to
+   AFTER the commit (`applyStepReveals`). Inference and
+   representation-reading questions are immune — visible data cannot spoil
+   "is the last-found particle therefore the heaviest?" — so prefer
+   reframing a fact question as an inference over hiding half the screen.
+3. **State pinning + clean state between questions.** Every question and
+   OBSERVE-COMPARE card declares the state it assumes and `onStep` sets
+   it; between questions the apparatus returns to a quiet state (detector
+   reset, beam off). Nothing runs before the student acts — UNLESS free
+   exploration cannot decide any pending question, in which case the FRAME
+   may explicitly invite it ("Explore what happens when you change μ²").
+4. **Hero graphic.** The observable a card discusses must be the most
+   visually prominent element while that card is active. If the payoff
+   plot is a side panel, promote it for that step.
+5. **Sanctioned affordance requests.** When a question needs an affordance
+   the sim lacks (a source toggle, closable slits, per-question reset, a
+   quiet boot state, relocating pre-reveal static text behind its
+   question), request the minimal sim change, implement it additively, and
+   REPORT it. Do not contort the flow around a missing affordance.
+6. **Delete rather than fix** anything that is trivia (Lagrangian term
+   counts), a glossary card, or spectacle. If a card can't be an honest
+   question, a needed frame, or a naming tell, it goes.
 
 ## Refine vs restructure vs add (decide FIRST)
 
-- **Copy polish only** — cards already follow the grammar (validated on
-  Newton's laws: the verifier flagged one 97-word card; trimming its stem
-  was the entire inquiry change): gated predicts
-  with per-choice misconception feedback, observe-asks/resolve-tells,
-  state pinning. Trim to budgets, nothing structural.
-- **Refine in place** — mechanics sound but grammar violated (spoiler
-  observe cards, lookup-leak stems, mashed resolve cards, missing
-  feedback). Restructure the cards; keep the sim's wiring style and
-  mechanics (see below).
+- **Copy polish only** — cards already follow the grammar: question-first
+  ordering, resolving answers, plain physics prose, honest inference
+  questions. Trim to budgets, strip any choreography phrases, nothing
+  structural. (The SME passed two SR decks unchanged — conforming decks
+  exist; don't rebuild them.)
+- **Refine in place** — mechanics sound but grammar violated (observation
+  placed before the question it answers, stem self-spoiling, lookup or
+  trivia questions, choreography prose, glossary cards, missing classical
+  baseline). Reorder and rewrite the cards — the SME's fixes were mostly
+  reorders plus deletions; keep the sim's wiring style and mechanics (see
+  below).
 - **Full add** — no inquiry zone. Insert the shell blocks from the
   reference and author from scratch.
 
@@ -78,23 +133,36 @@ indices it hardcodes.
 
 ### 2. Structure proposal (mandatory — this is the judgment layer)
 Before writing any card, produce and reason through, in this order:
-- **Concept list**: the 2–3 phenomena that deserve POE cycles, ordered
-  easy → hard, each with its single best observable.
-- **Misconception table**: for each PREDICT, every distractor named as a
-  misconception with its everyday origin. If you can't name the
-  misconception, the distractor is filler — replace it.
+- **Concept list**: the 2–3 phenomena worth questions, ordered along the
+  ladder (baseline → mechanism → generalization → scaling), each with its
+  single best countable observable.
+- **Baseline check**: what does classical/naive intuition predict here?
+  That is Q1 (or the cold-open flagship predict, if intuition-answerable).
+  If genuinely no naive expectation exists, say so explicitly.
+- **Misconception table**: for each question, every distractor named as a
+  rival physical mechanism or misconception with its everyday origin. If
+  you can't name it, the distractor is filler — replace it. On
+  generalization questions, engineer ≥1 distractor consistent with the
+  seen case.
 - **Card plan**: one line per card — type, the one observable or claim,
-  pinned state, and which reveals unlock at that step.
-Then two red-team passes: (a) answer each PREDICT stem using only the stem
-— if guessable without the sim, tighten it; (b) walk the reveals — at each
-PREDICT, list everything visible on screen and confirm none of it contains
-the answer. On the first few sims, show this proposal to the user for
-sign-off before writing cards.
+  the ONE apparatus change vs the previous card, pinned/reset state, hero
+  graphic, and which reveals unlock at that step.
+- **Affordance list**: any sim change a question needs (toggle, closable
+  element, per-question reset, quiet boot, relocated pre-reveal text) —
+  each one minimal, additive, and reported.
+Then three red-team passes: (a) answer each stem using only the stem — if
+a classifying word in it entails the answer, neutralize the stem; (b) walk
+the reveals — at each FACT question, list everything visible and confirm
+none of it contains the answer (inference questions are immune); (c) read
+every feedback string and confirm each claim is licensed by evidence the
+student has seen by that card — no over-claiming. On the first few sims,
+show this proposal to the user for sign-off before writing cards.
 
 ### 3. Write the cards
-Follow the grammar table exactly. Number `1 ·, 2 ·, …`; RESOLVE cards may
-carry a name ("Resolve — Kepler's second law"). Verify EVERY factual claim
-against this sim's code — values, readout names, what actually changes.
+Follow the grammar table exactly. Number `1 ·, 2 ·, …`. Verify EVERY
+factual claim against this sim's code — values, readout names, what
+actually changes. Then read the whole deck aloud once: if any sentence
+narrates the interface rather than the physics, rewrite it.
 
 ### 4. Wire
 - Update `wirePredictions` indices (or data attributes) to the new card
@@ -124,6 +192,30 @@ OBSERVE cards ask rather than tell.
 
 Deliver as a new file (`<simname>-inquiry-v2.html`); never overwrite the
 upload.
+
+## The layout contract (measured identical across JEE-C, CM-L, PP-v2 and SR)
+
+Where the inquiry LIVES is as canonical as what it says. All four reference
+fleets render it identically (zone at the same coordinates, 18px below the
+bar); sims from other stacks (QM) must be restructured to match:
+
+1. **Right column, first block.** The inquiry zone (`#aside-inquiry` /
+   `#inq-zone`) is the FIRST visible block in the right sidebar, directly
+   below the top bar — gap ≤ 28px, and NOTHING between them. A sim-native
+   sidebar header ("CONTROLS") above the zone violates the contract: move
+   the zone above it so the header titles only the controls below.
+2. **Zone-internal order:** zone head ("Guided Inquiry") → `#inq-dots` →
+   `#inq-cards` → `.inq-listen` (once the voice layer is applied) →
+   `.inq-nav`.
+3. **Controls below.** The sim's control panels start below the zone; a
+   bottom border / divider separates the two.
+4. When the zone moves outside a padded container, give it its own padding
+   (~14–20px) and `flex-shrink:0` so it neither inherits double padding
+   nor collapses.
+
+**Gate:** `node ../tests/layout-probe.mjs <build.html>` (course-agnostic,
+real Chrome) asserts all of the above — run it alongside `verify.js` on
+every build from a non-L-series stack, and after any sidebar restructure.
 
 ## The Guided Inquiry button and the two-button template (validated)
 
@@ -193,20 +285,32 @@ sim's symbols.
 
 ## Pitfalls (each observed in the fleet)
 
-- **The spoiler observe card**: telling the student what to notice in the
-  same card that asks them to look ("notice how v is largest when r is
-  smallest"). Observe asks; Resolve tells — split them.
-- **The lookup-leak stem**: a PREDICT that invites reading the answer off
-  a readout before committing. Fix structurally (stage the reveal), not
-  just textually.
+- **The spoiler observe card**: showing or narrating the phenomenon before
+  the question that asks about it ("notice how v is largest when r is
+  smallest", a race run before the race predict). Move the question in
+  front; observation cards ask the student to notice or compare, never
+  state the conclusion.
+- **The self-spoiling stem**: a stem containing the classifying word that
+  entails the answer ("the origin has become a *hilltop*… what happens?").
+  Describe the shape neutrally ("the bottom of a wine bottle"); keep the
+  subtlety for the answer ("an equilibrium, but an unstable one").
+- **The lookup-leak stem**: a FACT question that invites reading the
+  answer off a readout before committing. First try reframing it as an
+  inference (immune to visible data); otherwise stage the reveal.
 - **Index drift**: changing the card count without re-mapping every
   hardcoded index in `wirePredictions`, `onStep` view/ghost logic, and
   reveal thresholds. Walk each one explicitly.
-- **Feedback that resolves**: per-choice feedback so complete the RESOLVE
-  card has nothing left to say. Point forward instead.
-- **The mashed closer**: a final card carrying both cycles' resolutions
-  plus implementation trivia at 120+ words. One principle + one synthesis
-  line; cut internals (integrators, code details) from student copy.
+- **Feedback that withholds**: forward-pointing feedback that saves the
+  principle for a later card ("watch the next card to find out"). The
+  answer resolves on the spot, 1–2 sentences, principle named — the old
+  never-resolve rule is retired.
+- **Answers hiding in choice text**: a choice that carries the
+  explanation or points at the evidence ("top: 172.6 GeV — rightmost on
+  the ladder"). Choices are terse claims; explanation lives only in the
+  answer feedback.
+- **The mashed closer**: a final card carrying multiple resolutions plus
+  implementation trivia at 120+ words. One principle, plainly stated; cut
+  internals (integrators, code details) from student copy.
 - **jsdom last-card boot** (sims still carrying Lecture mode): headless
   walkthroughs must rewind with `inq-prev` before asserting anything
   about card 1 — and the quirk can MASK bugs by pre-revealing everything;

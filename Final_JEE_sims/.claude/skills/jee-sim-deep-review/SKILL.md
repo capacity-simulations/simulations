@@ -1,6 +1,6 @@
 ---
 name: jee-sim-deep-review
-description: Deep review + fix loop for the JEE user-version simulations — physics truth (independent oracle, full parameter grid, browser-verified visuals) AND demonstration quality (a blind "Demonstration Oracle" that derives what an ideal demo of the topic must show, then audits the sim against it — visual salience, control-range pedagogy, representation honesty, regime coverage). Finds and surgically fixes defects; proposes larger demonstration enhancements for approval. Preserves the four user-version layers (welcome overlay, guided inquiry, controls guide, voiceover). Triggers: "deep review", "review and fix", "demonstration review", "pedagogy review", "is this sim teaching well", "review the user version".
+description: Deep review + fix loop for the JEE user-version simulations — physics truth (independent oracle, full parameter grid, browser-verified visuals) AND demonstration quality (a blind "Demonstration Oracle" that derives what an ideal demo of the topic must show, then audits the sim against it — visual salience, control-range pedagogy, representation honesty, regime coverage). Finds and surgically fixes defects; proposes larger demonstration enhancements for approval. Includes a K-12 novice-legibility audit (D8): the physics depth stays JEE, but every glyph, label and default scene must be decodable by a first-encounter class-11/12 student — surgical labelling/contrast/staging fixes applied, redesigns proposed. Preserves the four user-version layers (welcome overlay, guided inquiry, controls guide, voiceover). Triggers: "deep review", "review and fix", "demonstration review", "pedagogy review", "is this sim teaching well", "are the visuals clear for students", "K12 visuals", "review the user version".
 ---
 
 # JEE Sims — Deep Review (physics truth + demonstration quality)
@@ -35,9 +35,15 @@ exists to catch this entire class systematically.
 - Scratch scripts (oracles, probes) go in the scratchpad/`$TMPDIR`, never the repo.
 - One file per agent. No git operations (the user commits centrally).
 - Curriculum ground truth: `/Users/admin/Downloads/JEE_PHYSICS_CURRICULUM.md`.
-  Audience: JEE Main/Advanced aspirants — quantitative, comfortable with
-  calculus and limiting cases; NOT K-12. Depth and sign conventions follow
-  NCERT + JEE Advanced.
+- **Audience — read both halves, they are not in tension.**
+  *Physics depth* is JEE Main/Advanced: quantitative, calculus-comfortable,
+  limiting cases, NCERT + JEE Advanced sign conventions. Never dumb the
+  physics down.
+  *Visual communication* must land for the humans who actually use these —
+  **school students in classes 11–12 (K-12), aged ~16–18**, most of whom meet
+  the topic here for the first time. A diagram that only a person who already
+  understands the topic can decode has failed, however correct it is. Track D
+  audits exactly this gap, and Track D8 makes it explicit.
 
 ## Buckets and priorities
 
@@ -184,6 +190,50 @@ Work through the eight audits; every failure is a finding with evidence.
    (Also confirms the guided-inquiry cards' claimed observations actually
    occur when instructions are followed literally.)
 
+## D8 · K-12 visual legibility — is this diagram readable by a 16-year-old?
+
+Track D1–D2 ask whether the RIGHT things are shown. D8 asks whether a class
+11–12 student, meeting this topic for the first time, can actually READ what
+is shown. Run it in the live browser at 1500×950 AND at 1024×768. Every
+failure is a DEMONSTRATION defect (not polish) — a diagram a novice cannot
+decode teaches nothing.
+
+1. **Every glyph is identified on first appearance.** Each arrow, colour,
+   dashed line, shaded region, subscript and Greek symbol is labelled in the
+   scene or in an adjacent key — not in a distant legend, not only in the
+   voiceover, not assumed. Bare `v₁`, `θ_c`, `Φ` with no gloss is a finding.
+2. **Words before symbols.** The first time a quantity appears it carries its
+   name, not only its symbol ("induced EMF ε", not a lone "ε"). Formal-only
+   labelling is a finding for a first-encounter topic.
+3. **Text is legible, not just present.** Canvas text ≥ 12px effective (after
+   DPR), sidebar text ≥ 13px; measure, don't eyeball. Nothing important
+   overlaps, is clipped at a canvas edge, or sits behind another element.
+   (`ctx.font = 'var(--font-sans)'` silently renders 10px — check for it.)
+4. **Colour is never the only channel.** Any distinction carried by colour
+   (positive/negative, before/after, object A vs B) also carries shape,
+   label, dash pattern or position. Check the palette is distinguishable for
+   red-green colour blindness.
+5. **The scene is self-explanatory when paused at t = 0.** Screenshot the
+   default boot state and ask: can a student name what each object is and
+   what is about to happen, from the pixels alone? Unexplained abstractions
+   (a bare dot standing for a block, an unlabelled box standing for a field
+   region) are findings.
+6. **Quantities are concrete before abstract.** Where the topic allows it,
+   real units and relatable magnitudes beat normalized ones ("2.0 m/s", not
+   "v = 1.0 a.u.") — or the normalization is stated on screen.
+7. **One new idea at a time.** Count the novel visual encodings on screen at
+   once; more than ~3 competing for attention, with no staging or highlight,
+   is extraneous load for a novice even if each is individually correct.
+8. **Read the guided-inquiry cards as a novice.** Any term used before it is
+   defined, any instruction referencing a control by a name that differs from
+   its on-screen label, any claim the student cannot verify from the visuals.
+
+**Fix policy for D8.** Labelling, glossing, font size, contrast, colour
+redundancy, legend placement and staging are surgical — FIX them in this loop.
+Anything needing a new representation (an inset, a second panel, a redrawn
+schematic) is an ENHANCEMENT with a sketch, for approval. Never fix D8 by
+simplifying the physics — the depth stays JEE; only the communication changes.
+
 ## D3 · Demonstration report card
 Score 1–5 on five axes, each with a one-line justification tied to evidence:
 - **Invisible made visible** (fields, forces, rates, energy drawn, not implied)
@@ -191,6 +241,8 @@ Score 1–5 on five axes, each with a one-line justification tied to evidence:
 - **Regime coverage & control honesty** (ranges, criticality, honest pixels)
 - **Representation linkage** (animation ↔ graph ↔ numbers ↔ equation)
 - **Guided path** (defaults + cards + contrasts reliably produce the aha)
+- **Novice legibility** (D8: a first-encounter class-11/12 student can name
+  every glyph, read every label, and decode the paused default scene)
 
 Scores are for the ledger and batch triage (a 2 anywhere ⇒ at least one
 DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
@@ -202,6 +254,13 @@ DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
 - Card, callout, and voiceover COPY must match present behavior (no references
   to removed buttons, wrong colors, wrong panel positions, actions `onStep`
   already performs, transport instructions contradicting boot state).
+- **Any card copy you rewrite follows the SME grammar** — canonical flows in
+  `../Sim_use_version_skills/guided-inquiry/references/golden-flows.md`,
+  rules in that skill's `SKILL.md`: question-before-observation, a classical /
+  naive baseline first, answers that RESOLVE on the spot (the old
+  forward-pointing style is retired), neutral stems, terse claim-only choices,
+  distractors that are named rival mechanisms, zero UI-choreography prose,
+  ≤6 cards. Do not "improve" a card into the pre-2026 house style.
 - Predict-gate hygiene: at each gated card, nothing on screen leaks the answer
   pre-commit (readouts, plotted theory curves, banners). Leaks found earlier in
   C198/C194/C192/C037 were reported-not-fixed; in THIS loop a surgical staging
@@ -225,6 +284,16 @@ DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
      `git show <pre-replacement-commit>:<path>` if a baseline is needed);
    - `node tools/user-version-eval.mjs <port> <module-relative-path>` (deep
      browser eval: overlay, 3 modes, inquiry, controls walk, voiceover wiring);
+   - **`node ../Sim_use_version_skills/tests/layout-probe.mjs <file>`** — the
+     five layout contracts (inquiry zone first under the top bar, guide buttons
+     in the left cluster, guide nav docked at the viewport bottom and centred
+     on the sidebar, sidebar opens empty at guide step 1). A fix that moves a
+     panel or re-parents a control can break these silently;
+   - **`node ../Sim_use_version_skills/tests/canvas-check.mjs`** (or the same
+     backing-store:display ratio comparison against the pre-fix file) whenever
+     a fix touches canvas sizing, layout, or CSS. A wrong backing store ships a
+     stretched/blurred plot that EVERY other gate passes — this class has bitten
+     two builds already;
    - copyright grep (no third-party sim-source names).
 4. Ledger: append one row to `REVIEW-LOG.md` (file, date, grid size, fixes
    one-line each with priority, report-card scores, enhancements proposed,
@@ -237,7 +306,10 @@ DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
 
 **Parallel (Claude Code, Workflow/agents):** per sim, three sub-agents —
 (A) Track P oracle+grid, (B) Track P browser functional/visual + Track L,
-(C) Track D demonstration oracle — then one **skeptic pass**: an independent
+(C) Track D demonstration oracle INCLUDING the D8 novice-legibility audit
+(run it as a deliberate second pass, reading the screen as a first-encounter
+class-11 student, not as the physicist who just wrote the D1 spec) — then one
+**skeptic pass**: an independent
 agent receives all findings and tries to REFUTE each against the live sim
 (kills anchoring and false positives; PLAUSIBLE-but-unverified findings are
 downgraded and marked). The orchestrator merges (dedupe by root cause, keep
@@ -258,10 +330,10 @@ Per-agent CDP ports: unique per tab/agent (e.g., 12000 + concept number mod
 ```
 FILE: <module-relative path>
 TRACK P: grid <n> points, <m> mismatches · browser-verified yes/no
-TRACK D: report card V:<1-5> C:<1-5> R:<1-5> L:<1-5> G:<1-5>
+TRACK D: report card V:<1-5> C:<1-5> R:<1-5> L:<1-5> G:<1-5> N:<1-5>   (N = D8 novice legibility)
 FIXED (n): [P0|P1|P2][PHYS|DEMO|FUNC|LAYER] <one line> · verified <how>
 ENHANCEMENTS (m): [ROI-ranked] <one line each + implementation sketch>
-GATES: syntax ✓ · jsdom ×3 ✓ · user-version-eval ✓ · copyright ✓
+GATES: syntax ✓ · jsdom ×3 ✓ · user-version-eval ✓ · layout-probe ✓ · canvas-check ✓ · copyright ✓
 LEDGER: REVIEW-LOG.md row appended
 S3: re-push required for this file
 ```

@@ -5,6 +5,7 @@ description: Detect, rebuild, or create the GUIDED-INQUIRY card flow for a parti
 
 # Guided-inquiry: detect → design → build (v2 particle-physics sims)
 
+
 You are an **expert physics educator and inquiry designer** — fluent in the particle-physics
 canon and in how students actually mislearn it. You author the guided-inquiry stepper for ONE
 sim at a time (batch mode at the end). The sims are single-file HTML on the **v2 embedded
@@ -116,24 +117,41 @@ Draft the spine as a TABLE before writing any HTML — one row per card:
 
 | # | Beat | Title | The ONE idea | Scene state (`onStep` spec, exact params) | Gate? | Choices (correct + distractors←misconception) |
 
-### The beats (the arc — better than the CM/SR pattern, enforce all of it)
-1. **HOOK / ORIENT** — what am I looking at, why it matters (one sentence of stakes —
-   discovery, paradox, or open question). Names the 2–3 visual elements the student must
-   be able to read (colors/arrows/axes) — dynamic to what THIS sim draws.
-2. **GROUND** — establish the prerequisite and *drive the sim to show it* (baseline /
-   control case: field off, single particle, symmetric case…). No payoff yet.
-3. **PREDICT (gated)** — a real question about what happens next, 3 choices: one correct,
-   distractors drawn from the misconception list, each with a physics-specific rebuttal
-   in `data-fb` (never a bare "no — try again").
-4. **OBSERVE / VERIFY** — a concrete action ("press **Fire**", "drag **β** past 0.95")
-   plus the named readout that settles the prediction, quantitatively where possible
-   ("watch **P** fall to 0.000 and the lobe collapse onto the dotted circle").
-5. *(repeat 3–4 per additional layer, in dependency order — the boundary concept before
-   the phenomenon it defines: critical angle before TIR, polarization before asymmetry,
-   nuclear model before the large-angle count.)*
-6. **PAYOFF** — the core phenomenon / learning objective, seen on screen at this step.
-7. **RESOLVE + EXTEND** — the takeaway stated once, the historical anchor (who/when),
-   and ONE open question that hands off to free exploration (pairs with `onComplete`).
+### The beats — the SME grammar (canonical exemplars:
+`Final_JEE_sims/Sim_use_version_skills/guided-inquiry/references/golden-flows.md`;
+when this rubric and those flows disagree, the flows win)
+1. **FRAME** — define the apparatus and its physical quantities, symbolically, ≤3
+   sentences. Physics first, UI never. One situating clause if a sibling sim precedes
+   this one. The boot state must not decide any pending question: quiet apparatus where
+   running would spoil Q1; an explicit exploration invitation where it can't.
+2. **Q1 = the naive/classical baseline (gated)** — what pre-quantum / pre-relativistic /
+   everyday intuition predicts; the sim then breaks it. Must be answerable from prior
+   intuition alone. A deck may cold-open on its flagship predict exactly when that
+   question needs no sim vocabulary.
+3. **Chained questions (gated, 2–4 more)** — each changes exactly ONE thing in the
+   apparatus vs the previous card and reads ONE countable observable ("how many regions
+   are lit?"). The ladder climbs: mechanism → generalization → quantitative scaling.
+   Questions test an inference or a representation-reading — never a lookup, trivia, or
+   a UI operation. Stems neutral (no classifying word that entails the answer); choices
+   are terse claims ≤ ~8 words; distractors are rival physical mechanisms; on a
+   generalization question include ≥1 distractor consistent with the seen case so the
+   sim must decide.
+4. **ANSWERS RESOLVE ON THE SPOT** — `data-fb` names the principle plainly and
+   completely in 1–2 sentences ("B. The magnetic field serves as a measurement device
+   that collapses the wavefunction onto eigenstates of σ_z"). Claims strictly licensed
+   by evidence the student has seen. No forward-pointing "watch the next card".
+5. **INTERSTITIAL / OBSERVE-COMPARE (ungated, sparing)** — a one-sentence connective
+   fact, or a comparison task ("How is it different from the critically damped case?")
+   that never states the conclusion. The card's observable is the hero graphic.
+6. **TELL (naming only)** — the formal name for something already seen ("this
+   oscillation is the massive radial mode"). Definitions may be told; behaviour is
+   always asked. Trivia, glossaries and spectacle are deleted, not fixed.
+Language rule (absolute): zero UI-choreography prose — no "Commit to…", "Your answer
+fires/unmasks…", no bold-control stage direction inside questions; minimal imperatives
+naming physical objects ("Place an X magnet after the first Z magnet"). Questions refer
+to physics objects, never UI objects. When a question needs an affordance the sim lacks
+(source toggle, per-question reset, relocated pre-reveal text), request the minimal
+additive change and REPORT it — do not contort the flow around it.
 
 ### Card count is DERIVED, not chosen (hard ceiling: 6)
 Before drafting cards, derive the exact count the content flow needs — no fixed target:
@@ -158,10 +176,11 @@ forward references, no standing-misconception text. Every card's prose must be T
 SCREEN at that step — each claim checkable against the `onStep` state in the same row.
 Every action names its control/readout in **bold**, matching the on-screen label exactly.
 
-**Brevity is a hard budget, not a style note.** Card prose ≤ 45 words (1–2 sentences per
-beat); choice labels ≤ 10 words; each `data-fb` ONE sentence ≤ 25 words. Numbers beat
-adjectives; never restate what an earlier card or the current scene already shows. If a
-sentence survives deletion without losing a checkable fact, delete it.
+**Brevity is a hard budget, not a style note.** Card prose ≤ 45 words; choice labels
+≤ ~8 words (terse claims — explanation lives ONLY in `data-fb`); each `data-fb` 1–2
+sentences ≤ 40 words, resolving fully. Numbers beat adjectives; never restate what an
+earlier card or the current scene already shows. If a sentence survives deletion
+without losing a checkable fact, delete it.
 
 ### LLM calls (subagent design + critique — use when the Agent tool is available)
 Settle the spine with independent brains before implementing; this is where quality is won:
