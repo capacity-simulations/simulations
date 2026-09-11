@@ -110,8 +110,18 @@ for (const f of args) {
     await new Promise(r => setTimeout(r, 600));
     const nav = await p.evaluate(() => { const e = document.querySelector('.cg-nav');
       if (!e || getComputedStyle(e).display === 'none') return null;
-      const r = e.getBoundingClientRect(); return { bottomGap: innerHeight - (r.y + r.height) }; });
+      const r = e.getBoundingClientRect();
+      const s = document.querySelector('.sidebar') || document.querySelector('.shell-aside') || document.querySelector('aside');
+      const sc = s ? (() => { const b = s.getBoundingClientRect(); return b.x + b.width / 2; })() : null;
+      return { bottomGap: innerHeight - (r.y + r.height),
+               offCenter: sc === null ? null : Math.abs((r.x + r.width / 2) - sc) }; });
     if (nav && nav.bottomGap > 28) errs.push(`guide nav floats ${Math.round(nav.bottomGap)}px above the viewport bottom (reference: 16px)`);
+    // Centered on the sidebar. Tolerance 30px: legacy JEE right:18 anchoring
+    // measures 24-28px off (accepted shipped fleet); anything beyond means the
+    // nav is visibly skewed on this sim's sidebar — center it with equal side
+    // margins (width: sidebarW - 36px; right:18px).
+    if (nav && nav.offCenter !== null && nav.offCenter > 30)
+      errs.push(`guide nav ${Math.round(nav.offCenter)}px off the sidebar centre — give it equal side margins`);
     if (!nav) errs.push('controls guide opened but no visible .cg-nav');
   }
   console.log(errs.length ? `FAIL  ${f}\n      ${errs.join('\n      ')}` : `  ok  ${f}`);

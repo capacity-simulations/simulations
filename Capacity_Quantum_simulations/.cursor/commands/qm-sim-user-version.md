@@ -73,6 +73,9 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
    reference `bottom:16px` (bottom of the right column, like every JEE sim)
    and the pill overlap is accepted — the pill is reviewer-only chrome. A
    raised nav collides with real controls on control-heavy sims.
+   **Center the nav on the sidebar** with equal side margins:
+   `.cg-nav{ right:18px; width:calc(<sidebar-width> - 36px); box-sizing:border-box; }`
+   (pilot: 340px sidebar → width:304px). The layout probe enforces this.
 5. **Theme.** Most QM sims are dark-only; some have `data-theme="light"`.
    The template CSS already targets both hooks — verify against the sim's
    actual toggle (`#theme-checkbox` where present) and screenshot both themes
