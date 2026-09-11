@@ -116,8 +116,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  font-size:12.5px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+/* the chip was hardcoded dark while the text follows the theme — near-black on near-black
+   (~2.2:1) in light theme, which is the one key naming every glyph in the scene. */
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.88);
+  border-color:rgba(51,65,85,.28);color:#0f172a;}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -145,9 +149,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .stat-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
 .ctrl-box .stat-row:first-child{padding-top:0;}
 .ctrl-box .stat-row:last-child{padding-bottom:0;}
-.stat-label{color:var(--muted);display:flex;align-items:center;font-weight:600;flex-shrink:0;}
+/* NOT display:flex — a flex container drops the whitespace between "Radius" and its
+   <em>r</em>, so the sidebar read "Radiusr" / "Speedv". The row itself is already flex. */
+.stat-label{color:var(--muted);font-weight:600;flex-shrink:0;}
 .stat-value{color:var(--text);font-weight:600;font-family:var(--font-nums);font-variant-numeric:tabular-nums;min-width:0;text-align:right;overflow-wrap:anywhere;}
-.stat-value.highlight{font-size:18px;}
+.stat-value.highlight{font-size:16px;white-space:nowrap;}
 .divider{height:1px;background:var(--border);}
 .note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
 .shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
@@ -1503,6 +1509,26 @@ Object.freeze(Engine);
     </div>
 </div>
 <!-- POLISH: [physics] CRITICAL — at the default detune=0 the gap kick alternated accelerate/decelerate (drivePol=cos(driveOscPhase) is identically cos(phase) at resonance, and the extra *newDee factor cancelled its sign), so the very first kick drove the proton to the 50 km/s floor, raised the "out of step" stall banner on the default scene, and the orbit never spiralled — contradicting steps 1/3/4/5. Gap voltage is now U = Vgap·sin(driveOscPhase) with kickSign = sign(U·sin(phase)) (ΔK = qU for a right→left crossing), which accelerates on EVERY crossing at resonance and beats in/out of step under detune [UNVERIFIED: out of step not found in this file]; the drawn +/− gap markers now use the same U, so the polarity shown is the polarity that does the work. Rotation sense corrected: B is out of the page, so F = qv×B curls a proton CLOCKWISE — py now uses +rPx·sin(phase) and the velocity arrow +cos(phase) (was counter-clockwise, i.e. a negative charge). Added a finite dee aperture (extraction radius R_DEE, K_max = q²B²R²/2m): kicks stop once the orbit fills the dees, with a scene label saying so — previously the proton accelerated without limit to c/3 in a non-relativistic model and drew far outside the dees and off-canvas within seconds. Fixed uninitialised/unreset state.crossings, which left "Laps completed" counting on half-lap boundaries after Reset. Prose: "slowed by ~10⁸×" corrected to ~4 × 10⁶× (timeScale 260 ns per animation second); step 3 "the radius keeps growing" qualified to "until the orbit fills the dees". NOT changed: the proton's radius steps discontinuously at the gap because the orbit centre is pinned to the canvas centre instead of walking along the gap line — the honest fix needs new orbit-centre state threaded through reset/step/draw, which is build-time, not polish. ; [pedagogy] NO FINDINGS — every readout (T, laps, r, v, f_c, K) is named by a step card, the detune reveal is the build's D6 staging, no control is disabled at load, and no element was removed. ; [visuals] Every scene label was rendering at the 10px canvas default because ctx.font cannot resolve var(--font-sans) — the whole shorthand was invalid and dropped; replaced with a literal DM Sans stack and lifted the 11px labels to 12–13px (D2). Scale bar and its label were hardcoded near-white (rgba(203,213,225,…)) and effectively invisible in light theme, and the stall banner text #fda4af sat at ~1.6:1 on its own pink box — both now read theme variables. K1 dead-by-autoscale: scalePxPerMetre fitted m·v_max/(qB), so scale ∝ B cancelled r ∝ 1/B exactly and the canvas was pixel-identical at every B while the radius readout moved — the B slider looked wired but could not move the picture. Now fits the fixed dee aperture, so B visibly changes orbit size, lap count and final energy. -->
+<!-- DEEP REVIEW 2026-09-11 (jee-sim-deep-review). Supersedes two claims in the POLISH note above.
+  (a) "NOT changed: the proton's radius steps discontinuously at the gap" — IT IS NOW CHANGED. The arc
+      centre (state.centreY) walks along the gap line at every crossing, so the position is continuous
+      and the drawn path is the real cyclotron spiral of offset semicircles, not nested circles joined
+      by radial teleports.
+  (b) the K1 autoscale fix was verified genuinely present (drawn radius x B constant at 19.8 px.T across
+      B = 0.2 -> 1.5, i.e. r_px proportional to 1/B) — but the canvas was NOT repainted on a slider move
+      while paused, which made it LOOK dead. Slider handlers now call draw().
+  Also fixed here: extraction capped at K_max = (qBR)^2/2m (was applied before the kick, so the exit
+  energy overshot by one qV and depended on V — 205/245 keV at V = 20/60 against 187.9 keV of theory);
+  gap crossings solved exactly instead of to within one T/40 substep; energy per crossing is now q*U at
+  the crossing instant rather than +/-qV by sign alone, so detune behaves as a resonance beat; the
+  trail is sampled per physics substep in world metres (the 20 px "big jump" guard had been silently
+  discarding every segment once the per-frame arc step exceeded 20 px, i.e. the spiral stopped being
+  drawn past r ~ 3 cm); "Per-lap time" now reads the STOPWATCHED lap time (state.lapTimeMeasured was
+  computed every lap and never displayed) instead of 2*pi*m/(qB) recomputed from the slider, which made
+  the card-3 claim circular; canvas theme vars read from document.body (the class lands there, not on
+  documentElement); default V 20 -> 8 kV so the default run lasts ~6 s / 11 laps instead of ~2.3 s;
+  legend chip and .stat-label spacing fixed; card deck rewritten to the SME guided-inquiry grammar
+  (frame + 5 gated questions). -->
 <div id="shell" class="hide-formal">
 
   <div id="shell-info-modal" class="shell-modal-backdrop">
@@ -1582,36 +1608,53 @@ Object.freeze(Engine);
       <div id="inq-cards" class="aside-zone-body">
 
         <div class="inq-step">
-          <h4>1 · The setup</h4>
-          <p>A proton sits between two D-shaped electrodes ("dees") in a uniform magnetic field <em>B</em> pointing out of the screen. An alternating voltage across the gap kicks it faster each time it crosses. Inside a dee, the magnetic force curls it around — <strong>and does no work</strong>, so its speed there is exactly constant.</p>
-          <p>Notice the radius on the scene, and the per-lap timer in the sidebar. Then click Next.</p>
+          <h4>1 · The machine</h4>
+          <p>Two D-shaped metal electrodes — the <strong>dees</strong> — sit in a uniform magnetic field <em>B</em> pointing out of the page. A narrow gap separates them, and an alternating voltage of peak value <em>V</em> is applied across that gap. A proton of charge <em>q</em> and mass <em>m</em> starts near the centre.</p>
         </div>
 
         <div class="inq-step" data-gate>
-          <h4>2 · Predict</h4>
-          <p>As the proton is accelerated across the gap, it speeds up and its orbit gets bigger. What happens to the <strong>time for one full lap</strong>?</p>
-          <button class="choice" data-fb="A faster particle travels a proportionally LONGER path (bigger circle). The time to go round doesn't depend on v — the two factors cancel exactly. Watch the per-lap timer: it will read the same value on lap 1 and lap 50.">The lap gets shorter — faster particles must go round faster.</button>
-          <button class="choice" data-fb="The radius does grow — but bigger orbit at a proportionally higher speed means the same period. The result r = mv/(qB) tells you the size, T = 2πm/(qB) tells you the time — and T has no v in it.">The lap gets longer — a bigger orbit must take longer.</button>
-          <button class="choice" data-correct data-fb="<strong>Correct.</strong> The period is T = 2πm/(qB) — no v anywhere. Speed up the proton and its orbit grows proportionally, so it covers the extra path in exactly the same time. That is the whole reason a fixed-frequency oscillator can drive it for thousands of turns.">It stays exactly the same on every lap.</button>
+          <h4>2 · One lap at twice the speed</h4>
+          <p>A charged particle travels in a circle in a uniform magnetic field. Its speed is now doubled, with the field unchanged. The time to go once round the new circle is:</p>
+          <button class="choice" data-fb="That assumes the circle stays the same size. It does not — r = mv/(qB) doubles when v doubles, so the path is twice as long as well.">Half as long.</button>
+          <button class="choice" data-fb="The circle is indeed twice as big, but the particle covers it at twice the speed. The two changes cancel exactly.">Twice as long.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> T = 2πm/(qB) contains no v. Doubling v doubles r = mv/(qB), so the longer path is covered at a proportionally higher speed. This period is the cyclotron period.">Exactly the same.</button>
           <div class="predict-eval"></div>
         </div>
 
-        <div class="inq-step">
-          <h4>3 · Watch the timer</h4>
-          <p>Press ▶ Play. The proton spirals outward, gaining a red kick at every gap crossing. Read the <strong>Per-lap time</strong> and the <strong>Radius</strong> in the sidebar as the lap counter climbs. The radius grows lap after lap, until the orbit fills the dees. The per-lap time holds steady at <strong>131.19 ns</strong> the whole way.</p>
-          <p>That is the payoff: one clock, thousands of laps, no adjustment needed.</p>
+        <div class="inq-step" data-gate>
+          <h4>3 · Where the energy enters</h4>
+          <p>Inside a dee the field is purely magnetic; the only electric field is in the gap. Over one lap, where does the proton's kinetic energy change?</p>
+          <button class="choice" data-fb="That needs a force with a component along v everywhere. The magnetic force q v × B is perpendicular to v at every instant, so the power F·v is exactly zero.">Steadily, all the way round.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> A magnetic force does no work, so inside a dee the speed is frozen and only the direction turns. Every joule is delivered by the electric field in the gap: qV per crossing, 2qV per lap.">Only while crossing the gap.</button>
+          <button class="choice" data-fb="A dee contains no electric field, and the magnetic force there is perpendicular to v. Neither can change the speed.">Only while inside a dee.</button>
+          <div class="predict-eval"></div>
         </div>
 
-        <div class="inq-step">
-          <h4>4 · Why it works</h4>
-          <p>The magnetic force is always perpendicular to <em>v</em>, so it changes direction only — never speed, never kinetic energy. The only work is done by the electric field <em>at the gap</em>. Inside a dee, watch the Speed readout: it does not change until the next crossing.</p>
-          <p>Because T = 2πm/(qB) is v-independent, the oscillator driving the gap can run at one fixed frequency (the <em>cyclotron frequency</em>) and stay in step forever.</p>
+        <div class="inq-step" data-gate>
+          <h4>4 · One fixed frequency</h4>
+          <p>The oscillator across the gap runs at a single frequency and is never retuned, yet it accelerates the proton on every crossing for the whole climb. That frequency is:</p>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> f_c = qB/(2πm) depends only on the particle and the field, so one fixed setting stays in step for every turn. This is the resonance condition of the machine.">qB/2πm — a constant.</button>
+          <button class="choice" data-fb="Numerically this is the very same frequency: substitute r = mv/(qB) and the v cancels. It is the right number written so that it looks as though it needs retuning — it never does.">v/2πr, retuned as v grows.</button>
+          <button class="choice" data-fb="V sets how big each kick is, not when it arrives. Off the cyclotron frequency the kicks meet the wrong polarity and the climb stops, however large V is.">Any value, if V is large enough.</button>
+          <div class="predict-eval"></div>
         </div>
 
-        <div class="inq-step">
-          <h4>5 · Break the timing</h4>
-          <p>Now use the <strong>Drive detune</strong> slider in the sidebar. Slide it away from 0. The oscillator is no longer at the cyclotron frequency — the kicks arrive when the proton is going the wrong way through the gap, so it gets <strong>decelerated</strong>. The spiral stalls.</p>
-          <p>This is why cyclotrons eventually fail at relativistic speeds: m grows with v, T stops being constant, and one fixed frequency can no longer stay in step.</p>
+        <div class="inq-step" data-gate>
+          <h4>5 · How much energy comes out</h4>
+          <p>Two cyclotrons are identical except for the gap voltage: one at 8 kV, one at 60 kV. Each proton climbs until its orbit fills the dees, radius <em>R</em>. Compare the two exit energies.</p>
+          <button class="choice" data-fb="Bigger kicks, but fewer of them. Both climbs end at the same radius, so both end at the same energy.">The 60 kV machine delivers more.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> The orbit stops growing at r = R, so K_max = (qBR)²/2m — set by the field and the size of the machine, with no V in it. V only fixes how many turns the climb takes.">Both deliver the same energy.</button>
+          <button class="choice" data-fb="More turns, smaller kicks — the two cancel. The exit energy is fixed by R and B alone: K_max = (qBR)²/2m.">The 8 kV machine delivers more.</button>
+          <div class="predict-eval"></div>
+        </div>
+
+        <div class="inq-step" data-gate>
+          <h4>6 · Out of step</h4>
+          <p>The drive frequency is offset from <em>f</em><sub>c</sub> by a few per cent, with <em>B</em> unchanged. Over the following laps the proton:</p>
+          <button class="choice" data-fb="Only while drive and proton stay in step. An offset makes the phase slip a little further on every crossing, so the gap voltage the proton meets keeps changing.">gains the same energy each crossing.</button>
+          <button class="choice" data-correct data-fb="<strong>Correct.</strong> The drive slips out of phase, so the gap voltage at the crossing falls from its peak through zero and then reverses. Real cyclotrons fail the same way: at high speed m → γm, so T = 2πγm/(qB) grows and one fixed frequency falls behind.">gains less each crossing, then loses.</button>
+          <button class="choice" data-fb="One mistimed crossing removes qV, not the whole kinetic energy. The loss builds up gradually over many crossings.">stops dead at the gap.</button>
+          <div class="predict-eval"></div>
         </div>
 
       </div>
@@ -1652,10 +1695,10 @@ Object.freeze(Engine);
           <div class="ctrl-box ctrl-box--slider" id="box-V">
             <div class="ctrl-box-head">
               <span class="ctrl-box-label">Gap voltage <em>V</em></span>
-              <span class="slider-val" id="V-val">20 kV</span>
+              <span class="slider-val" id="V-val">8 kV</span>
             </div>
             <div class="ctrl-slider-row">
-              <input type="range" id="V-in" min="5" max="60" step="1" value="20">
+              <input type="range" id="V-in" min="5" max="60" step="1" value="8">
             </div>
           </div>
 
@@ -1676,13 +1719,13 @@ Object.freeze(Engine);
         <div class="shell-panel-head"><h3>Readouts</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box" id="box-readouts">
-            <div class="stat-row"><span class="stat-label">Per-lap time</span><span class="stat-value highlight" id="stat-T">131.19 ns</span></div>
+            <div class="stat-row"><span class="stat-label">Measured lap time</span><span class="stat-value highlight" id="stat-T">—</span></div>
             <div class="stat-row"><span class="stat-label">Laps completed</span><span class="stat-value" id="stat-N">0</span></div>
             <div class="divider" style="margin:6px 0"></div>
             <div class="stat-row"><span class="stat-label">Radius <em>r</em></span><span class="stat-value" id="stat-r">2.09 cm</span></div>
             <div class="stat-row"><span class="stat-label">Speed <em>v</em></span><span class="stat-value" id="stat-v">1.00 × 10⁶ m/s</span></div>
             <div class="stat-row"><span class="stat-label">Cyclotron f<sub>c</sub></span><span class="stat-value" id="stat-fc">7.62 MHz</span></div>
-            <div class="stat-row"><span class="stat-label">Kinetic energy</span><span class="stat-value" id="stat-K">5.22 keV</span></div>
+            <div class="stat-row"><span class="stat-label">Kinetic energy <em>K</em></span><span class="stat-value" id="stat-K">5.22 keV</span></div>
           </div>
           <p class="note-text" style="margin:6px 2px 0">Time on screen is slowed by ~4 × 10⁶× so individual laps are visible.</p>
         </div>
@@ -2479,7 +2522,11 @@ return {
   // ---- Sim state (in a module closure; Shell.reset restores it) ------
   const DEFAULTS = {
     B: 0.5,     // T
-    Vgap: 20,   // kV
+    // 8 kV, not 20: K_max is set by B and the aperture alone, so V only decides how
+    // MANY turns the climb takes. At 20 kV the default run filled the dees in 9
+    // crossings (~2.3 s) — over before a student can read the lap counter. At 8 kV
+    // the same climb takes 23 crossings (~6 s), which is what the cards ask them to watch.
+    Vgap: 8,    // kV
     detune: 0,  // percent of f_c
     v0: 1.0e6,  // m/s initial
   };
@@ -2498,9 +2545,15 @@ return {
     driveOscPhase: 0,    // running phase of the drive oscillator, in radians
     lastGapCrossing: -1, // -1 or 0 or 1 — which dee we last entered (to detect crossings)
     inDee: 1,            // +1 = right dee, -1 = left dee
+    // Centre of the CURRENT circular arc, in metres, measured down the gap line from
+    // the machine centre. A cyclotron orbit is not concentric: each gap kick leaves the
+    // proton where it was and hands it a bigger circle, so the centre of curvature walks
+    // along the gap. Pinning it to the canvas centre made the proton teleport outward at
+    // every crossing and drew nested semicircles instead of the real spiral.
+    centreY: 0,
     gapFlashT: 0,        // seconds remaining of gap-kick flash on scene
     lastKickSign: 0,     // +1 = accelerated last kick, -1 = decelerated
-    trail: [],           // list of {x,y} in orbit-plane meters
+    trail: [],           // list of {x,y} in metres, relative to the machine centre (y down)
     // Real elapsed time for lap timing (in seconds, real)
     tReal: 0,
     tLapStart: 0,        // real time of last lap start
@@ -2550,8 +2603,16 @@ return {
   // Extraction radius: the orbit a proton at the design top speed has at B = 0.5 T.
   const V_ENVELOPE = 6e6;                                   // m/s, design top speed
   const R_DEE = M_PROTON*V_ENVELOPE/(Q_PROTON*0.5);         // ≈ 0.125 m = 12.5 cm
+  // Extraction energy: the orbit radius reaches the aperture. K_max = (qBR)²/2m —
+  // note there is no V in it. The gap voltage buys turns, never final energy.
+  function maxKineticEnergyJ(B){
+    const p = Q_PROTON*B*R_DEE;    // momentum at r = R_DEE
+    return p*p/(2*M_PROTON);
+  }
+  // 35% margin: the arc centre walks along the gap as the orbit grows, so the
+  // trajectory reaches a little past R_DEE from the machine centre.
   function scalePxPerMetre(){
-    return 0.42 * Math.min(viewW, viewH) / (R_DEE * 1.15);  // 15% margin inside the dee rim
+    return 0.42 * Math.min(viewW, viewH) / (R_DEE * 1.35);
   }
 
   // ---- Bindings -----------------------------------------------------
@@ -2564,9 +2625,13 @@ return {
     const s = state.detune*100;
     elDval.textContent = (s>=0?'+':'')+s.toFixed(1)+'%';
   }
-  elB.addEventListener('input', ()=>{ readControls(); updateReadouts(); });
-  elV.addEventListener('input', ()=>{ readControls(); updateReadouts(); });
-  elD.addEventListener('input', ()=>{ readControls(); updateReadouts(); });
+  // draw() as well as updateReadouts(): while the run is PAUSED nothing else repaints
+  // the canvas, so without this the readouts moved (r 2.09 cm -> 0.70 cm) while the
+  // drawn orbit stayed stale until Play resumed.
+  const onCtrl = ()=>{ readControls(); updateReadouts(); draw(); };
+  elB.addEventListener('input', onCtrl);
+  elV.addEventListener('input', onCtrl);
+  elD.addEventListener('input', onCtrl);
 
   // ---- Formatting helpers -------------------------------------------
   function fmtSI(x, unit){
@@ -2607,11 +2672,14 @@ return {
 
   // ---- Readouts -----------------------------------------------------
   function updateReadouts(){
-    const T = cyclotronPeriod(state.B);
     const f = cyclotronFreq(state.B);
     const r = orbitRadius(state.v, state.B);
     const K = kineticEnergyJ(state.v);
-    outT.textContent = fmtTns(T);
+    // The MEASURED lap time — stopwatched between identical gap crossings, not
+    // 2*pi*m/(qB) recomputed from the slider. Showing the formula made the whole
+    // demonstration circular: of course a quantity with no v in it does not change
+    // when v changes. Blank until the proton has actually completed a lap.
+    outT.textContent = state.laps > 0 ? fmtTns(state.lapTimeMeasured) : '—';
     outN.textContent = state.laps.toString();
     outR.textContent = fmtRadius(r);
     outV.textContent = fmtSpeed(state.v);
@@ -2638,6 +2706,7 @@ return {
     state.inDee = 1;
     state.gapFlashT = 0;
     state.lastKickSign = 0;
+    state.centreY = 0;
     state.trail = [];
     state.tReal = 0;
     state.tLapStart = 0;
@@ -2654,7 +2723,7 @@ return {
     // Convert to real seconds via timeScale.
     let dtReal = dtAnim * state.timeScale;
 
-    // Clamp per-frame to at most ~1/32 of a real period so gap crossings aren't skipped.
+    // Clamp per-frame to at most 1/40 of a real period so gap crossings aren't skipped.
     const T = cyclotronPeriod(state.B);
     const maxStep = T/40;
     let remaining = dtReal;
@@ -2664,81 +2733,99 @@ return {
       remaining -= step;
     }
 
+    updateReadouts();
     draw();
   }
+
+  const K_FLOOR = 0.5*M_PROTON*(5e4)*(5e4);   // 50 km/s floor so a stalled proton doesn't stop dead
 
   function stepPhysics(dt){
     // Advance orbital phase at true cyclotron angular frequency ω_c = qB/m.
     // (Independent of v: this IS the lesson.)
     const omega = cyclotronOmega(state.B);
+    const omegaDrive = omega * (1 + state.detune);   // drive runs at (1+detune)*ω_c
     const prevPhase = state.phase;
-    state.phase = (state.phase + omega*dt) % (2*Math.PI);
+    const phaseUn = prevPhase + omega*dt;            // unwrapped, so the crossing can be solved
+    const driveUn = state.driveOscPhase + omegaDrive*dt;
+    state.phase = phaseUn % (2*Math.PI);
+    state.driveOscPhase = driveUn % (2*Math.PI);
     state.tReal += dt;
 
-    // Advance drive oscillator at (1+detune)*ω_c.
-    const omegaDrive = omega * (1 + state.detune);
-    state.driveOscPhase = (state.driveOscPhase + omegaDrive*dt) % (2*Math.PI);
-
-    // Detect a gap crossing: the drawing puts the two dees split by a vertical gap through the origin.
-    // Convention: proton x(t) = r*cos(phase), y(t) = r*sin(phase). x=0 twice per lap.
-    // Detect sign flip in cos(phase).
-    const cosPrev = Math.cos(prevPhase);
-    const cosNow  = Math.cos(state.phase);
-    if(cosPrev*cosNow < 0){
-      // Gap crossing! We just crossed x=0.
-      // Determine direction of crossing (which dee we entered).
-      // If cosNow > 0 we're now in right dee; else left.
-      const newDee = cosNow>0 ? 1 : -1;
-      // Drive-vs-particle phase alignment.
-      // Gap voltage U = V_right − V_left = Vgap·sin(driveOscPhase). The offset is chosen so
-      // that AT RESONANCE the polarity reverses exactly once per half-lap, in step with the
-      // proton — which is the whole point of the machine.
-      // The proton crosses right→left when sin(phase) > 0, and gains q·U doing so; it crosses
-      // left→right when sin(phase) < 0, and then gains −q·U. So ΔK ∝ U·sin(phase).
-      const sinCross = Math.sin(state.phase);
-      const drivePol = Math.sin(state.driveOscPhase);
-      let kickSign = Math.sign(drivePol * sinCross);
-      if(kickSign === 0) kickSign = 1;
-      // Finite aperture: once the orbit reaches the extraction radius there is no room left
-      // to accelerate into, so further crossings gain nothing (K_max = q²B²R²/2m).
-      if(kickSign > 0 && orbitRadius(state.v, state.B) >= R_DEE) kickSign = 0;
-      // Energy gained per crossing = q * Vgap * kickSign. Convert Vgap kV to volts.
-      const dK = kickSign * Q_PROTON * (state.Vgap*1e3); // J
-      // Update speed from new kinetic energy
-      let Knew = kineticEnergyJ(state.v) + dK;
-      if(Knew < 0.5*M_PROTON*(5e4)*(5e4)) Knew = 0.5*M_PROTON*(5e4)*(5e4); // floor at 50 km/s so it doesn't stop dead
+    // Gap crossing: the drawing splits the dees along a vertical gap, so x = r·cos(phase)
+    // changes sign whenever the phase passes π/2 + kπ — twice per lap.
+    // Solve for that instant EXACTLY rather than using the end-of-substep values: a T/40
+    // substep is 9° of phase, and both the gap voltage that does the work and the lap
+    // stopwatch are read AT the crossing.
+    const kCross = Math.ceil((prevPhase - Math.PI/2)/Math.PI);
+    const phaseCross = kCross*Math.PI + Math.PI/2;
+    if(phaseUn >= phaseCross){
+      const tBack = (phaseUn - phaseCross)/omega;       // seconds elapsed since the crossing
+      const tCross = state.tReal - tBack;
+      const driveAtCross = driveUn - omegaDrive*tBack;
+      // sin(phaseCross) is exactly ±1; +1 is the right→left crossing.
+      const sinCross = (kCross % 2 === 0) ? 1 : -1;
+      const newDee = -sinCross;                          // just past π/2 cos<0 ⇒ left dee
+      // Gap voltage at the crossing, U = V_right − V_left = Vgap·sin(drive phase). A proton
+      // crossing right→left gains q·U; left→right gains −q·U. At resonance the drive phase
+      // equals the orbital phase, so sin(drive) = sinCross and every crossing gains the full
+      // q·Vgap — that is the machine working. Detuned, the drive slips and the SAME formula
+      // rolls the gain smoothly down through zero and into deceleration.
+      const U = state.Vgap*1e3 * Math.sin(driveAtCross);  // volts
+      const Kold = kineticEnergyJ(state.v);
+      let Knew = Kold + Q_PROTON*U*sinCross;
+      // Finite aperture: the orbit cannot grow past the extraction radius, so the beam
+      // leaves at K_max = (qBR)²/2m — a number with no V in it, which is the point.
+      const Kmax = maxKineticEnergyJ(state.B);
+      if(Knew > Kmax) Knew = Kmax;
+      if(Knew < K_FLOOR) Knew = K_FLOOR;
+      const rOld = orbitRadius(state.v, state.B);
       state.v = Math.sqrt(2*Knew/M_PROTON);
-      // Complete lap detection: count a lap every TWO gap crossings (proton crosses gap twice per lap).
-      // Use crossing count.
+      const rNew = orbitRadius(state.v, state.B);
+      // The proton does not move during the kick — it is handed a different circle. Walk the
+      // arc centre along the gap so the position stays continuous across the crossing.
+      state.centreY += sinCross*(rOld - rNew);
       state.crossings = (state.crossings|0) + 1;
-      if(state.crossings % 2 === 0){
+      // A lap is one full revolution, measured between crossings in the SAME direction —
+      // crossings 1, 3, 5, … The first crossing only starts the stopwatch.
+      if(state.crossings === 1){
+        state.tLapStart = tCross;
+      } else if(state.crossings % 2 === 1){
         state.laps++;
-        state.lapTimeMeasured = state.tReal - state.tLapStart;
-        state.tLapStart = state.tReal;
+        state.lapTimeMeasured = tCross - state.tLapStart;
+        state.tLapStart = tCross;
       }
       state.inDee = newDee;
+      const kickSign = Knew > Kold ? 1 : (Knew < Kold ? -1 : 0);
       state.gapFlashT = kickSign===0 ? 0 : 0.28; // no energy transfer ⇒ no kick flash
       state.lastKickSign = kickSign;
-      // Detect stall: if last several kicks were negative and v is very low
+      // Stall: the drive has slipped so far out of step that it is emptying the proton.
+      // Clear it again the moment a crossing accelerates, or the banner outlives the fact.
       if(state.v < 3e5 && kickSign < 0) state.stalled = true;
-      updateReadouts();
-    } else {
-      updateReadouts();
+      else if(kickSign > 0) state.stalled = false;
     }
+
+    // Trail in metres relative to the machine centre, sampled every substep (~60 points per
+    // lap) so the spiral is a smooth curve at any orbit size. Sampling once per animation
+    // frame put 60+ px between points on a large orbit, which the old "big jump" guard then
+    // discarded — the signature spiral simply stopped being drawn past r ≈ 3 cm.
+    const rNow = orbitRadius(state.v, state.B);
+    state.trail.push({ x: rNow*Math.cos(state.phase), y: state.centreY + rNow*Math.sin(state.phase) });
+    if(state.trail.length > 2600) state.trail.shift();
 
     // Fade gap flash timer
     if(state.gapFlashT > 0){
       state.gapFlashT -= dt / state.timeScale; // fade in animation seconds
       if(state.gapFlashT < 0) state.gapFlashT = 0;
     }
-
-    // Cap runaway speed at c/3 so display stays sensible
-    if(state.v > 1e8) state.v = 1e8;
   }
 
   // ---- Rendering ----------------------------------------------------
+  // Read the theme vars off BODY: the theme toggle lands `.light-theme` on document.body,
+  // and html does not inherit from it — reading documentElement returned the dark palette
+  // in both themes, so the scale bar, dee labels and field caption rendered at ~1.4:1 and
+  // ~2.5:1 contrast on the light panel. Keep the html[data-theme] path for hosts that set it.
   function pickColor(varName, fallback){
-    const c = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    const c = getComputedStyle(document.body).getPropertyValue(varName).trim();
     return c || fallback;
   }
 
@@ -2754,6 +2841,7 @@ return {
     const s = scalePxPerMetre();
     const r = orbitRadius(state.v, state.B);
     const rPx = r * s;
+    const ocy = cy + state.centreY * s;   // centre of the CURRENT arc, on the gap line
 
     // --- Dee bodies ---
     // Dees are large half-discs, gap along the vertical axis.
@@ -2810,19 +2898,24 @@ return {
       }
     }
 
-    // Gap voltage indication — colored strip in the gap.
+    // Gap voltage indication — the accelerating field, so it is drawn at full strength and
+    // named. Parked near the top of the gap, clear of the injection radius (the '−' used to
+    // sit exactly under the proton at t = 0) and clear of the arc-centre marker.
     const drivePol = Math.sin(state.driveOscPhase);
-    // Right side polarity: sign = drivePol. positive => '+', gets red-ish glow.
-    const posColor = 'rgba(244,63,94,0.55)';   // reddish for +
-    const negColor = 'rgba(6,182,212,0.55)';   // cyan for -
-    // Right dee marker
+    const posColor = 'rgba(244,63,94,0.95)';   // reddish for +
+    const negColor = 'rgba(6,182,212,0.95)';   // cyan for −
+    const polY = cy - deeR*0.62;
     ctx.save();
-    ctx.font = '600 22px ' + CANVAS_FONT;
+    ctx.font = '700 22px ' + CANVAS_FONT;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillStyle = drivePol>0 ? posColor : negColor;
-    ctx.fillText(drivePol>0?'+':'−', cx + gapPx/2 + 24, cy);
+    ctx.fillText(drivePol>0?'+':'−', cx + gapPx/2 + 22, polY);
     ctx.fillStyle = drivePol>0 ? negColor : posColor;
-    ctx.fillText(drivePol>0?'−':'+', cx - gapPx/2 - 24, cy);
+    ctx.fillText(drivePol>0?'−':'+', cx - gapPx/2 - 22, polY);
+    ctx.font = '600 12px ' + CANVAS_FONT;
+    ctx.fillStyle = inkMid;
+    ctx.fillText('gap voltage (flips every half-lap)', cx, polY - 26);
+    ctx.fillText('accelerating gap', cx, cy - deeR + 16);
     ctx.restore();
 
     // Gap flash overlay (kick just happened)
@@ -2838,46 +2931,25 @@ return {
     }
 
     // --- Proton path (trail) ---
-    // Compute proton position in orbit-plane.
-    // Proton is in the dee it currently occupies. Orbit center depends on inDee sign.
-    // In a real cyclotron, when the particle enters the right dee, its circular arc has center offset to the RIGHT of the current position perpendicular to velocity. We simplify: draw two semicircles centered slightly to each side of origin so the pattern reads as "spiral of expanding semicircles".
-    //
-    // Model: within right dee, particle orbits center O_R = (rPx, 0)-ish; within left dee, O_L = (-rPx, 0)-ish.
-    // At each gap crossing, its speed changes -> r changes -> orbit center jumps by delta r along x.
-    //
-    // We'll compute proton (x,y) live using its current phase and inDee.
-    // Convention: phase advances CCW around the current dee's center.
-
-    // Position on canvas:
-    const angle = state.phase;
-    let px, py;
-    // The two semicircles are joined at the gap. We treat phase ∈ [0,2π) as full lap.
-    // Right dee semicircle: phase in (3π/2, π/2) mod — i.e. cos(phase)>0. Center at (+rPx, 0).
-    // Left dee semicircle: cos(phase)<0. Center at (-rPx, 0).
-    // We already know cos(phase) sign; use it.
-    const c = Math.cos(angle), sn = Math.sin(angle);
+    // Each half-lap is a circular arc about state.centreY, a point that sits ON the gap line
+    // and walks every time the gap hands the proton a bigger circle. That walk is what turns
+    // a stack of circles into the cyclotron's spiral of offset semicircles.
     // B points OUT of the page, so F = qv×B curls a POSITIVE charge CLOCKWISE on screen.
-    // Canvas y grows downward, so +sin(phase) must map BELOW the centre.
-    px = cx + rPx*c;
-    py = cy + rPx*sn;
+    // Canvas y grows downward, so +sin(phase) maps BELOW the arc centre.
+    const angle = state.phase;
+    const c = Math.cos(angle), sn = Math.sin(angle);
+    const px = cx + rPx*c;
+    const py = ocy + rPx*sn;
 
-    // Add current position to trail
-    // Trail cap for perf
-    if(state.trail.length > 3000) state.trail.shift();
-    state.trail.push({x:px, y:py});
-
-    // Draw trail
+    // Draw trail (stored in metres, so it survives any change of scale)
     if(state.trail.length > 1){
-      ctx.strokeStyle = 'rgba(59,155,143,0.55)';
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = 'rgba(59,155,143,0.6)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(state.trail[0].x, state.trail[0].y);
+      ctx.moveTo(cx + state.trail[0].x*s, cy + state.trail[0].y*s);
       for(let i=1;i<state.trail.length;i++){
-        // if there was a big jump (shouldn't happen), skip to avoid a straight line across canvas
-        const p = state.trail[i], q = state.trail[i-1];
-        const dx = p.x-q.x, dy = p.y-q.y;
-        if(dx*dx+dy*dy > 400) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
+        const p = state.trail[i];
+        ctx.lineTo(cx + p.x*s, cy + p.y*s);
       }
       ctx.stroke();
     }
@@ -2916,26 +2988,35 @@ return {
     ctx.fillStyle = 'rgba(245,158,11,0.9)';
     ctx.fill();
 
-    // --- Center pivot ---
-    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+    // --- Centre of the current arc (sits on the gap line and walks as the orbit grows) ---
+    ctx.strokeStyle = 'rgba(148,163,184,0.55)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cx-6, cy);
-    ctx.lineTo(cx+6, cy);
-    ctx.moveTo(cx, cy-6);
-    ctx.lineTo(cx, cy+6);
+    ctx.moveTo(cx-6, ocy);
+    ctx.lineTo(cx+6, ocy);
+    ctx.moveTo(cx, ocy-6);
+    ctx.lineTo(cx, ocy+6);
     ctx.stroke();
 
-    // --- Radius annotation (label bottom-left, avoids reserved top corners) ---
-    // Draw a subtle radius line from center to proton.
-    ctx.strokeStyle = 'rgba(59,155,143,0.5)';
+    // --- Radius annotation: the dashed line IS r = mv/(qB), so it is drawn from the arc
+    // centre to the proton and labelled with its name and value at the midpoint. ---
+    ctx.strokeStyle = 'rgba(59,155,143,0.75)';
     ctx.setLineDash([4,4]);
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
+    ctx.moveTo(cx, ocy);
     ctx.lineTo(px, py);
     ctx.stroke();
     ctx.setLineDash([]);
+    if(rPx > 34){
+      ctx.save();
+      ctx.font = '600 12px ' + CANVAS_FONT;
+      ctx.fillStyle = inkMid;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('radius r = '+fmtRadius(r), (cx+px)/2, (ocy+py)/2 - 5);
+      ctx.restore();
+    }
 
     // Scale bar bottom-left
     drawScaleBar(cx, cy, s);
@@ -2946,38 +3027,42 @@ return {
     ctx.fillStyle = inkMute;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('D₁', cx + deeR*0.6, cy + deeR - 12);
-    ctx.fillText('D₂', cx - deeR*0.6, cy + deeR - 12);
+    ctx.fillText('dee D₁ (E = 0 inside)', cx + deeR*0.6, cy + deeR - 12);
+    ctx.fillText('dee D₂ (E = 0 inside)', cx - deeR*0.6, cy + deeR - 12);
     // B out of page indicator near bottom
     ctx.font = '600 12px ' + CANVAS_FONT;
     ctx.fillStyle = inkMute;
     ctx.textAlign = 'left';
-    ctx.fillText('B ⊙ (out of page)', 16, viewH - 16);
+    ctx.fillText('magnetic field B ⊙ = out of the page (the dots)', 16, viewH - 16);
     // Drive freq text bottom-right
     ctx.textAlign = 'right';
     const fDrive = cyclotronFreq(state.B) * (1+state.detune);
     ctx.fillText('Drive: '+fmtFreqMHz(fDrive)+'   f_c = '+fmtFreqMHz(cyclotronFreq(state.B)), viewW-16, viewH-16);
     ctx.restore();
 
-    // Stall / extraction banner
-    const atMaxOrbit = r >= R_DEE;
+    // Stall / extraction banner. Parked inside the lower dee, clear of the dee captions
+    // and of the bottom-left scale bar (at 1024x768 a bottom-edge banner sat on top of them).
+    const atMaxOrbit = r >= R_DEE*0.9995;
     if(state.stalled || atMaxOrbit){
       ctx.save();
-      ctx.font = '600 14px ' + CANVAS_FONT;
-      ctx.fillStyle = 'rgba(244,63,94,0.92)';
       ctx.textAlign='center';
       const msg = state.stalled
-        ? 'Out of step — kicks are decelerating the proton. Spiral stalled.'
-        : 'Maximum orbit — the dees are full; the gap adds no more energy.';
+        ? 'Out of step — the gap is now decelerating the proton.'
+        : 'Extraction: the beam leaves at K = (qBR)²/2m = '+fmtEnergy(maxKineticEnergyJ(state.B))+' — no V in it.';
+      let fs = 14;
+      ctx.font = '600 '+fs+'px ' + CANVAS_FONT;
+      while(fs > 10 && ctx.measureText(msg).width + 24 > viewW - 32){
+        fs -= 1; ctx.font = '600 '+fs+'px ' + CANVAS_FONT;
+      }
       const w = ctx.measureText(msg).width;
-      const bx = cx - w/2 - 12, by = viewH - 52;
+      const bx = cx - w/2 - 12, by = Math.min(cy + deeR*0.72, viewH - 86);
       ctx.fillStyle = 'rgba(244,63,94,0.18)';
       ctx.strokeStyle = 'rgba(244,63,94,0.6)';
       ctx.lineWidth = 1;
       ctx.fillRect(bx, by, w+24, 26);
       ctx.strokeRect(bx, by, w+24, 26);
       ctx.fillStyle = pickColor('--danger', '#f43f5e');
-      ctx.fillText(msg, cx, by+18);
+      ctx.fillText(msg, cx, by+13+fs*0.36);
       ctx.restore();
     }
   }
@@ -3018,9 +3103,10 @@ return {
   }
 
   // ---- onStep: reveal detune only when the step asks for it ---------
+  const DETUNE_STEP = 5;   // card 6 ("Out of step") is the first card that needs the slider
   function onStep(i){
-    // Steps 0..3 hide detune; step 4 reveals it.
-    if(i >= 4){
+    // Earlier steps hide the detune slider; the card that asks about it reveals it.
+    if(i >= DETUNE_STEP){
       detuneBox.style.display = '';
     } else {
       detuneBox.style.display = 'none';
@@ -3047,9 +3133,9 @@ return {
   }
   renderMath();
 
-  window.__cgReveals = function(n){ if(typeof n === 'number' && n >= 4) detuneBox.style.display = ''; else onStep(typeof n === 'number' ? n : 0); };
+  window.__cgReveals = function(n){ if(typeof n === 'number' && n >= DETUNE_STEP) detuneBox.style.display = ''; else onStep(typeof n === 'number' ? n : 0); };
   window.__cgPrepare = function(){ detuneBox.style.display = ''; };
-  window.__freeExplore = function(){ onStep(4); };
+  window.__freeExplore = function(){ onStep(DETUNE_STEP); };
   window.__giResume = function(){ onStep((typeof Shell !== 'undefined' && Shell.step) || 0); };
 
   // ---- Boot ---------------------------------------------------------
@@ -3253,7 +3339,7 @@ return {
   // Info / theme skipped (meta-UI). #detune-box is hidden until inquiry step 5;
   // __cgPrepare reveals it so this glow target has size.
   const cgSteps = [
-    { sel:'#shell-reset',    mode:'veil', title:'Reset',                text:'Restores B = 0.50 T, V = 20 kV, and zero detune.' },
+    { sel:'#shell-reset',    mode:'veil', title:'Reset',                text:'Restores B = 0.50 T, V = 8 kV, and zero detune.' },
     { sel:'#shell-maximize', mode:'veil', title:'Maximize',             text:'Expands the cyclotron scene to fill the window.' },
     { sel:'#toggle-formal',  mode:'veil', title:'Formal equations',     text:'Shows or hides r = mv/(qB) and T = 2πm/(qB).' },
     { sel:'#shell-play',     mode:'veil', title:'Play',                 text:'Runs the proton. Watch the spiral and the lap timer.' },

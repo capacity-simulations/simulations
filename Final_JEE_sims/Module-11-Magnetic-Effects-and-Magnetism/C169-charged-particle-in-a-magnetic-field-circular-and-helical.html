@@ -112,13 +112,17 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
   position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;width:100%;height:100%;}
-.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
-  letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
+/* The ⊗ field lattice is painted across the whole canvas, so an unbacked title
+   sits ON the symbols and neither reads. Give it the panel fill. */
+.plot-title{position:absolute;top:10px;left:12px;font-size:12px;font-weight:600;color:var(--muted);
+  letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;
+  background:var(--surface);border-radius:6px;padding:4px 8px;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
-.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:#e2e8f0;z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+.legend{position:absolute;top:46px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
+  font-size:12.5px;font-weight:600;color:#e2e8f0;z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
+html[data-theme="light"] .legend, body.light-theme .legend{background:rgba(248,250,252,.86);color:#0f172a;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
@@ -1569,9 +1573,9 @@ Object.freeze(Engine);
     <div id="pb-scene" class="plot-box">
       <div class="plot-title">Electron in a uniform B field <span class="plot-inline" id="scene-caption">— perpendicular entry</span></div>
       <div class="legend">
-        <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>trajectory</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span><span id="bLegend">B field (into page)</span></div>
-        <div class="legend-item"><span class="legend-dot" style="background:#34d399"></span>orbit clock</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>electron&rsquo;s path</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span><span id="bLegend">magnetic field B ⊗</span></div>
+        <div class="legend-item"><span class="legend-dot" style="background:#34d399"></span>orbit clock (period T)</div>
       </div>
       <canvas id="scene"></canvas>
     </div>
@@ -1586,7 +1590,7 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>1 · Set the scene</h4>
           <p>An electron is fired into a region of uniform magnetic field <b>B</b> (into the page). It enters <em>perpendicular</em> to <b>B</b>, so the magnetic force curves it into a closed circle.</p>
-          <p>Watch the trajectory close. The small dial on the right ticks off each completed orbit.</p>
+          <p>The whole circle is drawn from the start and the electron runs round it. The orbit clock at the top right sweeps its hand once per orbit.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1673,7 +1677,7 @@ Object.freeze(Engine);
             <div class="stat-row"><span class="stat-label">Radius r</span><span class="stat-value highlight" id="rVal">0.569 mm</span></div>
             <div class="stat-row"><span class="stat-label">Period T</span><span class="stat-value highlight" id="tVal">3.572 ns</span></div>
           </div>
-          <div class="note-text" style="margin-top:6px;">Drag <b>v</b>: <em>r</em> changes, <em>T</em> does not.</div>
+          <div class="note-text" id="notice-hint" style="margin-top:6px;">Drag <b>v</b>: <em>r</em> changes, <em>T</em> does not.</div>
         </div>
       </div>
 
@@ -2543,7 +2547,9 @@ return {
     tValEl.textContent = (p.T*1e9).toFixed(3) + ' ns';
     // legend must match the field direction actually drawn (⊗ grid vs axis →)
     const bLeg = document.getElementById('bLegend');
-    if (bLeg) bLeg.textContent = (state.theta < Math.PI/2 - 1e-6) ? 'B along axis (→)' : 'B field (into page)';
+    if (bLeg) bLeg.textContent = (state.theta < Math.PI/2 - 1e-6)
+      ? 'magnetic field B →'
+      : 'magnetic field B ⊗';
     // redraw even while paused so the picture never lags the readouts
     if (viewW > 0 && viewH > 0) draw();
   }
@@ -2569,6 +2575,11 @@ return {
       state.theta = Math.PI/2;
       sceneCaption.textContent = '— perpendicular entry';
     }
+    // Predict-gate hygiene: the "What to notice" hint is the answer to step 2's
+    // star question, word for word. Hold it back until the prediction has been
+    // committed and the student is on the observe card.
+    const hint = document.getElementById('notice-hint');
+    if(hint) hint.style.display = (i >= 2) ? '' : 'none';
     updateReadouts();
   }
 
@@ -2581,6 +2592,14 @@ return {
   // Read from body, not documentElement — the theme toggle sets body.light-theme,
   // so :root would keep handing the canvas the dark palette forever.
   function css(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+
+  // Canvas fonts must be LITERAL. `ctx.font = '600 12px var(--font-sans)'` is not
+  // parseable CSS font shorthand (canvas has no element to resolve var() against),
+  // so the assignment is silently DISCARDED and every label kept falling back to
+  // the 2D context default, 10px sans-serif — below the 12px legibility floor the
+  // last polish pass thought it had set. Spell the stacks out.
+  const FONT_SANS = "600 13px 'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+  const FONT_NUMS = "600 13px 'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace";
 
   function drawInto(css_var){ return css(css_var) || '#e2e8f0'; }
 
@@ -2625,10 +2644,13 @@ return {
   function drawBFieldDots(w, h, cx, cy, radius){
     // "into the page" dots (⊗ symbols) tiled inside the field region
     ctx.save();
-    ctx.fillStyle = 'rgba(96,165,250,0.35)';
-    ctx.strokeStyle = 'rgba(96,165,250,0.55)';
+    ctx.fillStyle = 'rgba(96,165,250,0.22)';
+    ctx.strokeStyle = 'rgba(96,165,250,0.38)';
     ctx.lineWidth = 1;
-    const spacing = 44;
+    // Wider and fainter than before: at 44 px the lattice put ~490 ⊗ glyphs on
+    // screen and they, not the orbit, were the dominant object in the frame.
+    // The field is context, the trajectory is the subject.
+    const spacing = 66;
     for(let x = spacing/2; x < w; x += spacing){
       for(let y = spacing/2; y < h; y += spacing){
         // draw ⊗ (circle with X)
@@ -2648,9 +2670,6 @@ return {
     // B field into the page — background dots
     drawBFieldDots(w, h);
 
-    // Center the circle in the canvas.
-    const cx = w*0.5, cy = h*0.5;
-
     // Fixed world→px scale: worst-case radius must fit with margin.
     // Floor keeps the scale positive on very short canvases — a negative
     // radius makes ctx.arc throw and kills the whole frame.
@@ -2659,6 +2678,19 @@ return {
     const scale = usable / rMax; // px per metre
 
     const rPx = p.r * scale;
+
+    // Compose around the ENTRY POINT, not the canvas centre. While the orbit
+    // fits, the entry lands exactly where a centred circle would put it, so the
+    // familiar centred picture is unchanged. Past that (low B with high v: r
+    // reaches 11.4 mm ≈ 1600 px) a CENTRED circle can miss the canvas
+    // altogether — measured at v = 4.0×10⁶ m/s, B = 2 mT the scene contained
+    // zero trajectory pixels, no circle and no electron. Pinning the entry keeps
+    // the electron and the near-straight arc a huge gyroradius really does
+    // follow on screen. The px-per-metre scale is untouched, so both sliders
+    // still move the picture strictly linearly.
+    const entryX = Math.max(margin*0.5, w*0.5 - rPx);
+    const cx = entryX + rPx, cy = h*0.5;
+    const centreOnScreen = cx < w - 8;
 
     // orbit circle (stationary geometry)
     ctx.save();
@@ -2680,27 +2712,31 @@ return {
     const px = cx - rPx*Math.cos(phase);
     const py = cy - rPx*Math.sin(phase);
 
-    // radius line
-    ctx.save();
-    ctx.strokeStyle = midA(0.5);
-    ctx.setLineDash([4,4]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(px, py);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
+    // radius line + label. Both hang off the orbit centre, so they are drawn
+    // only while that centre is on screen; when the orbit outgrows the frame the
+    // off-view note below carries r instead of leaving a floating number.
+    if(centreOnScreen){
+      ctx.save();
+      ctx.strokeStyle = midA(0.5);
+      ctx.setLineDash([4,4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
 
-    // radius label — clamp inside canvas
-    ctx.save();
-    ctx.fillStyle = inkA(0.85);
-    ctx.font = '600 12px var(--font-nums, monospace)';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const rLabelX = Math.min(w-90, cx + rPx*0.5 - 15);
-    const rLabelY = cy - 10;
-    ctx.fillText('r = ' + (p.r*1e3).toFixed(2) + ' mm', rLabelX, rLabelY);
-    ctx.restore();
+      // radius label — clamp inside canvas
+      ctx.save();
+      ctx.fillStyle = inkA(0.85);
+      ctx.font = FONT_NUMS;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const rLabelX = Math.min(w-150, cx + rPx*0.5 - 15);
+      const rLabelY = cy - 12;
+      ctx.fillText('radius r = ' + (p.r*1e3).toFixed(2) + ' mm', rLabelX, rLabelY);
+      ctx.restore();
+    }
 
     // particle
     ctx.save();
@@ -2715,20 +2751,38 @@ return {
     // velocity arrow (tangent to circle) — labels only, kept short
     // position (cx − r cosφ, cy − r sinφ) → v ∝ (sinφ, −cosφ), i.e. canvas angle φ − π/2
     const vAngle = phase - Math.PI/2;
-    drawArrow(px, py, px + 26*Math.cos(vAngle), py + 26*Math.sin(vAngle), '#fbbf24');
+    const vTipX = px + 30*Math.cos(vAngle), vTipY = py + 30*Math.sin(vAngle);
+    drawArrow(px, py, vTipX, vTipY, '#fbbf24');
+    // …and name it. An unlabelled arrow is one more glyph a first-time reader
+    // has to guess at; this one is the velocity, and its turning IS the topic.
+    ctx.save();
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = FONT_SANS;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('speed v', Math.max(40, Math.min(w-40, vTipX + 14*Math.cos(vAngle))),
+                            Math.max(14, Math.min(h-14, vTipY + 14*Math.sin(vAngle))));
+    ctx.restore();
 
     // center marker
-    ctx.save();
-    ctx.fillStyle = midA(0.7);
-    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
+    if(centreOnScreen){
+      ctx.save();
+      ctx.fillStyle = midA(0.7);
+      ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
 
     // "B into page" callout — top-left safe zone (below plot-title at y=12..40)
     ctx.save();
     ctx.fillStyle = 'rgba(96,165,250,0.9)';
-    ctx.font = '600 12px var(--font-sans)';
+    ctx.font = FONT_SANS;
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText('B = ' + (state.B*1e3).toFixed(1) + ' mT (into page)', 16, h - 26);
+    ctx.fillText('⊗  B = ' + (state.B*1e3).toFixed(1) + ' mT (into the page)', 16, h - 28);
+    // Scale honesty: say so when the orbit no longer fits the frame, rather than
+    // letting a mostly-empty canvas read as "nothing is happening".
+    if(rPx > usable){
+      ctx.fillStyle = 'rgba(251,191,36,0.95)';
+      ctx.fillText('orbit runs off the view — radius r = ' + (p.r*1e3).toFixed(2) + ' mm', 16, h - 50);
+    }
     ctx.restore();
   }
 
@@ -2764,7 +2818,7 @@ return {
     // arrow head for B
     drawArrow(w - marginX*0.6, axisY, w - marginX*0.35, axisY, 'rgba(96,165,250,0.9)');
     ctx.fillStyle = 'rgba(96,165,250,0.95)';
-    ctx.font = '600 12px var(--font-sans)';
+    ctx.font = FONT_SANS;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     ctx.fillText('B  →', w - marginX*0.35 - 4, axisY - 6);
     ctx.restore();
@@ -2784,6 +2838,16 @@ return {
     // to give a perspective feel
     ctx.save();
     const NPTS = 400;
+    // Orthographic side-on, the drawn curve of a helix is EXACTLY a sine wave —
+    // which is what a novice then reports seeing, contradicting card 4's "the
+    // result is a helix". Tip the camera a little off the axis: the depth
+    // coordinate (r·sin s) now contributes to the screen x as well, so each turn
+    // is drawn as a leaning loop and the coil reads as a coil. One full turn
+    // still advances exactly `pitchPx` in x (sin is periodic), so the pitch
+    // bracket and the pitch : radius ratio stay honest.
+    const DEPTH_X = 0.55;                       // px of screen-x per px of depth
+    const hx = (s) => x0 + (s/(2*Math.PI))*pitchPx + DEPTH_X*rPx*Math.sin(s);
+    const hy = (s) => axisY - rPx*Math.cos(s);
     // Depth is the coordinate we do NOT draw: the screen height carries
     // r*cos(phase), so the into-the-screen offset goes as r*sin(phase). The far
     // half is therefore sin(phase) < 0 — the weight then changes at the top and
@@ -2791,29 +2855,38 @@ return {
     // (Keying on cos would have dimmed the lower half of the wave instead.)
     // Draw as two passes: far first, near second.
     const drawPass = (isFar)=>{
-      ctx.strokeStyle = isFar ? 'rgba(251,191,36,0.35)' : 'rgba(251,191,36,0.95)';
-      ctx.lineWidth = isFar ? 1.5 : 2.5;
+      ctx.strokeStyle = isFar ? 'rgba(251,191,36,0.22)' : 'rgba(251,191,36,0.98)';
+      ctx.lineWidth = isFar ? 1.2 : 3;
+      ctx.setLineDash(isFar ? [5,4] : []);
       ctx.beginPath();
       let started = false;
       for(let i=0;i<=NPTS;i++){
         const s = (i/NPTS) * totalTurns * 2*Math.PI;
         const far = Math.sin(s) < 0;
         if(far !== isFar){ started = false; continue; }
-        const x = x0 + (s/(2*Math.PI)) * pitchPx;
-        const y = axisY - rPx*Math.cos(s);
+        const x = hx(s), y = hy(s);
         if(!started){ ctx.moveTo(x,y); started = true; }
         else ctx.lineTo(x,y);
       }
       ctx.stroke();
+      ctx.setLineDash([]);
     };
     drawPass(true);
     drawPass(false);
+    // name the two strands once, so the dashed half reads as "behind the axis"
+    // rather than as a different object
+    // bottom-left: the top band belongs to the plot title and the legend pill,
+    // and at 1024 px the pill reaches back far enough to cover this line.
+    ctx.fillStyle = midA(0.9);
+    ctx.font = FONT_SANS;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('solid = front of the coil   ·   dashed = behind the axis', marginX*0.5, h - 8);
     ctx.restore();
 
     // particle position — advance phase and axial position from tTotal
     const phase = (state.tTotal * p.omega);
-    const xP = x0 + (phase/(2*Math.PI)) * pitchPx;
-    const yP = axisY - rPx*Math.cos(phase);
+    const xP = hx(phase);
+    const yP = hy(phase);
 
     // If the particle would leave the drawn region, step it back by a WHOLE
     // number of periods. tTotal also drives the orbit clock, so zeroing it here
@@ -2839,38 +2912,53 @@ return {
     ctx.fill();
     ctx.restore();
 
-    // pitch label — bottom center-ish, clamped
+    // pitch bracket — one full turn's advance along B. The right end is clamped
+    // into the frame: at the top of the speed slider one pitch is ~2300 px on a
+    // 1150 px canvas, and the old unclamped bracket drew its closing tick off
+    // canvas while the centred label landed on top of the "electron: q = −e"
+    // tag in the bottom-right corner.
+    const bracketY = h - 26;
+    const pitchEnd = Math.min(x0 + pitchPx, w - 14);
+    const pitchClipped = (x0 + pitchPx) > (w - 14);
     ctx.save();
-    ctx.fillStyle = inkA(0.9);
-    ctx.font = '600 12px var(--font-nums, monospace)';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    const pitchLabelX = Math.max(90, Math.min(w-90, x0 + pitchPx*0.5));
-    ctx.fillText('pitch = ' + (p.pitch*1e3).toFixed(2) + ' mm', pitchLabelX, h - 14);
-    // pitch bracket
     ctx.strokeStyle = midA(0.55);
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x0, h-32);
-    ctx.lineTo(x0, h-24);
-    ctx.lineTo(x0 + pitchPx, h-24);
-    ctx.lineTo(x0 + pitchPx, h-32);
+    ctx.moveTo(x0, bracketY - 8);
+    ctx.lineTo(x0, bracketY);
+    ctx.lineTo(pitchEnd, bracketY);
+    if(!pitchClipped){ ctx.lineTo(pitchEnd, bracketY - 8); }
     ctx.stroke();
+    if(pitchClipped) drawArrow(pitchEnd - 12, bracketY, pitchEnd, bracketY, midA(0.55));
+    // label sits ABOVE the bracket and starts at its left end — it can never
+    // travel into the bottom-right identity tag.
+    ctx.fillStyle = inkA(0.9);
+    ctx.font = FONT_NUMS;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('pitch (one turn along B) = ' + (p.pitch*1e3).toFixed(2) + ' mm'
+                 + (pitchClipped ? ' — runs off the view' : ''), x0, bracketY - 12);
     ctx.restore();
 
-    // radius indication (vertical bracket at the entry)
+    // radius indication (vertical bracket at the entry). It marks the RADIUS —
+    // axis to the top of the coil — not the full transverse span; the old
+    // bracket ran the whole diameter while the label still read "r".
     ctx.save();
     ctx.strokeStyle = midA(0.55);
     ctx.lineWidth = 1;
     ctx.setLineDash([3,3]);
     ctx.beginPath();
-    ctx.moveTo(x0 - 18, axisY - rPx);
-    ctx.lineTo(x0 - 18, axisY + rPx);
+    ctx.moveTo(x0 - 18, axisY);
+    ctx.lineTo(x0 - 18, Math.max(6, axisY - rPx));
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x0 - 24, axisY); ctx.lineTo(x0 - 12, axisY);
+    ctx.moveTo(x0 - 24, Math.max(6, axisY - rPx)); ctx.lineTo(x0 - 12, Math.max(6, axisY - rPx));
+    ctx.stroke();
     ctx.fillStyle = inkA(0.85);
-    ctx.font = '600 12px var(--font-nums, monospace)';
+    ctx.font = FONT_NUMS;
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText('r', x0 - 22, axisY);
+    ctx.fillText('radius r', x0 - 26, Math.max(16, axisY - rPx*0.5));
     ctx.restore();
   }
 
@@ -2894,19 +2982,24 @@ return {
 
   function drawOrbitClock(w, h, p){
     // Position in top-right, BELOW the legend row (~y=42..80). Safe: y >= 90.
-    const cx = w - 60, cy = 130, R = 34;
+    // Inset far enough from the right edge that the spelled-out "period T = …"
+    // caption below fits without clipping.
+    const cx = w - 82, cy = 130, R = 34;
     if(cx < 100 || cy > h - 40) return; // canvas too small
 
-    // background
+    // background. Theme-aware: the dial used to be painted a fixed near-black
+    // disc, which read as a hole punched in the light-theme scene.
+    const light = isLight();
+    const dialRGB = light ? '5,150,105' : '52,211,153';
     ctx.save();
-    ctx.fillStyle = 'rgba(6,14,17,0.72)';
-    ctx.strokeStyle = 'rgba(52,211,153,0.55)';
+    ctx.fillStyle = light ? 'rgba(255,255,255,0.88)' : 'rgba(6,14,17,0.72)';
+    ctx.strokeStyle = 'rgba(' + dialRGB + ',0.55)';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(cx, cy, R+8, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.stroke();
 
     // tick marks
-    ctx.strokeStyle = 'rgba(52,211,153,0.5)';
+    ctx.strokeStyle = 'rgba(' + dialRGB + ',0.5)';
     for(let i=0;i<12;i++){
       const a = i*Math.PI/6;
       ctx.beginPath();
@@ -2918,7 +3011,7 @@ return {
     // hand: fraction of one period
     const frac = ((state.t % p.T) / p.T);
     const ang = -Math.PI/2 + frac*2*Math.PI;
-    ctx.strokeStyle = state.orbitPulse > 0 ? '#6ee7b7' : '#34d399';
+    ctx.strokeStyle = state.orbitPulse > 0 ? (light ? '#0d9488' : '#6ee7b7') : (light ? '#059669' : '#34d399');
     ctx.lineWidth = state.orbitPulse > 0 ? 3.5 : 2.5;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
@@ -2926,20 +3019,21 @@ return {
     ctx.stroke();
 
     // center dot
-    ctx.fillStyle = '#34d399';
+    ctx.fillStyle = light ? '#059669' : '#34d399';
     ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
 
     // orbit count label — BELOW the clock, clamped
     ctx.fillStyle = inkA(0.9);
-    ctx.font = '600 12px var(--font-nums, monospace)';
+    ctx.font = FONT_NUMS;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText('orbits: ' + state.orbits, cx, cy + R + 12);
 
-    // Period label ABOVE (also clamped)
-    ctx.font = '600 12px var(--font-sans)';
+    // Period label ABOVE (also clamped). Name the quantity, don't just print its
+    // symbol — this is a first-encounter topic and "T" alone means nothing yet.
+    ctx.font = FONT_SANS;
     ctx.fillStyle = midA(0.85);
     ctx.textBaseline = 'bottom';
-    ctx.fillText('T = ' + (p.T*1e9).toFixed(2) + ' ns', cx, cy - R - 6);
+    ctx.fillText('period T = ' + (p.T*1e9).toFixed(2) + ' ns', cx, cy - R - 6);
     ctx.restore();
   }
 
@@ -2948,7 +3042,7 @@ return {
     // But we DO paint the frame identity — "electron, q = -e" — bottom-right, clamped.
     ctx.save();
     ctx.fillStyle = midA(0.85);
-    ctx.font = '600 12px var(--font-sans)';
+    ctx.font = FONT_SANS;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     const label = 'electron: q = −e, m = mₑ';
     ctx.fillText(label, w - 14, h - 12);
