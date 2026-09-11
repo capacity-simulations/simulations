@@ -193,6 +193,30 @@ OBSERVE cards ask rather than tell.
 Deliver as a new file (`<simname>-inquiry-v2.html`); never overwrite the
 upload.
 
+## The layout contract (measured identical across JEE-C, CM-L, PP-v2 and SR)
+
+Where the inquiry LIVES is as canonical as what it says. All four reference
+fleets render it identically (zone at the same coordinates, 18px below the
+bar); sims from other stacks (QM) must be restructured to match:
+
+1. **Right column, first block.** The inquiry zone (`#aside-inquiry` /
+   `#inq-zone`) is the FIRST visible block in the right sidebar, directly
+   below the top bar — gap ≤ 28px, and NOTHING between them. A sim-native
+   sidebar header ("CONTROLS") above the zone violates the contract: move
+   the zone above it so the header titles only the controls below.
+2. **Zone-internal order:** zone head ("Guided Inquiry") → `#inq-dots` →
+   `#inq-cards` → `.inq-listen` (once the voice layer is applied) →
+   `.inq-nav`.
+3. **Controls below.** The sim's control panels start below the zone; a
+   bottom border / divider separates the two.
+4. When the zone moves outside a padded container, give it its own padding
+   (~14–20px) and `flex-shrink:0` so it neither inherits double padding
+   nor collapses.
+
+**Gate:** `node ../tests/layout-probe.mjs <build.html>` (course-agnostic,
+real Chrome) asserts all of the above — run it alongside `verify.js` on
+every build from a non-L-series stack, and after any sidebar restructure.
+
 ## The Guided Inquiry button and the two-button template (validated)
 
 Visibility of the inquiry zone is owned by ONE top-bar button, 🧭 Guided

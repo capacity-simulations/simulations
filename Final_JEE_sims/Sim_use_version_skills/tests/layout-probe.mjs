@@ -1,0 +1,99 @@
+// Layout-contract probe for guided-inquiry builds — course-agnostic.
+//
+// THE CONTRACT (measured identical across JEE-C, CM-L, PP-v2 and SR shells,
+// zone at x=1199 y=80 w=283 with an 18px gap below the top bar on all four):
+//   1. The inquiry zone (#aside-inquiry or #inq-zone) renders in the RIGHT
+//      column (its right edge within 40px of the viewport edge).
+//   2. It is the FIRST visible block below the top bar: gap ≤ 28px and NO
+//      other leaf element (e.g. a "CONTROLS" header) renders between the top
+//      bar's bottom edge and the zone's top edge in that column.
+//   3. Zone-internal order: zone head → #inq-dots → #inq-cards →
+//      (.inq-listen when the voice layer is applied) → .inq-nav.
+//   4. The controls area (#aside-controls / first control panel) starts BELOW
+//      the zone.
+// Sims that boot into lecture mode are reopened; a welcome overlay is entered
+// via its inquiry card first.
+//
+// Usage:
+//   node tests/layout-probe.mjs <build1.html> [build2.html ...]
+//   (absolute paths or paths relative to cwd; driven over file://)
+// Requires Chrome at the standard macOS path, driven via puppeteer-core —
+// pass --chrome <path> to override. Exit 0 = all conform.
+
+import { createRequire } from 'module';
+import { resolve } from 'path';
+
+const args = process.argv.slice(2);
+const ci = args.indexOf('--chrome');
+const CHROME = ci >= 0 ? args.splice(ci, 2)[1]
+  : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const rq = args.indexOf('--require-dir');
+const REQ_DIR = rq >= 0 ? args.splice(rq, 2)[1] : import.meta.dirname + '/../node_modules-puppeteer/';
+
+let puppeteer;
+for (const dir of [REQ_DIR,
+  '/Users/admin/Desktop/simulations-1/Capacity_SR_sims_v2_engine/_review/']) {
+  try { puppeteer = createRequire(dir)('puppeteer-core'); break; } catch (e) {}
+}
+if (!puppeteer) { console.error('puppeteer-core not found — pass --require-dir <dir with node_modules/puppeteer-core>'); process.exit(1); }
+
+const GAP_MAX = 28;
+let failed = 0;
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--allow-file-access-from-files'] });
+
+for (const f of args) {
+  const p = await b.newPage(); await p.setViewport({ width: 1500, height: 950 });
+  try { await p.goto('file://' + resolve(f), { waitUntil: 'networkidle0', timeout: 30000 }); } catch (e) {}
+  await new Promise(r => setTimeout(r, 1500));
+  await p.evaluate(() => {
+    const m = document.querySelector('.welcome-mode[data-mode="inquiry"]'); if (m) m.click();
+    const lect = document.getElementById('shell-lecture');
+    if (lect && (document.documentElement.classList.contains('lecture-mode') ||
+                 document.getElementById('shell')?.classList.contains('lecture-mode'))) lect.click();
+    const chip = document.getElementById('aside-inquiry-restore');
+    if (chip && getComputedStyle(chip).display !== 'none') chip.click();
+  });
+  await new Promise(r => setTimeout(r, 800));
+
+  const g = await p.evaluate(() => {
+    const q = s => document.querySelector(s);
+    const rect = e => { if (!e) return null; const r = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      return cs.display === 'none' || r.width === 0 ? null : { x: r.x, y: r.y, w: r.width, h: r.height }; };
+    const topbar = rect(q('.top-bar') || q('.shell-header') || q('header'));
+    const zone = rect(q('#aside-inquiry') || q('#inq-zone'));
+    const dots = rect(q('#inq-dots')), cards = rect(q('#inq-cards'));
+    const listen = rect(q('.inq-listen')), nav = rect(q('.inq-nav'));
+    const ctrl = rect(q('#aside-controls') || q('.panel-block') || q('.ctrl-box'));
+    let intruder = null;
+    if (topbar && zone) {
+      for (const e of document.body.querySelectorAll('*')) {
+        const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+        if (cs.display === 'none' || r.width < 10 || r.height < 8) continue;
+        if (e.children.length > 2) continue;
+        if (r.left >= zone.x - 8 && r.top >= topbar.y + topbar.h - 2 && r.top < zone.y - 2 && r.height < 60)
+          { intruder = (e.textContent || '').trim().slice(0, 30) || e.tagName; break; }
+      }
+    }
+    return { topbar, zone, dots, cards, listen, nav, ctrl, intruder, vw: innerWidth };
+  });
+
+  const errs = [];
+  if (!g.zone) errs.push('no inquiry zone rendered');
+  else {
+    if (g.vw - (g.zone.x + g.zone.w) > 40) errs.push('zone not in the right column');
+    if (g.topbar && g.zone.y - (g.topbar.y + g.topbar.h) > GAP_MAX)
+      errs.push(`gap below top bar ${Math.round(g.zone.y - (g.topbar.y + g.topbar.h))}px > ${GAP_MAX}px`);
+    if (g.intruder) errs.push(`element between top bar and zone: "${g.intruder}"`);
+    if (!g.dots) errs.push('no #inq-dots'); if (!g.cards) errs.push('no #inq-cards');
+    if (!g.nav) errs.push('no .inq-nav');
+    if (g.dots && g.cards && !(g.dots.y < g.cards.y)) errs.push('dots not above cards');
+    if (g.listen && g.nav && !(g.listen.y < g.nav.y)) errs.push('listen row not above nav');
+    if (g.ctrl && !(g.zone.y < g.ctrl.y)) errs.push('controls not below the inquiry zone');
+  }
+  console.log(errs.length ? `FAIL  ${f}\n      ${errs.join('\n      ')}` : `  ok  ${f}`);
+  if (errs.length) failed++;
+  await p.close();
+}
+await b.close();
+process.exit(failed ? 1 : 0);

@@ -108,8 +108,13 @@ the base `.cg-nav` rule in the cascade.
   left of the sim's action buttons. Reuse the sim's own button class.
 - Wrapper ids on any control/panel that lacks one (markup only).
 - The inquiry zone (`#inq-zone`: head, `#inq-dots`, `#inq-cards` with your
-  authored cards, the Listen row, `.inq-nav`) as the first child of the
-  sidebar's content — copy the pilot's skeleton.
+  authored cards, the Listen row, `.inq-nav`) as the FIRST child of the
+  sidebar itself — ABOVE any sim-native sidebar header ("CONTROLS"), so the
+  visual order is: top bar → Guided Inquiry → CONTROLS → panels. This is
+  the cross-course layout contract (identical in JEE/CM/PP/SR; see the
+  guided-inquiry SKILL § layout contract). Give the zone its own padding
+  (~14–20px) + bottom border + `flex-shrink:0` — copy the fixed pilot's
+  skeleton and its `.sidebar > .inq-zone` rule.
 - The welcome overlay as first child of `<body>` — ADAPT only `.welcome-name`
   (≤22ch), `.welcome-blurb`, the hero caption; the three `.wm-desc` strings
   are HOUSE COPY, never rewrite. Delete the `inquiry` card if this sim gets
@@ -148,6 +153,14 @@ cd ../Final_JEE_sims/Sim_use_version_skills          # jsdom lives here
 node guided-inquiry/scripts/verify.js    '<abs path to build>' --baseline '<abs path to original>'
 node controls-tutorial/scripts/verify.js '<abs path to build>' --baseline '<abs path to original>'
 node welcome-overlay/scripts/verify.js   '<abs path to build>' --baseline '<abs path to original>'
+```
+
+Then the layout gate (the inquiry must sit where every other course puts it
+— right column, first block under the top bar, controls below):
+
+```bash
+node ../Final_JEE_sims/Sim_use_version_skills/tests/layout-probe.mjs \
+  'Sims_user_versions/sim-use-builds/<basename>.html'
 ```
 
 Then the real-Chrome flow probe (jsdom cannot see a boot exception that kills
