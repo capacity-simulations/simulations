@@ -26,6 +26,15 @@ Each skill has `SKILL.md` (rules + workflow), `references/implementation.md`
 (config-free jsdom gate; `npm i jsdom` once; always pass `--baseline
 <original.html>` so CDN-library errors don't count against you).
 
+## Safety + layout gates (run on every build)
+
+- `tests/kernel-diff.mjs <original> <build>` — the production sim is intact:
+  every original script byte-identical (physics/controls untouched), no id,
+  canvas or visible text removed, styles append-only. `--allow-script-edits`
+  downgrades sanctioned L-series in-script deltas to reviewed warnings.
+- `tests/layout-probe.mjs <build>` — the inquiry sits in the cross-course
+  layout (right column, first block under the top bar, controls below).
+
 ## Browser test (mandatory before delivery)
 `tests/browser-smoke.js` runs the templated sim in real Chromium:
 `npm i playwright && npx playwright install chromium` once, then

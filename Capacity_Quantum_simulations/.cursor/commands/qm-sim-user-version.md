@@ -148,6 +148,15 @@ with `also`. ≤15 words per step. Closing card `sel:null`.
 
 ### 5. Verify — every gate must pass
 
+The kernel gate runs FIRST — it proves the production sim is intact
+(original scripts byte-identical, no id/canvas/text removed, styles
+append-only). Any failure here means you edited the sim, not layered on it:
+
+```bash
+cd ../Final_JEE_sims/Sim_use_version_skills
+node tests/kernel-diff.mjs '<abs original>' '<abs build>'
+```
+
 ```bash
 cd ../Final_JEE_sims/Sim_use_version_skills          # jsdom lives here
 node guided-inquiry/scripts/verify.js    '<abs path to build>' --baseline '<abs path to original>'
