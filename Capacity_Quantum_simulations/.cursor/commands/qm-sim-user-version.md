@@ -100,7 +100,23 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
    If this host names them differently, add the standard class alongside the
    sim's own (markup-only, inert, kernel-diff-safe) — do not leave a check
    unmeasured.
-10. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
+10. **Parse-time canvas sizing (invisible to every structural gate).** Hosts
+   that size a canvas from `clientHeight` at parse time measure a container
+   the not-yet-styled welcome overlay has squashed, and build the backing
+   store at the wrong size — the plot ships stretched or blurred while all
+   gates pass. Fix additively by letting the sim re-size itself:
+   `window.addEventListener('load', ()=>requestAnimationFrame(()=>requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')))));`
+   Prefer this to relocating the template CSS into `<head>` (that puts
+   template rules BEFORE the sim's own and changes the cascade). Verify with
+   `node tests/canvas-check.mjs`.
+11. **Panels that hide each other.** When guided targets live in mode-exclusive
+   panels, one pinned scene cannot cover them all and `__cgPrepare` is not
+   enough. Give `cgSteps` entries an optional `pre()` callback invoked at the
+   top of `cgShow`, and restore the student's view on guide exit. (Derived
+   independently on Spherical_harmonics_Explorer and Vector_Space.)
+12. **Scratch filenames.** Many agents share `$TMPDIR`. Prefix every scratch
+   file with the sim's basename — a generic name WILL be clobbered mid-run.
+13. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
    four layers. Static-plot sims (no play control) get welcome + controls
    tutorial + voice, and an inquiry ONLY if a genuine prediction exists against
    a slider (e.g. Bound_states: how many bound states fit as V₀ rises — good

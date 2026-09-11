@@ -32,6 +32,9 @@ Each skill has `SKILL.md` (rules + workflow), `references/implementation.md`
   every original script byte-identical (physics/controls untouched), no id,
   canvas or visible text removed, styles append-only. `--allow-script-edits`
   downgrades sanctioned L-series in-script deltas to reviewed warnings.
+- `tests/canvas-check.mjs` — proves the layers did not corrupt any rendering
+  buffer (parse-time-sized canvases ship stretched while every structural gate
+  passes; caught two builds this way).
 - `tests/layout-probe.mjs <build>` — the inquiry sits in the cross-course
   layout (right column, first block under the top bar, controls below).
 
