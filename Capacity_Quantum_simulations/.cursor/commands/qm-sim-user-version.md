@@ -85,7 +85,12 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
    `Double-slit-experiment`): hoist DOM-only wiring and hook publication ABOVE
    any `if(!window.THREE) return;` guard, and publish safe no-op hooks on the
    guarded path. The browser probe needs the CDN reachable.
-7. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
+7. **Frame-loop class rewrites.** Some sims rewrite an element's
+   `className` every draw frame (tunneling's `#regimeBadge`) — that wipes
+   `hidden-until-step` instantly. Stage such elements from a ROOT class
+   instead (`html.<sim>-hide-x #element{display:none}`) toggled on
+   `document.documentElement`, which the sim never touches.
+8. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
    four layers. Static-plot sims (no play control) get welcome + controls
    tutorial + voice, and an inquiry ONLY if a genuine prediction exists against
    a slider (e.g. Bound_states: how many bound states fit as V₀ rises — good

@@ -60,7 +60,7 @@ for (const f of args) {
     const rect = e => { if (!e) return null; const r = e.getBoundingClientRect();
       const cs = getComputedStyle(e);
       return cs.display === 'none' || r.width === 0 ? null : { x: r.x, y: r.y, w: r.width, h: r.height }; };
-    const topbar = rect(q('.top-bar') || q('.shell-header') || q('header'));
+    const topbar = rect(q('.top-bar') || q('.shell-header') || q('.app-header') || q('.header-bar') || q('header'));
     const zone = rect(q('#aside-inquiry') || q('#inq-zone'));
     const dots = rect(q('#inq-dots')), cards = rect(q('#inq-cards'));
     const listen = rect(q('.inq-listen')), nav = rect(q('.inq-nav'));
