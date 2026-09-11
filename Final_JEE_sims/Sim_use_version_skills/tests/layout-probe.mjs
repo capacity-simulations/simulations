@@ -65,6 +65,8 @@ for (const f of args) {
     const dots = rect(q('#inq-dots')), cards = rect(q('#inq-cards'));
     const listen = rect(q('.inq-listen')), nav = rect(q('.inq-nav'));
     const ctrl = rect(q('#aside-controls') || q('.panel-block') || q('.ctrl-box'));
+    const gi = rect(q('#btn-gi')), theme = rect(q('#shell-theme') || q('.theme-toggle-wrap') || q('.theme-toggle'));
+    const resetB = rect(q('#shell-reset') || q('#reset') || q('#reset-btn') || q('#btn-reset'));
     let intruder = null;
     if (topbar && zone) {
       for (const e of document.body.querySelectorAll('*')) {
@@ -75,7 +77,7 @@ for (const f of args) {
           { intruder = (e.textContent || '').trim().slice(0, 30) || e.tagName; break; }
       }
     }
-    return { topbar, zone, dots, cards, listen, nav, ctrl, intruder, vw: innerWidth };
+    return { topbar, zone, dots, cards, listen, nav, ctrl, gi, theme, resetB, intruder, vw: innerWidth };
   });
 
   const errs = [];
@@ -90,6 +92,14 @@ for (const f of args) {
     if (g.dots && g.cards && !(g.dots.y < g.cards.y)) errs.push('dots not above cards');
     if (g.listen && g.nav && !(g.listen.y < g.nav.y)) errs.push('listen row not above nav');
     if (g.ctrl && !(g.zone.y < g.ctrl.y)) errs.push('controls not below the inquiry zone');
+  }
+  // TOP-BAR CONTRACT: the Guided Inquiry / Controls Guide pair lives in the
+  // LEFT cluster, right after the theme control — never right-anchored beside
+  // Reset/Play (JEE reference: gi at x≈307-569 of 1500; Reset at x≈1322).
+  if (g.gi) {
+    if (g.gi.x > g.vw * 0.55) errs.push(`#btn-gi right-anchored (x=${Math.round(g.gi.x)} of ${g.vw}) — belongs in the left cluster beside the theme toggle`);
+    if (g.theme && g.gi.x < g.theme.x) errs.push('#btn-gi left of the theme control — order is info → theme → btn-gi → btn-cg');
+    if (g.resetB && g.gi.x > g.resetB.x) errs.push('#btn-gi to the right of Reset');
   }
   console.log(errs.length ? `FAIL  ${f}\n      ${errs.join('\n      ')}` : `  ok  ${f}`);
   if (errs.length) failed++;

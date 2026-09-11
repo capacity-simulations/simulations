@@ -12,6 +12,10 @@ Guide-button wrapper (its OWN wrapper beside the sim's action box; text-only
 labels; ADAPT the `--text-main`-free colours only if the sim's top bar is dark):
 
 ```css
+        /* Placement: the pair sits in the LEFT cluster right after the theme
+           toggle (JEE fleet reference). margin-left:auto here right-anchors it —
+           keep it ONLY if the sim has no theme/left cluster; otherwise override
+           with margin-left:0 (or 12px) and give Reset/Play's group the auto. */
         .guide-actions{display:flex;gap:8px;align-items:center;margin-left:auto;flex-shrink:0;}
         .top-bar-actions{margin-left:12px;}
         .guide-actions .btn-guide{height:36px;padding:0 14px;background:#fff;color:#334155;}

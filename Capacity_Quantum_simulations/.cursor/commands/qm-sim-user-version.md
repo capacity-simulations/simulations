@@ -104,8 +104,13 @@ block, then the §6 voice CSS. The `.cg-nav` two-row override must land AFTER
 the base `.cg-nav` rule in the cascade.
 
 ### 2. Markup
-- `.guide-actions` (`#btn-gi` boots `active`, `#btn-cg`) into the top bar,
-  left of the sim's action buttons. Reuse the sim's own button class.
+- `.guide-actions` (`#btn-gi` boots `active`, `#btn-cg`) into the top bar's
+  LEFT cluster, immediately AFTER the theme toggle — order: title/info →
+  theme → Guided Inquiry → Controls Guide … Reset/Play right-anchored.
+  Override the template's `.guide-actions{margin-left:auto}` (that
+  right-anchors it) with `margin-left:12px` and give the sim's action group
+  `margin-left:auto` instead. Reuse the sim's own button class. The layout
+  probe enforces this.
 - Wrapper ids on any control/panel that lacks one (markup only).
 - The inquiry zone (`#inq-zone`: head, `#inq-dots`, `#inq-cards` with your
   authored cards, the Listen row, `.inq-nav`) as the FIRST child of the
