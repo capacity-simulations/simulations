@@ -90,7 +90,17 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
    `hidden-until-step` instantly. Stage such elements from a ROOT class
    instead (`html.<sim>-hide-x #element{display:none}`) toggled on
    `document.documentElement`, which the sim never touches.
-8. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
+8. **Deferred-init hosts.** If the sim registers its control listeners inside
+   an `init()` deferred to `DOMContentLoaded`, the template's parse-time
+   `inqShow(0)` drives controls nobody is listening to yet — the sim then runs
+   unpaused behind the welcome overlay. Defer the final `inqShow(0)` to
+   `DOMContentLoaded` on such hosts.
+9. **Layout-probe landmarks.** The probe keys on `.top-bar`/`.sidebar`/
+   `.ctrl-box` (plus common aliases) and now FAILS LOUD when it matches none.
+   If this host names them differently, add the standard class alongside the
+   sim's own (markup-only, inert, kernel-diff-safe) — do not leave a check
+   unmeasured.
+10. **FULL vs LIGHT tier.** Animated sims (a play/pause control exists) get all
    four layers. Static-plot sims (no play control) get welcome + controls
    tutorial + voice, and an inquiry ONLY if a genuine prediction exists against
    a slider (e.g. Bound_states: how many bound states fit as V₀ rises — good

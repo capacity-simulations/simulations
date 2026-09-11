@@ -60,11 +60,13 @@ for (const f of args) {
     const rect = e => { if (!e) return null; const r = e.getBoundingClientRect();
       const cs = getComputedStyle(e);
       return cs.display === 'none' || r.width === 0 ? null : { x: r.x, y: r.y, w: r.width, h: r.height }; };
-    const topbar = rect(q('.top-bar') || q('.shell-header') || q('.app-header') || q('.header-bar') || q('header'));
+    const topbar = rect(q('.top-bar') || q('.shell-header') || q('.app-header') || q('.header-bar') ||
+                       q('.top-title-bar') || q('.title-bar') || q('.topbar') || q('header'));
     const zone = rect(q('#aside-inquiry') || q('#inq-zone'));
     const dots = rect(q('#inq-dots')), cards = rect(q('#inq-cards'));
     const listen = rect(q('.inq-listen')), nav = rect(q('.inq-nav'));
-    const ctrl = rect(q('#aside-controls') || q('.panel-block') || q('.ctrl-box'));
+    const ctrl = rect(q('#aside-controls') || q('.panel-block') || q('.ctrl-box') ||
+                      q('.control-group') || q('.control-box') || q('.sim-ctl'));
     const gi = rect(q('#btn-gi')), theme = rect(q('#shell-theme') || q('.theme-toggle-wrap') || q('.theme-toggle'));
     const resetB = rect(q('#shell-reset') || q('#reset') || q('#reset-btn') || q('#btn-reset'));
     let intruder = null;
@@ -77,10 +79,18 @@ for (const f of args) {
           { intruder = (e.textContent || '').trim().slice(0, 30) || e.tagName; break; }
       }
     }
-    return { topbar, zone, dots, cards, listen, nav, ctrl, gi, theme, resetB, intruder, vw: innerWidth };
+    const sidebarFound = !!(q('.sidebar') || q('.shell-aside') || q('.control-panel') || q('.right-panel') || q('.controls-panel') || q('aside'));
+    return { topbar, zone, dots, cards, listen, nav, ctrl, gi, theme, resetB, intruder, sidebarFound, vw: innerWidth };
   });
 
   const errs = [];
+  // FAIL LOUD on unmatched landmarks. Silently skipping a check is worse than a
+  // false alarm: four batch-1/2 builds "passed" checks that never ran because
+  // their host used .app-header / .control-panel / .top-title-bar / .right-panel.
+  // If a real landmark exists under another name, add the standard class to the
+  // host element (markup-only, inert) or extend the selector lists above.
+  if (!g.topbar) errs.push('no top-bar landmark matched (.top-bar/.shell-header/.app-header/.header-bar/.top-title-bar/.title-bar/header) — gap + intruder checks could not run');
+  if (!g.sidebarFound) errs.push('no sidebar landmark matched (.sidebar/.shell-aside/.control-panel/.right-panel/aside) — centring + sidebar-empty checks could not run');
   if (!g.zone) errs.push('no inquiry zone rendered');
   else {
     if (g.vw - (g.zone.x + g.zone.w) > 40) errs.push('zone not in the right column');
@@ -114,7 +124,9 @@ for (const f of args) {
     // of cgSteps (the exact bug: State Properties + Eigenstate never hidden).
     // Tolerance 1: the glowing step-1 target itself may be a sidebar box.
     const uncovered = await p.evaluate(() => {
-      const side = document.querySelector('.sidebar') || document.querySelector('.shell-aside') || document.querySelector('aside');
+      const side = document.querySelector('.sidebar') || document.querySelector('.shell-aside') ||
+                   document.querySelector('.control-panel') || document.querySelector('.right-panel') ||
+                   document.querySelector('.controls-panel') || document.querySelector('aside');
       if (!side) return null;
       const boxes = [...side.querySelectorAll('.ctrl-box, .sim-ctl.sim-box, .panel-block > .ctrl-box')];
       const seen = new Set();
@@ -131,7 +143,9 @@ for (const f of args) {
     const nav = await p.evaluate(() => { const e = document.querySelector('.cg-nav');
       if (!e || getComputedStyle(e).display === 'none') return null;
       const r = e.getBoundingClientRect();
-      const s = document.querySelector('.sidebar') || document.querySelector('.shell-aside') || document.querySelector('aside');
+      const s = document.querySelector('.sidebar') || document.querySelector('.shell-aside') ||
+                document.querySelector('.control-panel') || document.querySelector('.right-panel') ||
+                document.querySelector('.controls-panel') || document.querySelector('aside');
       const sc = s ? (() => { const b = s.getBoundingClientRect(); return b.x + b.width / 2; })() : null;
       return { bottomGap: innerHeight - (r.y + r.height),
                offCenter: sc === null ? null : Math.abs((r.x + r.width / 2) - sc) }; });
