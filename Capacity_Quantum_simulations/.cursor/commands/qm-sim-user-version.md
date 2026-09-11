@@ -64,12 +64,15 @@ The skill bundle lives in `../Final_JEE_sims/Sim_use_version_skills/`:
    play is `startPause` / `playPause` / `btnPlay` / absent. Map THIS sim's ids
    first; wire `__fullReset` and the pause helper to what actually exists.
 4. **The feedback pill** (`#qfbPill`, 6 sims). It is fixed bottom-right at
-   z-index 99990 — above the template's overlay (5000) and exactly where the
-   Controls Guide nav docks. If the sim has it, add the pilot's two-line fix:
+   z-index 99990 — above the template's welcome overlay (5000). If the sim
+   has it, add ONLY:
    ```css
-   .cg-nav{ bottom:74px; }
    body:has(#welcome-overlay:not(.hidden)) .qfb-pill{ display:none; }
    ```
+   Do NOT raise the guide nav to dodge the pill: the nav stays at the
+   reference `bottom:16px` (bottom of the right column, like every JEE sim)
+   and the pill overlap is accepted — the pill is reviewer-only chrome. A
+   raised nav collides with real controls on control-heavy sims.
 5. **Theme.** Most QM sims are dark-only; some have `data-theme="light"`.
    The template CSS already targets both hooks — verify against the sim's
    actual toggle (`#theme-checkbox` where present) and screenshot both themes

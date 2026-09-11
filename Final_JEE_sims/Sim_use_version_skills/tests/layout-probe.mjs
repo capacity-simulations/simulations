@@ -101,6 +101,19 @@ for (const f of args) {
     if (g.theme && g.gi.x < g.theme.x) errs.push('#btn-gi left of the theme control — order is info → theme → btn-gi → btn-cg');
     if (g.resetB && g.gi.x > g.resetB.x) errs.push('#btn-gi to the right of Reset');
   }
+  // GUIDE-NAV CONTRACT: the Controls Guide nav docks at the BOTTOM of the
+  // viewport (reference bottom:16px). A raised nav collides with sidebar
+  // controls on busy sims; overlapping the reviewer-only feedback pill is
+  // accepted. Open the guide to measure it.
+  if (await p.evaluate(() => !!document.getElementById('btn-cg'))) {
+    await p.evaluate(() => document.getElementById('btn-cg').click());
+    await new Promise(r => setTimeout(r, 600));
+    const nav = await p.evaluate(() => { const e = document.querySelector('.cg-nav');
+      if (!e || getComputedStyle(e).display === 'none') return null;
+      const r = e.getBoundingClientRect(); return { bottomGap: innerHeight - (r.y + r.height) }; });
+    if (nav && nav.bottomGap > 28) errs.push(`guide nav floats ${Math.round(nav.bottomGap)}px above the viewport bottom (reference: 16px)`);
+    if (!nav) errs.push('controls guide opened but no visible .cg-nav');
+  }
   console.log(errs.length ? `FAIL  ${f}\n      ${errs.join('\n      ')}` : `  ok  ${f}`);
   if (errs.length) failed++;
   await p.close();
