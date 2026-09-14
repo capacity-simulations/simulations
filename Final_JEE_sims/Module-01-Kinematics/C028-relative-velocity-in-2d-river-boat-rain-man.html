@@ -2299,8 +2299,28 @@ function labelBlocked(x, y, w, h){
 function clampLabel(x, y, w, h){
   return [Math.max(4, Math.min(viewW - w - 4, x)), Math.max(4, Math.min(viewH - h - 4, y))];
 }
-const LABEL_FONT = '600 12px "DM Sans", sans-serif';
-const LABEL_SUB_FONT = '600 8px "DM Sans", sans-serif';
+// The subscript face has its own 12px floor to meet (K-12 canvas legibility),
+// so the base face is lifted to 14px to keep "v_bw" reading as a subscripted
+// symbol rather than two same-size letters. Box heights below follow.
+const LABEL_FONT = '600 14px "DM Sans", sans-serif';
+const LABEL_SUB_FONT = '600 12px "DM Sans", sans-serif';
+const LABEL_H = 20;
+// The river scene paints its own ground (grass, mud, water) and keeps it in
+// both themes — that is deliberate: a river reads as a river. But the labels
+// drawn ON that ground were measured at 2.2:1 ("opposite start", mint on
+// grass), 2.0:1 ("current →", amber on water) and 1.5:1 ("Near bank (start)",
+// dark green on grass) in light theme. This is the same dark plate placeLabel
+// already puts under the vector labels; it restores >7:1 without touching the
+// scenery or the colour coding. Call it immediately before fillText, with the
+// same font/alignment already set on the context.
+function groundPlate(text, x, y, align){
+  const w = ctx.measureText(text).width;
+  const px = align === 'center' ? x - w / 2 : (align === 'right' ? x - w : x);
+  const prev = ctx.fillStyle;
+  ctx.fillStyle = 'rgba(6,14,17,0.72)';
+  ctx.fillRect(px - 5, y - 9, w + 10, 18);
+  ctx.fillStyle = prev;
+}
 function parseSubParts(text){
   const parts = [];
   const re = /v_(bw|bg|c)/g;
@@ -2327,7 +2347,7 @@ function fillSubText(text, x, y){
   let cx = x;
   for(const p of parseSubParts(text)){
     ctx.font = p.sub ? LABEL_SUB_FONT : LABEL_FONT;
-    ctx.fillText(p.t, cx, y + (p.sub ? 4.5 : 0));
+    ctx.fillText(p.t, cx, y + (p.sub ? 4 : 0));
     cx += ctx.measureText(p.t).width;
   }
   ctx.font = LABEL_FONT;
@@ -2335,7 +2355,7 @@ function fillSubText(text, x, y){
 function placeLabel(text, ax, ay, opts){
   opts = opts || {};
   ctx.font = opts.font || LABEL_FONT;
-  const w = measureSubText(text) + 8, h = 18;
+  const w = measureSubText(text) + 8, h = LABEL_H;
   const align = opts.align || 'left';
   const originX = align === 'center' ? ax - w / 2 : ax;
   const originY = ay - h / 2;
@@ -2368,9 +2388,9 @@ function placeLabel(text, ax, ay, opts){
 // Color-matched key stacked beside the triangle so the shafts stay visible.
 function placeTriangleKey(items, verts){
   ctx.font = LABEL_FONT;
-  const sizes = items.map(it => ({w: measureSubText(it.text) + 8, h: 18}));
+  const sizes = items.map(it => ({w: measureSubText(it.text) + 8, h: LABEL_H}));
   const stackW = Math.max(...sizes.map(s => s.w));
-  const row = 20;
+  const row = LABEL_H + 2;
   const stackH = items.length * row;
   const minX = Math.min(...verts.map(v => v[0]));
   const maxX = Math.max(...verts.map(v => v[0]));
@@ -2399,7 +2419,7 @@ function placeTriangleKey(items, verts){
     ox = x; oy = y;
   }
   items.forEach((it, i) => {
-    placeLabel(it.text, ox + stackW / 2, oy + i * row + 9, {color: it.color, align:'center', fixed:true});
+    placeLabel(it.text, ox + stackW / 2, oy + i * row + LABEL_H / 2, {color: it.color, align:'center', fixed:true});
   });
 }
 
@@ -2437,10 +2457,12 @@ function drawScene(){
   const bankH = drawBanks(rx0, ry0, rw, rh, isLight);
 
   // Bank labels — Far bank sits on the water's left, under the HTML plot title
-  ctx.fillStyle = isLight ? '#14532d' : '#bbf7d0';
+  ctx.fillStyle = '#bbf7d0';
   ctx.font = '600 12px "DM Sans", sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  groundPlate('Far bank', rx0 + 10, ry0 + 14, 'left');
   ctx.fillText('Far bank', rx0 + 10, ry0 + 14);
+  groundPlate('Near bank (start)', rx0 + 10, ry1 + bankH/2, 'left');
   ctx.fillText('Near bank (start)', rx0 + 10, ry1 + bankH/2);
 
   // Current-direction arrow along top edge (visual only; offset below the
@@ -2449,9 +2471,14 @@ function drawScene(){
   ctx.globalAlpha = 0.7;
   const arrowY = ry0 + 34;
   drawArrow(rx0 + rw * 0.35, arrowY, rx0 + rw * 0.65, arrowY, cssVar('--warn'), 2);
-  ctx.fillStyle = cssVar('--warn');
+  ctx.globalAlpha = 1;
+  // On the dark plate this label needs the bright amber the v_c key already
+  // uses (#fbbf24); the light theme's --warn is a dark amber tuned for a light
+  // ground and measured 2.2:1 here.
+  ctx.fillStyle = '#fbbf24';
   ctx.font = '600 12px "DM Sans", sans-serif';
   ctx.textAlign = 'center';
+  groundPlate('current →', rx0 + rw * 0.5, arrowY - 10, 'center');
   ctx.fillText('current →', rx0 + rw * 0.5, arrowY - 10);
   ctx.restore();
 
@@ -2497,6 +2524,7 @@ function drawScene(){
   ctx.fillStyle = 'rgba(52, 211, 153, 0.9)';
   ctx.font = '600 12px "DM Sans", sans-serif';
   ctx.textAlign = 'center';
+  groundPlate('opposite start', sxIdeal, syIdeal - 14, 'center');
   ctx.fillText('opposite start', sxIdeal, syIdeal - 14);
 
   // Trail (actual ground path so far) — wide fading wake under a crisp track
@@ -3266,7 +3294,7 @@ Shell.init({ onFrame, onReset, onResize, onStep });
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

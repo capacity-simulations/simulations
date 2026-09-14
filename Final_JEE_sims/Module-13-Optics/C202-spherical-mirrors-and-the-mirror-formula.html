@@ -2026,7 +2026,13 @@ return {
   }
 
   function css(varName){
-    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    // The light palette is declared on `body.light-theme`, so :root keeps the
+    // DARK value in BOTH themes — reading documentElement first would silently
+    // return dark ink on a light page (and a documentElement-first fallback is
+    // no fix: :root always answers, so the body branch would be dead code).
+    // Body first; :root only when body has nothing to say.
+    const b = getComputedStyle(document.body).getPropertyValue(varName).trim();
+    return b || getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   }
 
   // Drawing
@@ -2035,9 +2041,6 @@ return {
     const L = computeLayout(dims.w, dims.h);
     LAYOUT = L;
     const { w, h, axisY, poleScreenX, scale, worldToScreen, f, img, objectH_cm } = L;
-
-    // background
-    ctx.clearRect(0,0,w,h);
 
     // Light theme awareness for canvas colors
     const isLight = document.body.classList.contains('light-theme');
@@ -2057,6 +2060,20 @@ return {
     const cMirror = isLight ? '#0f172a' : '#e2e8f0';
     const cMirBack= isLight ? 'rgba(15,23,42,0.10)' : 'rgba(148,163,184,0.15)';
     const cHalo   = isLight ? '#f8fafc' : '#060E11';   // canvas ground, for label haloes
+
+    // Background. The bench used to clear to transparent and let .plot-box's
+    // var(--surface) show through, which left the canvas with no ground of its
+    // own: whole regions of it (the top-left corner the legend floats over)
+    // carried zero pixels in EITHER theme, so the surface was byte-identical
+    // across a theme toggle even though the diagram itself re-inked correctly.
+    // Painting the ground explicitly makes the canvas answer for its own
+    // background. cHalo is the opaque twin of --surface (dark #060E11 = --bg;
+    // light #f8fafc ≈ rgba(248,250,252,.96) over #e2e8f0), so the composite is
+    // unchanged on screen — the pixels are simply the canvas's now.
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = cHalo;
+    ctx.fillRect(0,0,w,h);
+
     if(legendDot.ray1){
       legendDot.ray1.style.background = cRay1; legendDot.ray2.style.background = cRay2;
       legendDot.obj.style.background  = cObj;  legendDot.img.style.background  = cImg;
@@ -3119,7 +3136,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
