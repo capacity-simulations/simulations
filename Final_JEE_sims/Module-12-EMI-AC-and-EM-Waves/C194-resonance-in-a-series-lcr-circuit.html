@@ -120,6 +120,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
+/* The pill fill was hard-coded dark while its text follows --text, so in light
+   theme it rendered near-black on near-black. */
+html[data-theme="light"] .legend, body.light-theme .legend{background:rgba(248,250,252,.88);border-color:rgba(51,65,85,.22);}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -285,7 +288,11 @@ html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{bac
 .welcome-hero{position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:140px;background:transparent;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);opacity:.9;}
 .welcome-hero canvas{display:block;width:100%;height:100%;}
 .welcome-hero::after{content:none;}
-.welcome-hero .hero-label{display:none;}
+/* The hero draws two real I(ω) curves; unlabelled it is just decoration to a
+   student meeting the topic. Caption it, in the gap above the title. */
+.welcome-hero .hero-label{display:block;position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);
+  max-width:min(640px,88vw);text-align:center;font-size:.72rem;line-height:1.3;color:#94A3B8;letter-spacing:.01em;}
+html[data-theme="light"] .welcome-hero .hero-label, body.light-theme .welcome-hero .hero-label{color:#475569;}
 .welcome-body{padding:156px 0 0;}
 .welcome-card h2{margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;}
 .welcome-kicker{font-size:.95rem;font-weight:500;letter-spacing:.02em;color:#AAB6C6;}
@@ -1425,7 +1432,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Current response I(ω) of the same loop at two resistances — dots stepped in equal ω</span>
+            <span class="hero-label">Current I against drive frequency ω for this same loop — green R = 25 Ω (tall, narrow), blue R = 100 Ω (low, broad). Both peak at ω₀ (dashed).</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Series LCR resonance</span></h2>
@@ -1530,7 +1537,7 @@ Object.freeze(Engine);
   <main class="shell-hero">
     <div class="hero-row">
       <div id="panel-phasor" class="plot-box">
-        <div class="plot-title">Phasor diagram <span class="plot-inline">rotating at drive frequency ω</span></div>
+        <div class="plot-title">Phasor diagram <span class="plot-inline">turn rate ∝ ω, slowed 265×</span></div>
         <div class="legend">
           <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>V_R</div>
           <div class="legend-item"><span class="legend-dot" style="background:#f472b6"></span>V_L</div>
@@ -1556,7 +1563,7 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>1 · Look at the phasors</h4>
           <p>V_R points along the current. V_L is a quarter turn ahead of it. V_C is a quarter turn behind. The three arrows rotate together at the drive frequency ω. The green resultant V_net is their vector sum — its angle relative to V_R is the phase φ by which the current lags the applied voltage.</p>
-          <p>Below, on the right, the impedance Z(ω) is plotted. A marker sits on the curve at the drive frequency you set with the ω slider.</p>
+          <p>In the right-hand panel the impedance |Z| is plotted against drive frequency ω. A marker sits on the curve at the frequency you set with the ω slider.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1585,8 +1592,8 @@ Object.freeze(Engine);
 
         <div class="inq-step">
           <h4>5 · Now change R</h4>
-          <p>Drop R from 100 Ω toward 20 Ω and watch the impedance curve. The valley gets deeper and narrower — the quality factor Q rises. But watch where the bottom of the valley sits along the ω-axis: it does not move. Resonance frequency ω₀ = 1/√(LC) depends only on L and C, never on R.</p>
-          <p>Push R back up and the peak blunts again — the circuit becomes a less selective filter, but ω₀ is unchanged.</p>
+          <p>Drop R from 100 Ω toward 20 Ω. The valley gets deeper and narrower — Q rises — and blunts again when you push R back up. But its bottom never moves along the ω-axis: ω₀ = 1/√(LC) depends only on L and C, never on R.</p>
+          <p>Now read V_L and V_C on the left. At R = 20 Ω each is about 50 V from a 10 V supply — and they still cancel.</p>
         </div>
 
       </div>
@@ -2464,24 +2471,55 @@ return {
   const w0Out = document.getElementById('w0Val');
   const QOut = document.getElementById('QVal');
 
-  omegaEl.addEventListener('input',()=>{ state.omega = +omegaEl.value; omegaOut.textContent = state.omega; updateReadouts(); });
-  REl.addEventListener('input',()=>{ state.R = +REl.value; ROut.textContent = state.R; updateReadouts(); });
+  // Repaint on every slider gesture, not just on the next animation frame: the
+  // shell's restart-on-param-change calls onReset() (which repaints at the
+  // DEFAULTS) and then re-fires `input`, so a sim that only updates numbers
+  // here leaves the canvas showing R = 100 Ω / ω = 1000 while the readouts
+  // show the chosen values. Invisible while playing, permanent while paused.
+  omegaEl.addEventListener('input',()=>{ state.omega = +omegaEl.value; omegaOut.textContent = state.omega; updateReadouts(); drawPhasors(); drawCurve(); });
+  REl.addEventListener('input',()=>{ state.R = +REl.value; ROut.textContent = state.R; updateReadouts(); drawPhasors(); drawCurve(); });
 
   function fmt(x, d=1){ if(!isFinite(x)) return '∞'; return (Math.abs(x)>=1000? x.toFixed(0) : x.toFixed(d)); }
+
+  // ---- predict-gate staging -------------------------------------------------
+  // A gated card must not have its own answer on screen before the student
+  // commits. Card 2 asks what φ does as ω sweeps through resonance; card 4 asks
+  // whether X_L and X_C vanish at ω₀ — and the sidebar was answering both out
+  // loud (φ = 0.0°, "resonance (φ ≈ 0)", X_L = 100.0 Ω = X_C). While a gate is
+  // open those four rows read "—", and the canvas drops its φ value, its
+  // lead/lag hint and its regime line. Everything returns the moment a choice
+  // is clicked. Nothing is display:none'd — the panels keep their geometry.
+  const GATED_VALUE = '—';
+  function gatePending(){
+    const zone = document.getElementById('aside-inquiry');
+    if(!zone || zone.offsetParent === null) return false;   // inquiry hidden/collapsed
+    const card = zone.querySelector('.inq-step.active[data-gate]');
+    return !!(card && !card.hasAttribute('data-answered'));
+  }
 
   function updateReadouts(){
     const s = Engine.ac.seriesRLC(state.R, L, C, state.omega);
     const r = Engine.ac.seriesResonance(state.R, L, C);
+    const hold = gatePending();
     ZOut.textContent = fmt(s.impedance,1) + ' Ω';
-    phiOut.textContent = fmt(s.phaseAngleDegrees,1) + '°';
-    XLOut.textContent = fmt(s.inductiveReactance,1) + ' Ω';
-    XCOut.textContent = fmt(s.capacitiveReactance,1) + ' Ω';
-    if(Math.abs(s.phaseAngleDegrees)<0.5) regimeOut.textContent = 'resonance (φ ≈ 0)';
+    phiOut.textContent = hold ? GATED_VALUE : fmt(s.phaseAngleDegrees,1) + '°';
+    XLOut.textContent = hold ? GATED_VALUE : fmt(s.inductiveReactance,1) + ' Ω';
+    XCOut.textContent = hold ? GATED_VALUE : fmt(s.capacitiveReactance,1) + ' Ω';
+    if(hold) regimeOut.textContent = GATED_VALUE;
+    else if(Math.abs(s.phaseAngleDegrees)<0.5) regimeOut.textContent = 'resonance (φ ≈ 0)';
     else if(s.isInductive) regimeOut.textContent = 'inductive (lag)';
     else regimeOut.textContent = 'capacitive (lead)';
     w0Out.textContent = fmt(r.resonantAngularFrequency,0)+' rad/s';
     QOut.textContent = r.qualityFactor.toFixed(2);
   }
+
+  // The shell sets data-answered on the card in its own #inq-cards listener;
+  // this one is registered later, so it runs after and sees the committed state.
+  const inqHost = document.getElementById('inq-cards');
+  if(inqHost) inqHost.addEventListener('click', e=>{
+    if(!e.target.closest || !e.target.closest('.choice')) return;
+    setTimeout(()=>{ updateReadouts(); drawPhasors(); drawCurve(); }, 0);
+  });
 
   // DPR fit
   function fit(canvas, ctx){
@@ -2493,14 +2531,36 @@ return {
     return { w:r.width, h:r.height };
   }
 
-  function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  // Read the custom properties from BODY, not documentElement: the theme
+  // toggle lands `light-theme` on <body>, so :root still reports the DARK
+  // palette in light mode and every canvas string drawn with css('--text')
+  // came out near-white on a white panel.
+  function css(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+  function isLight(){
+    return document.body.classList.contains('light-theme')
+        || document.documentElement.getAttribute('data-theme') === 'light';
+  }
+  // Canvas inks that were hard-coded to dark-theme greys.
+  const ink = {
+    get grid(){ return isLight() ? 'rgba(71,85,105,0.18)'  : 'rgba(148,163,184,0.12)'; },
+    get axis(){ return isLight() ? 'rgba(71,85,105,0.55)'  : 'rgba(148,163,184,0.4)'; },
+    get tick(){ return isLight() ? 'rgba(51,65,85,0.95)'   : 'rgba(148,163,184,0.85)'; },
+    get faint(){ return isLight() ? 'rgba(51,65,85,0.18)'  : 'rgba(148,163,184,0.15)'; },
+    get guide(){ return isLight() ? 'rgba(51,65,85,0.45)'  : 'rgba(226,232,240,0.35)'; },
+    get note(){ return isLight() ? 'rgba(51,65,85,0.95)'   : 'rgba(203,213,225,0.7)'; },
+    get body(){ return isLight() ? '#0f172a' : '#e2e8f0'; },
+    get panel(){ return isLight() ? '#f8fafc' : '#060e11'; }
+  };
 
   // ---- Phasor panel ----
   function drawPhasors(){
     const box = fit(cvPhasor, ctxP);
     const w = box.w, h = box.h;
-    const bg = getComputedStyle(cvPhasor.parentElement).backgroundColor;
-    ctxP.fillStyle = bg && bg!=='rgba(0, 0, 0, 0)' ? bg : '#0b1517';
+    // OPAQUE clear. The panel's own background is rgba(...,.95), so filling
+    // with it left 5% of the previous frame behind — visible ghost arrows and
+    // doubled labels that froze on screen as soon as the sim was paused.
+    ctxP.clearRect(0,0,w,h);
+    ctxP.fillStyle = ink.panel;
     ctxP.fillRect(0,0,w,h);
 
     const cx = w*0.5, cy = h*0.5 + 8;
@@ -2526,7 +2586,7 @@ return {
     const th = state.theta;
 
     // Draw faint reference circle & axes
-    ctxP.strokeStyle = 'rgba(148,163,184,0.15)';
+    ctxP.strokeStyle = ink.faint;
     ctxP.lineWidth = 1;
     ctxP.beginPath();
     ctxP.arc(cx,cy,radius,0,Math.PI*2);
@@ -2542,7 +2602,19 @@ return {
     const perpL = { x: Math.cos(th+Math.PI/2), y: -Math.sin(th+Math.PI/2) };
     const perpC = { x: Math.cos(th-Math.PI/2), y: -Math.sin(th-Math.PI/2) };
 
-    function arrow(x0,y0, dx,dy, color, width, label){
+    // Longest phasor the panel can hold. V_L and V_C reach Q·V_peak at
+    // resonance — 50 V at R = 20 Ω against a 10 V supply — which at the fixed
+    // 12 V reference scale is 4.2 canvas radii. Those arrows used to leave the
+    // panel with no head and no value: the one fact worth seeing (each
+    // reactive voltage can far exceed the supply, and they still cancel) was
+    // the one fact off screen. They are now capped at the rim, marked with a
+    // chevron, and carry their TRUE value in the label.
+    const RMAX = radius*1.04;
+
+    function arrow(x0,y0, dx,dy, color, width, label, volts, labelPerp, labelFrac){
+      let cut = false;
+      const m0 = Math.hypot(dx,dy);
+      if(m0 > RMAX){ const k = RMAX/m0; dx *= k; dy *= k; cut = true; }
       const x1 = x0+dx, y1 = y0+dy;
       ctxP.strokeStyle = color; ctxP.fillStyle = color; ctxP.lineWidth = width;
       ctxP.beginPath(); ctxP.moveTo(x0,y0); ctxP.lineTo(x1,y1); ctxP.stroke();
@@ -2554,15 +2626,35 @@ return {
       ctxP.lineTo(x1 - ah*Math.cos(ang-0.4), y1 - ah*Math.sin(ang-0.4));
       ctxP.lineTo(x1 - ah*Math.cos(ang+0.4), y1 - ah*Math.sin(ang+0.4));
       ctxP.closePath(); ctxP.fill();
+      // "runs past the rim" chevron, so a capped arrow never reads as its length
+      if(cut){
+        ctxP.lineWidth = 2;
+        for(const off of [6,11]){
+          ctxP.beginPath();
+          ctxP.moveTo(x1 + off*Math.cos(ang) - 5*Math.cos(ang-1.25), y1 + off*Math.sin(ang) - 5*Math.sin(ang-1.25));
+          ctxP.lineTo(x1 + off*Math.cos(ang), y1 + off*Math.sin(ang));
+          ctxP.lineTo(x1 + off*Math.cos(ang) - 5*Math.cos(ang+1.25), y1 + off*Math.sin(ang) - 5*Math.sin(ang+1.25));
+          ctxP.stroke();
+        }
+      }
       if(label){
+        const text = (volts==null) ? label : label+' = '+volts.toFixed(1)+' V';
         ctxP.font = '600 12px '+css('--font-sans');
-        // clamp label inside canvas
-        const lx = x1 + 8*Math.cos(ang), ly = y1 + 8*Math.sin(ang);
-        const tw = ctxP.measureText(label).width;
+        // label sits past the tip, pushed sideways where two phasors coincide
+        const gap = cut ? 20 : 8;
+        const px = labelPerp ? labelPerp*Math.cos(ang+Math.PI/2) : 0;
+        const py = labelPerp ? labelPerp*Math.sin(ang+Math.PI/2) : 0;
+        // labelFrac < 1 parks the label part-way down the shaft instead of past
+        // the tip. V_R uses it because at resonance V_net lies exactly on top of
+        // V_R, and two tip labels overprinted into an unreadable "V_netR=1D0.0W".
+        const f = (labelFrac == null) ? 1 : labelFrac;
+        const bx = x0 + (x1-x0)*f, by = y0 + (y1-y0)*f;
+        const lx = bx + (f<1 ? 0 : gap*Math.cos(ang)) + px, ly = by + (f<1 ? 0 : gap*Math.sin(ang)) + py;
+        const tw = ctxP.measureText(text).width;
         const cxL = Math.max(4, Math.min(w-tw-4, lx));
         const cyL = Math.max(14, Math.min(h-4, ly));
         ctxP.fillStyle = color;
-        ctxP.fillText(label, cxL, cyL);
+        ctxP.fillText(text, cxL, cyL);
       }
     }
 
@@ -2582,15 +2674,15 @@ return {
     const eSum = { x: cx + sumX*scale, y: cy + sumY*scale };
 
     // Draw arrows (VL and VC drawn slightly thick so cancellation is unmistakable)
-    arrow(cx,cy, eVL.x-cx, eVL.y-cy, '#f472b6', 4, 'V_L');
-    arrow(cx,cy, eVC.x-cx, eVC.y-cy, '#fbbf24', 4, 'V_C');
-    arrow(cx,cy, eVR.x-cx, eVR.y-cy, '#60a5fa', 4, 'V_R');
+    arrow(cx,cy, eVL.x-cx, eVL.y-cy, '#f472b6', 4, 'V_L', VL);
+    arrow(cx,cy, eVC.x-cx, eVC.y-cy, '#fbbf24', 4, 'V_C', VC);
+    arrow(cx,cy, eVR.x-cx, eVR.y-cy, '#60a5fa', 4, 'V_R', VR, 14, 0.5);
 
     // Dashed indicator: sum of reactive phasors (V_L + V_C) to show it collapses at resonance
     const reactX = VL*perpL.x + VC*perpC.x;
     const reactY = VL*perpL.y + VC*perpC.y;
     ctxP.setLineDash([5,4]);
-    ctxP.strokeStyle = 'rgba(226,232,240,0.35)';
+    ctxP.strokeStyle = ink.guide;
     ctxP.lineWidth = 1.5;
     ctxP.beginPath();
     ctxP.moveTo(cx,cy);
@@ -2598,8 +2690,11 @@ return {
     ctxP.stroke();
     ctxP.setLineDash([]);
 
-    // V_net (resultant) — thicker
-    arrow(cx,cy, eSum.x-cx, eSum.y-cy, '#34d399', 5, 'V_net');
+    // V_net (resultant) — thicker. At resonance it lies exactly on top of V_R,
+    // so its label is pushed 15 px sideways; the two used to overprint into an
+    // unreadable "V_Ret". |V_net| is always the supply peak (I·Z = V_pk), which
+    // is the number that makes a 50 V V_L worth a second look.
+    arrow(cx,cy, eSum.x-cx, eSum.y-cy, '#34d399', 5, 'V_net', Math.hypot(sumX,sumY), 15);
 
     // Draw φ arc between V_R and V_net (in canvas-angle sense)
     const angR = Math.atan2(eVR.y-cy, eVR.x-cx);
@@ -2616,27 +2711,33 @@ return {
     ctxP.arc(cx, cy, arcR, angR, angR+dphi, dphi<0);
     ctxP.stroke();
     // φ label near arc midpoint
+    // Nudge the label off the arc's own radius: at resonance dphi = 0, so the
+    // mid-direction IS the V_R arrow and the two strings sat on each other.
     const midAng = angR + dphi*0.5;
-    const lx = cx + (arcR+14)*Math.cos(midAng);
-    const ly = cy + (arcR+14)*Math.sin(midAng);
+    const lx = cx + (arcR+14)*Math.cos(midAng) + 16*Math.cos(midAng+Math.PI/2);
+    const ly = cy + (arcR+14)*Math.sin(midAng) + 16*Math.sin(midAng+Math.PI/2);
     ctxP.fillStyle = '#34d399';
     ctxP.font = '600 12px '+css('--font-sans');
-    const phaseDeg = -s.phaseAngleDegrees; // sign convention: current lags voltage; we've drawn V_R along current, so V_net leads V_R by φ when inductive
-    // Recompute cleanly: V_net makes angle with V_R equal to s.phaseAngle (positive when inductive).
-    const phiLabel = 'φ = '+(s.phaseAngleDegrees>=0?'+':'')+s.phaseAngleDegrees.toFixed(1)+'°';
+    // V_net makes an angle with V_R equal to s.phaseAngle (positive when
+    // inductive). The numeric value and the lead/lag verdict are both withheld
+    // while a prediction gate is open — they are the answers to cards 2 and 4.
+    const hold = gatePending();
+    const phiLabel = hold ? 'φ = ?'
+      : 'φ = '+(s.phaseAngleDegrees>=0?'+':'')+s.phaseAngleDegrees.toFixed(1)+'°';
     const tw = ctxP.measureText(phiLabel).width;
     const clampedX = Math.max(4, Math.min(w-tw-4, lx-tw/2));
     const clampedY = Math.max(14, Math.min(h-4, ly));
     ctxP.fillText(phiLabel, clampedX, clampedY);
 
     // Center dot
-    ctxP.fillStyle = css('--text');
+    ctxP.fillStyle = ink.body;
     ctxP.beginPath(); ctxP.arc(cx,cy,3,0,Math.PI*2); ctxP.fill();
 
     // Bottom hint
-    ctxP.font = '500 11px '+css('--font-sans');
-    ctxP.fillStyle = 'rgba(203,213,225,0.7)';
-    const hint = state.omega < 990 ? 'capacitive: V_C dominant, current LEADS voltage'
+    ctxP.font = '500 12px '+css('--font-sans');
+    ctxP.fillStyle = ink.note;
+    const hint = hold ? 'commit your prediction to reveal the phase readings'
+              : state.omega < 990 ? 'capacitive: V_C dominant, current LEADS voltage'
               : state.omega > 1010 ? 'inductive: V_L dominant, current LAGS voltage'
               : 'resonance: V_L and V_C cancel → V_net = V_R';
     const hw = ctxP.measureText(hint).width;
@@ -2648,7 +2749,8 @@ return {
   function drawCurve(){
     const box = fit(cvCurve, ctxC);
     const w = box.w, h = box.h;
-    ctxC.fillStyle = getComputedStyle(cvCurve.parentElement).backgroundColor || '#0b1517';
+    ctxC.clearRect(0,0,w,h);           // opaque clear — see drawPhasors
+    ctxC.fillStyle = ink.panel;
     ctxC.fillRect(0,0,w,h);
 
     // margins
@@ -2668,10 +2770,10 @@ return {
     const yOf = (z) => mT + (1 - (z - zMin)/(zMax - zMin)) * ph;
 
     // Grid + axes
-    ctxC.strokeStyle = 'rgba(148,163,184,0.12)';
+    ctxC.strokeStyle = ink.grid;
     ctxC.lineWidth = 1;
-    ctxC.font = '500 10px '+css('--font-nums');
-    ctxC.fillStyle = 'rgba(148,163,184,0.85)';
+    ctxC.font = '500 12px '+css('--font-nums');   // 10px is below the legible floor
+    ctxC.fillStyle = ink.tick;
 
     // vertical grid at 500,1000,1500,2000,2500
     [500,1000,1500,2000,2500].forEach(gw=>{
@@ -2691,14 +2793,14 @@ return {
     });
 
     // axis lines
-    ctxC.strokeStyle = 'rgba(148,163,184,0.4)';
+    ctxC.strokeStyle = ink.axis;
     ctxC.beginPath();
     ctxC.moveTo(mL, mT); ctxC.lineTo(mL, mT+ph); ctxC.lineTo(mL+pw, mT+ph);
     ctxC.stroke();
 
     // axis titles
-    ctxC.font = '600 11px '+css('--font-sans');
-    ctxC.fillStyle = css('--muted');
+    ctxC.font = '600 12px '+css('--font-sans');
+    ctxC.fillStyle = ink.tick;
     const xTitle = 'ω  (rad/s)';
     const xtw = ctxC.measureText(xTitle).width;
     ctxC.fillText(xTitle, Math.max(4, Math.min(w-xtw-4, mL + pw/2 - xtw/2)), h-8);
@@ -2719,8 +2821,8 @@ return {
     ctxC.lineWidth = 1.5;
     ctxC.beginPath(); ctxC.moveTo(xw0, mT); ctxC.lineTo(xw0, mT+ph); ctxC.stroke();
     ctxC.setLineDash([]);
-    ctxC.fillStyle = '#34d399';
-    ctxC.font = '600 10px '+css('--font-sans');
+    ctxC.fillStyle = isLight() ? '#047857' : '#34d399';
+    ctxC.font = '600 12px '+css('--font-sans');
     const w0Label = 'ω₀ = '+w0.toFixed(0);
     const w0lw = ctxC.measureText(w0Label).width;
     ctxC.fillText(w0Label, Math.max(4, Math.min(w-w0lw-4, xw0 - w0lw/2)), mT-4);
@@ -2742,7 +2844,7 @@ return {
     const Zcur = Engine.ac.seriesRLC(state.R, L, C, state.omega).impedance;
     const mx = xOf(state.omega), my = yOf(Math.min(zMax, Zcur));
     // vertical drop guide
-    ctxC.strokeStyle = 'rgba(226,232,240,0.35)';
+    ctxC.strokeStyle = ink.guide;
     ctxC.lineWidth = 1;
     ctxC.setLineDash([3,3]);
     ctxC.beginPath(); ctxC.moveTo(mx, my); ctxC.lineTo(mx, mT+ph); ctxC.stroke();
@@ -2755,8 +2857,8 @@ return {
     ctxC.beginPath(); ctxC.arc(mx, my, 6, 0, Math.PI*2); ctxC.stroke();
 
     // marker label
-    ctxC.font = '600 11px '+css('--font-sans');
-    ctxC.fillStyle = css('--text');
+    ctxC.font = '600 12px '+css('--font-sans');
+    ctxC.fillStyle = ink.body;
     const lbl = 'ω = '+state.omega.toFixed(0)+',  |Z| = '+Zcur.toFixed(1)+' Ω';
     const lw = ctxC.measureText(lbl).width;
     // place above marker, but clamp to canvas
@@ -2767,13 +2869,17 @@ return {
     if(ly < mT+12) ly = my + 20;
     ctxC.fillText(lbl, lx, ly);
 
-    // Regime label at bottom
+    // Regime label. It used to share the y = h-8 baseline with the x-axis
+    // title, which is centred — at 1024x768 the panel is only ~330 px wide and
+    // the two strings overprinted into an unreadable smear. It now sits above
+    // the plot frame, on its own line. Withheld while a prediction gate is open.
     const s = Engine.ac.seriesRLC(state.R, L, C, state.omega);
-    ctxC.font = '500 11px '+css('--font-sans');
-    ctxC.fillStyle = 'rgba(203,213,225,0.7)';
-    const regime = Math.abs(s.phaseAngleDegrees)<0.5 ? 'at resonance: Z = R = '+state.R.toFixed(0)+' Ω'
+    ctxC.font = '500 12px '+css('--font-sans');
+    ctxC.fillStyle = ink.note;
+    const regime = gatePending() ? 'regime hidden until you commit your prediction'
+      : Math.abs(s.phaseAngleDegrees)<0.5 ? 'at resonance: Z = R = '+state.R.toFixed(0)+' Ω'
       : (s.isCapacitive ? 'capacitive side (ω < ω₀)' : 'inductive side (ω > ω₀)');
-    ctxC.fillText(regime, mL, h-8);
+    ctxC.fillText(regime, mL, mT-24);
   }
 
   // ---- Shell callbacks ----
@@ -2806,9 +2912,10 @@ return {
   }
 
   function onStep(i){
-    // Scene evolves per step (D6). We keep it simple: step 0 shows the phasors
-    // steady; higher steps drive richer annotations — currently all annotations
-    // are always visible since they are the point. Kept deterministic.
+    // Scene evolves per step (D6). The only staging is the predict-gate hold:
+    // on a gated, uncommitted card the φ / X_L / X_C / regime readings are
+    // withheld, so every step change has to re-evaluate them.
+    updateReadouts();
     drawPhasors();
     drawCurve();
   }

@@ -103,8 +103,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 
 .shell-hero{grid-area:hero;min-height:0;min-width:0;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:14px;}
 
+/* 72px of bottom padding, not 18: the fixed Feedback pill parks over the last
+   ~54px of this column, and the readouts panel now runs to the bottom of it. */
 .shell-aside{grid-area:aside;min-height:0;display:flex;flex-direction:column;gap:16px;
-  padding:18px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);
+  padding:18px 18px 72px;overflow-y:auto;overflow-x:hidden;background:var(--surface-soft);
   backdrop-filter:blur(12px);border-left:1px solid rgba(148,163,184,.18);}
 .shell-formal{grid-area:formal;min-height:0;max-height:34vh;overflow-y:auto;
   padding:14px 18px;background:var(--surface-soft);border-top:1px solid var(--border);}
@@ -115,8 +117,13 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
-.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+/* Narrow viewports: the four-key legend wraps and would run into the subtitle. */
+@media(max-width:1200px){.plot-title .plot-inline{display:none;}}
+/* On the plot title's own row, not 30px below it: four keys are wide enough to
+   sit on top of the waveform panel's heading if they hang lower. */
+.legend{position:absolute;top:10px;right:16px;max-width:calc(100% - 250px);
+  display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 14px;
+  font-size:12px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:var(--surface-soft);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
@@ -142,6 +149,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
 .slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
 .control-range{font-size:.75rem;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;}
+/* A slider landmark sits at its real track fraction, not at the row's centre:
+   space-between put "omega_0 = 1000" under ~1350 rad/s on a 200-2500 track. */
+.ctrl-tickrow{position:relative;height:15px;margin-top:3px;}
+.ctrl-tick{position:absolute;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:600;
+  color:var(--warn);font-family:var(--font-nums);font-variant-numeric:tabular-nums;line-height:1;}
 .stat-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
 .ctrl-box .stat-row:first-child{padding-top:0;}
 .ctrl-box .stat-row:last-child{padding-bottom:0;}
@@ -1497,7 +1509,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Impedance triangle</span></h2>
-            <p class="welcome-blurb">Tune a series LCR circuit through resonance and watch the impedance triangle — and the power gap — collapse.</p>
+            <p class="welcome-blurb">Drive a series LCR circuit at any frequency and read its impedance triangle: R along the base, the net reactance X<sub>L</sub>−X<sub>C</sub> upright, Z as the hypotenuse.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1598,9 +1610,10 @@ Object.freeze(Engine);
     <div class="plot-box">
       <div class="plot-title">Series LCR <span class="plot-inline">— impedance triangle &amp; power</span></div>
       <div class="legend">
-        <div class="legend-item"><span class="legend-dot" style="background:#3b9b8f"></span>R</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>X<sub>L</sub>−X<sub>C</sub></div>
-        <div class="legend-item"><span class="legend-dot" style="background:#e2e8f0"></span>Z</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span>Resistance R</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Net reactance X<sub>L</sub>−X<sub>C</sub></div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--ink)"></span>Impedance Z</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>Phase angle φ</div>
       </div>
       <canvas id="scene"></canvas>
     </div>
@@ -1616,34 +1629,46 @@ Object.freeze(Engine);
       <div id="inq-cards" class="aside-zone-body">
 
         <div class="inq-step">
-          <h4>Off resonance</h4>
-          <p>The frequency is set well BELOW resonance. Look at the triangle: R is fixed by its slider, and the vertical leg is the NET reactance X<sub>L</sub>−X<sub>C</sub>. Because X<sub>C</sub> dominates at low ω, the leg points DOWN and the hypotenuse Z is much larger than R.</p>
-          <p>Press ▶ if paused. The two sinusoids are the applied voltage and the resulting current — they are NOT peaking together.</p>
+          <h4>The circuit</h4>
+          <p>A resistor R, an inductor L and a capacitor C sit in series across an alternating supply of rms voltage V and angular frequency ω. The inductor opposes the current with the reactance X<sub>L</sub> = ωL, which grows with frequency; the capacitor opposes it with X<sub>C</sub> = 1/(ωC), which shrinks with frequency.</p>
+          <p>L = 0.1 H and C = 10 µF are fixed here. The triangle has R along its base, X<sub>L</sub>−X<sub>C</sub> standing on it, and the impedance Z as its hypotenuse.</p>
         </div>
 
         <div class="inq-step" data-gate>
-          <h4>Predict — apparent vs average power</h4>
-          <p>You will now see two power bars appear on the same scale: the APPARENT power S = V·I that the supply must deliver, and the AVERAGE power P actually dissipated. As you tune the frequency slider toward resonance, what happens?</p>
-          <button class="choice" data-fb="That is the misconception this simulation is built to break. <strong>Power is not V·I — that is APPARENT power (VA).</strong> The average power dissipated is P = V·I·cos φ, and cos φ (the power factor) can be very small far from resonance. The current is largely reactive: energy flows into L and C and straight back out again.">The two bars are already equal — power IS voltage times current.</button>
-          <button class="choice" data-fb="The apparent power grows too, because at resonance Z drops to R and the current SURGES. What actually happens: <strong>both bars grow, and they meet.</strong> The gap between them (the reactive volt-amperes) closes to zero.">Only the average power grows; the apparent power stays put.</button>
-          <button class="choice" data-correct data-fb="Correct. Both S and P rise as ω → ω₀ because Z falls to R and the current surges — but they <strong>converge</strong>, because cos φ → 1. At resonance every volt-ampere the supply delivers is dissipated in R.">Both bars grow, and they converge — the gap closes.</button>
-          <button class="choice" data-fb="The opposite happens. As ω → ω₀ the net reactance → 0, so Z → R (the smallest it can be), and the current peaks. The bars grow, and they <strong>converge</strong>.">Both bars shrink — the circuit becomes an open.</button>
+          <h4>Voltage across one element</h4>
+          <p>The same current passes through all three elements in turn. Can the rms voltage across the capacitor alone exceed the rms voltage of the supply?</p>
+          <button class="choice" data-fb="Sharing out is what three resistors do: their voltages peak together. V<sub>L</sub> and V<sub>C</sub> peak half a cycle apart and cancel most of each other, so either may exceed the supply while √(V<sub>R</sub>² + (V<sub>L</sub>−V<sub>C</sub>)²) still equals it exactly. <strong>At the default setting V<sub>C</sub> = 306 V from a 230 V supply.</strong>">No — the supply voltage is shared out among the three.</button>
+          <button class="choice" data-correct data-fb="Correct. V<sub>C</sub> = I·X<sub>C</sub> and V = I·Z, so V<sub>C</sub> beats V whenever X<sub>C</sub> beats Z — as at the default setting, X<sub>C</sub> = 200 Ω against Z = 150 Ω: <strong>V<sub>C</sub> = 306 V from a 230 V supply.</strong> The three add as phasors: √(V<sub>R</sub>² + (V<sub>L</sub>−V<sub>C</sub>)²) = V.">Yes — whenever X<sub>C</sub> is larger than Z.</button>
+          <button class="choice" data-fb="Nothing is created. L and C store energy and hand it back every quarter cycle, dissipating none, and their voltages oppose, so √(V<sub>R</sub>² + (V<sub>L</sub>−V<sub>C</sub>)²) still comes to exactly the supply. <strong>At the default setting V<sub>C</sub> = 306 V from a 230 V supply.</strong>">No — that would create energy from nothing.</button>
+          <button class="choice" data-fb="Nothing is faulty. V<sub>C</sub> = I·X<sub>C</sub> and V = I·Z, so V<sub>C</sub> is larger whenever X<sub>C</sub> is larger than Z — <strong>true at the default setting, where V<sub>C</sub> = 306 V from a 230 V supply.</strong>">Only if the capacitor is faulty.</button>
+          <div class="predict-eval"></div>
+        </div>
+
+        <div class="inq-step" data-gate>
+          <h4>At the resonant frequency</h4>
+          <p>At ω₀ = 1000 rad/s the two reactances are equal: X<sub>L</sub> = X<sub>C</sub> = 100 Ω, with R = 10 Ω and a 230 V supply. How large is the rms voltage across the inductor there?</p>
+          <button class="choice" data-fb="The reactances cancel in the <em>sum</em> V<sub>L</sub> + V<sub>C</sub>, not individually. Each still carries I·X = 23 × 100 = 2300 V; the two are half a cycle apart, so the pair contributes nothing to the supply voltage while each remains enormous.">0 V — the two reactances cancel.</button>
+          <button class="choice" data-fb="The whole supply appears across R, not across L. With X<sub>L</sub> = X<sub>C</sub> the impedance is R = 10 Ω, so I = 230/10 = 23 A and V<sub>L</sub> = 23 × 100 = <strong>2300 V</strong>, ten times the supply.">230 V — the inductor takes the whole supply.</button>
+          <button class="choice" data-correct data-fb="Correct. X<sub>L</sub> − X<sub>C</sub> = 0 leaves Z = R = 10 Ω, so I = 230/10 = 23 A and V<sub>L</sub> = I·X<sub>L</sub> = <strong>2300 V</strong>. The factor 10 is the quality factor Q = ω₀L/R: at resonance L and C each carry Q times the supply voltage, in exact opposition, which is how a modest source destroys a component.">2300 V — ten times the supply.</button>
+          <button class="choice" data-fb="Halving assumes the supply is divided up. With X<sub>L</sub> = X<sub>C</sub> the impedance falls to R = 10 Ω, the current rises to 23 A, and V<sub>L</sub> = 23 × 100 = <strong>2300 V</strong> — larger than the supply, not smaller.">115 V — half the supply.</button>
+          <div class="predict-eval"></div>
+        </div>
+
+        <div class="inq-step" data-gate>
+          <h4>What the supply pays for</h4>
+          <p>A supply holding V<sub>rms</sub> across a current I<sub>rms</sub> must push out V<sub>rms</sub>·I<sub>rms</sub> volt-amperes — the apparent power S. The heat actually produced in the circuit is the average power P.</p>
+          <p>As ω is raised from 500 rad/s to ω₀, what happens to S and to P?</p>
+          <button class="choice" data-fb="That is the misconception this circuit breaks. <strong>V·I is the APPARENT power, in volt-amperes; the average power is V·I·cos φ</strong>, and cos φ is 0.07 at the default setting. The two are equal only when the current is in step with the voltage.">They stay equal throughout — power is voltage times current.</button>
+          <button class="choice" data-fb="S rises too: as X<sub>L</sub>−X<sub>C</sub> → 0 the impedance falls to R, so the current surges and V·I climbs with it. <strong>Both rise, and they meet</strong>, because cos φ → 1.">P rises, S does not.</button>
+          <button class="choice" data-correct data-fb="Correct. Z falls to R, so the current surges and both S and V·I·cos φ rise — and they <strong>converge</strong>, because cos φ → 1. At resonance every volt-ampere the supply delivers is dissipated in R and the gap between the bars closes to zero.">Both rise, and they become equal.</button>
+          <button class="choice" data-fb="The opposite. X<sub>L</sub>−X<sub>C</sub> → 0 makes Z as small as it can be, Z = R, so the current peaks rather than stops. <strong>Both rise, and they converge.</strong>">Both fall — the circuit stops conducting.</button>
           <div class="predict-eval"></div>
         </div>
 
         <div class="inq-step">
-          <h4>Tune to resonance</h4>
-          <p>Drag the frequency slider slowly toward the marked ω₀. Watch three things at once:</p>
-          <p>• The vertical leg of the triangle shrinks, passes through zero and grows the other way — the phase angle φ swings through 0.<br>
-             • The two sinusoids slide into step.<br>
-             • The gap between the apparent-power and average-power bars closes.</p>
-          <p>At resonance the triangle has NO vertical leg. Z = R exactly, cos φ = 1, and P = S.</p>
-        </div>
-
-        <div class="inq-step">
-          <h4>Why the gap exists</h4>
-          <p>Away from resonance the current is largely reactive. During part of every cycle energy flows FROM the supply INTO the inductor's magnetic field and the capacitor's electric field; during the rest of the cycle it flows back OUT. Net work over a cycle: zero.</p>
-          <p>Only the resistor dissipates: the average power is exactly I<sub>rms</sub>²·R. This is why an industrial plant with a poor power factor is billed for current it never turned into work.</p>
+          <h4>Power factor</h4>
+          <p>The ratio P/S is the power factor, cos φ = R/Z, and only the resistor dissipates: P = I<sub>rms</sub>²·R exactly, while the inductor and the capacitor hand back every joule they take within the cycle.</p>
+          <p>That gap is why an industrial plant running at a poor power factor is billed for current it never turned into work.</p>
         </div>
 
       </div>
@@ -1679,7 +1704,8 @@ Object.freeze(Engine);
             <div class="ctrl-slider-row">
               <input type="range" id="omega" min="200" max="2500" step="5" value="500">
             </div>
-            <div class="control-range"><span>200</span><span>ω₀ ≈ 1000</span><span>2500</span></div>
+            <div class="ctrl-tickrow"><span class="ctrl-tick" style="left:34.8%">▲ ω₀ = 1000</span></div>
+            <div class="control-range"><span>200</span><span>2500</span></div>
           </div>
 
           <div id="box-res" class="ctrl-box ctrl-box--slider">
@@ -1713,9 +1739,21 @@ Object.freeze(Engine);
         <div class="shell-panel-body">
           <div class="ctrl-box">
             <div class="stat-row"><span class="stat-label">Impedance Z</span><span class="stat-value" id="outZ">— Ω</span></div>
+            <div class="stat-row"><span class="stat-label">Current I<sub>rms</sub></span><span class="stat-value" id="outI">— A</span></div>
             <div class="stat-row"><span class="stat-label">Phase φ</span><span class="stat-value" id="outPhi">— °</span></div>
             <div class="stat-row"><span class="stat-label">Power factor cos φ</span><span class="stat-value" id="outPF">—</span></div>
             <div class="stat-row"><span class="stat-label">Regime</span><span class="stat-value" id="outRegime">—</span></div>
+          </div>
+
+          <div class="ctrl-box" id="box-branchv" style="display:none">
+            <span class="ctrl-box-label">Voltage across each element (rms)</span>
+            <div class="stat-row"><span class="stat-label">Resistor V<sub>R</sub></span><span class="stat-value" id="outVR">— V</span></div>
+            <div class="stat-row"><span class="stat-label">Inductor V<sub>L</sub></span><span class="stat-value" id="outVL">— V</span></div>
+            <div class="stat-row"><span class="stat-label">Capacitor V<sub>C</sub></span><span class="stat-value" id="outVC">— V</span></div>
+            <div class="divider"></div>
+            <div class="stat-row"><span class="stat-label">Added as numbers</span><span class="stat-value" id="outVsum">— V</span></div>
+            <div class="stat-row"><span class="stat-label">Added as phasors</span><span class="stat-value" id="outVphasor">— V</span></div>
+            <div class="note-text" style="font-size:12px;margin-top:6px;">V<sub>L</sub> leads the current by 90°, V<sub>C</sub> lags it by 90°, so they point opposite ways and partly cancel: √(V<sub>R</sub>² + (V<sub>L</sub>−V<sub>C</sub>)²) returns the supply voltage exactly, while the plain sum does not. Either of V<sub>L</sub>, V<sub>C</sub> can exceed the supply on its own.</div>
           </div>
         </div>
       </div>
@@ -2850,26 +2888,47 @@ function current(){
   return { s, p };
 }
 
+function fmtV(v){ return v>=1000 ? (v/1000).toFixed(2)+' kV' : v.toFixed(1)+' V'; }
+
 function updateReadouts(){
   const { s, p } = current();
-  document.getElementById('outZ').textContent = s.impedance.toFixed(1) + ' Ω';
+  const txt = (id, v)=>{ const e=document.getElementById(id); if(e) e.textContent = v; };
+  txt('outZ', s.impedance.toFixed(1) + ' Ω');
+  txt('outI', p.currentRms.toFixed(2) + ' A');
   const phiDeg = s.phaseAngleDegrees;
-  document.getElementById('outPhi').textContent = (phiDeg>=0?'+':'') + phiDeg.toFixed(1) + '°';
-  document.getElementById('outPF').textContent = s.powerFactor.toFixed(3);
+  txt('outPhi', (phiDeg>=0?'+':'') + phiDeg.toFixed(1) + '°');
+  txt('outPF', s.powerFactor.toFixed(3));
   let regime;
   if(s.atResonance) regime = 'Resonance (Z = R)';
   else if(s.isInductive) regime = 'Inductive (I lags V)';
   else regime = 'Capacitive (I leads V)';
-  document.getElementById('outRegime').textContent = regime;
+  txt('outRegime', regime);
+  // Element voltages: the same rms current through each, times that element's
+  // own opposition. V_L and V_C are half a cycle apart, so the ARITHMETIC sum
+  // over-counts while the PHASOR sum returns the supply exactly — the point the
+  // syllabus examines, and the reason either can exceed the supply on its own.
+  const I = p.currentRms;
+  const VR = I*state.R, VL = I*s.inductiveReactance, VC = I*s.capacitiveReactance;
+  txt('outVR', fmtV(VR)); txt('outVL', fmtV(VL)); txt('outVC', fmtV(VC));
+  txt('outVsum', fmtV(VR+VL+VC));
+  txt('outVphasor', fmtV(Math.hypot(VR, VL-VC)) + '  = supply');
 }
 
 // ---- STAGED REVEALS ------------------------------------------------------
-// The scene evolves per inquiry step: the power bars appear from card 2 on.
+// The scene evolves per inquiry step. Both stagings exist to keep a gated card
+// from being answerable by lookup: the element-voltage box would read out card
+// 2's and card 3's answers, and the power bars would read out card 4's.
+//   step >= 3 : the per-element rms voltages (asked on cards 2 and 3)
+//   step >= 4 : the apparent/average power bars (asked on card 4)
 // draw() used to read Shell.step directly; it now reads this one variable so
 // the Controls Guide and free exploration can lift the staging (applyStepReveals(99))
 // and the inquiry can hand it back (applyStepReveals(Shell.step)).
 let revealStep = 0;
-function applyStepReveals(i){ revealStep = (typeof i === 'number') ? i : 0; }
+function applyStepReveals(i){
+  revealStep = (typeof i === 'number') ? i : 0;
+  const vbox = document.getElementById('box-branchv');
+  if(vbox) vbox.style.display = (revealStep >= 3) ? '' : 'none';
+}
 
 // ---- CANVAS DRAW ---------------------------------------------------------
 const canvas = document.getElementById('scene');
@@ -2887,31 +2946,57 @@ function fit(){
   viewH = r.height;
 }
 
+// The light-theme override lands on BODY (`body.light-theme`), so reading a
+// custom property off documentElement always returns the :root (dark) value and
+// the canvas would stay dark-themed on a light page. Body first, root as the
+// fallback for the html[data-theme="light"] spelling.
 function cssVar(name){
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
-         getComputedStyle(document.body).getPropertyValue(name).trim();
+  return getComputedStyle(document.body).getPropertyValue(name).trim() ||
+         getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// Peak power scale — used for bar heights.  Worst case at chosen sliders:
-// choose a generous fixed max so the bars grow visibly at resonance without
-// clipping. At R=2Ω, V=400V, S = 400^2/2 = 80 kW. But bars need to be readable
-// at low ω too. Use a percentile: cap at V_rms^2 / R (resonance apparent = P).
-function powerScaleMax(){
-  // absolute worst case across the sliders — the resonance case with smallest R and largest V
-  const Rmin = 2, Vmax = 400;
-  return Vmax*Vmax / Rmin; // 80 000 W
+// Canvas cannot parse `var()` in ctx.font — the assignment is REJECTED and the
+// context silently keeps its previous font (10px sans-serif on a fresh context),
+// so every label here used to render at 10px whatever the declared size said.
+// Literal stacks only.
+const FONT_SANS = "'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+const FONT_NUMS = "'JetBrains Mono',ui-monospace,monospace";
+const fSans = (spec)=> spec + ' ' + FONT_SANS;
+const fNums = (spec)=> spec + ' ' + FONT_NUMS;
+
+// Canvas has no markup, so a subscript has to be drawn: `parts` is a list of
+// [text, isSubscript]. Without this, X_L and X_C reached the screen as literal
+// underscores. Left-aligned; returns the total advance (measureOnly skips the
+// painting so a label can be clamped before it is drawn).
+function richText(x, y, parts, size, measureOnly){
+  let cx = x;
+  for(const [t, sub] of parts){
+    // the subscript shrinks, but never below the 12px legibility floor
+    ctx.font = fSans('600 ' + (sub ? Math.max(12, Math.round(size*0.78)) : size) + 'px');
+    if(!measureOnly) ctx.fillText(t, cx, y + (sub ? Math.round(size*0.26) : 0));
+    cx += ctx.measureText(t).width;
+  }
+  ctx.font = fSans('600 ' + size + 'px');
+  return cx - x;
+}
+
+// Longest wording that still fits the panel at the CURRENT font. A label that
+// runs off the edge of a 1024 px canvas is unreadable, and shrinking it below
+// the 12 px floor is not an option — so the wording gives way instead.
+function pickLabel(options, maxW){
+  for(const t of options) if(ctx.measureText(t).width <= maxW) return t;
+  return options[options.length-1];
 }
 
 function draw(){
   fit();
-  const bg = cssVar('--surface');
   const text = cssVar('--text');
   const muted = cssVar('--muted');
-  const border = cssVar('--border');
+  const border = cssVar('--border');        // grid only — deliberately faint
+  const frame = cssVar('--ink-mute');       // panel frames: must read in BOTH themes
   const accent = cssVar('--accent');       // R / average
   const orange = '#f59e0b';                // reactance
   const ink = cssVar('--ink');
-  const white = getComputedStyle(document.body).getPropertyValue('color') || '#e2e8f0';
 
   // clear
   ctx.fillStyle = 'rgba(0,0,0,0)';
@@ -2922,7 +3007,15 @@ function draw(){
   // Layout: split viewport into three zones
   //   left  ~55%  : impedance triangle (+ resonance marker)
   //   right ~45%  : top half = V/I waves ; bottom half = power bars
-  const marginTop = 60;      // leave the plot-title / legend clear
+  // Clear the DOM legend, whose height depends on how many keys wrapped at this
+  // viewport — a fixed 60 px let it sit on top of the waveform panel's heading
+  // at 1024 px wide.
+  let marginTop = 60;
+  const lgEl = document.querySelector('.plot-box .legend');
+  if(lgEl){
+    const cr = canvas.getBoundingClientRect(), lr = lgEl.getBoundingClientRect();
+    marginTop = Math.max(60, Math.round(lr.bottom - cr.top) + 12);
+  }
   const marginBottom = 24;
   const marginLeft = 30;
   const marginRight = 22;
@@ -2934,31 +3027,48 @@ function draw(){
   const triW = split - triX0 - 30;
   const triH = viewH - triY0 - marginBottom - 30;
 
-  // Scale: fit triangle so R (base) uses a reasonable share, and Z hypotenuse can grow.
-  // Base uses R in ohms; we scale so that the worst-case Z (over slider ranges) fits.
-  // Worst-case reactance leg = max(X_L, X_C) at slider extremes.
-  // Simpler: use fixed-worst-case Z-max independent of current sliders to keep axes stable.
-  const wMin = 200, wMax = 2500, Rmax = 60;
-  const XLmax = wMax*L;                       // = 250
-  const XCmax = 1/(wMin*C);                   // = 500
-  const worstNet = Math.max(XLmax, XCmax);    // 500
-  const Zworst = Math.sqrt(Rmax*Rmax + worstNet*worstNet); // ≈ 503.6 Ω
-  // Map worst-case Z to about 88% of min(triW, triH)
-  const scale = 0.42 * Math.min(triW, triH) / Zworst; // ohms → pixels; both legs same scale (isotropic)
-  // Origin of triangle: place R base along horizontal from origin.
-  // Origin at bottom-left of drawing area, but shift so triangle fits when reactance leg points up OR down.
-  const originX = triX0 + 30;
+  // OHMS → PIXELS. A single fixed scale covering the worst case over both
+  // sliders (|X_L − X_C| reaches 480 Ω at ω = 200) left the shipped default a
+  // 4 px × 65 px sliver in a 521 × 627 box — the sim's own subject, illegible.
+  // Instead the scale steps through a 1-2-5 ladder, like an oscilloscope range:
+  // four grid squares always cover the larger of R and |X_L − X_C|, the square
+  // is DRAWN and its ohm value LABELLED, and a range change is therefore
+  // announced rather than silent. Both legs share the scale, so φ stays honest.
+  const need = Math.max(state.R, Math.abs(s.netReactance), 0.5);
+  const LADDER = [1,2,5,10,20,50,100,200,500];
+  const div = LADDER.find(d => need/d <= 4) || 500;   // ohms per grid square
+  const availPx = Math.min(triW - 130, triH*0.5 - 40);
+  const cell = availPx/4;                             // pixels per grid square
+  const scale = cell/div;                             // ohms → pixels (isotropic)
+  // The corner is inset far enough that the Z tag, which hangs off the LEFT of
+  // a steep hypotenuse, still lands inside the canvas.
+  const originX = triX0 + 110;
   const originY = triY0 + triH * 0.5;   // vertical middle — leg can extend up or down
 
-  // Draw origin cross & axes hints
+  // Grid — the scale made readable. One square = `div` ohms.
   ctx.strokeStyle = border;
   ctx.lineWidth = 1;
+  const gridX0 = originX - cell, gridX1 = Math.min(triX0+triW-6, originX + 4.6*cell);
+  const gridY0 = Math.max(triY0+6, originY - 4.4*cell), gridY1 = Math.min(triY0+triH-6, originY + 4.4*cell);
+  ctx.beginPath();
+  for(let k=-1; originX + k*cell <= gridX1; k++){
+    ctx.moveTo(originX + k*cell, gridY0);
+    ctx.lineTo(originX + k*cell, gridY1);
+  }
+  for(let k=-4; k<=4; k++){
+    const yy = originY + k*cell;
+    if(yy < gridY0 || yy > gridY1) continue;
+    ctx.moveTo(gridX0, yy);
+    ctx.lineTo(gridX1, yy);
+  }
+  ctx.stroke();
+
+  // Axes through the corner where φ opens
+  ctx.strokeStyle = muted;
   ctx.setLineDash([3,4]);
   ctx.beginPath();
-  ctx.moveTo(originX, triY0+8);
-  ctx.lineTo(originX, triY0+triH-8);
-  ctx.moveTo(originX-8, originY);
-  ctx.lineTo(triX0+triW-8, originY);
+  ctx.moveTo(originX, gridY0); ctx.lineTo(originX, gridY1);
+  ctx.moveTo(gridX0, originY); ctx.lineTo(gridX1, originY);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -2972,7 +3082,7 @@ function draw(){
 
   // R base
   ctx.strokeStyle = accent;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
   ctx.stroke();
@@ -2985,14 +3095,14 @@ function draw(){
 
   // Hypotenuse Z
   ctx.strokeStyle = ink || text || '#e2e8f0';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.moveTo(A.x, A.y); ctx.lineTo(Cv.x, Cv.y);
   ctx.stroke();
   ctx.lineWidth = 1;
 
   // Right-angle marker at B
-  const raSize = 8;
+  const raSize = 9;
   ctx.strokeStyle = muted;
   ctx.beginPath();
   const dir = (s.netReactance>=0) ? -1 : 1; // sign of y offset
@@ -3001,70 +3111,90 @@ function draw(){
   ctx.lineTo(B.x,          B.y + dir*raSize);
   ctx.stroke();
 
-  // Phase-angle arc at A
+  // Phase-angle arc at A. The canvas angle is −φ (screen y points down), and
+  // the sweep must be the SHORT way from the base to the hypotenuse: that is
+  // anticlockwise (decreasing canvas angle) exactly when φ > 0. The flag used
+  // to be `phi < 0`, which swept 360° − |φ| — a drawn 274° for a computed
+  // −86.2°. The radius carries a floor because the arc is an annotation, not a
+  // to-scale quantity; at R = 10 Ω it was 1.7 px across.
   const phi = s.phaseAngle;
-  const arcR = Math.min(28, Rpx*0.4);
+  const arcR = Math.max(16, Math.min(34, Math.min(Rpx, s.impedance*scale)*0.55));
   ctx.strokeStyle = '#fbbf24';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  // canvas angle: measure from +x axis. phi in physics has +up for inductive; canvas y is down so canvas angle = -phi.
-  const cvAng = -phi;
+  ctx.lineWidth = 2.5;
   if(Math.abs(phi) > 0.01){
-    ctx.arc(A.x, A.y, arcR, 0, cvAng, phi<0);
+    ctx.beginPath();
+    ctx.arc(A.x, A.y, arcR, 0, -phi, phi > 0);
     ctx.stroke();
   }
   ctx.lineWidth = 1;
 
-  // Labels — clamp inside canvas
-  ctx.font = '600 12px var(--font-sans, sans-serif)';
-  ctx.textAlign = 'center';
+  // ---- Labels. Every tag names the quantity in words before its symbol, and
+  // each is anchored so the four can never pile up on a thin triangle.
   ctx.textBaseline = 'middle';
-  // R label — below the base
+  // R — beside the base, ALWAYS on the side the reactance leg does not occupy,
+  // so it cannot collide with the φ tag (both used to land below the corner).
+  const rSide = (s.netReactance >= 0) ? 1 : -1;   // leg up ⇒ label below, and vice versa
+  ctx.font = fSans('600 13px');
   ctx.fillStyle = accent;
-  const rMid = { x: (A.x+B.x)/2, y: B.y + 16 };
-  ctx.fillText('R = ' + state.R.toFixed(0) + ' Ω', rMid.x, rMid.y);
-  // reactance leg label — to right of leg
-  ctx.fillStyle = orange;
-  const legMid = { x: B.x + 8, y: (B.y + Cv.y)/2 };
   ctx.textAlign = 'left';
-  const netTxt = 'X_L−X_C = ' + s.netReactance.toFixed(0) + ' Ω';
-  // Clamp
-  let legX = legMid.x;
-  const legTxtW = ctx.measureText(netTxt).width;
-  if(legX + legTxtW > triX0+triW-4) legX = triX0+triW-4 - legTxtW;
-  ctx.fillText(netTxt, legX, legMid.y);
-  // Z label near hypotenuse midpoint, offset perpendicular
+  ctx.fillText('R = ' + state.R.toFixed(0) + ' Ω', A.x + arcR + 10, B.y + rSide*18);
+  // Net reactance — beside the upright leg
+  ctx.fillStyle = orange;
+  ctx.textAlign = 'left';
+  const netParts = [['X',0],['L',1],[' − X',0],['C',1],
+                    [' = ' + s.netReactance.toFixed(0) + ' Ω',0]];
+  // with a near-zero leg the midpoint lands ON the base — lift the tag clear
+  const legY = (Math.abs(netPx) < 24) ? B.y - 17 : (B.y + Cv.y)/2;
+  const legW = richText(0, 0, netParts, 14, true);
+  let legX = B.x + 12;
+  if(legX + legW > triX0+triW-4) legX = Math.max(triX0+4, triX0+triW-4 - legW);
+  richText(legX, legY, netParts, 14);
+  // Z — offset along the outward normal of the hypotenuse, so it never sits on it
   ctx.fillStyle = ink || '#e2e8f0';
-  ctx.textAlign = 'right';
-  const midHx = (A.x+Cv.x)/2;
-  const midHy = (A.y+Cv.y)/2;
+  const hx = Cv.x - A.x, hy = Cv.y - A.y, hl = Math.hypot(hx, hy) || 1;
+  let nx = hy/hl, ny = -hx/hl;
+  if(nx*Rpx > 0){ nx = -nx; ny = -ny; }          // point away from the R base
   const zTxt = 'Z = ' + s.impedance.toFixed(1) + ' Ω';
-  let zx = midHx - 10;
-  let zy = midHy + (s.netReactance>=0 ? -8 : 12);
-  if(zx < triX0+40) zx = triX0+40;
-  ctx.fillText(zTxt, zx, zy);
-  // phi label near arc
+  ctx.font = fSans('600 13px');
+  const zW = ctx.measureText(zTxt).width;
+  if(Math.abs(netPx) < 24){
+    // At resonance the hypotenuse lies ON the base: stack Z on its own row
+    // above both the R tag (below) and the zero-reactance tag (just above).
+    ctx.textAlign = 'center';
+    ctx.fillText(zTxt, (A.x+B.x)/2, B.y - 36);
+  } else {
+    ctx.textAlign = nx < 0 ? 'right' : 'left';
+    let zx = (A.x+Cv.x)/2 + nx*16;
+    if(nx < 0) zx = Math.max(zx, triX0 + 4 + zW);          // never clipped at the left edge
+    else       zx = Math.min(zx, triX0 + triW - 4 - zW);
+    ctx.fillText(zTxt, zx, (A.y+Cv.y)/2 + ny*16);
+  }
+  // φ — just outside the arc, on the bisector
   if(Math.abs(phi) > 0.02){
     ctx.fillStyle = '#fbbf24';
     ctx.textAlign = 'left';
-    const phLabel = 'φ = ' + s.phaseAngleDegrees.toFixed(1) + '°';
-    ctx.fillText(phLabel, A.x + arcR + 6, A.y + (s.netReactance>=0 ? -6 : 10));
+    ctx.fillText('φ = ' + s.phaseAngleDegrees.toFixed(1) + '°',
+                 A.x + (arcR+9)*Math.cos(-phi/2), A.y + (arcR+9)*Math.sin(-phi/2));
   }
 
   // Resonance callout
   if(s.atResonance){
     ctx.fillStyle = '#34d399';
     ctx.textAlign = 'center';
-    ctx.font = '700 12px var(--font-sans, sans-serif)';
-    ctx.fillText('AT RESONANCE — Z = R,   cos φ = 1', originX + triW*0.5, triY0 + 14);
-    ctx.font = '600 12px var(--font-sans, sans-serif)';
+    ctx.font = fSans('700 14px');
+    ctx.fillText(pickLabel(['AT RESONANCE — the upright leg is gone: Z = R, cos φ = 1',
+                            'AT RESONANCE — no upright leg: Z = R, cos φ = 1',
+                            'AT RESONANCE — Z = R, cos φ = 1'], triW - 8),
+                 triX0 + triW*0.5, triY0 + 16);
   }
 
-  // Section title (left)
+  // Section title (left) — states the scale the grid is drawn at
   ctx.fillStyle = muted;
   ctx.textAlign = 'left';
-  ctx.font = '600 10px var(--font-sans, sans-serif)';
-  ctx.fillText('IMPEDANCE TRIANGLE (to scale)', triX0, triY0 + 4);
+  ctx.font = fSans('600 12px');
+  ctx.fillText(pickLabel(['IMPEDANCE TRIANGLE — one grid square = ' + div + ' Ω',
+                          'IMPEDANCE TRIANGLE — grid square = ' + div + ' Ω',
+                          'grid square = ' + div + ' Ω'], triW - 4), triX0, triY0 - 4);
 
   // ============ RIGHT ============
   const rightX0 = split + 10;
@@ -3072,8 +3202,10 @@ function draw(){
   const rightW  = rightX1 - rightX0;
 
   // Split right into TWO halves. Waves shown from step >= 0 (they're always on).
-  // Power bars only after step >= 1 (when the inquiry has introduced them).
-  const showBars = (revealStep >= 1);
+  // The power bars stay off until step >= 4, because card 4 asks the student to
+  // PREDICT what they do as ω approaches ω₀ — with them live at the gate, and
+  // the ω slider live beside them, the prediction is answerable by dragging.
+  const showBars = (revealStep >= 4);
 
   const wavesY0 = marginTop;
   const wavesY1 = showBars ? (marginTop + (viewH - marginTop - marginBottom)*0.42) : (viewH - marginBottom);
@@ -3081,11 +3213,11 @@ function draw(){
   const barsY1 = viewH - marginBottom;
 
   // ---- Waveforms ----
-  drawWaves(rightX0, wavesY0, rightW, wavesY1 - wavesY0, muted, text, accent, orange, border);
+  drawWaves(rightX0, wavesY0, rightW, wavesY1 - wavesY0, muted, text, accent, orange, frame);
 
   // ---- Bars ----
   if(showBars){
-    drawBars(rightX0, barsY0, rightW, barsY1 - barsY0, s, p, muted, text, accent, orange, border);
+    drawBars(rightX0, barsY0, rightW, barsY1 - barsY0, s, p, muted, text, accent, orange, frame);
   }
 }
 
@@ -3099,8 +3231,11 @@ function drawWaves(x, y, w, h, muted, text, accent, orange, border){
   const ctx2 = ctx;
   ctx2.fillStyle = muted;
   ctx2.textAlign = 'left';
-  ctx2.font = '600 10px var(--font-sans, sans-serif)';
-  ctx2.fillText('APPLIED VOLTAGE  vs  CURRENT   (φ separates their peaks)', cx, y + 4);
+  ctx2.textBaseline = 'middle';
+  ctx2.font = fSans('600 12px');
+  ctx2.fillText(pickLabel(['SUPPLY VOLTAGE  vs  CURRENT  —  two drive cycles of ωt',
+                           'SUPPLY VOLTAGE vs CURRENT — two cycles of ωt',
+                           'VOLTAGE vs CURRENT — two cycles'], w-16), cx, y + 2);
 
   // frame
   ctx2.strokeStyle = border;
@@ -3119,8 +3254,11 @@ function drawWaves(x, y, w, h, muted, text, accent, orange, border){
   const Vpk = state.Vrms * Math.SQRT2;
   const Ipk = Vpk / s.impedance;
 
-  // Scale so V uses ~40% of half-height, I uses ~40% independently
-  // (they aren't on the same axis; the point is their PHASE offset)
+  // Volts and amperes share no axis, so each trace is drawn at its OWN full
+  // height and the panel says so: what this panel encodes honestly is the phase
+  // gap φ between the two peaks, nothing about amplitude. The peak values are
+  // printed on the traces so the current's 48-fold swing across the ω slider —
+  // invisible here by construction — is still readable.
   const Vscale = (wh*0.42);
   const Iscale = (wh*0.42);
 
@@ -3140,9 +3278,12 @@ function drawWaves(x, y, w, h, muted, text, accent, orange, border){
   }
   ctx2.stroke();
 
-  // current (lags by phi if inductive)
+  // Current (lags by phi if inductive). DASHED, not merely a second colour:
+  // at resonance the two traces coincide exactly and a solid one would simply
+  // hide the other, and colour alone is never a safe channel for a distinction.
   ctx2.strokeStyle = orange;
   ctx2.lineWidth = 2;
+  ctx2.setLineDash([8,5]);
   ctx2.beginPath();
   for(let i=0;i<=ww;i++){
     const u = i/ww;
@@ -3151,17 +3292,19 @@ function drawWaves(x, y, w, h, muted, text, accent, orange, border){
     if(i===0) ctx2.moveTo(cx+i, yi); else ctx2.lineTo(cx+i, yi);
   }
   ctx2.stroke();
+  ctx2.setLineDash([]);
   ctx2.lineWidth = 1;
 
-  // legend for waves — inside the frame, bottom-left
-  ctx2.font = '600 11px var(--font-sans, sans-serif)';
+  // Trace tags — each names its quantity and the peak it is drawn at
   ctx2.textAlign = 'left';
-  ctx2.fillStyle = accent;
-  ctx2.fillText('V', cx+8, cy+8+wh-18);
-  ctx2.fillStyle = orange;
-  ctx2.fillText('I', cx+22, cy+8+wh-18);
+  ctx2.font = fSans('600 12px');
   ctx2.fillStyle = muted;
-  ctx2.fillText('(peaks apart by φ)', cx+36, cy+8+wh-18);
+  ctx2.fillText(pickLabel(['heights not to scale — only the φ gap is',
+                           'only the φ gap is to scale'], ww-20), cx+10, cy+8+wh-46);
+  ctx2.fillStyle = accent;
+  ctx2.fillText('v — supply voltage, peak ' + Vpk.toFixed(0) + ' V', cx+10, cy+8+wh-30);
+  ctx2.fillStyle = orange;
+  ctx2.fillText('i — current (dashed), peak ' + Ipk.toFixed(2) + ' A', cx+10, cy+8+wh-14);
 }
 
 function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
@@ -3174,8 +3317,15 @@ function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
   // Title
   ctx2.fillStyle = muted;
   ctx2.textAlign = 'left';
-  ctx2.font = '600 10px var(--font-sans, sans-serif)';
-  ctx2.fillText('APPARENT POWER  vs  AVERAGE POWER   (same scale)', cx, cy - 6);
+  ctx2.textBaseline = 'middle';
+  ctx2.font = fSans('600 12px');
+  ctx2.fillText(s.atResonance
+    ? pickLabel(['APPARENT POWER  vs  AVERAGE POWER  —  S = P, power factor 1',
+                 'APPARENT vs AVERAGE POWER — S = P, cos φ = 1',
+                 'S = P — power factor 1'], w-16)
+    : pickLabel(['APPARENT POWER  vs  AVERAGE POWER   (one shared scale)',
+                 'APPARENT vs AVERAGE POWER (one scale)',
+                 'APPARENT vs AVERAGE POWER'], w-16), cx, cy - 8);
 
   // Frame
   ctx2.strokeStyle = border;
@@ -3183,15 +3333,16 @@ function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
 
   const innerX0 = cx + 16;
   const innerX1 = cx + ww - 16;
-  const innerY0 = cy + 12;
+  const innerY0 = cy + 22;
   const innerY1 = cy + wh - 18;
   const innerH = innerY1 - innerY0;
 
-  // Fixed max: worst case = V^2 / R (both S & P at resonance). Use current sliders' V and R
-  // so the bars actually fill the panel — but keep the SCALE consistent between S and P (they share it),
-  // which is the whole point. This is not a "refit to displayed values" cheat: we're using a
-  // fixed physical upper bound of S at the CURRENT V and R (V²/R), which cannot make P and S refit
-  // relative to each OTHER — only relative to the frame. Their ratio (the power factor) is preserved.
+  // FULL HEIGHT = V²/R, which is what this circuit would draw AT RESONANCE with
+  // the present V and R. Both bars share it, so the P bar's height is cos φ
+  // times the S bar's — the power factor, read straight off the picture — and
+  // tuning to ω₀ drives both to the top. The reference moves with V and R, so
+  // it is DRAWN and LABELLED rather than left silent: without the rule the
+  // supply-voltage slider looks dead here (V cancels out of both fractions).
   const scaleMax = state.Vrms * state.Vrms / state.R;
 
   const barW = (innerX1 - innerX0) * 0.28;
@@ -3201,6 +3352,18 @@ function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
 
   const sH = Math.max(2, (p.apparentPower / scaleMax) * innerH);
   const pH = Math.max(0, (p.averagePower  / scaleMax) * innerH);
+
+  // The full-scale rule, drawn and named
+  ctx2.strokeStyle = border;
+  ctx2.setLineDash([4,4]);
+  ctx2.beginPath(); ctx2.moveTo(innerX0-10, innerY0); ctx2.lineTo(innerX1+10, innerY0); ctx2.stroke();
+  ctx2.setLineDash([]);
+  ctx2.fillStyle = muted;
+  ctx2.textAlign = 'left';
+  ctx2.font = fSans('600 12px');
+  ctx2.fillText(pickLabel(['full scale = V²/R = ' + fmtPower(scaleMax, 'W') + ' (the power at resonance)',
+                           'full scale = V²/R = ' + fmtPower(scaleMax, 'W') + ' (at resonance)',
+                           'full scale ' + fmtPower(scaleMax, 'W')], ww-12), innerX0-10, innerY0-10);
 
   // S bar (apparent) — orange outline (reactive component included)
   const xS = xStart;
@@ -3219,26 +3382,27 @@ function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
   ctx2.lineWidth = 1;
 
   // Numbers ON the bars — clamp inside canvas
-  ctx2.font = '700 12px var(--font-nums, monospace)';
+  ctx2.font = fNums('700 13px');
   ctx2.textAlign = 'center';
   ctx2.fillStyle = orange;
-  const sLabel = fmtPower(p.apparentPower) + ' VA';
-  const pLabel = fmtPower(p.averagePower)  + ' W';
-  const sLabelY = Math.max(innerY0 + 12, innerY1 - sH - 6);
-  const pLabelY = Math.max(innerY0 + 12, innerY1 - pH - 6);
+  const sLabel = fmtPower(p.apparentPower, 'VA');
+  const pLabel = fmtPower(p.averagePower, 'W');
+  const sLabelY = Math.max(innerY0 + 12, innerY1 - sH - 8);
+  const pLabelY = Math.max(innerY0 + 12, innerY1 - pH - 8);
   ctx2.fillText(sLabel, xS + barW/2, sLabelY);
   ctx2.fillStyle = accent;
   ctx2.fillText(pLabel, xP + barW/2, pLabelY);
 
-  // Under-bar labels
-  ctx2.font = '600 11px var(--font-sans, sans-serif)';
-  ctx2.fillStyle = muted;
-  ctx2.fillText('S = V·I', xS + barW/2, innerY1 + 12);
-  ctx2.fillText('P = V·I·cos φ', xP + barW/2, innerY1 + 12);
+  // Under-bar labels — named, not symbol-only
+  ctx2.font = fSans('600 12px');
+  const slot = (barW + gap) * 0.92;              // the two tags must not meet
+  ctx2.fillStyle = orange;
+  ctx2.fillText(pickLabel(['apparent  S = V·I','S = V·I'], slot), xS + barW/2, innerY1 + 12);
+  ctx2.fillStyle = accent;
+  ctx2.fillText(pickLabel(['average  P = V·I·cos φ','P = V·I·cos φ'], slot), xP + barW/2, innerY1 + 12);
 
   // Gap annotation
   if(p.apparentPower - p.averagePower > 0.02 * scaleMax){
-    const gapX = (xS + barW + xP)/2;
     const gapYtop = innerY1 - sH;
     const gapYbot = innerY1 - pH;
     ctx2.strokeStyle = '#fbbf24';
@@ -3250,30 +3414,28 @@ function drawBars(x, y, w, h, s, p, muted, text, accent, orange, border){
     ctx2.setLineDash([]);
     ctx2.fillStyle = '#fbbf24';
     ctx2.textAlign = 'center';
-    ctx2.font = '700 11px var(--font-sans, sans-serif)';
-    const gapTxt = 'reactive VA — energy sloshing, no work';
-    // clamp
+    ctx2.font = fSans('700 12px');
+    const gapTxt = 'the gap: reactive VA, no work done';
+    // Clamp horizontally, and keep clear of the S value label (which sits just
+    // above the taller bar) rather than landing on top of it.
     const tw = ctx2.measureText(gapTxt).width;
-    let gx = gapX;
+    let gx = (xS + barW + xP)/2;
     if(gx - tw/2 < cx+4) gx = cx+4 + tw/2;
     if(gx + tw/2 > cx+ww-4) gx = cx+ww-4 - tw/2;
-    ctx2.fillText(gapTxt, gx, (gapYtop+gapYbot)/2 - 6);
-  } else {
-    // At resonance — call it out
-    ctx2.fillStyle = '#34d399';
-    ctx2.textAlign = 'center';
-    ctx2.font = '700 11px var(--font-sans, sans-serif)';
-    ctx2.fillText('S = P    (power factor = 1)', (xS+xP+barW)/2, innerY0 + 14);
+    ctx2.fillText(gapTxt, gx, Math.max(innerY0 + 20, gapYtop - 28));
   }
+  // When the gap has closed the bars say so themselves; the title carries the
+  // wording, so nothing is drawn here that could land on the value labels.
 }
 
-function fmtPower(w){
-  if(!isFinite(w)) return '∞';
-  if(w >= 10000) return (w/1000).toFixed(1) + ' k';
-  if(w >= 1000)  return (w/1000).toFixed(2) + ' k';
-  if(w >= 100)   return w.toFixed(0);
-  if(w >= 10)    return w.toFixed(1);
-  return w.toFixed(2);
+function fmtPower(w, unit){
+  const u = unit || '';
+  if(!isFinite(w)) return '∞ ' + u;
+  if(w >= 10000) return (w/1000).toFixed(1) + ' k' + u;
+  if(w >= 1000)  return (w/1000).toFixed(2) + ' k' + u;
+  if(w >= 100)   return w.toFixed(0) + ' ' + u;
+  if(w >= 10)    return w.toFixed(1) + ' ' + u;
+  return w.toFixed(2) + ' ' + u;
 }
 
 // ---- SHELL CALLBACKS -----------------------------------------------------
@@ -3558,7 +3720,7 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     { sel:'#box-omega',      mode:'hide', also:['#note-fixed'], title:'Angular frequency ω', text:'Drives the circuit. L and C are fixed, so ω₀ sits at 1000 rad/s.' },
     { sel:'#box-res',        mode:'hide', title:'Resistance R',   text:'The triangle’s base — and the only element that dissipates power.' },
     { sel:'#box-vol',        mode:'hide', title:'Supply voltage', text:'Sets the rms voltage the source applies to the circuit.' },
-    { sel:'#panel-readouts', mode:'hide', title:'Readouts',       text:'Live impedance Z, phase φ, power factor cos φ and regime.' },
+    { sel:'#panel-readouts', mode:'hide', title:'Readouts',       text:'Live impedance, current, phase, power factor and regime, then the rms voltage across each element.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
   const cel = sel => sel ? document.querySelector(sel) : null;
@@ -3673,6 +3835,7 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   function setCg(on, keepGiState){
     cgOn = on;
     cgBtn.classList.toggle('active', on);
+    root.classList.toggle('cg-open', on);   // moves the Feedback pill off #cg-next
     if(on){
       if(!keepGiState) setGi(false);           // mutual exclusion
       ensureUi();
@@ -3730,7 +3893,7 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the impedance triangle.',
-    'Here you drive a series L C R circuit with an alternating supply. The resistance R lies along the base of a right triangle, the net reactance X L minus X C stands up from it, and the impedance Z is the hypotenuse. Tune the frequency toward resonance and the upright leg vanishes: Z falls to R alone, the phase angle closes, and every volt ampere the supply delivers finally becomes real work.',
+    'Here you drive a series L C R circuit with an alternating supply. The resistance R lies along the base of a right triangle, the net reactance X L minus X C stands up from it, and the impedance Z is the hypotenuse, and the angle at the corner is the phase angle phi between the supply voltage and the current. The inductance and capacitance are fixed; the drive frequency, the resistance and the supply voltage are yours to set.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -3896,6 +4059,11 @@ Shell.init({ onFrame, onReset, onResize, onStep });
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
   .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  /* The pill sits at right:18/bottom:18 with z-index 99990 — exactly on top of
+     the Controls Guide's docked nav, so elementFromPoint at #cg-next returned
+     the pill and a real click never reached Next. Park it on the left while the
+     guide is open (moving .cg-nav instead breaks the layout-probe contract). */
+  html.cg-open .qfb-pill{right:auto;left:18px}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

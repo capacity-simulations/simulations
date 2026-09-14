@@ -82,8 +82,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;width:100%;height:100%;}
-.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
-.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.plot-title{position:absolute;top:12px;left:16px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
+.plot-title .plot-inline{font-size:12px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
@@ -1040,7 +1040,7 @@ Object.freeze(Engine);
 
         <div class="inq-step">
           <h4>The setup</h4>
-          <p>A ray of light in air strikes the flat surface of water at some angle. In water, light travels slower — that single fact drives everything you're about to see. On the left, watch the ray for a moment; drag the <b>angle of incidence</b> slider in the sidebar to feel how the refracted ray tilts.</p>
+          <p>A ray of light in air strikes the flat surface of water at some angle. In water, light travels slower — that single fact drives everything you're about to see. On the left, the ray arrives at 45° and leaves the surface on a new line; the dashed grey line is where it would have gone had it not bent.</p>
           <p style="color:var(--ink-mute);font-size:13px;">Angles are measured from the <b>normal</b> — the dashed line perpendicular to the surface.</p>
         </div>
 
@@ -1950,6 +1950,13 @@ return {
     return { w: r.width, h: r.height };
   }
 
+  // Name the lower medium honestly — it is only "water" when n₂ = 1.33. Shared
+  // by both panels and the formal speed line so nothing can say "water" while
+  // the Diamond option is selected.
+  function mediumName(){
+    return state.n2 === 1.5 ? 'glass' : state.n2 === 2.42 ? 'diamond' : 'water';
+  }
+
   // ---------- ENGINE-BACKED PHYSICS -----------------------------------------
   function computePhysics(inputs){
     const thetaRad = inputs.incidenceAngleDeg * Math.PI/180;
@@ -2008,8 +2015,12 @@ return {
   function drawMechanism(){
     const {w, h} = mView;
     const ctx = ctxM;
-    // background
-    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060E11';
+    // Background. Read the variable off BODY, not documentElement: the theme
+    // toggle sets `body.light-theme`, and that is the selector that redefines
+    // --bg. documentElement's computed value stays the dark one, so the canvas
+    // used to keep a near-black fill under a light page — with every ink already
+    // switched to its light-theme (dark) colour, leaving the labels unreadable.
+    const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#060E11';
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,w,h);
 
@@ -2067,6 +2078,20 @@ return {
     // arrowhead on incident
     drawArrowhead(ctx, inEnd.x, inEnd.y, Math.atan2(inEnd.y-inStart.y, inEnd.x-inStart.x), rayColor, 8);
 
+    // The path the ray WOULD have taken had it not bent. Without this reference
+    // "how much did it bend" has nothing to be measured against — and at θ₁ = 0
+    // the refracted ray lying exactly on it is the answer to the prediction card.
+    const undEnd = { x: cx + Math.sin(th1)*rayLen, y: yInt + Math.cos(th1)*rayLen };
+    ctx.save();
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle = isLight ? 'rgba(100,116,139,0.60)' : 'rgba(148,163,184,0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(inEnd.x, inEnd.y);
+    ctx.lineTo(undEnd.x, undEnd.y);
+    ctx.stroke();
+    ctx.restore();
+
     // Draw refracted ray
     ctx.strokeStyle = rayColor;
     ctx.lineWidth = 2.5;
@@ -2122,37 +2147,72 @@ return {
     ctx.textBaseline = 'top';
     ctx.fillStyle = ink;
     ctx.font = '600 12px ' + getComputedStyle(document.body).fontFamily;
-    ctx.fillText('air  (n₁ = 1.00)', 14, yInt - 20);
-    ctx.fillText('medium  (n₂ = ' + state.n2.toFixed(2) + ')', 14, yInt + 8);
+    // "air" goes on the RIGHT of the normal: above the interface the incident
+    // ray is always to the LEFT of it, so this is the one spot a grazing ray
+    // (θ₁ = 80° on a short canvas) cannot strike through the label — which is
+    // exactly what it used to do at 1024×768.
+    ctx.textAlign = 'right';
+    ctx.fillText('air  (n₁ = 1.00)', w - 14, yInt - 20);
+    ctx.textAlign = 'left';
+    ctx.fillText(mediumName() + '  (n₂ = ' + state.n2.toFixed(2) + ')', 14, yInt + 8);
+
+    // Snell's law as live arithmetic, in the top-right quadrant — the only part
+    // of this panel the incident ray (always up-LEFT of the normal) can never
+    // reach. Seeing the two products stay equal while both angles change IS the
+    // law; a symbolic equation hidden behind ∑ Formal is not.
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    const prod1 = 1.00 * Math.sin(th1);
+    const prod2 = state.n2 * Math.sin(th2);
+    ctx.font = '600 13px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = ink;
+    // y = 56 clears the .plot-title overlay, which wraps to two lines on a
+    // narrow canvas.
+    ctx.fillText('n₁ sin θ₁ = ' + prod1.toFixed(3) + ' = ' + prod2.toFixed(3) + ' = n₂ sin θ₂', w - 14, 56);
+    ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = inkSoft;
+    ctx.fillText('1.00 × sin ' + state.thetaDeg.toFixed(0) + '°   and   ' + state.n2.toFixed(2)
+                 + ' × sin ' + (phys.refractionAngleDeg||0).toFixed(1) + '°', w - 14, 75);
 
     // Normal label
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = inkSoft;
     ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
-    ctx.fillText('normal', clamp(cx+8, 20, w-80), 56);
+    // Sits below the Snell block so the two never collide at narrow widths,
+    // where the block's left edge can reach past the normal.
+    ctx.fillText('normal', clamp(cx+8, 20, w-80), 100);
 
     // Wavefront bars
     drawWavefronts(ctx, cx, yInt, th1, th2, rayLen, w, h);
 
-    // Legend
+    // Legend. Laid out from MEASURED text widths rather than hardcoded x's, so
+    // a third entry fits without colliding on a narrow canvas; the wavefront
+    // gloss drops to its short form only when the row would otherwise overflow.
+    // (The dashed reference is identified here rather than in the scene: at
+    // grazing incidence it lies almost along the interface, and there is no
+    // in-scene spot for its label that some θ₁ does not sweep through.)
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
-    const barColor = '#60a5fa';
-    ctx.strokeStyle = barColor;
-    ctx.lineWidth = 2.2;
     const legY = h - 16;
-    ctx.beginPath();
-    ctx.moveTo(14, legY - 4); ctx.lineTo(38, legY - 4); ctx.stroke();
-    ctx.fillStyle = ink;
-    ctx.fillText('wavefronts (in step)', 44, legY);
-    ctx.strokeStyle = rayColor;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(210, legY - 4); ctx.lineTo(234, legY - 4); ctx.stroke();
-    ctx.fillStyle = ink;
-    ctx.fillText('ray', 240, legY);
+    const wfLong = 'wavefronts (in step)';
+    const items = [
+      { color:'#60a5fa', width:2.2, dash:null,  text: (ctx.measureText(wfLong).width + 250 <= w - 28) ? wfLong : 'wavefronts' },
+      { color:rayColor,  width:2.5, dash:null,  text:'ray' },
+      { color:isLight ? 'rgba(100,116,139,0.60)' : 'rgba(148,163,184,0.45)', width:1.4, dash:[4,4], text:'path with no bend' }
+    ];
+    let legX = 14;
+    for(const it of items){
+      ctx.save();
+      ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+      if(it.dash) ctx.setLineDash(it.dash);
+      ctx.beginPath(); ctx.moveTo(legX, legY - 4); ctx.lineTo(legX + 22, legY - 4); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = ink;
+      ctx.fillText(it.text, legX + 28, legY);
+      legX += 28 + ctx.measureText(it.text).width + 16;
+    }
   }
 
   function drawWavefronts(ctx, cx, yInt, th1, th2, rayLen, w, h){
@@ -2172,7 +2232,15 @@ return {
     ctx.lineCap = 'round';
 
     for(let i = -nBars; i < nBars; i++){
-      const dAir = -(i * spacing + phase);
+      // `phase` GROWS with t, so it must be ADDED to the along-ray coordinate:
+      // the wave has to travel toward the interface. Subtracting it ran the
+      // whole film backwards — bars retreating up-beam into the air while the
+      // arrowheads and the card ("in air they march forward at c") said the
+      // opposite, and the pivot the student is told to watch played in reverse.
+      // i = 0…nBars-1 still survives the dAir < 0 test, so the bar count is
+      // unchanged, and at the wrap (phase → spacing) bar i lands exactly where
+      // bar i-1 started, so the loop is seamless.
+      const dAir = phase - (i + 1) * spacing;
       const bxAir = cx + rxi * dAir;
       const byAir = yInt + ryi * dAir;
 
@@ -2220,8 +2288,13 @@ return {
       }
     }
 
-    for(let j = 1; j <= nBars-1; j++){
-      const dMed = (j * spacing - phase) / state.n2;
+    for(let j = 0; j <= nBars-1; j++){
+      // Same sense as the air bars: d grows with t, so the transmitted wave
+      // moves AWAY from the interface. Starting at j = 0 lets a bar emerge from
+      // the interface exactly where the straddling bar hands over, so the
+      // hand-off is continuous instead of popping. Division by n2 is the
+      // physics: spacing/n2 is λ₂ = λ₁/n₂ and d(dMed)/dt = v₁/n₂ = v₂.
+      const dMed = (j * spacing + phase) / state.n2;
       const bxr = cx + rxr * dMed;
       const byr = yInt + ryr * dMed;
       const ax = bxr + nxr * barHalf;
@@ -2264,12 +2337,16 @@ return {
   function drawPool(){
     const {w, h} = pView;
     const ctx = ctxP;
-    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060E11';
+    // BODY, not documentElement — see drawMechanism.
+    const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#060E11';
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,w,h);
 
     const ySurf = h * 0.28;
-    const belowSpace = h - ySurf - 24;
+    // Reserve the bottom strip for the coin's own label, the paraxial note and
+    // the legend. At 24 px the deepest coin (d = 2.00 m) landed ON the legend
+    // row and its "real coin" label was clipped off the bottom edge.
+    const belowSpace = h - ySurf - 78;
     const maxDepthMetres = 2.0;
     const pxPerMetre = belowSpace / maxDepthMetres;
     const dPx = state.depth * pxPerMetre;
@@ -2279,8 +2356,8 @@ return {
     const ink = isLight ? 'rgba(51,65,85,0.9)' : 'rgba(203,213,225,0.85)';
     const lineC = isLight ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.55)';
     const blueInk = isLight ? '#1d4ed8' : '#60a5fa';
-    // Name the denser medium honestly — it is only "water" when n = 1.33
-    const medName = state.n2 === 1.5 ? 'glass' : state.n2 === 2.42 ? 'diamond' : 'water';
+    const inkSoft = isLight ? 'rgba(71,85,105,0.9)' : 'rgba(148,163,184,0.9)';
+    const medName = mediumName();
     ctx.fillStyle = isLight ? 'rgba(59,155,143,0.08)' : 'rgba(59,155,143,0.10)';
     ctx.fillRect(0, ySurf, w, h - ySurf);
 
@@ -2294,11 +2371,39 @@ return {
     const dApp = Engine.rays.apparentDepth(state.depth, state.n2, 1).apparentDepth;
     const yApp = ySurf + dApp * pxPerMetre;
 
-    const xEye = w * 0.20;
+    // VIEWING GEOMETRY. d′ = d/n is a PARAXIAL result, and the construction that
+    // puts the back-extension exactly on it obeys tan θ_air = n·tan θ_water —
+    // which is Snell only for small angles. The eye used to sit at a fixed spot,
+    // so the in-water angle was whatever the depth made it: at d = 0.5 m it
+    // reached 43°, where the tan-law and Snell disagree by 14° (32° in glass),
+    // and in diamond (θc = 24.4°) it reached 34°, i.e. the panel drew a ray
+    // escaping from BEYOND the critical angle — light that physically cannot get
+    // out at all, in the same file whose other panel gets Snell right to 0.06°.
+    // Fix the in-water angle instead and derive the eye from it: capped at 20°
+    // and at 0.40·θc, the tan-law tracks Snell to under 1.6° everywhere — about
+    // one line width across the drawn segment — and no ray is ever drawn past
+    // θc. Holding it fixed also means the Real-depth slider now varies ONLY the
+    // depth, instead of silently swinging the viewing angle too.
+    const thC  = Math.asin(1/state.n2);
+    const thW  = Math.min(20*Math.PI/180, 0.40*thC);
+    const thA  = Math.atan(state.n2 * Math.tan(thW));
     const yEye = ySurf - Math.min(h*0.18, 90);
+    const xExit = xCoin - dPx * Math.tan(thW);
+    const xEye  = xExit - (ySurf - yEye) * Math.tan(thA);
 
-    const tSurf = (ySurf - yEye) / (yApp - yEye);
-    const xExit = xEye + tSurf * (xCoin - xEye);
+    // The normal at the exit point. "Bends AWAY from the normal on the way out"
+    // is the sentence card 4 asks the student to read off this picture, and
+    // until now the line it is measured from was not drawn at all.
+    ctx.setLineDash([5,4]);
+    ctx.strokeStyle = lineC;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(xExit, ySurf - 46); ctx.lineTo(xExit, ySurf + 46); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = inkSoft;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('normal', xExit + 6, ySurf - 48);
 
     const rayC = '#fbbf24';
     ctx.strokeStyle = rayC;
@@ -2362,7 +2467,9 @@ return {
     const dLabel = 'd = ' + state.depth.toFixed(2) + ' m';
     ctx.fillText(dLabel, Math.min(w-8-ctx.measureText(dLabel).width, xMeas + 8), (ySurf + yCoin)/2);
 
-    const xMeasL = Math.max(80, xCoin - 60);
+    // Park the d′ bracket clear of the ray instead of on top of it — the label
+    // used to be struck through by the amber ray at the default settings.
+    const xMeasL = Math.max(78, Math.min(xEye, xExit) - 46);
     ctx.strokeStyle = 'rgba(96,165,250,0.7)';
     ctx.setLineDash([3,3]);
     ctx.beginPath();
@@ -2388,8 +2495,12 @@ return {
     ctx.fillText('eye', xEye, yEye - 12);
     ctx.textBaseline = 'top';
     ctx.fillText('real coin', xCoin, yCoin + 14);
+    // Left of the dashed circle, not above it: above put the word on top of the
+    // "d" bracket, and "apparent" on its own never said apparent WHAT.
     ctx.fillStyle = blueInk;
-    ctx.fillText('apparent', xCoin, yApp - 30);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('apparent coin', xCoin - 16, yApp);
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
@@ -2409,6 +2520,15 @@ return {
     ctx.setLineDash([]);
     ctx.fillStyle = ink;
     ctx.fillText("brain's straight line", 150, legY);
+    // Scale honesty: d′ = d/n is the near-normal (paraxial) result, and the
+    // viewing angle here is opened up so the bend is visible at all. Say so.
+    ctx.fillStyle = inkSoft;
+    // Two widths: the full sentence when the canvas can hold it, a short form
+    // that still carries the disclosure when it cannot. The long one used to be
+    // cut off mid-word at 1024×768.
+    const noteLong = 'd′ = d/n is the near-vertical view; the viewing angle is opened up here so the bend shows';
+    const noteShort = 'angles exaggerated; d′ = d/n is near-vertical';
+    ctx.fillText(ctx.measureText(noteLong).width <= w - 28 ? noteLong : noteShort, 14, legY - 18);
   }
 
   // ---------- SHELL CALLBACKS -----------------------------------------------
@@ -2433,6 +2553,7 @@ return {
     if(sD) sD.value = '1.00';
 
     updateReadouts();
+    renderSpeedEq();          // n₂ is back to water — the speed line must follow
     drawMechanism();
     drawPool();
   }
@@ -2461,6 +2582,7 @@ return {
     sM.addEventListener('change', ()=>{
       state.n2 = parseFloat(sM.value);
       updateReadouts();
+      renderSpeedEq();
       drawMechanism();
       drawPool();
     });
@@ -2482,8 +2604,20 @@ return {
         document.getElementById('eq-snell'), {throwOnError:false});
       katex.render(String.raw`d' = \dfrac{d}{n_2} \qquad (\text{viewing from air})`,
         document.getElementById('eq-depth'), {throwOnError:false});
-      katex.render(String.raw`v = \dfrac{c}{n} \;\Rightarrow\; v_{\text{water}} \approx 2.254\times10^{8}\,\text{m/s}`,
-        document.getElementById('eq-speed'), {throwOnError:false});
+    }catch(e){}
+    renderSpeedEq();
+  }
+  // The speed line used to be a constant that said "water, 2.254e8 m/s" even
+  // with Diamond selected — a wrong number on screen, which is a physics defect,
+  // not a cosmetic one. Re-rendered on every medium change instead (KaTeX is far
+  // too slow to re-run per frame, and nothing else in this line moves).
+  function renderSpeedEq(){
+    const el = document.getElementById('eq-speed');
+    if(!el || typeof katex === 'undefined') return;
+    const v = Engine.rays.speedInMedium(state.n2).speed;
+    try{
+      katex.render(String.raw`v = \dfrac{c}{n_2} \;\Rightarrow\; v_{\text{` + mediumName() + String.raw`}} = `
+        + (v/1e8).toFixed(3) + String.raw`\times10^{8}\,\text{m/s}`, el, {throwOnError:false});
     }catch(e){}
   }
   renderMath();

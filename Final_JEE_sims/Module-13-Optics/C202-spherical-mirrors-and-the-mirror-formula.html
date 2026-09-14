@@ -81,7 +81,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box canvas{display:block;width:100%;height:100%;}
 .plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
-.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend{position:absolute;top:42px;right:16px;max-width:calc(100% - 32px);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 14px;font-size:12.5px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+/* The pill ground is hardcoded dark; in light theme var(--text) goes dark too,
+   leaving the key at 2.25:1 on its own background. */
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.88);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -104,6 +107,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .ctrl-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px var(--accent-soft);border:none;}
 .ctrl-slider-row input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 8px var(--accent-soft);}
 .slider-val,.control-value{min-width:30px;text-align:right;font-weight:600;font-size:15px;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--accent);}
+.sign-note{font-size:13px;line-height:1.5;color:var(--text-muted);margin:10px 2px 0;}
+.sign-note b{color:var(--text);}
 .control-range{font-size:.75rem;font-family:var(--font-nums);font-variant-numeric:tabular-nums;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;}
 .stat-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;font-family:var(--font-sans);}
 .ctrl-box .stat-row:first-child{padding-top:0;}
@@ -908,11 +913,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-Δu dots: object walks in, image races away as u → f</span>
+            <span class="hero-label">Purple: the object, stepped in by equal Δu. Green: where its image lands.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Spherical mirrors</span></h2>
-            <p class="welcome-blurb">Walk the object toward F and the real image races to infinity — then reappears virtual behind the mirror.</p>
+            <p class="welcome-blurb">One mirror, one object, two construction rays. Walk the object in toward F and decide for yourself what the image does.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1009,10 +1014,10 @@ Object.freeze(Engine);
     <div class="plot-box" id="box-scene">
       <div class="plot-title">Ray diagram <span class="plot-inline" id="scene-mode">concave mirror</span></div>
       <div class="legend">
-        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Ray 1 (∥ → F)</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#22d3ee"></span>Ray 2 (F → ∥)</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>Object</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#34d399"></span>Image</div>
+        <div class="legend-item"><span class="legend-dot" data-ink="ray1" style="background:#f59e0b"></span>Ray 1 — parallel in, reflects through F</div>
+        <div class="legend-item"><span class="legend-dot" data-ink="ray2" style="background:#22d3ee"></span><span id="legend-ray2">Ray 2 — through F, reflects parallel</span></div>
+        <div class="legend-item"><span class="legend-dot" data-ink="obj" style="background:#a78bfa"></span>Object</div>
+        <div class="legend-item"><span class="legend-dot" data-ink="img" style="background:#34d399"></span>Image — dashed means virtual</div>
       </div>
       <canvas id="scene"></canvas>
     </div>
@@ -1042,22 +1047,21 @@ Object.freeze(Engine);
         </div>
 
         <div class="inq-step">
-          <h4>3 · Slide the object in</h4>
-          <p>Now drag the <b>object distance</b> slider down from 30 cm toward 10 cm. Watch the green image arrow:</p>
-          <p>• at <b>u = 20 cm</b> (= C) it is exactly life-size and inverted (m = −1),<br>• at <b>u = 15 cm</b> it is twice as tall (m = −2),<br>• at <b>u ≈ 10 cm</b> (= F) the two reflected rays come out <b>parallel</b> and never meet — there is <i>no image</i>.</p>
-          <p>The readout on the right shows v growing without limit.</p>
+          <h4>3 · Inside C</h4>
+          <p>The object now sits at <b>u = 14 cm</b>, between C and F. The image has moved out past C — still real and inverted, but now <b>taller than the object</b>: m = −2.50.</p>
+          <p>Walk the slider down and the rest follows: <b>u = 20 cm</b> (= C) gives life-size, m = −1; <b>u = 15 cm</b> gives m = −2; at <b>u = 10 cm</b> (= F) the reflected rays leave <b>parallel</b> and never meet — <i>no image</i>, v = ∞.</p>
         </div>
 
         <div class="inq-step">
-          <h4>4 · Cross the focus</h4>
-          <p>Keep sliding — push the object <b>inside F</b> (below 10 cm). Now the two reflected rays diverge, so they cannot meet in front of the mirror. Your eye traces them <i>backwards</i> (dashed) to a virtual image behind the mirror.</p>
-          <p>The image jumps to the <b>other side</b>, becomes <b>upright</b> and <b>magnified</b>. That is how a shaving mirror works.</p>
+          <h4>4 · Past the focus</h4>
+          <p>The object is now at <b>u = 6 cm</b>, inside F. The two reflected rays leave the mirror <i>diverging</i>, so they can never cross in front of it. Follow them <b>backwards</b> instead — the dashed lines — and they meet behind the mirror.</p>
+          <p>That intersection is the image: <b>virtual</b> (no light is really there), <b>upright</b>, and <b>magnified</b>, m = +2.50. It is the shaving-mirror regime, and it is the only one a concave mirror has on this side of F.</p>
         </div>
 
         <div class="inq-step">
-          <h4>5 · Try the convex mirror</h4>
-          <p>Flip the mirror to <b>convex</b>. Now slide u across its full range. The image never crosses the mirror, never inverts, and never magnifies — it stays <b>virtual, upright and diminished</b> everywhere.</p>
-          <p>A concave mirror runs through the whole zoo; a convex mirror does one thing only. That's why passenger-side mirrors carry the warning &ldquo;objects are closer than they appear.&rdquo;</p>
+          <h4>5 · The convex mirror</h4>
+          <p>The mirror is now <b>convex</b>, object at u = 25 cm. F and C have moved <i>behind</i> it (drawn dashed), so f = −R/2.</p>
+          <p>Sweep u across its whole range: the image never crosses the mirror, never inverts, never magnifies — <b>virtual, upright, diminished</b> at every distance. A concave mirror runs through the whole zoo; a convex mirror does one thing only, which is why passenger-side mirrors carry &ldquo;objects are closer than they appear.&rdquo;</p>
         </div>
 
       </div>
@@ -1126,7 +1130,9 @@ Object.freeze(Engine);
             <div class="stat-row"><span class="stat-label">Magnification m</span><span class="stat-value" id="mOut">−0.50</span></div>
             <div class="stat-row"><span class="stat-label">Nature</span><span class="stat-value" id="natOut">real, inverted</span></div>
             <div class="stat-row"><span class="stat-label">Focal length f</span><span class="stat-value" id="fOut">10.0 cm</span></div>
+            <div class="stat-row"><span class="stat-label">Same, NCERT signs</span><span class="stat-value" id="ncertOut">u −30.0 · v −15.0 · f −10.0 cm</span></div>
           </div>
+          <p class="sign-note"><b>Which sign convention?</b> On this bench every distance is measured from the pole <b>P</b> and counted <b>positive in front of the mirror</b> — so u &gt; 0 always, v &gt; 0 means a real image, and f = R/2 &gt; 0 means concave. NCERT's <b>Cartesian</b> convention measures the same distances along the incident light, which simply <b>flips the sign of u, v and f</b> — that is the row above. Both conventions give the same 1/u + 1/v = 1/f, the same m = −v/u, and the same image.</p>
         </div>
       </div>
 
@@ -1902,6 +1908,12 @@ return {
   const mOut = document.getElementById('mOut');
   const natOut = document.getElementById('natOut');
   const fOut = document.getElementById('fOut');
+  const ncertOut = document.getElementById('ncertOut');
+  const legendRay2 = document.getElementById('legend-ray2');
+  // Legend swatches are re-inked from the SAME palette drawScene uses, because
+  // that palette is theme-dependent (see cRay1… below).
+  const legendDot = {};
+  document.querySelectorAll('.legend-dot[data-ink]').forEach(d => { legendDot[d.dataset.ink] = d; });
 
   // Physics (via Engine)
   function computeImage(u, R, concave){
@@ -1920,6 +1932,21 @@ return {
   function updateReadouts(){
     const { f, img } = computeImage(state.u, state.R, state.concave);
     fOut.textContent = fmt(f,1) + ' cm';
+    // The NCERT/JEE Cartesian convention measures the same distances along the
+    // incident light instead of in front of the mirror, which negates u, v and f
+    // exactly (m = −v/u is unchanged). Shown so a student never learns a sign
+    // opposite to the one the exam marks.
+    if(ncertOut){
+      ncertOut.textContent = 'u ' + fmt(-state.u,1) + ' · v ' +
+        (img.atFocalPoint ? '∞' : fmt(-img.imageDistance,1)) + ' · f ' + fmt(-f,1) + ' cm';
+    }
+    // At u = f the "ray through F" is degenerate — the diagram swaps in the ray
+    // through C (see drawScene), so the key must say so.
+    if(legendRay2){
+      legendRay2.textContent = img.atFocalPoint
+        ? 'Ray 2 — through C, reflects straight back'
+        : 'Ray 2 — through F, reflects parallel';
+    }
     if(img.atFocalPoint){
       vOut.textContent = '∞';
       mOut.textContent = '∞';
@@ -1990,7 +2017,11 @@ return {
       worldToScreen,
       cmToPx,
       f, img,
-      objectH_cm: Math.max(3.5, absF*0.35) // in cm, so object arrow is visible
+      // FIXED height in cm. Tying it to f made the object physically grow when
+      // the student changed the MIRROR — the one thing the mirror cannot do.
+      // The bench is to scale (one shared px/cm), so a constant 3.5 cm object
+      // shrinks on screen only when the frame genuinely zooms out.
+      objectH_cm: 3.5
     };
   }
 
@@ -2014,13 +2045,22 @@ return {
     const cTick   = isLight ? '#64748b' : '#94a3b8';
     const cLabel  = isLight ? '#0f172a' : '#e2e8f0';
     const cMuted  = isLight ? '#475569' : '#cbd5e1';
-    const cRay1   = '#f59e0b';
-    const cRay2   = '#22d3ee';
-    const cObj    = '#a78bfa';
-    const cImg    = '#34d399';
+    // The four sim inks are theme-dependent too: the dark-theme hues measure
+    // 1.8–2.7 : 1 against the light canvas (#f8fafc), so the 12px object/image
+    // labels were effectively unreadable in light mode. The light variants are
+    // the 700-weight versions of the same hues (4.1–7.1 : 1).
+    const cRay1   = isLight ? '#b45309' : '#f59e0b';
+    const cRay2   = isLight ? '#0e7490' : '#22d3ee';
+    const cObj    = isLight ? '#6d28d9' : '#a78bfa';
+    const cImg    = isLight ? '#047857' : '#34d399';
     const cVirtual= isLight ? '#94a3b8' : '#64748b';
     const cMirror = isLight ? '#0f172a' : '#e2e8f0';
     const cMirBack= isLight ? 'rgba(15,23,42,0.10)' : 'rgba(148,163,184,0.15)';
+    const cHalo   = isLight ? '#f8fafc' : '#060E11';   // canvas ground, for label haloes
+    if(legendDot.ray1){
+      legendDot.ray1.style.background = cRay1; legendDot.ray2.style.background = cRay2;
+      legendDot.obj.style.background  = cObj;  legendDot.img.style.background  = cImg;
+    }
 
     // shade behind mirror
     ctx.fillStyle = cMirBack;
@@ -2096,33 +2136,50 @@ return {
     const fScreenX = worldToScreen(fWorldX);
     const CScreenX = worldToScreen(CWorldX);
 
-    // Draw F and C tick marks (dashed for virtual side)
-    function drawMarker(sx, label, virtual){
+    // Draw F and C tick marks (dashed for virtual side).
+    // Each carries its NAME as well as its letter: a class-11 student meeting
+    // this topic here cannot decode a bare P / F / C. The halo keeps them
+    // readable when a reflected ray crosses the label (it does, at 1024x768).
+    function drawMarker(sx, label, word, virtual, tick){
       ctx.save();
       ctx.strokeStyle = cTick;
-      ctx.fillStyle = cLabel;
       ctx.lineWidth = 1.2;
-      if(virtual) ctx.setLineDash([3,3]);
-      ctx.beginPath();
-      ctx.moveTo(sx, axisY-6);
-      ctx.lineTo(sx, axisY+6);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = '600 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
+      if(tick){
+        if(virtual) ctx.setLineDash([3,3]);
+        ctx.beginPath();
+        ctx.moveTo(sx, axisY-6);
+        ctx.lineTo(sx, axisY+6);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.textAlign='center';
-      ctx.fillText(label, sx, axisY+22);
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = cHalo; ctx.lineWidth = 3.5;
+      ctx.fillStyle = cLabel;
+      ctx.font = '600 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
+      ctx.strokeText(label, sx, axisY+22); ctx.fillText(label, sx, axisY+22);
+      ctx.fillStyle = cMuted;
+      ctx.font = '500 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
+      ctx.strokeText(word, sx, axisY+36); ctx.fillText(word, sx, axisY+36);
       ctx.restore();
     }
-    // F, C only labelled from step >= 1 (i.e. always, since step 1 is intro)
-    drawMarker(fScreenX, 'F', !state.concave);
-    drawMarker(CScreenX, 'C', !state.concave);
+    drawMarker(fScreenX, 'F', 'focus', !state.concave, true);
+    drawMarker(CScreenX, 'C', 'centre', !state.concave, true);
+    drawMarker(poleScreenX, 'P', 'pole', false, false);
 
-    // Pole label
+    // Name the two remaining unexplained abstractions in the scene: the dashed
+    // line everything is measured from, and the grey band the mirror hides.
     ctx.save();
-    ctx.fillStyle = cLabel;
-    ctx.font = '600 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
-    ctx.textAlign='center';
-    ctx.fillText('P', poleScreenX, axisY+22);
+    ctx.font = '500 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = cHalo;
+    ctx.fillStyle = cMuted;
+    ctx.textAlign = 'left';
+    ctx.strokeText('principal axis', 16, axisY - 8); ctx.fillText('principal axis', 16, axisY - 8);
+    const backLab = 'behind the mirror';
+    ctx.textAlign = 'center';
+    if(w - poleScreenX > ctx.measureText(backLab).width + 14){
+      ctx.strokeText(backLab, (poleScreenX + w)/2, 22); ctx.fillText(backLab, (poleScreenX + w)/2, 22);
+    }
     ctx.restore();
 
     // Object — arrow standing up from axis at world x = u
@@ -2211,15 +2268,18 @@ return {
       ctx.setLineDash([]);
     }
 
-    // Ray 2 — through F (or aimed at F behind for convex), then reflected parallel
-    // Incoming ray direction from object tip through F (concave) or aimed toward F (behind, for convex)
+    // Ray 2 — through F (or aimed at F behind for convex), then reflected parallel.
+    //
+    // AT u = f THE F-RAY DOES NOT EXIST: the object SITS on F, so dx2 = 0, t2 and
+    // hitY2 evaluate to Infinity, and canvas silently discards every path with a
+    // non-finite coordinate — the whole cyan ray vanished, leaving ONE lone ray
+    // under a badge claiming "reflected rays are parallel". Swap in the other
+    // standard construction ray there, the one along the radius through C: it
+    // retraces on itself, and its reflected leg is exactly parallel to reflected
+    // ray 1, so the badge's claim becomes something you can actually see.
+    const useCRay = atFocal;
     let inc2TargetX, inc2TargetY;
-    if(state.concave){
-      inc2TargetX = fScreenX; inc2TargetY = axisY;
-    } else {
-      // convex: incoming aimed toward F behind mirror (fScreenX to the right of pole)
-      inc2TargetX = fScreenX; inc2TargetY = axisY;
-    }
+    inc2TargetX = useCRay ? CScreenX : fScreenX; inc2TargetY = axisY;
     // Ray goes from object tip through target; where does it hit the mirror plane x = poleScreenX?
     const dx2 = inc2TargetX - objScreenX;
     const dy2 = inc2TargetY - objTipY;
@@ -2236,24 +2296,34 @@ return {
     ctx.moveTo(objScreenX, objTipY);
     ctx.lineTo(hitX2, hitY2);
     ctx.stroke();
-    // If convex, incoming was AIMED at F behind — draw dashed continuation into mirror to show that
-    if(!state.concave){
+    // Show WHERE this ray lines up with F whenever F is not on the segment the
+    // student can already see: behind the mirror (convex), or behind the object
+    // (concave with the object inside F, where the ray only *appears* to come
+    // from F). Without it the ray starts nowhere and the name "Ray 2" is opaque.
+    if(!useCRay && (!state.concave || state.u < fAbs)){
       ctx.setLineDash([4,4]);
       ctx.strokeStyle = cRay2;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(hitX2, hitY2);
+      if(state.concave){ ctx.moveTo(objScreenX, objTipY); }
+      else { ctx.moveTo(hitX2, hitY2); }
       ctx.lineTo(fScreenX, axisY);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Reflected: parallel to axis at height hitY2, going LEFT.
+    // Reflected: parallel to axis at height hitY2, going LEFT — except the C-ray,
+    // which retraces back along the line it arrived on.
     ctx.strokeStyle = cRay2;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(hitX2, hitY2);
-    ctx.lineTo(0, hitY2);
+    if(useCRay){
+      const k = (w + h) / (Math.hypot(objScreenX - hitX2, objTipY - hitY2) || 1);
+      ctx.lineTo(hitX2 + (objScreenX - hitX2)*k, hitY2 + (objTipY - hitY2)*k);
+    } else {
+      ctx.lineTo(0, hitY2);
+    }
     ctx.stroke();
 
     // Virtual extension of ray 2 backward (into mirror) if virtual image
@@ -2298,23 +2368,39 @@ return {
     ctx.font = '600 12px "DMSansUser","DM Sans",-apple-system,"Segoe UI",sans-serif';
     ctx.fillStyle = cObj;
     ctx.textAlign = 'center';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = cHalo;
     let objLabelX = objScreenX;
     const objLabel = 'O (u = '+state.u.toFixed(1)+' cm)';
     const objLW = ctx.measureText(objLabel).width;
     if(objLabelX - objLW/2 < 8) objLabelX = objLW/2 + 8;
     if(objLabelX + objLW/2 > w-8) objLabelX = w - objLW/2 - 8;
+    ctx.strokeText(objLabel, objLabelX, Math.max(14, objTipY - 10));
     ctx.fillText(objLabel, objLabelX, Math.max(14, objTipY - 10));
 
     if(!atFocal){
       ctx.fillStyle = cImg;
-      let imgLabelX = imgScreenX;
       const vDisp = img.imageDistance;
-      const imgLabel = 'I (v = '+fmt(vDisp,1)+' cm)';
+      // Near u = f the image legitimately runs off-frame. Its LABEL was clamped
+      // in x only, so it left with it: at u = 11 cm the readout claimed a real
+      // 10x image at v = 110 cm while the canvas held not one green pixel.
+      // Pin the label inside the frame in BOTH axes and say which way it went.
+      const ovX = imgScreenX < 8 ? 8 - imgScreenX : (imgScreenX > w-8 ? imgScreenX - (w-8) : 0);
+      const ovY = imgTipY   < 8 ? 8 - imgTipY   : (imgTipY   > h-8 ? imgTipY   - (h-8) : 0);
+      const offFrame = ovX > 0 || ovY > 0;
+      const imgLabel = 'I (v = '+fmt(vDisp,1)+' cm)' + (!offFrame ? '' :
+        (ovX >= ovY ? (imgScreenX < 8 ? '  ← off-frame' : '  → off-frame')
+                    : (imgTipY   < 8 ? '  ↑ off-frame' : '  ↓ off-frame')));
       const imgLW = ctx.measureText(imgLabel).width;
+      let imgLabelX = imgScreenX;
       if(imgLabelX - imgLW/2 < 8) imgLabelX = imgLW/2 + 8;
       if(imgLabelX + imgLW/2 > w-8) imgLabelX = w - imgLW/2 - 8;
-      // put label on opposite side of tip from object label if possible
-      const ly = imgTipY > axisY ? imgTipY + 18 : Math.max(14, imgTipY - 10);
+      // put label on opposite side of tip from object label if possible, and
+      // keep it clear of the P / F / C name row that occupies axisY+22…+36
+      // (a strongly diminished image sits right on top of it otherwise).
+      let ly0 = imgTipY > axisY ? imgTipY + 18 : Math.max(14, imgTipY - 10);
+      if(ly0 > axisY + 6 && ly0 < axisY + 48) ly0 = axisY + 52;
+      const ly = Math.max(14, Math.min(ly0, h - 30));
+      ctx.strokeText(imgLabel, imgLabelX, ly);
       ctx.fillText(imgLabel, imgLabelX, ly);
     }
     ctx.restore();
@@ -2407,8 +2493,11 @@ return {
   });
 
   // KaTeX
+  let mathTries = 0;
   function renderMath(){
-    if(typeof katex === 'undefined'){ setTimeout(renderMath, 50); return; }
+    // Bounded: the KaTeX <script> is a CDN load, and an unbounded retry spins a
+    // 20 Hz timer forever on any machine that cannot reach it.
+    if(typeof katex === 'undefined'){ if(++mathTries <= 120) setTimeout(renderMath, 50); return; }
     katex.render(String.raw`\dfrac{1}{u} + \dfrac{1}{v} = \dfrac{1}{f}, \quad f = \dfrac{R}{2}`, document.getElementById('eq1'), {throwOnError:false});
     katex.render(String.raw`m = -\dfrac{v}{u}`, document.getElementById('eq2'), {throwOnError:false});
     katex.render(String.raw`u \to f \;\Rightarrow\; v \to \infty \;\;(\text{no image})`, document.getElementById('eq3'), {throwOnError:false});
@@ -2491,7 +2580,17 @@ return {
   });
 
   window.__cgReveals = function(){};
-  window.__freeExplore = function(){ onStep(4); };
+  // Free exploration and the Controls Guide open on the CANONICAL default —
+  // concave, u = 30 cm — which is what the page boots to, what Reset restores,
+  // and what the guide's own copy assumes ("Reset … and the concave mirror",
+  // "Mirror type — flip concave to convex"). Landing them on step 4 put both on
+  // a convex mirror at u = 25 cm, mutating the scene the moment the student
+  // picked "Free exploration" and making two guide steps untrue. Finishing the
+  // inquiry (already on the last card) still leaves card 5's scene untouched.
+  window.__freeExplore = function(){
+    if(typeof Shell !== 'undefined' && Shell.step >= 4){ updateReadouts(); drawScene(); return; }
+    onStep(0);
+  };
   window.__giResume = function(){ onStep((typeof Shell !== 'undefined' && Shell.step) || 0); };
 
   // Boot the shell (timeless — no Play/Pause / Speed).
@@ -2721,7 +2820,7 @@ return {
     { sel:'#box-u',          mode:'hide', title:'Object distance u',    text:'Walks the object in. Near F the image races away.' },
     { sel:'#box-R',          mode:'hide', title:'Radius of curvature',  text:'Sets R. Focal length is R/2; C sits at R.' },
     { sel:'#box-type',       mode:'hide', title:'Mirror type',          text:'Flip concave to convex. Convex stays virtual and diminished.' },
-    { sel:'#box-readouts',   mode:'hide', title:'Image readouts',       text:'Live v, magnification m, nature, and f = R/2.' },
+    { sel:'#box-readouts',   mode:'hide', title:'Image readouts',       text:'Live v, m, nature, f = R/2 — and the same distances in NCERT Cartesian signs.' },
     { sel:'#box-scene',      mode:'hide', title:'Ray diagram',          text:'Two construction rays. Green image; dashed when virtual.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
@@ -2880,7 +2979,7 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to spherical mirrors.',
-    'Walk the object toward F and the real image races to infinity. Inside F it reappears virtual, upright and magnified.',
+    'One mirror, one object, two construction rays. Walk the object in toward F and decide for yourself what the image does.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
