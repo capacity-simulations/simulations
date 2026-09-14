@@ -20,6 +20,12 @@
   --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
   --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
   --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  /* Scene palette — ONE source of truth for the legend swatches (DOM) and the
+     canvas (read back with getComputedStyle in draw), so the key can never
+     drift from the thing it keys. */
+  --c-disc:#f472b6; --c-bag:#60a5fa; --c-efield:#fbbf24;
+  --c-loop:#9ca3af; --c-pos:#fca5a5; --c-neg:#93c5fd;
+  --c-yes:#34d399; --c-no:#f87171;
   --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
   --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
@@ -34,6 +40,11 @@ body.light-theme,html[data-theme="light"]{
   --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
   --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
   --topbar-border:rgba(19,49,49,.20);
+  /* Darkened scene palette: the dark-theme pastels sit at ~1.5:1 against the
+     light canvas, which is unreadable for 2px strokes and small labels. */
+  --c-disc:#be185d; --c-bag:#1d4ed8; --c-efield:#b45309;
+  --c-loop:#64748b; --c-pos:#b91c1c; --c-neg:#1d4ed8;
+  --c-yes:#047857; --c-no:#be123c;
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
@@ -226,6 +237,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .eq-row .eq-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:6px;font-weight:600;}
 .formal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 @media(max-width:900px){.formal-grid{grid-template-columns:1fr;}}
+/* Predict-gate staging: the two tallies ARE the answer to card 2, so the
+   panel (and the canvas banner/tally numbers) stay off until the prediction
+   is committed. Lifted in the controls guide and in free exploration. */
+.tally-staged{display:none !important;}
+.legend-dash{width:16px;height:0;border-top:2px dashed var(--c-loop);}
+html[data-theme="light"] .legend, body.light-theme .legend{background:rgba(248,250,252,.86);}
 
 /* ===== Two-button template: Guided Inquiry zone visibility ===== */
 .gi-off #aside-inquiry{display:none !important;}
@@ -1506,11 +1523,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time charge dots along the wire, continuing across the empty gap</span>
+            <span class="hero-label">Equal-time charge dots along the wire, stopping dead at the capacitor plate; only the electric field occupies the gap</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Displacement current</span></h2>
-            <p class="welcome-blurb">A wire charges a capacitor — and one Ampèrian loop gives two different answers, until Maxwell's term.</p>
+            <p class="welcome-blurb">A wire charges a capacitor. Stretch one Ampèrian loop over two different surfaces — and ask what Ampère's law encloses on each.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1611,9 +1628,10 @@ Object.freeze(Engine);
     <div class="plot-box">
       <div class="plot-title">Ampèrian loop · two surfaces · one wire charging a capacitor</div>
       <div class="legend">
-        <div class="legend-item"><span class="legend-dot" style="background:#f472b6"></span>flat disc</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>bulging bag</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>E field</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--c-disc)"></span>flat disc</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--c-bag)"></span>bulging bag</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--c-efield)"></span>electric field E</div>
+        <div class="legend-item"><span class="legend-dash"></span>Ampèrian loop</div>
       </div>
       <canvas id="scene"></canvas>
     </div>
@@ -1628,7 +1646,7 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>1 · The set-up</h4>
           <p>A wire carries a steady current <em>I</em> into a parallel-plate capacitor. Draw one Ampèrian loop round the wire. Ampère's law says the enclosed current is the same across <strong>any</strong> surface bounded by that loop.</p>
-          <p>Two such surfaces are drawn: a <span style="color:#f472b6;font-weight:600">flat disc</span> the wire pierces, and a <span style="color:#60a5fa;font-weight:600">bulging bag</span> that slips past the wire and passes between the plates.</p>
+          <p>Two such surfaces are drawn: a <span style="color:var(--c-disc);font-weight:600">flat disc</span> the wire pierces, and a <span style="color:var(--c-bag);font-weight:600">bulging bag</span> that slips past the wire and passes between the plates.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1697,7 +1715,14 @@ Object.freeze(Engine);
           <div id="box-maxwell" class="ctrl-box">
             <div class="toggle-row">
               <span class="ctrl-box-label">Maxwell's term (<em>I<sub>d</sub></em>)</span>
-              <button id="maxwellToggle" class="toggle-btn">OFF</button>
+              <!-- data-no-reset: this toggle changes how the bag's enclosed
+                   current is ACCOUNTED, not what the apparatus is doing, so it
+                   must not trigger the shell's restart-on-param-change. Without
+                   the shield the capture-phase restart ran onReset() first,
+                   which set maxwellOn=false and repainted the button "OFF" —
+                   the sim's own handler then flipped it back to true, so the
+                   toggle could never be switched off again. -->
+              <button id="maxwellToggle" class="toggle-btn" data-no-reset>OFF</button>
             </div>
           </div>
         </div>
@@ -1708,17 +1733,17 @@ Object.freeze(Engine);
         <div class="shell-panel-body">
           <div class="ctrl-box">
             <div class="stat-row">
-              <span class="stat-label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f472b6;margin-right:8px"></span>Flat disc</span>
+              <span class="stat-label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c-disc);margin-right:8px"></span>Flat disc</span>
               <span class="stat-value highlight" id="discVal">0.50 A</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#60a5fa;margin-right:8px"></span>Bulging bag</span>
+              <span class="stat-label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c-bag);margin-right:8px"></span>Bulging bag</span>
               <span class="stat-value highlight" id="bagVal">0.00 A</span>
             </div>
             <div class="divider" style="margin:8px 0"></div>
             <div class="stat-row">
               <span class="stat-label">Agree?</span>
-              <span class="stat-value" id="agreeVal" style="color:#f43f5e">✗ disagree by 0.50 A</span>
+              <span class="stat-value" id="agreeVal" style="color:var(--c-no)">✗ disagree by 0.50 A</span>
             </div>
           </div>
           <div class="note-text" id="tallyNote">Ampère's law says both surfaces must give the same answer. With Maxwell's term OFF, they don't.</div>
@@ -2551,13 +2576,39 @@ return {
   const iSlider=document.getElementById('iSlider');
   const iVal=document.getElementById('iVal');
   const mtog=document.getElementById('maxwellToggle');
-  iSlider.addEventListener('input',()=>{ state.I=parseFloat(iSlider.value); iVal.textContent=state.I.toFixed(2)+' A'; updateReadouts(); });
+  // Both handlers repaint: the canvas is only redrawn from onFrame, so WHILE
+  // PAUSED a control change used to move the sidebar numbers and leave the
+  // scene (banner, tallies, I label) frozen on the old values — the student
+  // saw "✓ agree exactly" beside a canvas still shouting "≠ ... contradicts
+  // itself". Every control mutation must repaint, playing or not.
+  iSlider.addEventListener('input',()=>{ state.I=parseFloat(iSlider.value); iVal.textContent=state.I.toFixed(2)+' A'; updateReadouts(); draw(); });
   mtog.addEventListener('click',()=>{
     state.maxwellOn=!state.maxwellOn;
     mtog.textContent=state.maxwellOn?'ON':'OFF';
     mtog.classList.toggle('on',state.maxwellOn);
     updateReadouts();
+    draw();
   });
+
+  // ------------ PREDICT-GATE STAGING ------------
+  // Card 2 asks "can the two tallies ever agree?". The tallies themselves —
+  // sidebar panel, canvas banner, canvas per-surface numbers — ARE the answer,
+  // so they are held back until the prediction is committed. Outside the
+  // guided inquiry (controls guide, free exploration) everything shows.
+  function inquiryActive(){
+    return !document.documentElement.classList.contains('gi-off');
+  }
+  function talliesShown(){
+    if(!inquiryActive()) return true;
+    const step=(typeof Shell!=='undefined' && Shell.step) || 0;
+    if(step>=2) return true;                       // card 3 onwards
+    const gate=document.querySelectorAll('#inq-cards .inq-step')[1];
+    return !!(gate && gate.hasAttribute('data-answered'));
+  }
+  function applyStaging(){
+    const panel=document.getElementById('panel-tallies');
+    if(panel) panel.classList.toggle('tally-staged', !talliesShown());
+  }
 
   function updateReadouts(){
     const p=computePhysics(state.I, PLATE_AREA, PLATE_SEP);
@@ -2569,16 +2620,23 @@ return {
     const diff=Math.abs(discAmps-bagAmps);
     if(diff<1e-12){
       agree.textContent='✓ agree exactly';
-      agree.style.color='#34d399';
+      agree.style.color='var(--c-yes)';
       document.getElementById('tallyNote').textContent='With Maxwell\'s term ON, the changing electric flux between the plates gives the bag the same enclosed current as the disc — at every I.';
     } else {
       agree.textContent='✗ disagree by '+diff.toFixed(2)+' A';
-      agree.style.color='#f43f5e';
+      agree.style.color='var(--c-no)';
       document.getElementById('tallyNote').textContent='Ampère\'s law says both surfaces must give the same answer. With Maxwell\'s term OFF, they don\'t.';
     }
   }
 
   // ------------ CANVAS ------------
+  const SUP='⁰¹²³⁴⁵⁶⁷⁸⁹';
+  function sci(x){
+    if(!Number.isFinite(x) || x===0) return '0';
+    const e=Math.floor(Math.log10(Math.abs(x)));
+    const m=x/Math.pow(10,e);
+    return m.toFixed(1)+'×10'+String(e).replace(/\d/g, d=>SUP[+d]);
+  }
   let viewW=800, viewH=500;
   function fit(){
     const dpr=window.devicePixelRatio||1;
@@ -2589,13 +2647,31 @@ return {
     viewW=r.width; viewH=r.height;
   }
 
-  // Time-based charge accumulation (visual only — the readouts are exact)
-  let tCharge=0;
+  // Accumulated plate charge, display-normalised to 0..1 (visual only — the
+  // readouts are exact). It must be an INTEGRAL of I, not a product with the
+  // CURRENT value of I: E = Q/(eps0 A) and Q = integral(I dt), so turning the
+  // slider DOWN slows the growth, it never shrinks the field. (The old
+  // `tCharge * state.I` form drew E proportional to I and visibly collapsed
+  // the field when the student lowered the current — a false E-proportional-to-I
+  // encoding of the one quantity this sim is about.)
+  let qVis=0;
+  const Q_RATE=0.6;      // normalised charge units per amp-second
+  const Q_MAX=1;         // display ceiling — disclosed on the canvas label
 
   function draw(){
     fit();
     // background
     const light=document.body.classList.contains('light-theme');
+    // One palette for the scene, shared with the legend swatches. Re-read every
+    // frame so the theme toggle repaints in the right ink — a canvas never
+    // re-reads CSS on its own, and the dark-theme pastels are unreadable at
+    // ~1.5:1 on the light background.
+    const css=getComputedStyle(document.body);
+    const ink=(name,fallback)=>(css.getPropertyValue(name).trim()||fallback);
+    const FONT=css.getPropertyValue('--font-sans');
+    const loopColor=ink('--c-loop','#9ca3af'), eColor=ink('--c-efield','#fbbf24');
+    const posColor=ink('--c-pos','#fca5a5'), negColor=ink('--c-neg','#93c5fd');
+    const yesColor=ink('--c-yes','#34d399'), noColor=ink('--c-no','#f87171');
     ctx.fillStyle=light?'#f1f5f9':'#060E11';
     ctx.fillRect(0,0,viewW,viewH);
 
@@ -2625,7 +2701,7 @@ return {
     ctx.lineCap='round';
     // wire (in front of loop's back arc, behind front arc)
     // Draw the loop's BACK arc first
-    ctx.strokeStyle='#9ca3af';
+    ctx.strokeStyle=loopColor;
     ctx.lineWidth=2;
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -2648,8 +2724,8 @@ return {
 
     // --- BAG (drawn first so disc sits on top where they cross) ---
     // Bag path: starts at loop top, bulges right past the wire end, dips between the plates, returns to loop bottom.
-    const bagColor='#60a5fa';
-    const bagFill='rgba(96,165,250,0.13)';
+    const bagColor=ink('--c-bag','#60a5fa');
+    const bagFill=light?'rgba(29,78,216,0.10)':'rgba(96,165,250,0.13)';
     ctx.beginPath();
     // top of loop
     ctx.moveTo(loopX, wireY-loopRy);
@@ -2684,8 +2760,8 @@ return {
     ctx.stroke();
 
     // --- FLAT DISC ---
-    const discColor='#f472b6';
-    const discFill='rgba(244,114,182,0.16)';
+    const discColor=ink('--c-disc','#f472b6');
+    const discFill=light?'rgba(190,24,93,0.12)':'rgba(244,114,182,0.16)';
     ctx.beginPath();
     ctx.ellipse(loopX, wireY, loopRx, loopRy, 0, 0, 2*Math.PI);
     ctx.fillStyle=discFill;
@@ -2713,7 +2789,7 @@ return {
     ctx.fill();
 
     // ============ Loop front arc ============
-    ctx.strokeStyle='#9ca3af';
+    ctx.strokeStyle=loopColor;
     ctx.lineWidth=2;
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -2749,28 +2825,35 @@ return {
     // charge grows over time from current I; visual only
     // Q = I * tCharge; but we cap to a display maximum tied to slider so E field looks reasonable.
     // Use a normalized field strength for arrows.
-    const chargeVis = Math.min(1, tCharge * state.I * 0.6); // 0..1 visual
+    const chargeVis = qVis;                                 // 0..1 visual, monotone in accumulated charge
     const gapX0=plateAX, gapX1=plateBX;
     const gapW=gapX1-gapX0;
     const nArrows=6;
     const arrowMax = plateH*0.11;
-    // charge symbols on plates (accumulating +/-)
-    const chargeCount = Math.max(0, Math.floor(chargeVis*7));
-    ctx.font='bold '+Math.max(11, viewH*0.026)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    // Charge symbols on the plates. Tied to the SAME threshold as the arrows:
+    // an E field between the plates with no charge drawn on them is
+    // physically incoherent, and floor() used to give exactly that for every
+    // chargeVis below 1/7 (e.g. the whole early ramp at I = 0.05 A).
+    const chargeCount = chargeVis>0.02 ? Math.max(1, Math.round(chargeVis*7)) : 0;
+    ctx.font='bold '+Math.round(Math.max(12, viewH*0.026))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    // + charges on left plate (inner side)
+    // The charge lives on the INNER (facing) surfaces of the plates — NCERT's
+    // parallel-plate result. Drawing it on the outer faces contradicts the
+    // field that is drawn between them.
     for(let i=0;i<chargeCount;i++){
       const y = plateTop + plateH*(i+0.5)/chargeCount;
-      ctx.fillStyle='#fca5a5';
-      ctx.fillText('+', plateAX-10, y);
-      ctx.fillStyle='#93c5fd';
-      ctx.fillText('−', plateBX+10, y);
+      ctx.fillStyle=posColor;
+      ctx.fillText('+', plateAX+10, y);
+      ctx.fillStyle=negColor;
+      ctx.fillText('−', plateBX-10, y);
     }
     // E field arrows from + plate to − plate
     if(chargeVis>0.02){
-      ctx.strokeStyle='#fbbf24';
-      ctx.fillStyle='#fbbf24';
-      const alpha = 0.4 + 0.6*chargeVis;
+      ctx.strokeStyle=eColor;
+      ctx.fillStyle=eColor;
+      // Floor raised from 0.4: at the bottom of the current range the arrows
+      // blended to ~2:1 against the dark canvas and read as absent.
+      const alpha = 0.55 + 0.45*chargeVis;
       ctx.globalAlpha=alpha;
       const nRows=5;
       const arrLen = gapW*0.65 * (0.35+0.65*chargeVis);
@@ -2792,20 +2875,34 @@ return {
         ctx.fill();
       }
       ctx.globalAlpha=1;
-      // Label
-      ctx.fillStyle='#fbbf24';
-      ctx.font='bold '+Math.max(11, viewH*0.024)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+      // Gap label, in words before symbols, carrying the RATE (the quantity
+      // the displacement current is built from) and disclosing the cap: the
+      // arrow length is a normalised display that stops at Q_MAX, while the
+      // real E keeps growing at the steady rate dE/dt = I/(eps0*A). The old
+      // one-line "E growing → dΦ_E/dt" became a false claim the moment the
+      // display saturated, and it collided with the bag tally below it.
       ctx.textAlign='center';
-      const Elabel='E growing → dΦ_E/dt';
       const Elx = (gapX0+gapX1)*0.5;
-      const Ely = plateBot + 18;
-      ctx.fillText(Elabel, Elx, Math.min(viewH-10, Ely));
+      ctx.fillStyle=eColor;
+      ctx.font='bold '+Math.round(Math.max(12, viewH*0.024))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+      ctx.fillText('electric field E — growing between the plates', Elx, Math.min(viewH-40, plateBot+20));
+      ctx.fillStyle=light?'#64748b':'#9ca3af';
+      ctx.font='600 '+Math.round(Math.max(12, viewH*0.019))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+      const rate=sci(state.I/EPS0);
+      ctx.fillText('electric flux rate dΦ_E/dt = '+rate+' V·m/s  (arrow length capped)',
+                   Elx, Math.min(viewH-20, plateBot+42));
     }
+    // The two plates are the only unexplained objects in the scene otherwise.
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=light?'#475569':'#9ca3af';
+    ctx.font='600 '+Math.round(Math.max(12, viewH*0.019))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    ctx.fillText('capacitor plates · plate area A = 0.01 m², gap d = 1 mm',
+                 (gapX0+gapX1)*0.5, Math.max(12, plateTop-14));
 
     // ============ Labels ============
     ctx.fillStyle=light?'#0f172a':'#e2e8f0';
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.font='600 '+Math.max(12, viewH*0.026)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    ctx.font='600 '+Math.round(Math.max(12, viewH*0.026))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
 
     // "I" label near wire arrow
     ctx.fillStyle=light?'#0f172a':'#e2e8f0';
@@ -2815,8 +2912,8 @@ return {
     ctx.fillText(Ilabel, ilx, ily);
 
     // Ampèrian loop label
-    ctx.fillStyle='#9ca3af';
-    ctx.font='600 '+Math.max(11, viewH*0.022)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    ctx.fillStyle=loopColor;
+    ctx.font='600 '+Math.round(Math.max(12, viewH*0.022))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
     const loopLabel='Ampèrian loop';
     const llMetrics=ctx.measureText(loopLabel);
     let llx=loopX-llMetrics.width/2;
@@ -2826,11 +2923,18 @@ return {
     if(Math.abs(llx-ilx)<llMetrics.width && Math.abs(lly-ily)<16) lly = ily+18;
     ctx.fillText(loopLabel, llx, lly);
 
-    // Disc label with tally
-    ctx.fillStyle=discColor;
-    ctx.font='700 '+Math.max(12, viewH*0.026)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    // Surface labels. While the card-2 prediction is still open the surfaces
+    // are NAMED but not TALLIED — the numbers are the answer to the question
+    // being asked, and the names are what a first-time reader needs to tell
+    // the pink ellipse from the blue sock. Names match the cards and legend
+    // word for word ("flat disc", "bulging bag").
+    const showTallies=talliesShown();
     const discAmps=state.I;
-    const discText='disc: '+discAmps.toFixed(2)+' A';
+    const bagAmps=state.maxwellOn ? state.I : 0;
+
+    ctx.fillStyle=discColor;
+    ctx.font='700 '+Math.round(Math.max(12, viewH*0.026))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    const discText=showTallies ? 'flat disc: '+discAmps.toFixed(2)+' A' : 'flat disc';
     const discM=ctx.measureText(discText);
     let dx=loopX-loopRx-discM.width-10;
     let dy=wireY+loopRy+18;
@@ -2838,13 +2942,12 @@ return {
     if(dy>viewH-10) dy=viewH-10;
     ctx.fillText(discText, dx, dy);
 
-    // Bag label with tally
+    // Bag label with tally — clear of the two-line gap label above it.
     ctx.fillStyle=bagColor;
-    const bagAmps=state.maxwellOn ? state.I : 0;
-    const bagText='bag: '+bagAmps.toFixed(2)+' A';
+    const bagText=showTallies ? 'bulging bag: '+bagAmps.toFixed(2)+' A' : 'bulging bag';
     const bagM=ctx.measureText(bagText);
     let bx=bagPeakX-bagM.width/2;
-    let by=wireY+plateH*0.5+34;
+    let by=wireY+plateH*0.5+66;
     if(bx+bagM.width>viewW-8) bx=viewW-8-bagM.width;
     if(bx<8) bx=8;
     if(by>viewH-10) by=viewH-10;
@@ -2852,19 +2955,23 @@ return {
 
     // Big comparison banner at top
     ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.font='700 '+Math.max(13, viewH*0.028)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+    ctx.font='700 '+Math.round(Math.max(13, viewH*0.028))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
     let banner;
-    if(state.maxwellOn){
-      banner='disc = '+discAmps.toFixed(2)+' A   =   bag = '+bagAmps.toFixed(2)+' A   ✓  Ampère–Maxwell holds';
-      ctx.fillStyle='#34d399';
+    if(!showTallies){
+      // Pre-commit: restate the PREMISE under test, never the verdict.
+      banner='Ampère: every surface bounded by this loop must enclose the same current';
+      ctx.fillStyle=light?'#475569':'#9ca3af';
+    } else if(state.maxwellOn){
+      banner='flat disc = '+discAmps.toFixed(2)+' A   =   bulging bag = '+bagAmps.toFixed(2)+' A   ✓  Ampère–Maxwell holds';
+      ctx.fillStyle=yesColor;
     } else {
-      banner='disc = '+discAmps.toFixed(2)+' A   ≠   bag = '+bagAmps.toFixed(2)+' A   ✗  Ampère alone contradicts itself';
-      ctx.fillStyle='#f87171';
+      banner='flat disc = '+discAmps.toFixed(2)+' A   ≠   bulging bag = '+bagAmps.toFixed(2)+' A   ✗  Ampère alone contradicts itself';
+      ctx.fillStyle=noColor;
     }
     // Ensure banner fits (measure)
     let bm=ctx.measureText(banner);
     if(bm.width>viewW-40){
-      ctx.font='700 '+Math.max(11, viewH*0.022)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+      ctx.font='700 '+Math.round(Math.max(12, viewH*0.022))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
       bm=ctx.measureText(banner);
     }
     ctx.fillText(banner, viewW/2, viewH-28);
@@ -2877,12 +2984,12 @@ return {
     if(step>=4 && state.maxwellOn){
       // "Nothing crosses the gap" annotation
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.font='italic 600 '+Math.max(11, viewH*0.022)+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
+      ctx.font='italic 600 '+Math.round(Math.max(12, viewH*0.022))+'px '+getComputedStyle(document.body).getPropertyValue('--font-sans');
       ctx.fillStyle=light?'#334155':'#cbd5e1';
       const nc='nothing crosses the gap — only E changes';
       const ncM=ctx.measureText(nc);
       let ncx=(gapX0+gapX1)*0.5;
-      let ncy=plateTop-14;
+      let ncy=plateTop-36;                       // clear of the "capacitor plates" label
       if(ncx-ncM.width/2<8) ncx=ncM.width/2+8;
       if(ncx+ncM.width/2>viewW-8) ncx=viewW-8-ncM.width/2;
       if(ncy<12) ncy=12;
@@ -2892,30 +2999,46 @@ return {
 
   // ------------ Shell callbacks ------------
   function onFrame(dt){
-    // build up visual charge over time (capped)
-    tCharge += dt;
-    if(tCharge>4) tCharge=4;
+    // Q = integral(I dt): accumulate, then clamp at the display ceiling.
+    qVis = Math.min(Q_MAX, qVis + dt*state.I*Q_RATE);
     draw();
   }
+  // A ↻ Reset restores EVERY default. A parameter-change restart (the shell
+  // replays onReset, then puts the sliders back) must NOT: it cannot restore a
+  // button, so clearing Maxwell's term there silently switched the model back
+  // off the moment the student moved the current slider — exactly what card 4
+  // tells them to do ("sweep the current slider again … they agree at every
+  // setting"), and they would have watched it stop agreeing.
+  let hardReset=false;
+  const resetBtn=document.getElementById('shell-reset');
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ hardReset=true; }, true);
+
   function onReset(){
+    const hard=hardReset; hardReset=false;
     state.I=initial.I;
-    state.maxwellOn=initial.maxwellOn;
     iSlider.value=String(initial.I);
     iVal.textContent=initial.I.toFixed(2)+' A';
-    mtog.textContent='OFF';
-    mtog.classList.remove('on');
-    tCharge=0;
+    if(hard){
+      state.maxwellOn=initial.maxwellOn;
+      mtog.textContent='OFF';
+      mtog.classList.remove('on');
+    }
+    qVis=0;
     updateReadouts();
+    applyStaging();
+    draw();
   }
   function onResize(){ fit(); draw(); }
   function onStep(i){
-    // deterministic scene evolution: step 3+ suggests turning Maxwell on, but we do NOT force it (student-owned)
-    // step 4 (last) leaves everything student-controlled.
+    // Deterministic scene evolution: the only thing staged by step is the
+    // tally reveal (card 2's predict gate). Maxwell's term stays student-owned.
+    applyStaging();
     draw();
   }
 
   // Initial readouts
   updateReadouts();
+  applyStaging();
 
   // KaTeX
   function renderMath(){
@@ -2928,25 +3051,39 @@ return {
   renderMath();
 
   // ---------- TWO-BUTTON TEMPLATE HOOKS -------------------------------------
-  // This sim stages no reveals — onStep only repaints, and both sidebar panels
-  // render from load — so the controls-guide reveal hook is a documented no-op.
-  // It must still exist on window, or the template's typeof guard silently
-  // skips it (that bug shipped once).
-  window.__cgReveals = function(){};
-  // Free exploration = the post-completion state. Nothing is staged and there
-  // are no rebuttal objects to clear; repaint with the current parameters so
-  // the last card's "nothing crosses the gap" annotation is in force.
-  window.__freeExplore = function(){
-    updateReadouts();
+  // The one staged reveal is the pair of enclosed-current tallies, held back
+  // over card 2's predict gate. The controls guide needs everything visible
+  // (it has its own step for #panel-tallies), so this lifts the staging.
+  window.__cgReveals = function(){
+    const panel=document.getElementById('panel-tallies');
+    if(panel) panel.classList.remove('tally-staged');
     draw();
   };
-  // Re-entering the inquiry re-applies the current card's state (here just the
-  // step-conditional canvas annotation; progress is kept by the shell stepper).
+  // Free exploration = the post-completion state: tallies shown, current
+  // parameters, and the last card's "nothing crosses the gap" annotation.
+  window.__freeExplore = function(){
+    updateReadouts();
+    applyStaging();
+    draw();
+  };
+  // Re-entering the inquiry re-applies the current card's state (the staged
+  // tallies and the step-conditional canvas annotation; progress is kept by
+  // the shell stepper).
   window.__giResume = function(){
     onStep((typeof Shell !== 'undefined' && Shell.step) || 0);
   };
 
   Shell.init({ onFrame, onReset, onResize, onStep });
+
+  // Committing the card-2 prediction reveals the tallies immediately, so the
+  // student reads the verdict alongside their own feedback. Registered AFTER
+  // Shell.init so the shell's own handler has already set data-answered.
+  const inqCardsHost=document.getElementById('inq-cards');
+  if(inqCardsHost) inqCardsHost.addEventListener('click', e=>{
+    if(!e.target.closest('.choice')) return;
+    applyStaging();
+    draw();
+  });
 })();
 </script>
 
@@ -3176,7 +3313,7 @@ return {
     { sel:'#shell-reset',    mode:'veil', title:'Reset',            text:'Restores the default current and switches Maxwell’s term off.' },
     { sel:'#shell-maximize', mode:'veil', title:'Maximize',         text:'Expands the apparatus to fill the window.' },
     { sel:'#toggle-formal',  mode:'veil', title:'Formal equations', text:'Shows or hides the Ampère–Maxwell equation panel.' },
-    { sel:'.legend',         mode:'hide', title:'Colour key',       text:'Pink flat disc, blue bulging bag, amber the growing E field.' },
+    { sel:'.legend',         mode:'hide', title:'Colour key',       text:'Pink flat disc, blue bulging bag, amber the growing electric field, grey dashed the Ampèrian loop.' },
     { sel:'#box-current',    mode:'hide', title:'Charging current I', text:'Sets the conduction current flowing into the capacitor.' },
     { sel:'#box-maxwell',    mode:'hide', title:'Maxwell’s term', text:'Switches the displacement-current term in the bag’s tally on or off.' },
     { sel:'#panel-tallies',  mode:'hide', title:'The two tallies',  text:'Each surface’s enclosed current, and whether the two agree.' },
@@ -3353,17 +3490,18 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to displacement current.',
-    'Here a steady current charges a parallel-plate capacitor. Stretch one Ampèrian loop over two different surfaces and the enclosed current comes out different on each — until Maxwell’s term counts the growing electric flux between the plates as a current of its own.',
+    'Here a steady current charges a parallel-plate capacitor. One Ampèrian loop is drawn round the wire, and two different surfaces are stretched over it: a flat disc the wire pierces, and a bulging bag that passes through the gap between the plates. Ampère’s law says the enclosed current must come out the same on both.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the two currents drawn as ONE chain of equal-time dots. A steady I
-     delivers equal charge in equal time, so conduction dots sit at uniform
-     spacing along the wire. Nothing at all crosses the gap — but
-     I_d = ε₀ dΦ_E/dt = dQ/dt = I exactly, so the chain continues across it at
-     the SAME spacing, unbroken, through the Ampèrian loop. */
+  /* Hero: equal-time charge dots along the wire. A steady I delivers equal
+     charge in equal time, so the dots sit at uniform spacing — and they STOP
+     dead at the plate. NOTHING crosses the gap; only the E field between the
+     plates is there, growing. Drawing dots across the gap would picture the
+     exact misconception this sim exists to kill ("something is transported
+     across"), and would hand the student card 2's answer on the title screen. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
@@ -3393,17 +3531,17 @@ return {
       ctx.beginPath(); ctx.moveTo(gx0+7,yy); ctx.lineTo(gx1-11,yy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(gx1-5,yy); ctx.lineTo(gx1-14,yy-4.5); ctx.lineTo(gx1-14,yy+4.5); ctx.closePath(); ctx.fill();
     }
-    // one chain: conduction dots on the wire, displacement dots across the gap
+    // conduction dots on the wire only — the gap stays empty of matter
     const cond = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(125,211,252,.95)';
-    const disp = LIGHT ? 'rgba(180,83,9,.95)'  : 'rgba(253,224,171,.95)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const N = 64, dx = (x1-x0)/N; let k = 0;
     function batch(){
       const per = reduce ? N+1 : 1;
       for(let s=0;s<per && k<=N;s++,k++){
-        const px = x0 + k*dx, inGap = px > gx0 && px < gx1;
-        ctx.fillStyle = inGap ? disp : cond;
-        ctx.beginPath(); ctx.arc(px, y, inGap ? 3.4 : 3.0, 0, 7); ctx.fill();
+        const px = x0 + k*dx;
+        if(px >= gx0 - 2 && px <= gx1 + 2) continue;   // nothing crosses the gap
+        ctx.fillStyle = cond;
+        ctx.beginPath(); ctx.arc(px, y, 3.0, 0, 7); ctx.fill();
       }
       if(k <= N) requestAnimationFrame(batch);
     }
@@ -3507,7 +3645,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

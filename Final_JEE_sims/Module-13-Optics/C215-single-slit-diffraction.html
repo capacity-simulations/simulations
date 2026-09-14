@@ -116,8 +116,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  font-size:12px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+/* Light theme: --text goes dark, so the dark pill fill left the key at ~2.2:1
+   contrast — unreadable. Flip the fill with the theme. */
+html[data-theme="light"] .legend, body.light-theme .legend{background:rgba(248,250,252,.92);border-color:rgba(51,65,85,.25);color:#0f172a;}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -1441,7 +1444,7 @@ Object.freeze(Engine);
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" id="legend-light-dot" style="background:#fbbf24"></span>Light</div>
         <div class="legend-item"><span class="legend-dot" style="background:#3b9b8f"></span>Intensity I/I₀</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#f43f5e"></span>First minimum</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#f43f5e"></span>Minima (m = 1, 2, …)</div>
       </div>
       <canvas id="scene"></canvas>
     </div>
@@ -1472,8 +1475,8 @@ Object.freeze(Engine);
 
         <div class="inq-step">
           <h4>Why? The first minimum</h4>
-          <p>The first dark fringe sits where light from one edge of the slit arrives exactly one wavelength behind light from the other edge — they cancel. This gives <b>a·sinθ = λ</b>, so <b>sinθ = λ/a</b>.</p>
-          <p>Smaller a ⇒ larger θ ⇒ wider central band. The width on a screen at distance L is <b>W = 2λL/a</b> — the whole spread goes as <b>1/a</b>.</p>
+          <p>At the first dark fringe, light from one edge of the slit arrives one wavelength behind light from the other edge. Split the slit in two: every point in the top half has a partner in the bottom half exactly <b>λ/2</b> behind it, so the pairs cancel and the slit goes dark. Hence <b>a·sinθ = λ</b>, and <b>sinθ = λ/a</b>.</p>
+          <p>Smaller a ⇒ larger θ ⇒ wider central band: <b>W = 2λL/a</b> on a screen at distance L, so the spread goes as <b>1/a</b>.</p>
         </div>
 
         <div class="inq-step">
@@ -1541,8 +1544,9 @@ Object.freeze(Engine);
           <div class="ctrl-box">
             <div class="stat-row"><span class="stat-label">Central band width</span><span class="stat-value highlight" id="ro-width">11.00 mm</span></div>
             <div class="stat-row"><span class="stat-label">First minimum θ</span><span class="stat-value" id="ro-theta">0.315°</span></div>
+            <div class="stat-row"><span class="stat-label">Brightness I₀ ∝ a²</span><span class="stat-value" id="ro-peak">1.00 ×</span></div>
           </div>
-          <div class="note-text">Screen at L = 1.00 m. Screen axis is fixed at ±25 mm so the pattern's growth is visible against an unmoving scale.</div>
+          <div class="note-text">Screen at L = 1.00 m. Screen axis is fixed at ±25 mm so the pattern's growth is visible against an unmoving scale. The strip and the I/I₀ curve are each drawn scaled to their own peak; I₀ is the true central brightness, relative to a = 100 µm — a narrower slit spreads the light out <i>and</i> dims it.</div>
         </div>
       </div>
 
@@ -1552,7 +1556,7 @@ Object.freeze(Engine);
 
   <section class="shell-formal">
     <div class="formal-grid">
-      <div class="eq-row"><div class="eq-label">First minimum (single slit)</div><div class="eq-body" id="eq1"></div></div>
+      <div class="eq-row"><div class="eq-label">Dark fringes — minima, not maxima (single slit)</div><div class="eq-body" id="eq1"></div></div>
       <div class="eq-row"><div class="eq-label">Central band full width on screen</div><div class="eq-body" id="eq2"></div></div>
       <div class="eq-row"><div class="eq-label">Intensity distribution</div><div class="eq-body" id="eq3"></div></div>
       <div class="eq-row"><div class="eq-label">First side lobe (≈ 4.7% of peak)</div><div class="eq-body" id="eq4"></div></div>
@@ -2386,12 +2390,17 @@ return {
   const wlValEl   = document.getElementById('wl-val');
   const roWidth = document.getElementById('ro-width');
   const roTheta = document.getElementById('ro-theta');
+  const roPeak  = document.getElementById('ro-peak');
   const legendLightDot = document.getElementById('legend-light-dot');
 
   // Concrete canvas font stacks — CSS var() is invalid inside ctx.font and
   // would silently leave the canvas on its 10px sans-serif default.
   const FONT_NUM  = '"JetBrainsMonoNums","JetBrains Mono",ui-monospace,monospace';
   const FONT_SANS = '"DMSansUser","DM Sans",-apple-system,"Segoe UI",Roboto,sans-serif';
+
+  // The authored defaults, captured before anything can move them — onReset
+  // has to be able to put the controls back (see onReset).
+  const SLIT_DEFAULT = slitEl.value, WL_DEFAULT = wlEl.value;
 
   // Bind sliders — attach listener only; onReset performs first update
   slitEl.addEventListener('input',()=>{
@@ -2437,6 +2446,12 @@ return {
       roWidth.textContent = '—';
       roTheta.textContent = '—';
     }
+    // The strip and the I/I0 curve are both normalised to their own peak, so
+    // the slit slider's effect on BRIGHTNESS would otherwise be invisible. The
+    // central amplitude is proportional to a (the whole aperture arrives in
+    // phase straight ahead), so I0 goes as a^2 — reported here against the
+    // a = 100 um default.
+    if(roPeak) roPeak.textContent = Math.pow(state.slitUm/100, 2).toFixed(2) + ' ×';
   }
 
   // DPR-aware fit
@@ -2478,8 +2493,9 @@ return {
     const usableW = w - leftPad - rightPad;
     const usableH = h - topReserve - 20;
 
-    // Background
-    const cs = getComputedStyle(document.documentElement);
+    // Background. The theme class lands on <body>, never on <html>, so the
+    // ground is chosen from the body class directly — a getComputedStyle read
+    // off document.documentElement would always return the dark :root token.
     const isLight = document.body.classList.contains('light-theme');
     const bg = isLight ? '#f8fafc' : '#050b0d';
     ctx.fillStyle = bg;
@@ -2514,8 +2530,12 @@ return {
 
     // Draw incoming plane wavefronts (from the left)
     const [wr, wg, wb] = wlToRGB(state.wlNm);
-    const waveColor = `rgba(${wr},${wg},${wb},0.55)`;
-    const waveColorFaint = `rgba(${wr},${wg},${wb},0.28)`;
+    // A saturated spectral colour at low alpha washes out against the light
+    // theme's near-white panel — darken it and raise the alpha there. The
+    // screen strip and the legend dot keep the true hue in both themes.
+    const dk = c => Math.round(c * 0.55);
+    const waveColor = isLight ? `rgba(${dk(wr)},${dk(wg)},${dk(wb)},0.85)` : `rgba(${wr},${wg},${wb},0.55)`;
+    const waveColorFaint = isLight ? `rgba(${dk(wr)},${dk(wg)},${dk(wb)},0.45)` : `rgba(${wr},${wg},${wb},0.28)`;
     ctx.strokeStyle = waveColor;
     ctx.lineWidth = 1.5;
     // Plane wave spacing (visual) — scales with λ so the drawn wavelength
@@ -2541,7 +2561,9 @@ return {
     // Draw circular wavelets from each source across the slit
     ctx.strokeStyle = waveColorFaint;
     ctx.lineWidth = 1.2;
-    const localMaxR = dividerX - slitX + 40;
+    // Stop the arcs short of the screen panel's I/I0 axis labels rather than
+    // running right up to them.
+    const localMaxR = dividerX - slitX + 26;
     for(let i=0;i<nSources;i++){
       const t = (i+0.5)/nSources;
       const sy = (appCY - slitHalfPx) + t * (2*slitHalfPx);
@@ -2583,8 +2605,20 @@ return {
     ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
     drawTextClamped('λ = ' + state.wlNm.toFixed(0) + ' nm', appL + 8, appT + 74, {align:'left', _box:{w,h}});
     drawTextClamped('plane wave in', appL + 8, appT + 90, {align:'left', _box:{w,h}});
-    ctx.font = '600 11px ' + FONT_SANS;
+    ctx.font = '600 12px ' + FONT_SANS;
     drawTextClamped('schematic — not to scale', appL + 8, appT + 107, {align:'left', _box:{w,h}});
+    // Name the two objects a first-time reader has to decode: the dark bar is
+    // an opaque barrier, and the panel on the other side of the divider is the
+    // screen the pattern lands on.
+    drawTextClamped('opaque barrier with a slit', slitX + 6, appT + 34, {align:'right', _box:{w,h}});
+    ctx.save();
+    // Down the divider column, in its LOWER half: the wavelet arcs reach about
+    // 58 px past the slit, and the I/I0 axis labels own the strip to its right.
+    ctx.translate(dividerX + 12, (appCY + 62 + appB) / 2);
+    ctx.rotate(-Math.PI/2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('the screen (L = 1.00 m)', 0, 0);
+    ctx.restore();
 
     // Divider between apparatus and screen panel
     ctx.strokeStyle = isLight ? 'rgba(51,65,85,0.18)' : 'rgba(148,163,184,0.18)';
@@ -2607,10 +2641,15 @@ return {
     //   middle 60% : intensity curve I/I0 vs y (in mm)
     //   bottom : screen axis with tick labels (y in mm)
     const stripH = Math.max(40, scH * 0.20);
-    const stripT = scT + 26; // below the DOM legend pill (top:42px, ~35px tall) so it never overlaps the strip
+    // Clear of the DOM legend pill (top:42px, 31px tall) INCLUDING the strip's
+    // own caption, which is drawn above stripT: at +26 the caption ran under
+    // the pill at every window size (measured at 1500x950 and 1024x768).
+    const stripT = scT + 40;
     const stripB = stripT + stripH;
     const axisH = 26;
-    const curveT = stripB + 16;
+    // The gap below the strip carries the W measurement arrow, so the width
+    // label no longer sits on top of the curve's central peak.
+    const curveT = stripB + 34;
     const curveB = scB - axisH - 4;
     const curveH = curveB - curveT;
 
@@ -2658,10 +2697,12 @@ return {
     ctx.lineWidth = 1;
     ctx.strokeRect(scL, stripT, scW, stripH);
 
-    // Label above strip
-    ctx.font = '600 11px ' + FONT_SANS;
+    // Label above strip. The strip is normalised to its OWN peak, so it shows
+    // the pattern's shape honestly but not its absolute brightness — say so
+    // rather than claim "as it appears"; the I0 readout carries the a^2 law.
+    ctx.font = '600 12px ' + FONT_SANS;
     ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
-    drawTextClamped('PATTERN ON SCREEN (as it appears)', scL, stripT - 4, {align:'left', _box:{w,h}});
+    drawTextClamped('PATTERN ON SCREEN — scaled to its own peak', scL, stripT - 6, {align:'left', _box:{w,h}});
 
     // ---- Intensity curve (middle) ----
     // Background
@@ -2713,15 +2754,35 @@ return {
     ctx.closePath();
     ctx.fill();
 
-    // Mark first minima positions with dashed red lines
+    // Mark the DARK fringes: a·sinθ = mλ, m = ±1, ±2, … (minima, never maxima).
+    // The m = 1 pair bounds the central maximum; the higher orders get short
+    // ticks so the eye can read that the central band is exactly twice the
+    // spacing of every band beyond it.
     const m1 = Engine.wavefront.singleSlitMinimum(a, lam, 1, L);
     if(m1.exists){
-      const yMm = m1.centralMaximumWidth * 1000 / 2; // half-width
+      const yMm = m1.centralMaximumWidth * 1000 / 2; // half-width = first minimum
       const clampedHalf = Math.min(yMm, Y_HALF_MM);
       const off = clampedHalf < yMm; // if the minimum is offscreen
-      let xL = yToPx(-clampedHalf);
-      let xR = yToPx(+clampedHalf);
+      const xL = yToPx(-clampedHalf);
+      const xR = yToPx(+clampedHalf);
       if(!off){
+        // Higher orders first, so the m = 1 pair draws over them.
+        ctx.strokeStyle = 'rgba(244,63,94,0.38)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3,4]);
+        ctx.beginPath();
+        for(let m = 2; m <= 5; m++){
+          const mm = Engine.wavefront.singleSlitMinimum(a, lam, m, L);
+          if(!mm.exists) break;
+          const yOrder = mm.position * 1000;
+          if(yOrder > Y_HALF_MM) break;
+          for(const s of [-1, 1]){
+            ctx.moveTo(yToPx(s*yOrder), curveB - 14);
+            ctx.lineTo(yToPx(s*yOrder), curveB);
+          }
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
         // Draw the dashed markers only when the true minima are on the screen;
         // clamped lines at ±25 mm would falsely place the minima at the edge.
         ctx.strokeStyle = '#f43f5e';
@@ -2734,21 +2795,36 @@ return {
         ctx.lineTo(xR, curveB);
         ctx.stroke();
         ctx.setLineDash([]);
+        // Name the order. The two labels sit on the OUTER side of their own
+        // line, so they never collide however narrow the central band gets.
+        ctx.font = '600 12px ' + FONT_NUM;
+        ctx.fillStyle = '#f43f5e';
+        drawTextClamped('m = 1', xL - 5, curveB - 20, {align:'right', _box:{w,h}});
+        drawTextClamped('m = 1', xR + 5, curveB - 20, {align:'left',  _box:{w,h}});
       }
-      // Label central width in the middle of the curve area
+      // Central-band width, measured between the two first minima and drawn in
+      // the gap between the strip and the curve — clear of the central peak,
+      // and directly under the band it measures.
+      const measY = stripB + 24;
+      if(!off){
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(xL, measY); ctx.lineTo(xR, measY);
+        ctx.moveTo(xL + 6, measY - 4); ctx.lineTo(xL, measY); ctx.lineTo(xL + 6, measY + 4);
+        ctx.moveTo(xR - 6, measY - 4); ctx.lineTo(xR, measY); ctx.lineTo(xR - 6, measY + 4);
+        ctx.stroke();
+      }
       ctx.font = '600 12px ' + FONT_NUM;
       ctx.fillStyle = '#f43f5e';
       const widthLabel = 'W = ' + (m1.centralMaximumWidth*1000).toFixed(2) + ' mm';
-      // place above the strip inside curve area if room
-      const midY = curveT + 14;
-      const midX = (xL + xR)/2;
-      drawTextClamped(widthLabel, midX, midY, {align:'center', _box:{w,h}});
+      drawTextClamped(widthLabel, (xL + xR)/2, stripB + 15, {align:'center', _box:{w,h}});
 
       if(off){
         // Indicate the minima are OFF the screen
-        ctx.font = '600 11px ' + FONT_SANS;
+        ctx.font = '600 12px ' + FONT_SANS;
         ctx.fillStyle = '#f43f5e';
-        drawTextClamped('first minima → off screen', scR - 4, curveT + 14, {align:'right', _box:{w,h}});
+        drawTextClamped('first minima → off screen', scR - 4, stripB + 15, {align:'right', _box:{w,h}});
       }
     }
 
@@ -2756,7 +2832,7 @@ return {
     ctx.strokeStyle = isLight ? 'rgba(51,65,85,0.5)' : 'rgba(148,163,184,0.5)';
     ctx.fillStyle = isLight ? '#334155' : '#cbd5e1';
     ctx.lineWidth = 1;
-    ctx.font = '500 11px ' + FONT_NUM;
+    ctx.font = '500 12px ' + FONT_NUM;
     const ticks = [-25, -15, -5, 0, 5, 15, 25];
     for(const tval of ticks){
       const tx = yToPx(tval);
@@ -2767,13 +2843,13 @@ return {
       drawTextClamped(tval.toString(), tx, curveB + 16, {align:'center', _box:{w,h}});
     }
     // Axis title
-    ctx.font = '600 11px ' + FONT_SANS;
+    ctx.font = '600 12px ' + FONT_SANS;
     ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
     drawTextClamped('y on screen  (mm)   ·   screen at L = 1.00 m', (scL+scR)/2, scB - 4, {align:'center', _box:{w,h}});
 
     // Y-axis label (I/I0) at left
     ctx.save();
-    ctx.font = '600 11px ' + FONT_SANS;
+    ctx.font = '600 12px ' + FONT_SANS;
     ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
     ctx.translate(scL - 6, (curveT+curveB)/2);
     ctx.rotate(-Math.PI/2);
@@ -2781,7 +2857,7 @@ return {
     ctx.fillText('I / I₀', 0, 0);
     ctx.restore();
     // 1.0 label at top
-    ctx.font = '500 11px ' + FONT_NUM;
+    ctx.font = '500 12px ' + FONT_NUM;
     ctx.fillStyle = isLight ? '#334155' : '#cbd5e1';
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.fillText('1.0', scL - 4, curveT);
@@ -2795,7 +2871,14 @@ return {
   function onResize(){ render(); }
   function onReset(){
     state.t = 0;
-    // Re-read slider DOM values to closure
+    // The shell contract: onReset returns every control to its AUTHORED
+    // default — that is what makes ↻ Reset (and the Controls Guide's "Restores
+    // a = 100 µm and λ = 550 nm") true. Merely re-reading the sliders left
+    // Reset as a no-op on the parameters. The shell's restart-on-parameter-
+    // change watcher snapshots the controls around this call and re-applies
+    // the student's value, so dragging a slider still keeps what was dragged.
+    slitEl.value = SLIT_DEFAULT;
+    wlEl.value = WL_DEFAULT;
     state.slitUm = +slitEl.value;
     state.wlNm = +wlEl.value;
     slitValEl.textContent = state.slitUm.toFixed(0) + ' µm';
@@ -3098,7 +3181,7 @@ return {
     { sel:'#shell-reset',    mode:'veil', title:'Reset',               text:'Restores a = 100 µm and λ = 550 nm.' },
     { sel:'#box-slit',       mode:'hide', title:'Slit width a',        text:'Sets the single-slit width — narrower means a wider pattern.' },
     { sel:'#box-wl',         mode:'hide', title:'Wavelength λ',        text:'Sets the light wavelength — longer waves spread more.' },
-    { sel:'#panel-readouts', mode:'hide', title:'Live readouts',       text:'Central band width W and first-minimum angle θ.' },
+    { sel:'#panel-readouts', mode:'hide', title:'Live readouts',       text:'Central band width W, first-minimum angle θ, and the central brightness I₀ (which goes as a²).' },
     { sel:'#pb-scene',       mode:'hide', title:'Apparatus and trace', text:'The slit, the screen, and I/I₀ against a fixed axis.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
@@ -3388,7 +3471,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

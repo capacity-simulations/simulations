@@ -219,8 +219,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .formal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}
 .eq-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;}
 .eq-row .eq-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-mute);margin-bottom:6px;}
-.toggle-row{display:flex;gap:8px;}
-.toggle-row .shell-btn{flex:1;justify-content:center;}
+.toggle-row{display:flex;flex-direction:column;gap:8px;}
+.toggle-row .shell-btn{flex:none;width:100%;justify-content:center;}
 .toggle-row .shell-btn.active{background:rgba(59,155,143,.20);border-color:var(--accent);color:var(--accent);}
 
 /* ===== Two-button template: Guided Inquiry zone visibility ===== */
@@ -947,11 +947,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-Δi dots of δ(i) for a 60° crown-glass prism</span>
+            <span class="hero-label">Deviation δ against angle of incidence i, for a 60° crown-glass prism</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The Prism</span></h2>
-            <p class="welcome-blurb">Rotate a prism and δ dips at symmetric passage — white light fans violet more than red.</p>
+            <p class="welcome-blurb">A ray enters a glass prism, bends at both faces and leaves deviated by an angle δ. Rotate the prism, change its apex angle, and switch from one wavelength to white light.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1079,7 +1079,7 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>Sweep and watch the curve build</h4>
           <p>Press ▶ Play (auto-sweep) or drag the <em>Prism rotation</em> slider yourself. The δ–i plot below records every setting. Look for the dip.</p>
-          <p>When the ray inside the prism runs <strong>parallel to the base</strong>, the passage is symmetric and δ is at its minimum. The scene lights that up for you.</p>
+          <p>The scene marks the setting where δ bottoms out. Park there, and watch the ray <em>inside</em> the glass while you do.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1092,8 +1092,8 @@ Object.freeze(Engine);
         </div>
 
         <div class="inq-step" data-gate>
-          <h4>Now try white light — which colour bends most?</h4>
-          <p>Next you will flip the light source to <em>White</em>, and the single ray fans into a spectrum. Before you flip — which colour do you predict deviates <strong>most</strong>?</p>
+          <h4>Predict: which colour deviates most?</h4>
+          <p>White light is a mixture of wavelengths, and the glass has a different refractive index for each one. Which colour deviates <strong>most</strong>?</p>
           <button class="choice" data-fb="No — that is the common misconception. All colours have the SAME speed in vacuum, but in glass n(λ) depends on wavelength: n is LARGER for violet, so <strong>violet bends and deviates most</strong> (about 1.5° more than red for a 60° crown-glass prism).">All colours bend the same; the prism just spreads them somehow.</button>
           <button class="choice" data-fb="No — red has the SMALLEST index (n≈1.508) so it bends LEAST. Violet has the largest index (n≈1.525) and bends most.">Red — it has the longest wavelength so it bends the most.</button>
           <button class="choice" data-correct data-fb="Right. <strong>Violet has the largest refractive index</strong> (n≈1.525 vs n≈1.508 for red), so violet is slowed most and deviated most — the ordering that makes the visible spectrum.">Violet — it is slowed most in the glass.</button>
@@ -1169,10 +1169,13 @@ Object.freeze(Engine);
         <div class="shell-panel-head"><h3>Live readouts</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box" id="box-readouts">
+            <div class="stat-row"><span class="stat-label">Refraction angle r<sub>1</sub> (entry)</span><span class="stat-value" id="r1Out">—</span></div>
+            <div class="stat-row"><span class="stat-label">Angle r<sub>2</sub> at exit face</span><span class="stat-value" id="r2Out">—</span></div>
+            <div class="stat-row"><span class="stat-label">Emergence angle e</span><span class="stat-value" id="eOut">—</span></div>
             <div class="stat-row"><span class="stat-label">Deviation δ (550 nm)</span><span class="stat-value highlight" id="deltaOut">—</span></div>
-            <div class="stat-row"><span class="stat-label">Minimum δ<sub>m</sub> (this A, 550 nm)</span><span class="stat-value" id="deltaMinOut">—</span></div>
+            <div class="stat-row" id="dminRow"><span class="stat-label">Minimum δ<sub>m</sub> (at this A)</span><span class="stat-value" id="deltaMinOut">—</span></div>
             <div class="stat-row" id="symRow"><span class="stat-label">At symmetric passage?</span><span class="stat-value" id="symOut">no</span></div>
-            <div class="stat-row" id="dispRow" style="display:none;"><span class="stat-label">Angular dispersion (violet − red)</span><span class="stat-value" id="dispOut">—</span></div>
+            <div class="stat-row" id="dispRow" style="display:none;"><span class="stat-label">Dispersion, violet − red</span><span class="stat-value" id="dispOut">—</span></div>
           </div>
         </div>
       </div>
@@ -1952,6 +1955,11 @@ return {
     plotPoints: new Map(),
     highlightSym: false,
     sweepDir: +1,
+    // Inquiry step reached. Card 1 asks the student to PREDICT that δ has a
+    // minimum, so the δ_min line/readout stay hidden until they have committed;
+    // card 3 asks what the internal ray does at that minimum, so the words
+    // "parallel to base" stay hidden until that card is answered too.
+    reveal: 0,
   };
   const DEFAULTS = { iDeg:45, Adeg:60, mode:'mono' };
 
@@ -2036,7 +2044,10 @@ return {
 
   function drawScene(){
     const {w,h} = sceneSize;
-    const css = getComputedStyle(document.documentElement);
+    // Read the palette off <body>: the light theme lands as body.light-theme,
+    // so documentElement still reports the DARK values and every canvas label
+    // came out near-white on a white page.
+    const css = getComputedStyle(document.body);
     const bg = getComputedStyle(sceneCv.parentElement).backgroundColor || '#060E11';
     const textCol = css.getPropertyValue('--text').trim() || '#e2e8f0';
     const mutedCol = css.getPropertyValue('--muted').trim() || '#94a3b8';
@@ -2044,6 +2055,9 @@ return {
     const isLight = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme')==='light';
     const rayCol = isLight ? '#1e293b' : '#f8fafc';
 
+    // The panel background is 95 % opaque, so filling alone left a 5 % ghost of
+    // the previous frame — clear first.
+    sceneCtx.clearRect(0,0,w,h);
     sceneCtx.fillStyle = bg;
     sceneCtx.fillRect(0,0,w,h);
 
@@ -2075,8 +2089,11 @@ return {
 
     const leftFaceAng = Math.atan2(baseL.y-apex.y, baseL.x-apex.x);
     const rightFaceAng = Math.atan2(baseR.y-apex.y, baseR.x-apex.x);
-    const nLeft  = { x:  Math.sin(leftFaceAng),  y: -Math.cos(leftFaceAng) };
-    const nRight = { x: -Math.sin(rightFaceAng), y:  Math.cos(rightFaceAng) };
+    // OUTWARD unit normals of the two refracting faces (the prism interior is
+    // on the far side of each). Rotating the inward normal by −i / −r1 puts the
+    // ray on the apex side of the normal, which is the standard prism picture.
+    const nLeft  = { x: -Math.sin(leftFaceAng),  y:  Math.cos(leftFaceAng) };
+    const nRight = { x:  Math.sin(rightFaceAng), y: -Math.cos(rightFaceAng) };
 
     const t = 0.55;
     const hitL = { x: apex.x + t*(baseL.x-apex.x), y: apex.y + t*(baseL.y-apex.y) };
@@ -2086,11 +2103,11 @@ return {
     function traceOne(n, hitLPoint){
       const res = computeRay(iRad, A, n);
       if (!res.escapes){
-        const inDir = rotate({ x:-nLeft.x, y:-nLeft.y }, +iRad);
+        const inDir = rotate({ x:-nLeft.x, y:-nLeft.y }, -iRad);
         const start = { x: hitLPoint.x - inDir.x * 400, y: hitLPoint.y - inDir.y * 400 };
         if (res.tir){
           const inwardL = { x:-nLeft.x, y:-nLeft.y };
-          const insideDir = rotate(inwardL, +res.r1);
+          const insideDir = rotate(inwardL, -res.r1);
           const hitR = intersectRaySeg(hitLPoint, insideDir, apex, baseR);
           if (hitR){
             const dot = insideDir.x*nRight.x + insideDir.y*nRight.y;
@@ -2102,18 +2119,19 @@ return {
         return { start, hitL: hitLPoint, hitR: null, exitEnd: null, res, inDir };
       }
       const { r1, r2, e } = res;
-      const inDir = rotate({ x:-nLeft.x, y:-nLeft.y }, +iRad);
+      const inDir = rotate({ x:-nLeft.x, y:-nLeft.y }, -iRad);
       const start = { x: hitLPoint.x - inDir.x * 400, y: hitLPoint.y - inDir.y * 400 };
       const inwardL = { x:-nLeft.x, y:-nLeft.y };
-      const insideDir = rotate(inwardL, +r1);
+      const insideDir = rotate(inwardL, -r1);
       const hitR = intersectRaySeg(hitLPoint, insideDir, apex, baseR);
       if (!hitR){
         return { start, hitL: hitLPoint, hitR:null, exitEnd:null, res, inDir, insideDir };
       }
-      const inwardR = { x:-nRight.x, y:-nRight.y };
-      const crossZ = inwardR.x*insideDir.y - inwardR.y*insideDir.x;
+      // The emergent ray sits on the same side of the exit normal as the ray
+      // inside the glass, at the angle e that Snell's law just gave us.
+      const crossZ = nRight.x*insideDir.y - nRight.y*insideDir.x;
       const sign = crossZ >= 0 ? +1 : -1;
-      const exitDir = rotate(nRight, sign * e);
+      const exitDir = rotate(nRight, sign * Math.abs(e));
       const exitEnd = { x: hitR.x + exitDir.x * 400, y: hitR.y + exitDir.y * 400 };
       return { start, hitL: hitLPoint, hitR, exitEnd, res, inDir, insideDir, exitDir };
     }
@@ -2191,7 +2209,8 @@ return {
       drawLabel(sceneCtx, 'total internal reflection — ray does not exit', refTr.hitR.x + 14, refTr.hitR.y + 2, mutedCol, 12, 'left');
     }
 
-    if (atMin && refTr.hitR){
+    if (atMin && refTr.hitR && state.reveal >= 1){
+      const saidParallel = state.reveal >= 3;   // card 3 asks this — don't answer it early
       sceneCtx.save();
       sceneCtx.strokeStyle = 'rgba(52,211,153,0.85)';
       sceneCtx.lineWidth = 5;
@@ -2202,19 +2221,22 @@ return {
       sceneCtx.stroke();
       sceneCtx.restore();
 
-      sceneCtx.save();
-      sceneCtx.strokeStyle = 'rgba(52,211,153,0.35)';
-      sceneCtx.lineWidth = 1.2;
-      sceneCtx.setLineDash([4,4]);
-      sceneCtx.beginPath();
-      sceneCtx.moveTo(baseL.x, baseL.y);
-      sceneCtx.lineTo(baseR.x, baseR.y);
-      sceneCtx.stroke();
-      sceneCtx.restore();
+      if (saidParallel){
+        sceneCtx.save();
+        sceneCtx.strokeStyle = 'rgba(52,211,153,0.35)';
+        sceneCtx.lineWidth = 1.2;
+        sceneCtx.setLineDash([4,4]);
+        sceneCtx.beginPath();
+        sceneCtx.moveTo(baseL.x, baseL.y);
+        sceneCtx.lineTo(baseR.x, baseR.y);
+        sceneCtx.stroke();
+        sceneCtx.restore();
+      }
 
       const midX = (refTr.hitL.x + refTr.hitR.x)/2;
-      const midY = (refTr.hitL.y + refTr.hitR.y)/2 - 12;
-      drawLabel(sceneCtx, 'parallel to base — δ is MINIMUM', midX, midY, '#34d399', 12, 'center');
+      const midY = (refTr.hitL.y + refTr.hitR.y)/2 - 26;
+      drawLabel(sceneCtx, saidParallel ? 'parallel to base — δ is MINIMUM' : 'δ is at its MINIMUM here',
+                midX, midY, '#34d399', 12, 'center');
     }
 
     if (refTr.exitEnd){
@@ -2230,6 +2252,8 @@ return {
       sceneCtx.lineTo(refTr.hitR.x + dInc.x*160, refTr.hitR.y + dInc.y*160);
       sceneCtx.stroke();
       sceneCtx.restore();
+      drawLabel(sceneCtx, 'original direction (no prism)',
+                refTr.hitR.x + dInc.x*170, refTr.hitR.y + dInc.y*170 - 10, mutedCol, 12, 'center');
 
       const a1 = Math.atan2(dInc.y, dInc.x);
       const a2 = Math.atan2(dExitN.y, dExitN.x);
@@ -2249,7 +2273,7 @@ return {
       const midA = s + d/2;
       const labX = refTr.hitR.x + Math.cos(midA)*(rArc+18);
       const labY = refTr.hitR.y + Math.sin(midA)*(rArc+18);
-      drawLabel(sceneCtx, (state.mode==='white' ? 'δ (550 nm) = ' : 'δ = ')+(refTr.res.delta*RAD2DEG).toFixed(1)+'°', labX, labY, accentCol, 13, 'center');
+      drawLabel(sceneCtx, (state.mode==='white' ? 'deviation δ (550 nm) = ' : 'deviation δ = ')+(refTr.res.delta*RAD2DEG).toFixed(1)+'°', labX, labY, accentCol, 13, 'center');
     }
 
     // Apex angle arc — use short-arc helper so it matches the printed A.
@@ -2275,11 +2299,23 @@ return {
       sceneCtx.lineTo(hitL.x + nLeft.x*35, hitL.y + nLeft.y*35);
       sceneCtx.stroke();
       sceneCtx.restore();
-      drawLabel(sceneCtx, 'i = '+state.iDeg.toFixed(1)+'°', hitL.x - 55, hitL.y - 24, mutedCol, 12, 'right');
+      drawLabel(sceneCtx, 'normal', hitL.x - nLeft.x*46, hitL.y - nLeft.y*46, mutedCol, 12, 'center');
+      drawLabel(sceneCtx, 'angle of incidence i = '+state.iDeg.toFixed(1)+'°', hitL.x - 46, hitL.y - 30, mutedCol, 12, 'right');
     }
 
-    if (state.mode==='white'){
-      drawLabel(sceneCtx, 'Violet bends most  •  Red bends least', w-16, h-14, mutedCol, 12, 'right');
+    // Card 4 asks WHICH colour deviates most, so the fan may be shown but not
+    // named until that prediction is in (reveal ≥ 4 = card 5 / free explore).
+    if (state.mode==='white' && state.reveal >= 4){
+      // Name the two ends of the fan: colour alone is not a safe channel.
+      const vio = renderedTraces[0], red = renderedTraces[renderedTraces.length-1];
+      const at = (tr, f) => tr && tr.exitEnd
+        ? { x: tr.hitR.x + (tr.exitEnd.x-tr.hitR.x)*f, y: tr.hitR.y + (tr.exitEnd.y-tr.hitR.y)*f } : null;
+      const pR = red && at(red.tr, 0.45), pV = vio && at(vio.tr, 0.78);
+      if (pR) drawLabel(sceneCtx, 'red — deviates least', pR.x, pR.y - 15, '#ef4444', 12, 'center');
+      if (pV) drawLabel(sceneCtx, 'violet — deviates most', pV.x, pV.y + 17, '#a855f7', 12, 'center');
+      // Bottom-LEFT: the fan always leaves down-and-right, so a bottom-right
+      // note collided with the "violet — deviates most" label at 1024 px.
+      drawLabel(sceneCtx, 'n is larger for violet ⇒ violet deviates more', 16, h-14, mutedCol, 12, 'left');
     }
   }
 
@@ -2299,7 +2335,7 @@ return {
 
   function drawLabel(ctx, text, x, y, color, size, align){
     ctx.save();
-    ctx.font = '600 '+size+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-sans');
+    ctx.font = '600 '+size+'px '+getComputedStyle(document.body || document.documentElement).getPropertyValue('--font-sans');
     ctx.textAlign = align||'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = color;
@@ -2324,17 +2360,20 @@ return {
 
   function drawPlot(){
     const {w,h} = plotSize;
-    const css = getComputedStyle(document.documentElement);
+    const css = getComputedStyle(document.body);   // see drawScene — theme lands on <body>
     const textCol = css.getPropertyValue('--text').trim() || '#e2e8f0';
     const mutedCol = css.getPropertyValue('--muted').trim() || '#94a3b8';
     const accentCol = css.getPropertyValue('--accent').trim() || '#3b9b8f';
     const borderCol = css.getPropertyValue('--border').trim() || '#334155';
     const bg = getComputedStyle(plotCv.parentElement).backgroundColor || '#060E11';
 
+    plotCtx.clearRect(0,0,w,h);
     plotCtx.fillStyle = bg;
     plotCtx.fillRect(0,0,w,h);
 
-    const iMin=20, iMax=85, dMin=20, dMax=80;
+    // δ floor of 10° (not 20°): at A = 30° the minimum is 16.1°, and with a 20°
+    // floor the whole dip — the point of the graph — fell off the bottom.
+    const iMin=20, iMax=85, dMin=10, dMax=80;
     const pad = { l:52, r:16, t:56, b:36 };
     const px = i => pad.l + (i - iMin)/(iMax - iMin) * (w - pad.l - pad.r);
     const py = d => (h - pad.b) - (d - dMin)/(dMax - dMin) * (h - pad.t - pad.b);
@@ -2424,7 +2463,7 @@ return {
       }
     }
 
-    const dMinR = minDevAt(state.Adeg*DEG, n);
+    const dMinR = state.reveal >= 1 ? minDevAt(state.Adeg*DEG, n) : null;
     if (dMinR != null){
       const dMinDeg = dMinR*RAD2DEG;
       if (dMinDeg >= dMin && dMinDeg <= dMax){
@@ -2451,19 +2490,30 @@ return {
     const iRad = state.iDeg*DEG;
     const res = computeRay(iRad, A, n);
     const dMinR = minDevAt(A, n);
+    // Decide symmetry HERE, not in drawScene: updateReadouts runs first, so
+    // reading drawScene's flag left the panel one interaction stale.
+    state.highlightSym = !!res.escapes && Math.abs(res.r1 - res.r2) < 0.4*DEG;
 
     document.getElementById('iVal').textContent = state.iDeg.toFixed(1)+'°';
     document.getElementById('aVal').textContent = state.Adeg.toFixed(0)+'°';
+    // The chain the prism formula is built from: i → r₁ → r₂ → e → δ.
+    document.getElementById('r1Out').textContent = (res.r1 != null ? (res.r1*RAD2DEG).toFixed(2)+'°' : '—');
+    document.getElementById('r2Out').textContent = (res.r2 != null ? (res.r2*RAD2DEG).toFixed(2)+'°' : '—');
+    document.getElementById('eOut').textContent =
+      (res.escapes ? (res.e*RAD2DEG).toFixed(2)+'°' : '— (total internal reflection)');
     document.getElementById('deltaOut').textContent =
       (res.escapes ? (res.delta*RAD2DEG).toFixed(2)+'°' : '— (ray does not exit)');
     document.getElementById('deltaMinOut').textContent =
       (dMinR != null ? (dMinR*RAD2DEG).toFixed(2)+'°' : '—');
+    // Card 1 asks the student to predict that a minimum exists — don't print it
+    // on the panel before they have committed.
+    document.getElementById('dminRow').style.display = state.reveal >= 1 ? '' : 'none';
     const symOut = document.getElementById('symOut');
-    symOut.textContent = state.highlightSym ? 'YES — parallel to base' : 'no';
+    symOut.textContent = state.highlightSym ? (state.reveal >= 3 ? 'YES — parallel to base' : 'YES') : 'no';
     symOut.style.color = state.highlightSym ? '#34d399' : '';
 
     const dispRow = document.getElementById('dispRow');
-    if (state.mode==='white'){
+    if (state.mode==='white' && state.reveal >= 4){   // see drawScene — card 4 predicts this
       dispRow.style.display='';
       const nRed = nAt(LAMBDA_RED);
       const nVio = nAt(LAMBDA_VIOLET);
@@ -2541,6 +2591,7 @@ return {
   }
 
   function onStep(i){
+    state.reveal = i;
     if (i === 0){
       state.plotPoints.clear();
       state.iDeg = 45;
@@ -2564,11 +2615,16 @@ return {
   }
   renderMath();
 
-  window.__cgReveals = function(){};
+  // Controls Guide walks the panel — nothing is being predicted, so reveal all.
+  window.__cgReveals = function(){ state.reveal = 99; updateReadouts(); drawScene(); drawPlot(); };
   window.__freeExplore = function(){ onStep(4); };
   window.__giResume = function(){ onStep((typeof Shell !== 'undefined' && Shell.step) || 0); };
 
-  Shell.init({ onFrame, onReset, onResize, onStep, cfg: { autoplay: false } });
+  // restartOnParamChange:false — this is a slider-driven diagram, not a run.
+  // With the shell's default (true) every slider event called onReset, which
+  // silently flipped White light back to Monochromatic and wiped the δ–i curve
+  // the plot is supposed to accumulate as you rotate.
+  Shell.init({ onFrame, onReset, onResize, onStep, cfg: { autoplay: false, restartOnParamChange: false } });
   window.addEventListener('resize', ()=>Shell.refit());
 })();
 </script>
@@ -2779,10 +2835,10 @@ return {
     { sel:'#toggle-formal',  mode:'veil', title:'Formal equations',     text:'Shows or hides Snell, δ = i + e − A, and Cauchy.' },
     { sel:'#shell-play',     mode:'veil', title:'Play',                 text:'Auto-sweeps incidence so the δ–i curve builds.' },
     { sel:'#shell-speed',    mode:'veil', title:'Speed',                text:'Sets how fast the auto-sweep runs.' },
-    { sel:'#box-i',          mode:'hide', title:'Prism rotation',       text:'Sets incidence i. Watch δ dip, then rise.' },
+    { sel:'#box-i',          mode:'hide', title:'Prism rotation',       text:'Rotates the prism — this is the angle of incidence i.' },
     { sel:'#box-A',          mode:'hide', title:'Apex angle A',         text:'Sets the prism apex angle A.' },
     { sel:'#box-source',     mode:'hide', title:'Light source',         text:'Flip 550 nm mono to white for a spectrum.' },
-    { sel:'#box-readouts',   mode:'hide', title:'Live readouts',        text:'Live δ, minimum δm, and symmetric-passage flag.' },
+    { sel:'#box-readouts',   mode:'hide', title:'Live readouts',        text:'The angle chain r₁, r₂, e and δ, plus the minimum δm.' },
     { sel:'#box-scene',      mode:'hide', title:'Prism and ray',        text:'Ray through the prism. Spectrum in white light.' },
     { sel:'#box-plot',       mode:'hide', title:'Deviation plot',       text:'δ versus i. The curve builds as you rotate.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
@@ -2942,7 +2998,7 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the prism.',
-    'Rotate the prism and the deviation dips at a minimum. White light fans into a spectrum — violet bends more than red.',
+    'A ray enters a glass prism, bends at each face, and leaves deviated by an angle delta. You will rotate the prism, change its apex angle, and switch from a single wavelength to white light.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -3083,7 +3139,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

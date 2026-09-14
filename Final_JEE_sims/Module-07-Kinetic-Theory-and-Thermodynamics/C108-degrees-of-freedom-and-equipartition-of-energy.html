@@ -2042,6 +2042,34 @@ return {
     ctx.restore();
   }
 
+  /* Width of `text` in `font`, without disturbing the current context state. */
+  function measureIn(text, font){
+    ctx.save(); ctx.font = font; const w = ctx.measureText(text).width; ctx.restore();
+    return w;
+  }
+  /* Every canvas label here sits at the 12px K-12 legibility floor, so a narrow
+     canvas can no longer be answered by shrinking the type. Instead a caption
+     that would run into its neighbour is cut at a word boundary and ellipsised —
+     it never overlaps, and it never drops below 12px. At the 1500x950 design
+     size every string measured here fits whole, so nothing is ellipsised there. */
+  function fitLine(text, font, maxW){
+    if(maxW <= 0) return '';
+    if(measureIn(text, font) <= maxW) return text;
+    const words = text.split(' ');
+    let out = '';
+    for(let i = 0; i < words.length; i++){
+      const cand = (out ? out + ' ' : '') + words[i];
+      if(measureIn(cand + '…', font) > maxW) break;
+      out = cand;
+    }
+    if(!out){
+      // Not even one word fits — cut by character so something legible survives.
+      out = text;
+      while(out.length > 1 && measureIn(out + '…', font) > maxW) out = out.slice(0, -1);
+    }
+    return out + '…';
+  }
+
   function draw(){
     const cText  = css('--text') || '#e2e8f0';
     const cMuted = css('--muted') || '#cbd5e1';
@@ -2076,9 +2104,11 @@ return {
     const tileGap = 12, tileX = 22, tileW = splitX - 44;
     const tileH = (tilesBot - tilesTop - tileGap*(tiles.length-1)) / tiles.length;
 
+    const CHIP_FONT = fontSans('600 12px');
+    const chipW = label => measureIn(label, CHIP_FONT) + 14;
     const chip = (x, y, label, lit, col) => {
       ctx.save();
-      ctx.font = fontSans('600 11px');
+      ctx.font = CHIP_FONT;
       const w2 = ctx.measureText(label).width + 14;
       ctx.fillStyle = lit ? withAlpha(col, 0.22) : 'rgba(148,163,184,0.08)';
       ctx.strokeStyle = lit ? col : 'rgba(148,163,184,0.35)';
@@ -2091,6 +2121,30 @@ return {
       ctx.fillText(label, x + w2/2, y + 10.5);
       ctx.restore();
       return w2;
+    };
+
+    /* Tile top row: caption on the left, "n × ½kT" on the right. At 12px the two
+       can no longer share one row on a narrow canvas, so the count drops to a
+       second row (there is always clear space there — the molecule sits at
+       0.52·tileH) and only then is the caption ellipsised. */
+    const HDR_FONT = fontSans('600 12px');
+    const tileHeader = (ty, head, count, countCol) => {
+      const countW = measureIn(count, HDR_FONT);
+      const oneRow = measureIn(head, HDR_FONT) + countW + 38 <= tileW;
+      drawTextClamped(fitLine(head, HDR_FONT, tileW - 24 - (oneRow ? countW + 14 : 0)),
+        tileX+12, ty+8, {color:cMuted, font:HDR_FONT});
+      drawTextClamped(count, tileX+tileW-12, oneRow ? ty+8 : ty+26,
+        {color:countCol, font:HDR_FONT, align:'right'});
+    };
+    /* Tile bottom row: the explanatory line shares it with the axis chips, so the
+       width left over by the chips is what it gets. */
+    const tileCaption = (ty, text, chipsRight, align) => {
+      const f = fontSans('12px');
+      const right = align === 'right';
+      const maxW = (right ? (tileX + tileW - 12) - Math.max(chipsRight, tileX+12) - 14
+                          : tileW - 24);
+      drawTextClamped(fitLine(text, f, maxW), right ? tileX+tileW-12 : tileX+12,
+        ty+tileH-25, {color:cMuted, font:f, align: right ? 'right' : 'left'});
     };
 
     tiles.forEach((kind, ti) => {
@@ -2108,11 +2162,8 @@ return {
 
       if(kind === 'trans'){
         // header + count
-        drawTextClamped('TRANSLATION — the molecule moves through space', tileX+12, ty+8,
-          {color:cMuted, font:fontSans('600 10px')});
         const nOn = Math.round(rev[0]+rev[1]+rev[2]);
-        drawTextClamped(nOn + ' × ½kT', tileX+tileW-12, ty+8,
-          {color:COL_TRANS, font:fontSans('600 11px'), align:'right'});
+        tileHeader(ty, 'TRANSLATION — the molecule moves through space', nOn + ' × ½kT', COL_TRANS);
         // one axis at a time: x slide, y slide, z = toward/away (size pulse)
         const phase = Math.floor(t/1.6) % 3;
         const osc = Math.sin((t % 1.6)/1.6 * Math.PI*2);
@@ -2133,26 +2184,23 @@ return {
         drawMolecule(cx+dx, cy+dy, baseR*0.85, state.species, {sx:sc, sy:sc});
         if(phase === 2 && rev[2] > 0.5){
           drawTextClamped(sc > 1 ? 'coming toward you (z)' : 'going away (z)', cx, cy-baseR-26,
-            {color:withAlpha(COL_TRANS,0.8), font:fontSans('11px'), align:'center'});
+            {color:withAlpha(COL_TRANS,0.8), font:fontSans('12px'), align:'center'});
         }
         // axis chips light with the reveal
         let axx = tileX + 12;
         axx += chip(axx, ty+tileH-28, 'x', rev[0] > 0.5, COL_TRANS) + 6;
         axx += chip(axx, ty+tileH-28, 'y', rev[1] > 0.5, COL_TRANS) + 6;
-        chip(axx, ty+tileH-28, 'z (depth)', rev[2] > 0.5, COL_TRANS);
+        axx += chip(axx, ty+tileH-28, 'z (depth)', rev[2] > 0.5, COL_TRANS);
         if(state.species === 'monatomic'){
-          drawTextClamped('a lone point-like atom — nothing to spin, nothing to stretch → f = 3',
-            tileX+tileW-12, ty+tileH-25, {color:cMuted, font:fontSans('11px'), align:'right'});
+          tileCaption(ty, 'a lone point-like atom — nothing to spin, nothing to stretch → f = 3',
+            axx, 'right');
         }
       }
 
       if(kind === 'rot'){
         const nAxes = state.species === 'polyatomic' ? 3 : 2;
-        drawTextClamped('ROTATION — it spins about an axis', tileX+12, ty+8,
-          {color:cMuted, font:fontSans('600 10px')});
         const nOn = Math.round(rev[3]+rev[4]+(rev[5]||0));
-        drawTextClamped(nOn + ' × ½kT', tileX+tileW-12, ty+8,
-          {color:COL_ROT, font:fontSans('600 11px'), align:'right'});
+        tileHeader(ty, 'ROTATION — it spins about an axis', nOn + ' × ½kT', COL_ROT);
         const phase = Math.floor(t/2.0) % nAxes;
         const spin = t*2.2;
         if(phase === 0 && rev[3] > 0.5){
@@ -2165,7 +2213,7 @@ return {
           ctx.beginPath(); ctx.arc(cx, cy, 1.6, 0, Math.PI*2); ctx.fill();
           ctx.restore();
           drawTextClamped('axis 1 — points out of the screen (⊙)', cx, cy-baseR-26,
-            {color:withAlpha(COL_ROT,0.85), font:fontSans('11px'), align:'center'});
+            {color:withAlpha(COL_ROT,0.85), font:fontSans('12px'), align:'center'});
         } else if(phase === 1 && rev[4] > 0.5){
           // vertical in-plane axis: the molecule tumbles — foreshortening
           const fsh = Math.cos(spin);
@@ -2177,7 +2225,7 @@ return {
           ctx.setLineDash([]);
           ctx.restore();
           drawTextClamped('axis 2 — vertical (the ends swing toward and away)', cx, cy-baseR-26,
-            {color:withAlpha(COL_ROT,0.85), font:fontSans('11px'), align:'center'});
+            {color:withAlpha(COL_ROT,0.85), font:fontSans('12px'), align:'center'});
         } else if(phase === (nAxes-1) && nAxes === 3 && rev[5] > 0.5){
           const fsh = Math.cos(spin);
           drawMolecule(cx, cy, baseR*0.85, state.species, {sy:Math.max(0.12, Math.abs(fsh))});
@@ -2188,25 +2236,22 @@ return {
           ctx.setLineDash([]);
           ctx.restore();
           drawTextClamped('axis 3 — horizontal (it somersaults)', cx, cy-baseR-26,
-            {color:withAlpha(COL_ROT,0.85), font:fontSans('11px'), align:'center'});
+            {color:withAlpha(COL_ROT,0.85), font:fontSans('12px'), align:'center'});
         } else {
           drawMolecule(cx, cy, baseR*0.85, state.species, {});
         }
         let axx = tileX + 12;
         axx += chip(axx, ty+tileH-28, 'axis 1', rev[3] > 0.5, COL_ROT) + 6;
         axx += chip(axx, ty+tileH-28, 'axis 2', rev[4] > 0.5, COL_ROT) + 6;
-        if(nAxes === 3) chip(axx, ty+tileH-28, 'axis 3', rev[5] > 0.5, COL_ROT);
+        if(nAxes === 3) axx += chip(axx, ty+tileH-28, 'axis 3', rev[5] > 0.5, COL_ROT);
         if(state.species === 'diatomic'){
-          drawTextClamped('spin ALONG the bond? point-like atoms store no energy there → only 2 axes count',
-            tileX+tileW-12, ty+tileH-25, {color:cMuted, font:fontSans('11px'), align:'right'});
+          /* shortened so the whole line still clears the axis chips at 12px */
+          tileCaption(ty, 'spin ALONG the bond stores no energy → only 2 axes count', axx, 'right');
         }
       }
 
       if(kind === 'vib'){
-        drawTextClamped('VIBRATION — the bond is a spring', tileX+12, ty+8,
-          {color:cMuted, font:fontSans('600 10px')});
-        drawTextClamped('❄ frozen at ~300 K — counts 0 here', tileX+tileW-12, ty+8,
-          {color:cMuted, font:fontSans('600 11px'), align:'right'});
+        tileHeader(ty, 'VIBRATION — the bond is a spring', '❄ frozen at ~300 K — counts 0 here', cMuted);
         // static spring between the two atoms, greyed
         ctx.save();
         ctx.globalAlpha = 0.55;
@@ -2227,8 +2272,8 @@ return {
           ctx.beginPath(); ctx.arc(cx+x2, cy, baseR*0.55, 0, Math.PI*2); ctx.fill();
         });
         ctx.restore();
-        drawTextClamped('quantum: this mode needs a big energy chunk to wake — at room T it stays asleep, so f stays 5',
-          tileX + 12, ty+tileH-25, {color:cMuted, font:fontSans('11px')});
+        tileCaption(ty, 'quantum: this mode needs a big energy chunk to wake — at room T it stays asleep, so f stays 5',
+          tileX+12, 'left');
       }
     });
 
@@ -2244,7 +2289,7 @@ return {
     const chainY = viewH*0.14;
 
     // Header
-    drawTextClamped('The chain', chainX, chainY, {color:cMuted, font:fontSans('600 11px')});
+    drawTextClamped('The chain', chainX, chainY, {color:cMuted, font:fontSans('600 12px')});
 
     // Card: f
     drawChainCard(chainX, chainY+18, rw, 'f  (quadratic modes)', r.f.toFixed(0), '#93c5fd');
@@ -2271,7 +2316,7 @@ return {
 
     // Title above the bar
     drawTextClamped('Energy share — each lit mode carries ½ kT', ebX, ebY-20,
-      {color:cMuted, font:fontSans('600 11px')});
+      {color:cMuted, font:fontSans('600 12px')});
 
     // Draw each block
     for(let i=0;i<blockCount;i++){
@@ -2288,7 +2333,7 @@ return {
         // hatch: 1/2 kT label centered
         ctx.globalAlpha = a;
         ctx.fillStyle = cText;
-        ctx.font = fontSans('600 10px');
+        ctx.font = fontSans('600 12px');
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('½kT', bx+blockW/2, ebY+ebH/2);
         ctx.textAlign='left'; ctx.textBaseline='top';
@@ -2322,7 +2367,7 @@ return {
     ctx.fill(); ctx.stroke();
     // label
     ctx.fillStyle = cMuted;
-    ctx.font = fontSans('600 11px');
+    ctx.font = fontSans('600 12px');
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText(label, x+12, y+13);
     // value
@@ -2342,7 +2387,7 @@ return {
     ctx.beginPath();
     ctx.moveTo(cx-4,y+9); ctx.lineTo(cx+4,y+9); ctx.lineTo(cx,y+15); ctx.closePath(); ctx.fill();
     ctx.fillStyle = cMuted;
-    ctx.font = fontSans('600 10.5px');
+    ctx.font = fontSans('600 12px');
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText(label, cx+10, y+6);
     ctx.restore();
@@ -2942,25 +2987,28 @@ return {
         ctx.font = '600 12px ' + font;
         ctx.fillStyle = st.col;
         ctx.fillText(st.lab, st.x, cy + 44);
-        const bw = 26, gap = 5, total = st.n || 0;
+        /* Blocks sized around a 12px ½kT — the K-12 canvas floor. Widest row is
+           3 blocks = 3*34 + 2*5 = 112, and the stages are 0.20*W = 256 apart, so
+           neighbouring rows stay well clear. */
+        const bw = 34, gap = 5, bh = 17, total = st.n || 0;
         const x0 = st.x - (Math.max(total,1)*bw + (Math.max(total,1)-1)*gap)/2;
         for(let i = 0; i < total; i++){
           // blocks fill one by one over the loop
           const on = (tt % 6) > (0.8 + i*0.55);
           ctx.fillStyle = on ? st.col : 'rgba(148,163,184,.15)';
           ctx.beginPath();
-          if(ctx.roundRect) ctx.roundRect(x0 + i*(bw+gap), cy + 54, bw, 11, 3); else ctx.rect(x0 + i*(bw+gap), cy + 54, bw, 11);
+          if(ctx.roundRect) ctx.roundRect(x0 + i*(bw+gap), cy + 54, bw, bh, 3); else ctx.rect(x0 + i*(bw+gap), cy + 54, bw, bh);
           ctx.fill();
           if(on){
             ctx.fillStyle = LIGHT ? '#fff' : '#0f172a';
-            ctx.font = '600 8px ' + font;
-            ctx.fillText('½kT', x0 + i*(bw+gap) + bw/2, cy + 62.5);
+            ctx.font = '600 12px ' + font;
+            ctx.fillText('½kT', x0 + i*(bw+gap) + bw/2, cy + 54 + bh/2 + 4);
           }
         }
         if(total === 0){
-          ctx.font = '600 10px ' + font;
+          ctx.font = '600 12px ' + font;
           ctx.fillStyle = mute;
-          ctx.fillText('counts 0 at 300 K', st.x, cy + 63);
+          ctx.fillText('counts 0 at 300 K', st.x, cy + 66);
         }
       });
       // the payoff, right side
@@ -3084,7 +3132,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

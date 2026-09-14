@@ -2538,7 +2538,7 @@ function drawScene(){
   ctx.lineTo(thermX + 14, zeroY);
   ctx.stroke();
   ctx.fillStyle = muted;
-  ctx.font = '11px ' + (cssVar('--font-sans') || 'sans-serif');
+  ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText('0 °C', thermX + 16, zeroY);
@@ -2558,7 +2558,10 @@ function drawScene(){
   // ---------- Molecular inset (top-left, but BELOW the .plot-title band 0..40) ----------
   const insetX = 12;
   const insetY = 52;
-  const insetW = Math.min(190, w * 0.32);
+  // Floor the width at 150px. At 1024 the scene pane is ~358px, so the old
+  // 0.32w gave a 109px box — too narrow to hold its own 12px title, which is
+  // how "MOLECULAR VIEW" and the caption came to spill out of the plate.
+  const insetW = Math.max(150, Math.min(190, w * 0.32));
   const insetH = Math.min(140, h * 0.28);
   // background
   ctx.fillStyle = document.body.classList.contains('light-theme') ? 'rgba(255,255,255,0.85)' : 'rgba(6,14,17,0.85)';
@@ -2571,7 +2574,7 @@ function drawScene(){
 
   // Inset title
   ctx.fillStyle = muted;
-  ctx.font = '10px ' + (cssVar('--font-sans') || 'sans-serif');
+  ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillText('MOLECULAR VIEW', insetX + 8, insetY + 6);
@@ -2667,20 +2670,24 @@ function drawScene(){
     }
   }
 
-  // Inset caption bottom
+  // Inset caption. It sits JUST BELOW the plate, not inside it: at the 12px
+  // floor the longest caption runs ~210px, which no inset narrow enough to
+  // leave the beaker room could hold. Inside the box the two old clamps fought
+  // each other — the right-edge clamp won and pushed the text off the LEFT edge
+  // of the plate and out of the canvas at 1024. Below the box it is left-
+  // aligned with the plate and clamped only against the canvas edge, so it can
+  // never overlap the lattice above it or run off the surface.
   ctx.fillStyle = muted;
-  ctx.font = '10px ' + (cssVar('--font-sans') || 'sans-serif');
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
+  ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
   let capText;
   if(s.region === 'warm-ice') capText = 'Lattice — molecules vibrate in place';
   else if(s.region === 'melt') capText = 'Bonds breaking (' + Math.round(meltFrac*100) + '% melted)';
   else capText = 'Liquid — molecules free';
   const capW = ctx.measureText(capText).width;
-  let capX = insetX + insetW/2;
-  if(capX - capW/2 < insetX + 4) capX = insetX + 4 + capW/2;
-  if(capX + capW/2 > insetX + insetW - 4) capX = insetX + insetW - 4 - capW/2;
-  ctx.fillText(capText, capX, insetY + insetH - 4);
+  const capX = Math.max(4, Math.min(insetX, w - 4 - capW));
+  ctx.fillText(capText, capX, insetY + insetH + 6);
 }
 
 // ================== GRAPH (T vs energy supplied) ==================
@@ -2696,7 +2703,10 @@ function drawGraph(){
   const border = cssVar('--border');
 
   // Reserved corners: title top-left, legend top-right → axis area below y=80 (legend rides at 42 + ~30)
-  const marginL = 74;
+  // 82, not 74: at the 12px floor the widest y-tick ("−20 °C") is ~48px, and
+  // right-aligned at plotX−6 it used to reach back into the rotated
+  // "Temperature T" title sitting at x=18.
+  const marginL = 82;
   const marginR = 18;
   const marginT = 90;
   const marginB = 44;
@@ -2718,7 +2728,7 @@ function drawGraph(){
   // Gridlines
   ctx.strokeStyle = border;
   ctx.lineWidth = 1;
-  ctx.font = '11px ' + (cssVar('--font-sans') || 'sans-serif');
+  ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
   ctx.fillStyle = muted;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
@@ -2740,19 +2750,28 @@ function drawGraph(){
   ctx.textBaseline = 'top';
   ctx.fillStyle = muted;
   const xtickStep = 50000; // 50 kJ
-  for(let Q = 0; Q <= xMax; Q += xtickStep){
+  const nTicks = Math.floor(xMax / xtickStep) + 1;
+  // Label only every Nth tick. Ten "450 kJ"-sized labels never fitted this axis
+  // even at 11px — at 1024 they ran into a single smear — and the 12px floor
+  // makes them wider still. Measure the widest label, compare it with the
+  // spacing the axis actually has, and thin the LABELS (never the ticks, and
+  // never the type) until they clear each other at any viewport.
+  const tickGap = plotW / Math.max(1, nTicks - 1);
+  const labelEvery = Math.max(1, Math.ceil((ctx.measureText(((nTicks-1)*xtickStep/1000) + ' kJ').width + 8) / tickGap));
+  for(let i = 0; i < nTicks; i++){
+    const Q = i * xtickStep;
     const x = xOf(Q);
     ctx.strokeStyle = border;
     ctx.beginPath();
     ctx.moveTo(x, plotY + plotH);
     ctx.lineTo(x, plotY + plotH + 4);
     ctx.stroke();
-    ctx.fillText((Q/1000) + ' kJ', x, plotY + plotH + 8);
+    if(i % labelEvery === 0) ctx.fillText((Q/1000) + ' kJ', x, plotY + plotH + 8);
   }
 
   // Axis labels
   ctx.fillStyle = muted;
-  ctx.font = '11px ' + (cssVar('--font-sans') || 'sans-serif');
+  ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText('Energy supplied  Q', plotX + plotW/2, plotY + plotH + 34);
@@ -2806,7 +2825,7 @@ function drawGraph(){
     ctx.lineTo(xOf(th.Qmelt_end), bracketY);
     ctx.stroke();
     ctx.fillStyle = '#f472b6';
-    ctx.font = 'bold 11px ' + (cssVar('--font-sans') || 'sans-serif');
+    ctx.font = 'bold 12px ' + (cssVar('--font-sans') || 'sans-serif');   // 12px canvas-text floor
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     const ratio = th.Qmelt / th.Qwarm;
@@ -3473,7 +3492,7 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
       ctx.strokeStyle = 'rgba(244,114,182,.5)';
       ctx.beginPath(); ctx.moveTo(gx0, yOf(0)); ctx.lineTo(gx1, yOf(0)); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = cMelt; ctx.font='600 11px '+font; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle = cMelt; ctx.font='600 12px '+font; ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText('0 °C', gx1 + 8, yOf(0));
       // curve up to Q, colored by region
       const segs = [ [0, Math.min(Q,Q1), cClimb], [Q1, Math.min(Q,Q2), cMelt], [Q2, Math.min(Q,Q3), cWater] ];
@@ -3496,7 +3515,7 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
         ctx.fillStyle = cMelt; ctx.font='700 12px '+font; ctx.textAlign='center';
         ctx.fillText('heat still flowing — temperature stuck', (xOf(Q1)+xOf(Q2))/2, yOf(0) - 14);
       }
-      ctx.fillStyle = mute; ctx.font='600 11px '+font; ctx.textAlign='left';
+      ctx.fillStyle = mute; ctx.font='600 12px '+font; ctx.textAlign='left';
       ctx.fillText('energy in →', gx0, gy0 + 16);
       ctx.save();
       ctx.translate(gx0 - 10, (gy0+gy1)/2); ctx.rotate(-Math.PI/2);
@@ -3605,7 +3624,7 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
