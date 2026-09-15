@@ -510,14 +510,6 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
             <div class="sim-note ht-hide">5.0 MeV α on a 0.40 µm gold foil (n·t = 2.4×10²² m⁻²). At 10 k α/s the rare flashes past 90° arrive about one every few seconds — Geiger and Marsden counted them by eye in a darkened room. Use 100 k α/s to build the pattern quickly.</div>
           </div>
           <div class="sim-ctl sim-box">
-            <label><span>Overlay prediction</span></label>
-            <div class="sim-seg" role="group" aria-label="overlay prediction">
-              <button type="button" id="gmModeNuc" class="sim-seg-btn sim-on">Rutherford only</button>
-              <button type="button" id="gmModePlum" class="sim-seg-btn">+ plum pudding</button>
-            </div>
-            <div class="sim-note ht-hide">The green points are the measurement — this switch never changes them. It only chooses which <b>prediction</b> is drawn over them.</div>
-          </div>
-          <div class="sim-ctl sim-box">
             <label class="sim-check"><input type="checkbox" id="gmShowPlot" checked> Show counts-vs-angle plot</label>
           </div>
           <div class="sim-ctl sim-box">
@@ -849,7 +841,7 @@ var DOMS=new Float64Array(NBINS), TEFF=new Float64Array(NBINS), TLO=new Float64A
 } })();
 
 /* ---- state ---- */
-var st={p:0.193,flat:false,showPlum:false,showPlot:true,rate:RSLOW,
+var st={p:0.193,flat:false,showPlum:true,showPlot:true,rate:RSLOW,
         Nf:0,nScat:0,nBack:0,nAbs:0,acc:0,trAcc:0,uiT:0,t:0,
         bins:new Float64Array(NBINS)};
 var dots=[],dotPtr=0,tracers=[],flashes=[];
@@ -953,8 +945,6 @@ function syncUI(){ var Ek=EkOf(st.p), n;
     ? '<b>Accelerator beam</b> ('+(Ek*1000).toFixed(1)+' MeV) — beyond any natural α source. Natural α: 4–9 MeV (RaC′ 7.7 MeV = 0.240 GeV/c).'
     : 'Natural α sources run 4–9 MeV (RaC′ 7.7 MeV = 0.240 GeV/c).';
   n=el('gmDotNote'); if(n) n.innerHTML='Screen: upper and lower arcs are opposite azimuthal sides of the same θ. Dots light up wherever α land (θ ≥ 1° — the 0°–1° direct-beam cone is unmeasurable); a sub-sample is drawn to keep the arc readable (same size at every angle, large angles over-shown in the tracks).';
-  n=el('gmModeNuc'); if(n)n.classList.toggle('sim-on',!st.showPlum);
-  n=el('gmModePlum'); if(n)n.classList.toggle('sim-on',st.showPlum);
   n=el('gmRateSlow'); if(n)n.classList.toggle('sim-on',st.rate<=RSLOW);
   n=el('gmRateFast'); if(n)n.classList.toggle('sim-on',st.rate>RSLOW);
   n=el('gmShowPlot'); if(n)n.checked=!!st.showPlot;
@@ -1105,7 +1095,7 @@ function draw(){
   if(!HT()) chip(chipTxt,null);
   if(st.p>PNAT) chip('accelerator beam — beyond any natural α source',C.warn);
   if(dmin<=RTOUCH) chip('α now grazes the nuclear surface',C.hot);
-  if(st.showPlum) chip('overlay: plum-pudding prediction (dashed)',C.muted);
+  if(st.showPlum && dmin>=12) chip('overlay: plum-pudding prediction (dashed)',C.muted);
   if(!small){
     label('ZnS screen',cx+(R+26)*Math.cos(-38*D2R),Math.min(cy+(R+26)*Math.sin(38*D2R)+4,appH-4),'center',C.muted,small?12:14);
     /* The "tracks: sampled beam — large angles over-shown" canvas label was removed at
@@ -1135,8 +1125,10 @@ function draw(){
   var altPoint=(dmin<12);
   var items=[['data',C.data,'sq'],
              [(altPoint?'Rutherford × nuclear absorption':'Rutherford  1/sin⁴(θ/2)'),C.accent,'ln']];
-  if(st.showPlum) items.push(['plum pudding',C.muted,'da']);
-  else if(altPoint) items.push(['point Coulomb (no nuclear size)',C.muted,'da']);
+  /* at accelerator momentum the point-Coulomb reference outranks the plum overlay —
+     the sag below it is the lesson there */
+  if(altPoint) items.push(['point Coulomb (no nuclear size)',C.muted,'da']);
+  else if(st.showPlum) items.push(['plum pudding',C.muted,'da']);
   /* One anchor for the legend: the plot's top edge is derived from it, so nudging the
      legend down moves the plot area with it instead of letting the two drift apart. */
   var legendY=hTop+24;
@@ -1185,8 +1177,8 @@ function draw(){
     if(dash){X.setLineDash([6,5]); X.strokeStyle=C.muted; X.lineWidth=1.8;}
     else{X.setLineDash([]); X.strokeStyle=C.accent; X.lineWidth=2.6;}
     X.stroke(); X.setLineDash([]); }
-  if(st.showPlum) drawCurve('plum',true);
-  else if(altPoint) drawCurve('point',true);
+  if(altPoint) drawCurve('point',true);
+  else if(st.showPlum) drawCurve('plum',true);
   drawCurve('nuc',false);                      /* the data model is ALWAYS the solid accent curve */
   var q;
   for(q=0;q<pts.length;q++){ var dx=xl(pts[q][0]), dy=yl(pts[q][1]);
@@ -1211,7 +1203,11 @@ function draw(){
     }
     lp.style.display='block';
     lp.style.left=(CV.offsetLeft+(xL+xR)/2)+'px';
-    lp.style.top=(CV.offsetTop+hTop+10)+'px';
+    /* dodge a wide legend (e.g. high-momentum labels): drop below its rows */
+    var pw=lp.offsetWidth||340, lLeft=(drawLegend.lastLeft!=null?drawLegend.lastLeft:xR);
+    var pTop=hTop+10;
+    if((xL+xR)/2+pw/2 > lLeft-8) pTop=hTop+10+((lrows-1)*15+26);
+    lp.style.top=(CV.offsetTop+pTop)+'px';
   }
 }
 
@@ -1227,6 +1223,7 @@ function drawLegend(items,xL,xR,yTop,C){
      [xR-max(wid), xR-14]; the box is that span plus 7px breathing room. */
   var maxw=0; for(i=0;i<wid.length;i++) if(wid[i]>maxw) maxw=wid[i];
   var bx=xR-maxw-7, by=yTop-14, bw=(xR-14+7)-bx, bh=(rows.length-1)*15+20;
+  drawLegend.lastLeft=bx;   /* exposed so the law pill can dodge a wide legend */
   X.save();
   X.globalAlpha=0.55; X.fillStyle=C.surface; rr(bx,by,bw,bh,7); X.fill();
   X.globalAlpha=0.9;  X.strokeStyle=C.border; X.lineWidth=1; rr(bx,by,bw,bh,7); X.stroke();
@@ -1271,8 +1268,6 @@ bind('gmMomentum','input',function(){
   applyRun(p,st.Nf,4517); syncUI(); updateCounts(); draw(); });
 bind('gmMomentum','change',function(){ if(SH&&SH.setPlaying&&!SH.playing) SH.setPlaying(true); });
 /* model switch changes ONLY the overlaid prediction — the data are untouched */
-bind('gmModeNuc','click',function(){ st.showPlum=false; syncUI(); draw(); });
-bind('gmModePlum','click',function(){ st.showPlum=true; syncUI(); draw(); });
 bind('gmRateSlow','click',function(){ st.rate=RSLOW; syncUI(); draw(); });
 bind('gmRateFast','click',function(){ st.rate=RFAST; syncUI(); draw(); });
 /* draw() alone: the canvas element keeps its size, only the internal split between
@@ -1302,10 +1297,10 @@ function onStep(i){ i=Math.max(0,Math.min(STEPS.length-1,i|0)); var s=STEPS[i];
 
 /* Completed / lecture state: open EMPTY and PAUSED (same scene as Card 1) — the student clicks ▶ Play to fire.
    Pre-populating dots + histogram was flagged as confusing; the blank chamber makes the "watch it happen" moment explicit. */
-function onComplete(){ st.showPlum=false; st.flat=false; st.showPlot=true;
+function onComplete(){ st.showPlum=true; st.flat=false; st.showPlot=true;
   applyRun(0.193,0,1); syncUI(); updateCounts(); draw();
 }
-function onReset(){ st.showPlum=false; st.flat=false; st.showPlot=true; st.rate=RSLOW;
+function onReset(){ st.showPlum=true; st.flat=false; st.showPlot=true; st.rate=RSLOW;
   applyRun(0.193,0,1); syncUI(); updateCounts(); draw(); 
   onStep(Shell.step); /* re-sync the scene to the ACTIVE card (SYS-2) */
 }
