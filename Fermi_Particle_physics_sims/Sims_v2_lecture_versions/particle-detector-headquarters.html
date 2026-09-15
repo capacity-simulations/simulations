@@ -854,7 +854,7 @@ window.__audit = { at(momentumGeV) {
   const ctxMain = cvMain.getContext('2d'), ctxStrip = cvStrip.getContext('2d');
   const momEl = $('simMom');
 
-  const state = { part: 'pi', sel: 'pi', p: 1, fireCount: 0, showGhosts: true };
+  const state = { part: 'pi', sel: 'pi', p: 1, fireCount: 0, showGhosts: true, armed: false };
   const sizes = { main: { w: 860, h: 430 }, strip: { w: 860, h: 120 } };
   let ev = null, lastFrame = 0;
   let ghosts = [];   /* previous fired events, completed; capped at 4 (prof review: layering) */
@@ -1089,9 +1089,14 @@ window.__audit = { at(momentumGeV) {
     ctx.beginPath(); ctx.arc(L.vx, L.yMid, 3, 0, 6.2832); ctx.fill(); ctx.restore();
 
     /* previous tracks first (dimmed), then the live event on top (prof review:
-       layer signatures for comparison) */
+       layer signatures for comparison). While ARMED (species picked, not yet
+       fired) the last track fades to ghost styling — the cue to press Fire. */
     if (state.showGhosts) for (const g of ghosts) drawEventLayer(g, T, 0.35);
-    drawEventLayer(ev, T, 1);
+    drawEventLayer(ev, T, state.armed ? 0.35 : 1);
+    if (state.armed && !(window.HT && HT())) {
+      const PS = PARTS[state.sel];
+      chipDraw(ctx, T, '⚡ Fire to launch ' + PS.sym, L.vx + 8, L.yMid - 34, W);
+    }
   }
 
   /* One event's rendering. gf = 1 for the live event; < 1 draws a completed
@@ -1335,10 +1340,14 @@ window.__audit = { at(momentumGeV) {
   }
   function isPlaying() { return (performance.now() - lastFrame) < 400; }
   /* Select only — a chip click no longer launches anything (prof review: the
-     track used to just appear, with no animation, when paused). */
+     track used to just appear, with no animation, when paused). Selecting ARMS
+     the launcher: pause, complete + fade the previous track, cue the Fire button. */
   function selectParticle(key) {
     state.sel = key;
-    syncChips(); updateReadouts();
+    state.armed = true;
+    if (ev) ev.clock = ev.dur;          /* the old flight is history now — show it finished */
+    if (window.Shell && Shell.setPlaying) Shell.setPlaying(false);
+    syncChips(); updateReadouts(); drawAll();
   }
   /* Fire = archive the current event as a ghost, launch the selected species
      with the full animation, and make sure the clock is running. */
@@ -1351,7 +1360,7 @@ window.__audit = { at(momentumGeV) {
       ghosts.push(ev);
       while (ghosts.length > 4) ghosts.shift();
     }
-    state.part = state.sel; state.fireCount++;
+    state.part = state.sel; state.fireCount++; state.armed = false;
     ev = buildEvent(false);
     ev.meta = { part: state.part, p: state.p, fc: state.fireCount };
     syncChips(); updateReadouts();
@@ -1441,7 +1450,7 @@ window.__audit = { at(momentumGeV) {
     drawAll();
   }
   function onReset() {
-    state.part = 'pi'; state.sel = 'pi'; state.p = 1; state.fireCount = 0;
+    state.part = 'pi'; state.sel = 'pi'; state.armed = false; state.p = 1; state.fireCount = 0;
     ghosts = [];
     momEl.value = '1';
     syncChips(); updateReadouts();
@@ -1453,7 +1462,7 @@ window.__audit = { at(momentumGeV) {
   function onStep(i) {
     const k = Math.max(0, Math.min(STEPS.length - 1, i | 0));
     const st = STEPS[k];
-    state.part = st.part; state.sel = st.part; state.p = st.p || 1; state.fireCount = (i | 0);
+    state.part = st.part; state.sel = st.part; state.armed = false; state.p = st.p || 1; state.fireCount = (i | 0);
     momEl.value = String(state.p);
     syncChips(); updateReadouts();
     ev = buildEvent(false);
