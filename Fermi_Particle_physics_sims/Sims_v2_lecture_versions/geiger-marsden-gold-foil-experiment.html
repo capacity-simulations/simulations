@@ -146,6 +146,13 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
+/* Cross-section law pill: KaTeX-typeset, pinned to the plot's top centre by the
+   plot draw (canvas coords -> CSS). Always visible with the plot (not HT-gated). */
+.plot-box{position:relative;}
+.gm-law{position:absolute;transform:translateX(-50%);pointer-events:none;z-index:5;display:none;
+  white-space:nowrap;background:var(--surface);border:1px solid var(--accent-soft);
+  border-radius:999px;padding:3px 14px 4px;}
+.gm-law,.gm-law .katex{color:var(--accent);font-size:17px;}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -428,6 +435,7 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
     <div class="plot-box" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column">
   <div class="plot-title">Geiger–Marsden scattering chamber — counts vs scattering angle</div>
   <canvas id="gmCanvas" style="flex:1 1 auto;min-height:0;width:100%;display:block"></canvas>
+  <div id="gmLaw" class="gm-law" aria-hidden="true"></div>
 </div>
   </main>
 
@@ -1108,11 +1116,12 @@ function draw(){
 
   if(!hasData){
     /* Only promise a plot if the checkbox will let one appear. */
+    var lp0=el('gmLaw'); if(lp0)lp0.style.display='none';
     label(st.showPlot?'▶ Play — fire the α beam. Counts vs angle will be plotted here.'
                      :'▶ Play — fire the α beam.',w/2,h-9,'center',C.muted,13);
     return;
   }
-  if(!showHist) return;   /* plot hidden; the chamber above already used the full height */
+  if(!showHist){ var lp1=el('gmLaw'); if(lp1)lp1.style.display='none'; return; }   /* plot hidden; the chamber above already used the full height */
 
   /* ---------- histogram band: counts per INCIDENT alpha per steradian ---------- */
   var hTop=h-histoH, xL=58, xR=w-14;
@@ -1185,21 +1194,25 @@ function draw(){
     X.beginPath(); X.moveTo(dx,yB); X.lineTo(dx,dy); X.stroke();
     X.fillStyle=C.data; X.fillRect(dx-2,dy-2,4.5,4.5); }
   X.restore();
-  /* The law behind the prediction curve (prof review): centred outlined pill,
-     always visible — deliberately NOT gated by Hide Text. In ×sin⁴ mode it
-     becomes the flat-line identity that explains the collapse. */
-  var fTxt = st.flat ? 'dσ/dΩ · sin⁴(θ/2) = (zZ·α_em·ħc / 4Eₖ)² = const'
-                     : 'dσ/dΩ = (zZ·α_em·ħc / 4Eₖ)² · 1/sin⁴(θ/2)';
-  X.font='600 13px '+FAM;
-  var fw=X.measureText(fTxt).width, fcx=(xL+xR)/2, fby=yT+8;
-  var fbx=fcx-fw/2-12, fbw=fw+24, fbh=26, fr=13;
-  X.beginPath();
-  X.moveTo(fbx+fr,fby); X.arcTo(fbx+fbw,fby,fbx+fbw,fby+fbh,fr);
-  X.arcTo(fbx+fbw,fby+fbh,fbx,fby+fbh,fr); X.arcTo(fbx,fby+fbh,fbx,fby,fr);
-  X.arcTo(fbx,fby,fbx+fbw,fby,fr); X.closePath();
-  X.fillStyle='rgba(6,12,24,0.55)'; X.fill();
-  X.strokeStyle=C.accent; X.globalAlpha=0.65; X.lineWidth=1.5; X.stroke(); X.globalAlpha=1;
-  label(fTxt,fcx,fby+17,'center',C.accent,13);
+  /* The law behind the prediction curve (prof review): KaTeX-typeset pill pinned
+     to the plot's top centre — proper fraction/subscripts, always visible.
+     In ×sin⁴ mode it becomes the flat-line identity that explains the collapse. */
+  var lp=el('gmLaw');
+  if(lp){
+    var lMode=st.flat?'flat':'std';
+    if(lp.dataset.mode!==lMode){
+      var lTex = st.flat
+        ? '\\frac{d\\sigma}{d\\Omega}\\,\\sin^{4}\\!\\left(\\tfrac{\\theta}{2}\\right)=\\left(\\frac{zZ\\,\\alpha_{\\mathrm{em}}\\hbar c}{4E_k}\\right)^{2}=\\mathrm{const}'
+        : '\\frac{d\\sigma}{d\\Omega}=\\left(\\frac{zZ\\,\\alpha_{\\mathrm{em}}\\hbar c}{4E_k}\\right)^{2}\\frac{1}{\\sin^{4}(\\theta/2)}';
+      if(window.katex&&window.katex.render){
+        try{ window.katex.render(lTex,lp,{throwOnError:false}); lp.dataset.mode=lMode; }
+        catch(e){ lp.textContent=st.flat?'dσ/dΩ · sin⁴(θ/2) = const':'dσ/dΩ ∝ 1/sin⁴(θ/2)'; }
+      } else lp.textContent=st.flat?'dσ/dΩ · sin⁴(θ/2) = const':'dσ/dΩ ∝ 1/sin⁴(θ/2)';
+    }
+    lp.style.display='block';
+    lp.style.left=(CV.offsetLeft+(xL+xR)/2)+'px';
+    lp.style.top=(CV.offsetTop+hTop+10)+'px';
+  }
 }
 
 /* legend wraps to extra rows instead of dropping entries */
