@@ -505,6 +505,16 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="sim-selname" id="simSelName">pion · m = 0.1396 GeV</div>
   </div>
   <div class="sim-ctlbox">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="shell-btn primary" id="simFireBtn" type="button">⚡ Fire</button>
+      <button class="shell-btn" id="simClearBtn" type="button">Clear tracks</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted);margin:8px 0 0;">
+      <input type="checkbox" id="simPrevToggle" checked>
+      Show previous tracks
+    </label>
+  </div>
+  <div class="sim-ctlbox">
     <div class="sim-slider-row">
       <div class="sim-lab"><span>Momentum p</span><b class="sim-val" id="simMomVal">1.0 GeV/c</b></div>
       <input type="range" id="simMom" min="0.2" max="5" step="0.1" value="1" aria-label="momentum in GeV per c">
@@ -844,9 +854,10 @@ window.__audit = { at(momentumGeV) {
   const ctxMain = cvMain.getContext('2d'), ctxStrip = cvStrip.getContext('2d');
   const momEl = $('simMom');
 
-  const state = { part: 'pi', p: 1, fireCount: 0 };
+  const state = { part: 'pi', sel: 'pi', p: 1, fireCount: 0, showGhosts: true };
   const sizes = { main: { w: 860, h: 430 }, strip: { w: 860, h: 120 } };
   let ev = null, lastFrame = 0;
+  let ghosts = [];   /* previous fired events, completed; capped at 4 (prof review: layering) */
 
   function mulberry32(a) {
     return function () {
@@ -1077,75 +1088,89 @@ window.__audit = { at(momentumGeV) {
     }
     ctx.beginPath(); ctx.arc(L.vx, L.yMid, 3, 0, 6.2832); ctx.fill(); ctx.restore();
 
-    const sNow = Math.min(1, ev.clock / ev.dur);
+    /* previous tracks first (dimmed), then the live event on top (prof review:
+       layer signatures for comparison) */
+    if (state.showGhosts) for (const g of ghosts) drawEventLayer(g, T, 0.35);
+    drawEventLayer(ev, T, 1);
+  }
 
-    /* deposit meters */
-    const meter = (z, dep, ratio, prog, col) => {
-      const zw = z[1] - z[0], mw = Math.min(76, zw - 16);
-      if (mw < 30) return;
-      const cx = (z[0] + z[1]) / 2, x = cx - mw / 2, y = L.yTop + 8;
-      ctx.strokeStyle = T.border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, mw, 9);
-      const f = Math.max(0, Math.min(1, ratio * prog));
-      if (f > 0) { ctx.fillStyle = col; ctx.fillRect(x + 1, y + 1, (mw - 2) * f, 7); }
-      const val = dep * prog;
-      if (val > 0.004 && prog > 0.03) {
-        ctx.fillStyle = T.text; ctx.font = '600 14px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        ctx.fillText(val.toFixed(2) + ' GeV', cx, y + 24);
-      }
-    };
-    meter(L.ecal, ev.dep.ecal, ev.kin.E > 0 ? ev.dep.ecal / ev.kin.E : 0, rev01(sNow, ev.mR.ecal), 'rgba(42,168,96,0.85)');
-    meter(L.hcal, ev.dep.hcal, ev.kin.E > 0 ? ev.dep.hcal / ev.kin.E : 0, rev01(sNow, ev.mR.hcal), 'rgba(236,140,40,0.9)');
+  /* One event's rendering. gf = 1 for the live event; < 1 draws a completed
+     ghost: dimmed, no meters/head/annotations, tag kept as its label. */
+  function drawEventLayer(e, T, gf) {
+    const ctx = ctxMain, W = sizes.main.w, L = e.L, P = e.P;
+    const live = (gf === 1);
+    const sNow = Math.min(1, e.clock / e.dur);
+
+    /* deposit meters — live event only (stacked ghost meters would be noise) */
+    if (live) {
+      const meter = (z, dep, ratio, prog, col) => {
+        const zw = z[1] - z[0], mw = Math.min(76, zw - 16);
+        if (mw < 30) return;
+        const cx = (z[0] + z[1]) / 2, x = cx - mw / 2, y = L.yTop + 8;
+        ctx.strokeStyle = T.border; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, mw, 9);
+        const f = Math.max(0, Math.min(1, ratio * prog));
+        if (f > 0) { ctx.fillStyle = col; ctx.fillRect(x + 1, y + 1, (mw - 2) * f, 7); }
+        const val = dep * prog;
+        if (val > 0.004 && prog > 0.03) {
+          ctx.fillStyle = T.text; ctx.font = '600 14px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+          ctx.fillText(val.toFixed(2) + ' GeV', cx, y + 24);
+        }
+      };
+      meter(L.ecal, e.dep.ecal, e.kin.E > 0 ? e.dep.ecal / e.kin.E : 0, rev01(sNow, e.mR.ecal), 'rgba(42,168,96,0.85)');
+      meter(L.hcal, e.dep.hcal, e.kin.E > 0 ? e.dep.hcal / e.kin.E : 0, rev01(sNow, e.mR.hcal), 'rgba(236,140,40,0.9)');
+    }
 
     /* trail */
-    const cutLen = sNow * ev.totalLen;
+    const cutLen = sNow * e.totalLen;
     let idx = 0;
-    while (idx < ev.pts.length - 1 && ev.pts[idx + 1].len <= cutLen) idx++;
+    while (idx < e.pts.length - 1 && e.pts[idx + 1].len <= cutLen) idx++;
     const st = (P.kind === 'nu') ? { a: 0.4, w: 2, dash: [7, 6] }
       : (P.key === 'ph') ? { a: 0.75, w: 1.8, wavy: true }
         : (P.key === 'ne') ? { a: 0.5, w: 2, dash: [7, 6] }
           : { a: 0.95, w: 2.5 };
     if (idx > 0) {
-      ctx.save(); ctx.globalAlpha = st.a; ctx.strokeStyle = P.color; ctx.lineWidth = st.w;
+      ctx.save(); ctx.globalAlpha = st.a * gf; ctx.strokeStyle = P.color; ctx.lineWidth = st.w;
       if (st.dash) ctx.setLineDash(st.dash);
       ctx.beginPath();
       for (let i = 0; i <= idx; i++) {
-        const q = ev.pts[i], yy = st.wavy ? q.y + Math.sin(q.len / 6.5) * 3 : q.y;
+        const q = e.pts[i], yy = st.wavy ? q.y + Math.sin(q.len / 6.5) * 3 : q.y;
         if (i) ctx.lineTo(q.x, yy); else ctx.moveTo(q.x, yy);
       }
       ctx.stroke(); ctx.restore();
     }
 
-    /* shower glow + sparks */
-    if (ev.glow) {
-      const g = rev01(sNow, ev.glow.range);
+    /* shower glow + sparks (glow live-only; sparks dimmed on ghosts) */
+    if (live && e.glow) {
+      const g = rev01(sNow, e.glow.range);
       if (g > 0.02) {
-        const R = ev.glow.r * (0.4 + 0.6 * g);
-        const gr = ctx.createRadialGradient(ev.glow.x, ev.glow.y, 0, ev.glow.x, ev.glow.y, R);
-        gr.addColorStop(0, ev.glow.colA + (0.30 * g).toFixed(3) + ')');
-        gr.addColorStop(1, ev.glow.colA + '0)');
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ev.glow.x, ev.glow.y, R, 0, 6.2832); ctx.fill();
+        const R = e.glow.r * (0.4 + 0.6 * g);
+        const gr = ctx.createRadialGradient(e.glow.x, e.glow.y, 0, e.glow.x, e.glow.y, R);
+        gr.addColorStop(0, e.glow.colA + (0.30 * g).toFixed(3) + ')');
+        gr.addColorStop(1, e.glow.colA + '0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(e.glow.x, e.glow.y, R, 0, 6.2832); ctx.fill();
       }
     }
     ctx.save();
-    for (const g of ev.segs) {
+    for (const g of e.segs) {
       if (g.s > sNow) continue;
-      ctx.globalAlpha = g.al; ctx.strokeStyle = g.col; ctx.lineWidth = g.w;
+      ctx.globalAlpha = g.al * gf; ctx.strokeStyle = g.col; ctx.lineWidth = g.w;
       ctx.beginPath(); ctx.moveTo(g.x1, g.y1); ctx.lineTo(g.x2, g.y2); ctx.stroke();
     }
     ctx.restore();
 
     /* hits */
-    const headX = ev.pts[idx].x;
-    const ptAt = X => { for (const q of ev.pts) { if (q.x >= X) return q; } return ev.pts[ev.pts.length - 1]; };
+    const headX = e.pts[idx].x;
+    const ptAt = X => { for (const q of e.pts) { if (q.x >= X) return q; } return e.pts[e.pts.length - 1]; };
     if (P.q !== 0) {
-      ctx.fillStyle = P.color;
-      for (const x of ev.trkXs) {
+      ctx.save(); ctx.globalAlpha = gf; ctx.fillStyle = P.color;
+      for (const x of e.trkXs) {
         if (x > headX) break;
         const q = ptAt(x); ctx.beginPath(); ctx.arc(q.x, q.y, 2.6, 0, 6.2832); ctx.fill();
       }
+      ctx.restore();
     }
     if (P.kind === 'had' && P.q !== 0) {
-      ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = P.color;
+      ctx.save(); ctx.globalAlpha = 0.9 * gf; ctx.fillStyle = P.color;
       for (const f of [0.3, 0.55, 0.8]) {
         const x = L.ecal[0] + (L.ecal[1] - L.ecal[0]) * f;
         if (x > headX) break;
@@ -1154,7 +1179,7 @@ window.__audit = { at(momentumGeV) {
       ctx.restore();
     }
     if (P.kind === 'mu') {
-      ctx.save(); ctx.strokeStyle = P.color; ctx.lineWidth = 2;
+      ctx.save(); ctx.globalAlpha = gf; ctx.strokeStyle = P.color; ctx.lineWidth = 2;
       for (const z of L.mus) {
         const mx = (z[0] + z[1]) / 2;
         if (mx > headX) break;
@@ -1165,25 +1190,29 @@ window.__audit = { at(momentumGeV) {
       ctx.restore();
     }
 
-    /* head */
-    if (sNow < 1) {
-      const hp = ev.pts[idx];
+    /* head — live only (ghosts are completed) */
+    if (live && sNow < 1) {
+      const hp = e.pts[idx];
       ctx.save(); ctx.fillStyle = P.color; ctx.globalAlpha = 0.25;
       ctx.beginPath(); ctx.arc(hp.x, hp.y, 9, 0, 6.2832); ctx.fill();
       ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(hp.x, hp.y, 4.5, 0, 6.2832); ctx.fill(); ctx.restore();
     }
-    /* fired-species tag — rides the head, parks at the stop point (D: which particle is this?) */
+    /* fired-species tag — rides the head, parks at the stop point; on ghosts it
+       is the layer label ("see previous tracks") */
     {
-      const tagPt = sNow < 1 ? ev.pts[idx] : ev.pts[ev.pts.length - 1];
-      chipDraw(ctx, T, P.sym + ' · ' + ev.p.toFixed(1) + ' GeV/c', tagPt.x, Math.max(L.yTop + 40, tagPt.y - 24), W);
+      const tagPt = sNow < 1 ? e.pts[idx] : e.pts[e.pts.length - 1];
+      ctx.save(); ctx.globalAlpha = live ? 1 : Math.min(1, gf * 1.8);
+      chipDraw(ctx, T, P.sym + ' · ' + e.p.toFixed(1) + ' GeV/c', tagPt.x, Math.max(L.yTop + 40, tagPt.y - 24), W);
+      ctx.restore();
     }
 
-    /* annotations */
-    if (P.q === 0 && P.kind !== 'nu' && sNow > ev.sTrkMid) {
+    /* annotations — live event only */
+    if (!live) return;
+    if (P.q === 0 && P.kind !== 'nu' && sNow > e.sTrkMid) {
       chipDraw(ctx, T, 'no track (neutral)', (L.trk[0] + L.trk[1]) / 2, L.yMid - 30, W);
     }
-    if (sNow >= 1 && ev.exits) {
-      const yEnd = ev.pts[ev.pts.length - 1].y;
+    if (sNow >= 1 && e.exits) {
+      const yEnd = e.pts[e.pts.length - 1].y;
       if (P.kind === 'nu') {
         arrowDraw(ctx, L.mus[2][0], Math.min(W - 4, L.mus[2][1] + 14), yEnd, '#ef4444', true);
         /* BELOW the axis: the species tag above sits at tagPt.y - 24 and this used to be
@@ -1295,25 +1324,50 @@ window.__audit = { at(momentumGeV) {
     else if (k.beta > 1 / N_W) { ch.textContent = 'ON \u00B7 \u03B2 > 0.752'; ch.style.color = 'var(--accent)'; }
     else { ch.textContent = 'off \u00B7 \u03B2 < 0.752'; ch.style.color = ''; }
     $('roSig').textContent = SIG[state.part];
-    $('simSelName').textContent = P.name + ' \u00B7 m = ' + (P.m === 0 ? '0' : P.m.toFixed(4)) + ' GeV';
+    const PS = PARTS[state.sel] || P;
+    $('simSelName').textContent = PS.name + ' \u00B7 m = ' + (PS.m === 0 ? '0' : PS.m.toFixed(4)) + ' GeV';
     $('simMomVal').textContent = state.p.toFixed(1) + ' GeV/c';
   }
   function syncChips() {
     document.querySelectorAll('#simPartGrid .sim-chip').forEach(b => {
-      b.setAttribute('aria-pressed', b.dataset.part === state.part ? 'true' : 'false');
+      b.setAttribute('aria-pressed', b.dataset.part === state.sel ? 'true' : 'false');
     });
   }
   function isPlaying() { return (performance.now() - lastFrame) < 400; }
+  /* Select only — a chip click no longer launches anything (prof review: the
+     track used to just appear, with no animation, when paused). */
   function selectParticle(key) {
-    state.part = key; state.fireCount++;
-    syncChips();
-    ev = buildEvent(!isPlaying());
-    updateReadouts(); drawAll();
+    state.sel = key;
+    syncChips(); updateReadouts();
+  }
+  /* Fire = archive the current event as a ghost, launch the selected species
+     with the full animation, and make sure the clock is running. */
+  function fireParticle(key, opts) {
+    if (key) state.sel = key;
+    const keepGhost = !(opts && opts.noGhost);
+    if (ev && keepGhost) {
+      if (!ev.meta) ev.meta = { part: state.part, p: state.p, fc: state.fireCount };
+      ev.clock = ev.dur;                 /* ghosts are always completed tracks */
+      ghosts.push(ev);
+      while (ghosts.length > 4) ghosts.shift();
+    }
+    state.part = state.sel; state.fireCount++;
+    ev = buildEvent(false);
+    ev.meta = { part: state.part, p: state.p, fc: state.fireCount };
+    syncChips(); updateReadouts();
+    if (window.Shell && Shell.setPlaying) Shell.setPlaying(true);
+    drawAll();
   }
 
   document.querySelectorAll('#simPartGrid .sim-chip').forEach(b => {
     b.addEventListener('click', () => selectParticle(b.dataset.part));
   });
+  const fireBtn = document.getElementById('simFireBtn');
+  if (fireBtn) fireBtn.addEventListener('click', () => fireParticle());
+  const clearBtn = document.getElementById('simClearBtn');
+  if (clearBtn) clearBtn.addEventListener('click', () => { ghosts = []; drawAll(); });
+  const prevTgl = document.getElementById('simPrevToggle');
+  if (prevTgl) prevTgl.addEventListener('change', () => { state.showGhosts = prevTgl.checked; drawAll(); });
   momEl.addEventListener('input', () => {
     if (window.Shell && Shell.setPlaying) Shell.setPlaying(false);
     state.p = Math.max(0.2, Math.min(5, parseFloat(momEl.value) || 1));
@@ -1343,8 +1397,8 @@ window.__audit = { at(momentumGeV) {
       const r = card.dataset.reveal;
       if (r) {
         if (window.Shell && Shell.setPlaying) Shell.setPlaying(true);
-        if (r === 'choice') selectParticle(ch.dataset.ans);
-        else if (r.slice(0, 5) === 'fire:') selectParticle(r.slice(5));
+        if (r === 'choice') fireParticle(ch.dataset.ans, { noGhost: true });
+        else if (r.slice(0, 5) === 'fire:') fireParticle(r.slice(5), { noGhost: true });
         else if (r === 'mom5') {
           state.p = 5; momEl.value = '5'; state.fireCount++;
           ev = buildEvent(false); updateReadouts(); drawAll();
@@ -1387,7 +1441,8 @@ window.__audit = { at(momentumGeV) {
     drawAll();
   }
   function onReset() {
-    state.part = 'pi'; state.p = 1; state.fireCount = 0;
+    state.part = 'pi'; state.sel = 'pi'; state.p = 1; state.fireCount = 0;
+    ghosts = [];
     momEl.value = '1';
     syncChips(); updateReadouts();
     ev = buildEvent(false);
@@ -1398,7 +1453,7 @@ window.__audit = { at(momentumGeV) {
   function onStep(i) {
     const k = Math.max(0, Math.min(STEPS.length - 1, i | 0));
     const st = STEPS[k];
-    state.part = st.part; state.p = st.p || 1; state.fireCount = (i | 0);
+    state.part = st.part; state.sel = st.part; state.p = st.p || 1; state.fireCount = (i | 0);
     momEl.value = String(state.p);
     syncChips(); updateReadouts();
     ev = buildEvent(false);
@@ -1409,8 +1464,8 @@ window.__audit = { at(momentumGeV) {
       const r = c.dataset.reveal;
       if (r === 'choice') {
         const picked = c.querySelector('.choice.wrong') || c.querySelector('.choice[data-correct]');
-        if (picked && picked.dataset.ans) selectParticle(picked.dataset.ans);
-      } else if (r && r.slice(0, 5) === 'fire:') selectParticle(r.slice(5));
+        if (picked && picked.dataset.ans) fireParticle(picked.dataset.ans, { noGhost: true });
+      } else if (r && r.slice(0, 5) === 'fire:') fireParticle(r.slice(5), { noGhost: true });
       else if (r === 'mom5') { state.p = 5; momEl.value = '5'; ev = buildEvent(false); updateReadouts(); drawAll(); }
     }
   }
@@ -1425,6 +1480,15 @@ window.__audit = { at(momentumGeV) {
       sizes[k] = { w, h };
     });
     if (!ev) ev = buildEvent(false); else rebuildKeepClock();
+    /* ghosts hold canvas-space geometry — rebuild each at the new size from its meta */
+    if (ghosts.length) {
+      const keep = { part: state.part, p: state.p, fc: state.fireCount };
+      ghosts = ghosts.map(g => {
+        state.part = g.meta.part; state.p = g.meta.p; state.fireCount = g.meta.fc;
+        const ne = buildEvent(true); ne.meta = g.meta; return ne;
+      });
+      state.part = keep.part; state.p = keep.p; state.fireCount = keep.fc;
+    }
     drawAll();
   }
   function onResize() { resizeNow(); }
@@ -1438,6 +1502,11 @@ window.__audit = { at(momentumGeV) {
   updateReadouts();
   syncChips();
   resizeNow();
+  /* verification/debug handle (pattern shared with the other v2 sims; lets a
+     reviewer drive the animation clock when rAF is throttled in a hidden tab) */
+  window.__det = { state: state, ghosts: () => ghosts, ev: () => ev,
+    fire: fireParticle, select: selectParticle,
+    tick: s => { if (ev) { ev.clock += (s || 1); drawAll(); } } };
   Shell.init({ onFrame: onFrame, onReset: onReset, onResize: onResize, onStep: onStep });
 })();
 </script>
