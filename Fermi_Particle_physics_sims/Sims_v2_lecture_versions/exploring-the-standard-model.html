@@ -480,6 +480,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <button type="button" class="sim-segbtn" data-color="mass">Mass</button>
     </div>
   </div>
+  <div class="sim-group">
+    <div class="sim-lab">Fermions</div>
+    <div class="sim-seg" id="antiSeg">
+      <button type="button" class="sim-segbtn sim-on" data-anti="matter">Matter</button>
+      <button type="button" class="sim-segbtn" data-anti="anti">Antimatter</button>
+    </div>
+  </div>
   <label class="sim-check"><input type="checkbox" id="ladderTgl" checked> Mass log scale</label>
 </div>
     </div>
@@ -765,7 +772,23 @@ window.__audit = {
     P('W boson', 'W', '', 'g', 0, 1, '±1', 1, 80.3692, '80.37 GeV', 1983, 'The weak force’s charged messenger — it sparks the reactions that make the Sun shine.', 3, 3)
   ];
 
-  const QCOL = { '+⅔': '#e08a2e', '−⅓': '#2fa3a0', '−1': '#4a7fe0', '0': '#7d8792', '±1': '#c95591' };
+  const QCOL = { '+⅔': '#e08a2e', '−⅓': '#2fa3a0', '−1': '#4a7fe0', '0': '#7d8792', '±1': '#c95591', '−⅔': '#4a8fd0', '+⅓': '#d0763a', '+1': '#c9563e' };
+  const QFLIP = { '+⅔': '−⅔', '−⅔': '+⅔', '−⅓': '+⅓', '+⅓': '−⅓', '−1': '+1', '+1': '−1', '0': '0', '±1': '±1' };
+  /* Antiparticle display for the 12 fermions (catalog index). Mass/spin/q in CAT stay as-is. */
+  const ANTI = {
+    0:  { name: 'positron', year: 1932, fact: "Predicted by Dirac's equation, found in 1932 — the first antiparticle ever seen." },
+    1:  { name: 'anti-muon', fact: "The muon's antimatter twin — same mass, opposite charge." },
+    2:  { name: 'anti-up', fact: "The up quark's antimatter twin — same mass, opposite charge." },
+    4:  { name: 'anti-tau', fact: "The tau's antimatter twin — same mass, opposite charge." },
+    5:  { name: 'e antineutrino', year: 1956, fact: "What Reines and Cowan actually caught in 1956 were antineutrinos streaming from a reactor." },
+    6:  { name: 'μ antineutrino', fact: "The muon neutrino's antimatter twin — same mass, opposite charge." },
+    7:  { name: 'τ antineutrino', fact: "The tau neutrino's antimatter twin — same mass, opposite charge." },
+    8:  { name: 'anti-down', fact: "The down quark's antimatter twin — same mass, opposite charge." },
+    9:  { name: 'anti-charm', fact: "The charm quark's antimatter twin — same mass, opposite charge." },
+    10: { name: 'anti-strange', fact: "The strange quark's antimatter twin — same mass, opposite charge." },
+    11: { name: 'anti-top', fact: "The top quark's antimatter twin — same mass, opposite charge." },
+    12: { name: 'anti-bottom', fact: "The bottom quark's antimatter twin — same mass, opposite charge." }
+  };
 
   const TERMS = [
     { title: 'Gauge fields', chip: 'force carriers', color: '#e2543e',
@@ -813,11 +836,11 @@ window.__audit = {
   const ALLROW = [0, 1, 2, 3, 4];
 
   /* ---------------- state & canvas ---------------- */
-  const state = { mode: 'particles', colorBy: 'family', sel: 3, term: 0, hovT: -1, hovC: -1, t: 0, showLadder: true };
+  const state = { mode: 'particles', colorBy: 'family', sel: 3, term: 0, hovT: -1, hovC: -1, t: 0, showLadder: true, antimatter: false, chir: 'L' };
   const cv = document.getElementById('smCanvas');
   const ctx = cv.getContext('2d');
   let W = 600, H = 400, DPR = 1;
-  let tileRects = [], ladderPts = [], chipRects = [];
+  let tileRects = [], ladderPts = [], chipRects = [], lrRects = [];
   let introStart = performance.now();
 
   /* ---------------- helpers ---------------- */
@@ -912,8 +935,85 @@ window.__audit = {
     if (line) lines.push(line);
     let ly = y; for (const ln of lines) { ctx.fillText(ln, cx, ly); ly += lh; }
   }
+  function isFermion(p) { return p.fam === 'q' || p.fam === 'l'; }
+  function antiOn(p) { return state.antimatter && isFermion(p); }
+  function antiRec(p) { return ANTI[CAT.indexOf(p)]; }
+  function dispName(p) {
+    if (!antiOn(p)) return p.name;
+    const a = antiRec(p); return (a && a.name) ? a.name : p.name;
+  }
+  function dispToks(p) {
+    if (!antiOn(p)) return [{ t: p.sym, sub: p.ssub }];
+    if (p.fam === 'q') return [{ t: p.sym, bar: 1 }];
+    if (p.sym === 'ν') return [{ t: 'ν', bar: 1, sub: p.ssub }];
+    return [{ t: p.sym, sup: '+' }];
+  }
+  function dispQ(p) { return antiOn(p) ? -p.q : p.q; }
+  function dispQs(p) { return antiOn(p) ? (QFLIP[p.qs] || p.qs) : p.qs; }
+  function dispYear(p) {
+    if (!antiOn(p)) return p.year;
+    const a = antiRec(p); return (a && a.year != null) ? a.year : p.year;
+  }
+  function dispFact(p) {
+    if (!antiOn(p)) return p.fact;
+    const a = antiRec(p); return (a && a.fact) ? a.fact : p.fact;
+  }
+  /* Weak quantum numbers, Q = T₃ + Y/2 convention. L = doublet, R = singlet. */
+  const WEAK = {
+    uType: { L: { T: '½', T3: '+½', Y: '+⅓' }, R: { T: '0', T3: '0', Y: '+4⁄3' } },
+    dType: { L: { T: '½', T3: '−½', Y: '+⅓' }, R: { T: '0', T3: '0', Y: '−⅔' } },
+    nu:    { L: { T: '½', T3: '+½', Y: '−1' }, R: null },  /* no ν_R in the SM */
+    eType: { L: { T: '½', T3: '−½', Y: '−1' }, R: { T: '0', T3: '0', Y: '−2' } }
+  };
+  const COLC = ['#d64545', '#3fa34d', '#4a7fe0'];  /* r, g, b color-charge dots */
+  function weakCat(p) {
+    if (p.fam === 'q') return p.q > 0 ? 'uType' : 'dType';
+    if (p.fam === 'l') return p.q === 0 ? 'nu' : 'eType';
+    return null;
+  }
+  function flipSign(s) {
+    if (s.charAt(0) === '+') return '−' + s.slice(1);
+    if (s.charAt(0) === '−') return '+' + s.slice(1);
+    return s;
+  }
+  function weakDisp(p) {
+    if (p.fam === 'g') {
+      if (p.sym === 'W') return { iso: 'T = 1 · T₃ = ±1', Y: '0' };
+      if (p.sym === 'g') return { iso: 'T = 0 · T₃ = 0', Y: '0' };
+      return { iso: '0 (W³–B mix)', Y: '0' };  /* photon, Z */
+    }
+    if (p.fam === 'h') return { iso: 'T = ½ · T₃ = −½', Y: '+1' };
+    const rec = WEAK[weakCat(p)][state.chir];
+    if (!rec) return { iso: state.antimatter ? 'no ν̄_R in the SM' : 'no ν_R in the SM', Y: '—' };
+    const t3 = antiOn(p) ? flipSign(rec.T3) : rec.T3;
+    const yy = antiOn(p) ? flipSign(rec.Y) : rec.Y;
+    return { iso: 'T = ' + rec.T + ' · T₃ = ' + t3, Y: yy };
+  }
+  function colorKind(p) {
+    if (p.fam === 'q') return 'rgb';
+    if (p.sym === 'g') return 'pair';
+    return '0';
+  }
+  /* Color-charge cell, right-aligned at (rightX, ry). Anticolors = hollow rings. */
+  function drawColorCell(th, kind, rightX, ry) {
+    const cy = ry - 5, anti = antiOn(CAT[state.sel]);
+    if (kind === 'rgb') {
+      for (let k = 0; k < 3; k++) {
+        const cx = rightX - 6 - (2 - k) * 16;
+        ctx.beginPath(); ctx.arc(cx, cy, 5.5, 0, 7);
+        if (anti) { ctx.strokeStyle = COLC[k]; ctx.lineWidth = 2; ctx.stroke(); }
+        else { ctx.fillStyle = COLC[k]; ctx.fill(); }
+      }
+    } else {  /* gluon: color–anticolor pair × 8 */
+      ctx.font = uf(14, 700); ctx.fillStyle = th.text; ctx.textAlign = 'right';
+      ctx.fillText('×8', rightX, ry);
+      const base = rightX - ctx.measureText('×8').width - 10;
+      ctx.beginPath(); ctx.arc(base - 14, cy, 5.5, 0, 7); ctx.fillStyle = COLC[0]; ctx.fill();
+      ctx.beginPath(); ctx.arc(base, cy, 5.5, 0, 7); ctx.strokeStyle = COLC[2]; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
   function tileColor(p) {
-    if (state.colorBy === 'charge') return QCOL[p.qs] || '#7d8792';
+    if (state.colorBy === 'charge') return QCOL[dispQs(p)] || '#7d8792';
     if (state.colorBy === 'mass') {
       if (p.m <= 0) return '#55606e';
       const t = Math.max(0, Math.min(1, (Math.log10(p.m) + 4.5) / 6.9));
@@ -931,7 +1031,7 @@ window.__audit = {
     const gr = ctx.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, th.bg); gr.addColorStop(1, mix(th.bg, th.surface, 0.6));
     ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
-    tileRects = []; ladderPts = []; chipRects = [];
+    tileRects = []; ladderPts = []; chipRects = []; lrRects = [];
     if (state.mode === 'particles') drawParticles(th); else drawLagrangian(th);
   }
 
@@ -940,7 +1040,7 @@ window.__audit = {
     const m = Math.max(12, Math.min(24, W * 0.02));
     const capY = m + 12;
     ctx.font = uf(15, 700); ctx.fillStyle = th.muted; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('17 fundamental particles', m + 2, capY);
+    ctx.fillText(state.antimatter ? '12 antifermions — bosons shown unchanged' : '17 fundamental particles', m + 2, capY);
     ctx.font = uf(14, 600); ctx.textAlign = 'right';
     ctx.fillText('click a tile', W - m - 2, capY);
 
@@ -972,7 +1072,9 @@ window.__audit = {
       const col = tileColor(p);
       const hov = state.hovT === i, sel = state.sel === i;
       ctx.save();
-      ctx.globalAlpha = 0.25 + 0.75 * ease;
+      let a = 0.25 + 0.75 * ease;
+      if (state.antimatter && !isFermion(p)) a *= 0.55;
+      ctx.globalAlpha = a;
       const sc = 0.92 + 0.08 * ease + (hov ? 0.02 : 0);
       const cxx = tx + tile / 2, cyy = ty + tile / 2;
       ctx.translate(cxx, cyy); ctx.scale(sc, sc); ctx.translate(-cxx, -cyy);
@@ -983,16 +1085,17 @@ window.__audit = {
       if (sel) { ctx.strokeStyle = th.text; ctx.lineWidth = 2.5; rr(tx + 1.25, ty + 1.25, tile - 2.5, tile - 2.5, Math.min(11, tile * 0.14)); ctx.stroke(); }
       if (tile >= 46) {
         ctx.font = uf(14, 700); ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.textAlign = 'right';
-        ctx.fillText(p.qs, tx + tile - 7, ty + 18);
+        ctx.fillText(dispQs(p), tx + tile - 7, ty + 18);
       }
       const ssz = Math.max(15, tile * 0.34);
-      const stoks = [{ t: p.sym, sub: p.ssub }];
+      const stoks = dispToks(p);
       const sw = toksW(ssz, stoks);
       drawToks(stoks, tx + tile / 2 - sw / 2, ty + tile * (tile >= 58 ? 0.54 : 0.62), ssz, '#ffffff');
       if (tile >= 58) {
         ctx.font = uf(14, 600);
-        const nw = ctx.measureText(p.name).width;
-        if (nw <= tile - 8) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.fillText(p.name, tx + tile / 2, ty + tile - 9); }
+        const nm = dispName(p);
+        const nw = ctx.measureText(nm).width;
+        if (nw <= tile - 8) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.fillText(nm, tx + tile / 2, ty + tile - 9); }
       }
       ctx.restore();
     }
@@ -1016,7 +1119,9 @@ window.__audit = {
       ctx.fillStyle = th.muted; ctx.fillText('heavy', x, cy);
     } else {
       const items = state.colorBy === 'charge'
-        ? [['+⅔', QCOL['+⅔']], ['−⅓', QCOL['−⅓']], ['−1', QCOL['−1']], ['0', QCOL['0']], ['±1', QCOL['±1']]]
+        ? (state.antimatter
+          ? [['−⅔', QCOL['−⅔']], ['+⅓', QCOL['+⅓']], ['+1', QCOL['+1']], ['0', QCOL['0']], ['±1', QCOL['±1']]]
+          : [['+⅔', QCOL['+⅔']], ['−⅓', QCOL['−⅓']], ['−1', QCOL['−1']], ['0', QCOL['0']], ['±1', QCOL['±1']]])
         : [['quarks', FAMC.q], ['leptons', FAMC.l], ['gauge', FAMC.g], ['Higgs', FAMC.h]];
       ctx.font = uf(14, 600);
       let total = 0; for (const it of items) total += 34 + ctx.measureText(it[0]).width;
@@ -1041,35 +1146,70 @@ window.__audit = {
     const r = Math.min(24, Math.max(16, w * 0.085));
     const mx = x + pad + r, my = y + pad + r;
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, my, r, 0, 7); ctx.fill();
-    const ssz = r * 1.05, stoks = [{ t: p.sym, sub: p.ssub }], sw = toksW(ssz, stoks);
+    const ssz = r * 1.05, stoks = dispToks(p), sw = toksW(ssz, stoks);
     drawToks(stoks, mx - sw / 2, my + ssz * 0.35, ssz, '#ffffff');
     ctx.textAlign = 'left'; ctx.fillStyle = th.text; ctx.font = uf(Math.min(19, Math.max(15, w * 0.07)), 700);
-    ctx.fillText(p.name, mx + r + 12, my - 4);
+    ctx.fillText(dispName(p), mx + r + 12, my - 4);
     ctx.font = uf(14, 600); ctx.fillStyle = th.muted;
-    const cap = (p.gen ? ['', '1st', '2nd', '3rd'][p.gen] + '-gen ' : '') + FAMN[p.fam];
+    let cap = (p.gen ? ['', '1st', '2nd', '3rd'][p.gen] + '-gen ' : '') + FAMN[p.fam];
+    if (state.antimatter && (p.fam === 'g' || p.fam === 'h')) {
+      cap += p.sym === 'W' ? ' — antiparticle: W∓' : ' — its own antiparticle';
+    }
     ctx.fillText(cap, mx + r + 12, my + 14);
+    /* L | R chirality chip — fermions only */
+    if (isFermion(p)) {
+      const bw = 20, bh = 18, gpx = 4;
+      const bx = x + w - pad - 2 * bw - gpx, by = my - 4;
+      ctx.font = uf(11, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'right';
+      ctx.fillText('chirality', x + w - pad, by - 6);
+      ['L', 'R'].forEach(function (cLab, k) {
+        const rx = bx + k * (bw + gpx), on = state.chir === cLab;
+        ctx.fillStyle = on ? col : th.surface;
+        ctx.strokeStyle = on ? col : th.border; ctx.lineWidth = 1.5;
+        rr(rx, by, bw, bh, 5); ctx.fill(); rr(rx, by, bw, bh, 5); ctx.stroke();
+        ctx.font = uf(12, 700); ctx.fillStyle = on ? '#ffffff' : th.muted;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(cLab, rx + bw / 2, by + bh / 2 + 1);
+        ctx.textBaseline = 'alphabetic';
+        lrRects.push({ x: rx, y: by, w: bw, h: bh, chir: cLab });
+      });
+    }
+    const dqs = dispQs(p);
+    const wk = weakDisp(p);
     const rows = [
       ['Mass', p.ms === '0' ? '0 (massless)' : p.ms],
-      ['Charge', p.qs === '0' ? '0' : p.qs + ' e'],
+      ['Charge', dqs === '0' ? '0' : dqs + ' e'],
       ['Spin', p.spin === 0.5 ? '½ ħ' : (p.spin === 1 ? '1 ħ' : '0')],
-      ['Found', String(p.year)]
+      ['Color', colorKind(p), 'color'],
+      ['Weak isospin', wk.iso],
+      ['Hypercharge', wk.Y],
+      ['Found', String(dispYear(p))]
     ];
     let ry = my + r + 24;
-    const rh = Math.max(22, Math.min(30, (h - (ry - y) - 70) / 4));
+    const rh = Math.max(20, Math.min(30, (h - (ry - y) - 90) / rows.length));
     for (const row of rows) {
       ctx.font = uf(14, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'left';
       ctx.fillText(row[0], x + pad, ry);
-      ctx.font = uf(16, 700); ctx.fillStyle = th.text; ctx.textAlign = 'right';
-      ctx.fillText(row[1], x + w - pad, ry);
+      if (row[2] === 'color' && row[1] !== '0') {
+        drawColorCell(th, row[1], x + w - pad, ry);
+      } else {
+        ctx.font = uf(16, 700); ctx.fillStyle = th.text; ctx.textAlign = 'right';
+        ctx.fillText(row[1], x + w - pad, ry);
+      }
       ctx.strokeStyle = alphaCol(th.border, 0.7); ctx.lineWidth = 1.5;
       ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(x + pad, ry + 8); ctx.lineTo(x + w - pad, ry + 8); ctx.stroke(); ctx.setLineDash([]);
       ry += rh;
       if (ry > y + h - 12) break;
     }
+    if (ry + 14 < y + h - 26) {
+      ctx.font = uf(13, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'left';
+      ctx.fillText('Q = T₃ + ½·Y', x + pad, ry + 10);
+      ry += 20;
+    }
     if (ry + 16 < y + h - 6) {
       ctx.font = 'italic 600 14px ' + SANS; ctx.fillStyle = th.muted; ctx.textAlign = 'left';
       const maxLines = Math.max(1, Math.floor((y + h - 6 - (ry + 12)) / 18));
-      wrapLeft(p.fact, x + pad, ry + 12, w - 2 * pad, 18, maxLines);
+      wrapLeft(dispFact(p), x + pad, ry + 12, w - 2 * pad, 18, maxLines);
     }
     ctx.restore();
   }
@@ -1113,8 +1253,13 @@ window.__audit = {
     ctx.font = uf(14, 700);
     for (const q of pts) {
       const selq = state.sel === q.i;
-      const lab = selq ? (q.p.sym + (q.p.ssub || '') + '  ' + q.p.ms) : (q.p.sym + (q.p.ssub || ''));
-      const lw2 = ctx.measureText(lab).width;
+      const stoks = dispToks(q.p);
+      const ssz = 14;
+      const tw = toksW(ssz, stoks);
+      const extra = selq ? ('  ' + q.p.ms) : '';
+      ctx.font = uf(14, 700);
+      const ew = extra ? ctx.measureText(extra).width : 0;
+      const lw2 = tw + ew;
       let lane = laneOff.length - 1;
       for (let L = 0; L < laneOff.length; L++) { if (q.x - lw2 / 2 > laneEnd[L] + 10) { lane = L; break; } }
       laneEnd[lane] = q.x + lw2 / 2;
@@ -1126,8 +1271,13 @@ window.__audit = {
       if (selq) { ctx.strokeStyle = th.text; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q.x, axisY, 9.5 + 1.5 * Math.sin(state.t * 3), 0, 7); ctx.stroke(); }
       else if (state.hovT === q.i) { ctx.strokeStyle = alphaCol(th.text, 0.6); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(q.x, axisY, 8, 0, 7); ctx.stroke(); }
       const lx = Math.max(x + 6 + lw2 / 2, Math.min(x + w - 6 - lw2 / 2, q.x));
-      ctx.fillStyle = selq ? th.text : th.muted; ctx.textAlign = 'center';
-      ctx.fillText(lab, lx, axisY + off + (off < 0 ? 2 : 6));
+      const ly = axisY + off + (off < 0 ? 2 : 6);
+      const labCol = selq ? th.text : th.muted;
+      drawToks(stoks, lx - lw2 / 2, ly, ssz, labCol);
+      if (extra) {
+        ctx.font = uf(14, 700); ctx.fillStyle = labCol; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.fillText(extra, lx - lw2 / 2 + tw, ly);
+      }
       ladderPts.push({ i: q.i, x: q.x, y: axisY });
     }
   }
@@ -1269,6 +1419,7 @@ window.__audit = {
   function syncDom() {
     document.querySelectorAll('#modeSeg .sim-segbtn').forEach(b => b.classList.toggle('sim-on', b.dataset.mode === state.mode));
     document.querySelectorAll('#colorSeg .sim-segbtn').forEach(b => b.classList.toggle('sim-on', b.dataset.color === state.colorBy));
+    document.querySelectorAll('#antiSeg .sim-segbtn').forEach(b => b.classList.toggle('sim-on', state.antimatter === (b.dataset.anti === 'anti')));
     const ladderBox = document.getElementById('ladderTgl');
     if (ladderBox) ladderBox.checked = !!state.showLadder;
   }
@@ -1306,10 +1457,14 @@ window.__audit = {
     for (const c of chipRects) if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) return c.i;
     return -1;
   }
+  function hitLR(p) {
+    for (const c of lrRects) if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) return c.chir;
+    return null;
+  }
   cv.addEventListener('mousemove', function (e) {
     const p = mpos(e); let cur = 'default';
     state.hovT = -1; state.hovC = -1;
-    if (state.mode === 'particles') { state.hovT = hitParticle(p); if (state.hovT >= 0) cur = 'pointer'; }
+    if (state.mode === 'particles') { state.hovT = hitParticle(p); if (state.hovT >= 0 || hitLR(p)) cur = 'pointer'; }
     else { state.hovC = hitChip(p); if (state.hovC >= 0) cur = 'pointer'; }
     cv.style.cursor = cur; draw();
   });
@@ -1317,8 +1472,10 @@ window.__audit = {
   cv.addEventListener('click', function (e) {
     const p = mpos(e);
     if (state.mode === 'particles') {
+      const lr = hitLR(p);
+      if (lr) { state.chir = lr; draw(); return; }
       const hit = hitParticle(p);
-      if (hit >= 0) { state.sel = hit; syncDom(); draw(); }
+      if (hit >= 0) { state.sel = hit; state.chir = 'L'; syncDom(); draw(); }
     } else {
       const hit = hitChip(p);
       if (hit >= 0) { state.term = hit; draw(); }
@@ -1329,6 +1486,9 @@ window.__audit = {
   }));
   document.querySelectorAll('#colorSeg .sim-segbtn').forEach(b => b.addEventListener('click', function () {
     state.colorBy = b.dataset.color; state.mode = 'particles'; syncDom(); draw();
+  }));
+  document.querySelectorAll('#antiSeg .sim-segbtn').forEach(b => b.addEventListener('click', function () {
+    state.antimatter = (b.dataset.anti === 'anti'); state.mode = 'particles'; syncDom(); draw();
   }));
   (function () {
     const ladderBox = document.getElementById('ladderTgl');
@@ -1342,7 +1502,7 @@ window.__audit = {
   function onFrame(dt) { state.t += dt; draw(); }
   function onReset() {
     state.mode = 'particles'; state.colorBy = 'family'; state.sel = 3; state.term = 0;
-    state.hovT = -1; state.hovC = -1; state.t = 0; state.showLadder = true;
+    state.hovT = -1; state.hovC = -1; state.t = 0; state.showLadder = true; state.antimatter = false; state.chir = 'L';
     introStart = performance.now();
     syncDom(); draw();
   
@@ -1350,7 +1510,7 @@ window.__audit = {
 }
   function onResize() { sizeAll(); renderFormal(); draw(); }
   function onStep(i) {
-    state.hovT = -1; state.hovC = -1;
+    state.hovT = -1; state.hovC = -1; state.antimatter = false; state.chir = 'L';
     switch (i) {
       case 0: state.mode = 'particles'; state.colorBy = 'family'; state.sel = 0; state.showLadder = true; break;
       case 1: state.mode = 'particles'; state.colorBy = 'family'; state.sel = 1; state.showLadder = true; break;
@@ -1362,7 +1522,7 @@ window.__audit = {
   }
   function onComplete() {
     state.mode = 'particles'; state.colorBy = 'family'; state.sel = 3;
-    state.hovT = -1; state.hovC = -1;
+    state.hovT = -1; state.hovC = -1; state.antimatter = false; state.chir = 'L';
     syncDom(); draw();
   }
 
@@ -1388,7 +1548,7 @@ window.__audit = {
         const a = spec.split(':');
         if (a[0] === 'color') { state.mode = 'particles'; state.colorBy = a[1]; if (a[2] !== undefined) state.sel = parseInt(a[2], 10); }
         else if (a[0] === 'mode') { state.mode = a[1]; if (a[1] === 'lagrangian') state.term = 0; }
-        state.hovT = -1; state.hovC = -1; syncDom(); draw();
+        state.hovT = -1; state.hovC = -1; state.antimatter = false; state.chir = 'L'; syncDom(); draw();
       }
     }));
   });
