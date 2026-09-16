@@ -226,7 +226,7 @@ both flows):
 ```bash
 cd /Users/admin/Desktop/simulations-1 && python3 -m http.server 8734   # once
 cd Fermi_testprep_jee_sims && node tools/flow-probe.mjs <port> \
-  "Capacity_Quantum_simulations/Sims_user_versions/sim-use-builds/<basename>.html"
+  "Fermi_QM_simulations/Sims_user_versions/sim-use-builds/<basename>.html"
 ```
 
 Plus: `node --check` every inline script; unique ids (`btn-gi`, `btn-cg`,
