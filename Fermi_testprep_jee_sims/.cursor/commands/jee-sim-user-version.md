@@ -15,9 +15,9 @@ The user names a sim (e.g. `Module-05-Gravitation/C077-escape-velocity.html`). Y
 
 ## Read these first (they are the specification)
 
-- `../Sim_use_version_skills/guided-inquiry/SKILL.md` + `references/implementation.md`
-- `../Sim_use_version_skills/controls-tutorial/SKILL.md` + `references/implementation.md` — **§1–§4** are the base layers, **§6** is the voiceover layer (including §6.4's identifier map and §6.4b for watcher sims). Every code block is verbatim-copyable.
-- `../Sim_use_version_skills/welcome-overlay/SKILL.md` + `references/implementation.md`
+- `../User_version_sims_skills/guided-inquiry/SKILL.md` + `references/implementation.md`
+- `../User_version_sims_skills/controls-tutorial/SKILL.md` + `references/implementation.md` — **§1–§4** are the base layers, **§6** is the voiceover layer (including §6.4's identifier map and §6.4b for watcher sims). Every code block is verbatim-copyable.
+- `../User_version_sims_skills/welcome-overlay/SKILL.md` + `references/implementation.md`
 
 **Validated exemplars** — consult the one matching your sim's shell instead of re-deriving:
 - C-series (`Module-*/C0xx-*.html`): `sim-use-builds/C203-refraction-and-snells-law.html`
@@ -31,7 +31,7 @@ The user names a sim (e.g. `Module-05-Gravitation/C077-escape-velocity.html`). Y
 ### 1. Guided inquiry — button contract (content is copy-polish ONLY)
 Replace `#shell-lecture` with the two-button pair (`#btn-gi` boots `active`, `#btn-cg`). Remove the lecture **markup** — the `#shell-lecture` button, the `#aside-inquiry-restore` strip, and any end-of-body auto-lecture boot script. Leave `setLectureMode` and its listeners in the shell-runtime block alone: with their elements gone they are unreachable, and ground rule 5 keeps shell-runtime byte-identical apart from the two sanctioned deltas (Finish → `__giOff`, and exporting `setInquiryCollapsed`/`inqShow`). This matches the validated C203 exemplar. Add `.gi-off #aside-inquiry{display:none !important;}`. Route the inquiry's Finish through `window.__giOff`. Expose `setInquiryCollapsed` and `inqShow` on the `Shell` object. Publish from the sim's scope: `__cgReveals` (its `applyStepReveals`, or a documented no-op), `__freeExplore` (the POST-COMPLETION state — not a mid-inquiry snapshot), `__giResume`, and `__cgPrepare` if any guided control only exists in one scene/mode.
 
-**Cards: trim only budget violations** (card ≤90 words pre-answer, feedback ≤60). Never restructure cycles, never rewrite distractors — EXCEPT when the user explicitly requests an SME-grammar content pass: then follow `../Sim_use_version_skills/guided-inquiry/SKILL.md` (SME grammar, Sept 2026: question-before-observation, classical baseline first, resolving answers, ≤6 cards) with `references/golden-flows.md` as canon.
+**Cards: trim only budget violations** (card ≤90 words pre-answer, feedback ≤60). Never restructure cycles, never rewrite distractors — EXCEPT when the user explicitly requests an SME-grammar content pass: then follow `../User_version_sims_skills/guided-inquiry/SKILL.md` (SME grammar, Sept 2026: question-before-observation, classical baseline first, resolving answers, ≤6 cards) with `references/golden-flows.md` as canon.
 
 **Then grep the card copy for controls you just removed.** Cards that say "press the 🎓 button" or "click Lecture" point at a control this layer deletes — fix the wording (C190 shipped with exactly that). Also check cards for transport instructions that contradict the boot state ("Press ▶ Play" on a sim that boots playing) and for colour/position claims that no longer match the scene.
 
@@ -63,7 +63,7 @@ The Chrome TTS defenses in the engine (deferred speak, `safeCancel`, `onstart` w
 ## Verify — every gate must pass before you report
 
 ```bash
-cd ../Sim_use_version_skills                       # jsdom is installed here
+cd ../User_version_sims_skills                       # jsdom is installed here
 node guided-inquiry/scripts/verify.js   '../sim-use-builds/<basename>.html' --baseline '../<original-path>'
 node controls-tutorial/scripts/verify.js '../sim-use-builds/<basename>.html' --baseline '../<original-path>'
 node welcome-overlay/scripts/verify.js   '../sim-use-builds/<basename>.html'

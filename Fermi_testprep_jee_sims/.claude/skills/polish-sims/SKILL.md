@@ -58,7 +58,7 @@ Main/Advanced (NCERT conventions), not K-12.
    - Parse: `node --check` every inline `<script>` (skip `type="application/json"`).
    - Baseline file for jsdom gates: `git show 6ba6f47:"<module-path>"` (the
      pre-user-version original) → temp file.
-   - `cd ../Sim_use_version_skills && node {guided-inquiry,controls-tutorial,welcome-overlay}/scripts/verify.js ../<module-path> --baseline <temp>` — all PASS.
+   - `cd ../User_version_sims_skills && node {guided-inquiry,controls-tutorial,welcome-overlay}/scripts/verify.js ../<module-path> --baseline <temp>` — all PASS.
    - Static server `python3 -m http.server 8734` from repo root (once), then
      `node tools/user-version-eval.mjs <port> <module-path>` — exit 0.
    - `window.__audit` in the live page (CDP via `tools/cdp.mjs`, unique port)

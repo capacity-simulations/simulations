@@ -24,7 +24,7 @@ You produce `Sims_user_versions/sim-use-builds/<same-basename>.html`.
 
 ## The specification (read these first — copy blocks, don't re-derive)
 
-The skill bundle lives in `../Sim_use_version_skills/`:
+The skill bundle lives in `../User_version_sims_skills/`:
 
 - `guided-inquiry/SKILL.md` + `references/golden-flows.md` +
   `references/implementation.md` — the SME card grammar (FRAME + 3–5
@@ -43,7 +43,7 @@ The skill bundle lives in `../Sim_use_version_skills/`:
 | Exemplar | Why it matters |
 |---|---|
 | `Sims_user_versions/sim-use-builds/infinite-potential-well.html` | **The QM pilot — your PRIMARY template, mechanics AND content.** All four layers + the SME-grammar deck (frame + 5 questions: classical baseline, commit-fired reveal, degeneracy distractors, staged readout) + every layout contract (zone above the CONTROLS header, buttons in the left cluster, centered docked nav, sidebar-opens-empty cgSteps). All gates passing. |
-| `../Sim_use_version_skills/examples/Double-slit-experiment.welcome-cards.html` | Three base layers on a QM Three.js sim (predates the voice layer). |
+| `../User_version_sims_skills/examples/Double-slit-experiment.welcome-cards.html` | Three base layers on a QM Three.js sim (predates the voice layer). |
 | `../Fermi_testprep_jee_sims/Module-01-Kinematics/C025-projectile-motion-ground-to-ground.html` | JEE reference for the **voice engine + Auto** (§6) — the validated source of `__makeCardVoice`. |
 | `../Fermi_testprep_jee_sims/Module-13-Optics/C203-refraction-and-snells-law.html` | JEE reference for the full four-layer C-series build. |
 
@@ -201,12 +201,12 @@ The kernel gate runs FIRST — it proves the production sim is intact
 append-only). Any failure here means you edited the sim, not layered on it:
 
 ```bash
-cd ../Sim_use_version_skills
+cd ../User_version_sims_skills
 node tests/kernel-diff.mjs '<abs original>' '<abs build>'
 ```
 
 ```bash
-cd ../Sim_use_version_skills          # jsdom lives here
+cd ../User_version_sims_skills          # jsdom lives here
 node guided-inquiry/scripts/verify.js    '<abs path to build>' --baseline '<abs path to original>'
 node controls-tutorial/scripts/verify.js '<abs path to build>' --baseline '<abs path to original>'
 node welcome-overlay/scripts/verify.js   '<abs path to build>' --baseline '<abs path to original>'
@@ -216,7 +216,7 @@ Then the layout gate (the inquiry must sit where every other course puts it
 — right column, first block under the top bar, controls below):
 
 ```bash
-node ../Sim_use_version_skills/tests/layout-probe.mjs \
+node ../User_version_sims_skills/tests/layout-probe.mjs \
   'Sims_user_versions/sim-use-builds/<basename>.html'
 ```
 
@@ -240,7 +240,7 @@ Controls Guide in the probe/screenshot and confirm the nav clears it.
 
 ## Inquiry authoring bar — the SME grammar (the part only you can get right)
 
-**Canonical exemplars: `../Sim_use_version_skills/guided-inquiry/references/golden-flows.md`**
+**Canonical exemplars: `../User_version_sims_skills/guided-inquiry/references/golden-flows.md`**
 — ten flows by the senior physics SME, three of them for QM sims in THIS
 course (Stern-Gerlach, Double-Slit Measurement, Multi-Stage SG). When these
 rules and those flows disagree, the flows win.

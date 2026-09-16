@@ -118,7 +118,7 @@ Draft the spine as a TABLE before writing any HTML — one row per card:
 | # | Beat | Title | The ONE idea | Scene state (`onStep` spec, exact params) | Gate? | Choices (correct + distractors←misconception) |
 
 ### The beats — the SME grammar (canonical exemplars:
-`Sim_use_version_skills/guided-inquiry/references/golden-flows.md`;
+`User_version_sims_skills/guided-inquiry/references/golden-flows.md`;
 when this rubric and those flows disagree, the flows win)
 1. **FRAME** — define the apparatus and its physical quantities, symbolically, ≤3
    sentences. Physics first, UI never. One situating clause if a sibling sim precedes
