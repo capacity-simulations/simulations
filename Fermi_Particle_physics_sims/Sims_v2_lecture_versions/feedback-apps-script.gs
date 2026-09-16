@@ -21,9 +21,12 @@
  * 5. Paste that URL into the `FEEDBACK_URL` constant inside every course's
  *    viewer.html file (all four use the same endpoint):
  *      Fermi_Particle_physics_sims/Sims_v2_lecture_versions/viewer.html   (PP)
- *      Fermi_CM_simulations/viewer.html                                (CM)
- *      Fermi_QM_simulations/Sims_user_versions/viewer.html        (QM)
- *      Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/viewer.html              (SR)
+ *      Fermi_CM_simulations/viewer.html                                   (CM)
+ *      Fermi_QM_simulations/Sims_user_versions/viewer.html                (QM)
+ *      Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/viewer.html  (SR)
+ *    The user-version builds in Fermi_university_sim_lab_sims/ embed the
+ *    pill directly (like JEE) and post the same course + sim identifiers,
+ *    so they need no separate setup.
  * 6. Commit + push. That's it.
  *
  * To rotate / redeploy later: Deploy → Manage deployments → edit → New version.
@@ -157,7 +160,7 @@ const SIM_TITLES_BY_COURSE = {
     "How To Make a Particle",
     "Feynman Diagram Sandbox",
     "Navigating the Eight-Fold Way",
-    "Build-A-Baryon",
+    "Build-A-Hadron",
     "Wu Experiment and the Death of Parity",
     "The Wine Bottle Potential",
     "Virtual Particle Collider",
