@@ -21,7 +21,7 @@
  * 5. Paste that URL into the `FEEDBACK_URL` constant inside every course's
  *    viewer.html file (all four use the same endpoint):
  *      Fermi_Particle_physics_sims/Sims_v2_lecture_versions/viewer.html   (PP)
- *      Capacity_CM_simulations/viewer.html                                (CM)
+ *      Fermi_CM_simulations/viewer.html                                (CM)
  *      Capacity_Quantum_simulations/Sims_user_versions/viewer.html        (QM)
  *      Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/viewer.html              (SR)
  * 6. Commit + push. That's it.

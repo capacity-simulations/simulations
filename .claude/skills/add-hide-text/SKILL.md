@@ -14,7 +14,7 @@ disagree, the MDC wins.
 
 Given one sim, a list, or "all":
 
-1. Read the MDC. Resolve targets; for "all": CM = `Capacity_CM_simulations/*.html`
+1. Read the MDC. Resolve targets; for "all": CM = `Fermi_CM_simulations/*.html`
    minus `index.html`, `vendor/`, `CM_lecture_sims_backup/`; particle physics =
    `Fermi_Particle_physics_sims/Sims_v2_lecture_versions/*.html` minus `index.html`.
    Both families carry the same anchors (`#shell-lecture`, `</header>`, `#shell`) —
