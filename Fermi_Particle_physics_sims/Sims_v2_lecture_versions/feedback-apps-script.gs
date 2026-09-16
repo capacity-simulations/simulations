@@ -42,7 +42,7 @@
  * submission after all MAX_VERSIONS cells are filled returns an error.
  */
 
-const MAX_VERSIONS = 10;
+const MAX_VERSIONS = 15;
 const MAX_MESSAGE_CHARS = 5000;
 
 const SIM_TITLES_BY_COURSE = {
