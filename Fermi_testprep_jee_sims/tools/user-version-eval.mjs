@@ -23,12 +23,12 @@ for (const f of files) {
   let b, flags = [];
   // Accepts a bare basename (legacy sim-use-builds layout), a module-relative
   // path (Module-13-Optics/C203-....html) or a repo-relative one
-  // (Final_JEE_sims/Module-13-Optics/C203-....html). The static server runs
+  // (Fermi_testprep_jee_sims/Module-13-Optics/C203-....html). The static server runs
   // from the REPO ROOT, so a bare module-relative path must be prefixed with
-  // Final_JEE_sims/ — omitting it 404s and the probe reports a misleading
+  // Fermi_testprep_jee_sims/ — omitting it 404s and the probe reports a misleading
   // "PAGE-DID-NOT-LOAD / static server down" instead of a bad path.
   let rel = f.includes('/') ? f : `sim-use-builds/${f}`;
-  if (/^Module-/.test(rel) || /^sim-use-builds\//.test(rel)) rel = `Final_JEE_sims/${rel}`;
+  if (/^Module-/.test(rel) || /^sim-use-builds\//.test(rel)) rel = `Fermi_testprep_jee_sims/${rel}`;
   try { b = await launch(`http://localhost:8734/${rel}`, { port }); }
   catch (e) { console.log(`FAIL-LAUNCH ${f}: ${e.message}`); bad++; continue; }
   try {

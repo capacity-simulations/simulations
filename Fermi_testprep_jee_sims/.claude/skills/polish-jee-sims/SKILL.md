@@ -1,6 +1,6 @@
 ---
 name: polish-jee-sims
-description: Run the Engine-v2 polish stage over the JEE sims in Final_JEE_sims using Claude Code in the terminal at zero API cost — an orchestrator finds the unpolished batch, fans one review agent out per sim in parallel, then applies every edit through the same guard chain the paid API polish uses. Covers the full flow from a cold start: status, emit, parallel review, apply, verify. Triggers "polish the sims", "run polish", "polish module N", "next polish batch", "polish stage", "polish-batch".
+description: Run the Engine-v2 polish stage over the JEE sims in Fermi_testprep_jee_sims using Claude Code in the terminal at zero API cost — an orchestrator finds the unpolished batch, fans one review agent out per sim in parallel, then applies every edit through the same guard chain the paid API polish uses. Covers the full flow from a cold start: status, emit, parallel review, apply, verify. Triggers "polish the sims", "run polish", "polish module N", "next polish batch", "polish stage", "polish-batch".
 ---
 
 # Polish the JEE sims — orchestrated, parallel, $0
@@ -22,7 +22,7 @@ Claude Code in the terminal for **$0**, and fans it across parallel agents.
 The course's `filedPath(base)` holds that mapping and `polish-batch` resolves
 through it. All 78 `jee-physics` sims have one.
 
-So: **`--outdir` is the TOP-LEVEL `Final_JEE_sims`, never a module folder, and
+So: **`--outdir` is the TOP-LEVEL `Fermi_testprep_jee_sims`, never a module folder, and
 `--only` takes course names, never `C###-…` names.**
 
 Point `--outdir` at a module folder and `course.sims()` matches nothing there,
@@ -35,7 +35,7 @@ protection will be gone.
 
 | | |
 |---|---|
-| Sims | `/Users/admin/Downloads/Final_JEE_sims` (14 `Module-*` folders, 76 of 78 built) |
+| Sims | `/Users/admin/Downloads/Fermi_testprep_jee_sims` (14 `Module-*` folders, 76 of 78 built) |
 | Pipeline repo | `/Users/admin/Downloads/capacity-studio-share` — **run all commands from here** |
 | Course | `jee-physics` |
 | Polished so far | 2 (`ce-internal-resistance`, `emi-motional-emf`) |
@@ -46,7 +46,7 @@ spends nothing on it**. No LLM call is made; the key is only checked at boot.
 ```bash
 cd /Users/admin/Downloads/capacity-studio-share
 export OPENROUTER_KEY=$(grep '^VITE_OPENROUTER_KEY=' .env.local | cut -d= -f2)
-export SIMS=/Users/admin/Downloads/Final_JEE_sims
+export SIMS=/Users/admin/Downloads/Fermi_testprep_jee_sims
 ```
 
 ---

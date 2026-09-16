@@ -1,6 +1,6 @@
 ---
 name: jee-sim-review
-description: End-to-end review of JEE physics HTML simulations in Final_JEE_sims — one skill covering physics correctness (independent oracle, every slider-parameter regime), functional correctness (browser-drive every control, find dead/broken components), visual↔parameter alignment, and pedagogy. Runs as an orchestrated parallel agent flow (one orchestrator + dimension sub-agents per sim; scales to many sims), with a serial fallback. Produces a two-bucket report (Physics / Non-physics) ranked P0/P1/P2 with precise surgical proposed fixes. REVIEW-ONLY — nothing is edited until the user approves fixes. Triggers: "review this sim", "validate physics", "audit the simulation", "test all controls", "find dead controls", "parallel review", "review all sims", "JEE sim review", "physics review".
+description: End-to-end review of JEE physics HTML simulations in Fermi_testprep_jee_sims — one skill covering physics correctness (independent oracle, every slider-parameter regime), functional correctness (browser-drive every control, find dead/broken components), visual↔parameter alignment, and pedagogy. Runs as an orchestrated parallel agent flow (one orchestrator + dimension sub-agents per sim; scales to many sims), with a serial fallback. Produces a two-bucket report (Physics / Non-physics) ranked P0/P1/P2 with precise surgical proposed fixes. REVIEW-ONLY — nothing is edited until the user approves fixes. Triggers: "review this sim", "validate physics", "audit the simulation", "test all controls", "find dead controls", "parallel review", "review all sims", "JEE sim review", "physics review".
 ---
 
 # JEE Sims — End-to-End Simulation Review (orchestrated)
@@ -22,7 +22,7 @@ One skill, two parts. **Part A** is the review specification — the complete de
 
 ## Scope and codebase facts
 
-Applies to the standalone HTML sims in `Final_JEE_sims/` (root and `CM/`). Curriculum ground truth: `/Users/admin/Downloads/JEE_PHYSICS_CURRICULUM.md` (numbered concepts, NCERT-first, JEE Advanced depth). File↔topic mapping: `COVERAGE-MAP.md`.
+Applies to the standalone HTML sims in `Fermi_testprep_jee_sims/` (root and `CM/`). Curriculum ground truth: `/Users/admin/Downloads/JEE_PHYSICS_CURRICULUM.md` (numbered concepts, NCERT-first, JEE Advanced depth). File↔topic mapping: `COVERAGE-MAP.md`.
 
 Two generations of sims — identify which you have first:
 - **Engine-grounded** (contain `<script id="engine-manifest">` + a `verify.audit` module installing `window.__audit = {manifest, at, probes, invariants, state, setParam, run()}`): `mp-photoelectric`, `Terminal_velocity`, `fluid-terminal-velocity`, `rot-rolling-race`, `shm-damped`, `tir-fixed`, `Polarization_v2`, etc.

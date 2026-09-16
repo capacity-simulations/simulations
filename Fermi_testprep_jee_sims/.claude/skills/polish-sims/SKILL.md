@@ -3,7 +3,7 @@ name: polish-sims
 description: Full 3-critic polish flow (physics + pedagogy + visuals critics → consolidated findings with orchestrator rulings → one surgical fixer → independent re-gate) on any sim in Module-*/. Ported from the sim-foundry sim-polish skill and rewired to this repo's verification stack. Subscription subagents only. Never pushes to S3.
 ---
 
-# polish-sims — the 3-critic polish flow for Final_JEE_sims
+# polish-sims — the 3-critic polish flow for Fermi_testprep_jee_sims
 
 Polish one already-built user-version sim: three specialist critics in
 parallel, an orchestrator consolidation with binding rulings, one surgical
@@ -16,7 +16,7 @@ the gates and file conventions are this repo's.
 `/polish-sims <module-relative-path>` — e.g.
 `/polish-sims Module-03-Work-Energy-and-Power/C055-collisions-in-2d-and-coefficient-of-restitution.html`
 
-Repo root: `/Users/admin/Downloads/Final_JEE_sims`. Curriculum ground truth:
+Repo root: `/Users/admin/Downloads/Fermi_testprep_jee_sims`. Curriculum ground truth:
 `/Users/admin/Downloads/JEE_PHYSICS_CURRICULUM.md`. Audience: JEE
 Main/Advanced (NCERT conventions), not K-12.
 
