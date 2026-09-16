@@ -1,6 +1,6 @@
 ---
 name: review-CM-sims
-description: Deep physics + pedagogy review of ONE CLASSICAL-MECHANICS simulation, by an expert classical-mechanics reviewer who will not miss a physics bug. Use for the Newtonian/analytical-mechanics sims (e.g. Capacity_CM_simulations/*.html — Newton's laws, projectile/drag, SHM, damped/driven oscillators, pendulum, motion in a potential, friction, rotating-frame centrifugal/Coriolis). Reviews the code against the classical-mechanics canon, and — by default for these animated sims, always when a claim depends on dynamic or slider-dependent behaviour — drives the sim in a real browser, screenshots it, and validates the animation + per-slider behaviour against the expected physics. Read-only candidate analysis; groups findings into Physics vs Non-physics, each P0/P1/P2, with issue + fix + (where run) screenshot evidence. NOT for the SR shell course (use review-sim / physics-check).
+description: Deep physics + pedagogy review of ONE CLASSICAL-MECHANICS simulation, by an expert classical-mechanics reviewer who will not miss a physics bug. Use for the Newtonian/analytical-mechanics sims (e.g. Fermi_CM_simulations/*.html — Newton's laws, projectile/drag, SHM, damped/driven oscillators, pendulum, motion in a potential, friction, rotating-frame centrifugal/Coriolis). Reviews the code against the classical-mechanics canon, and — by default for these animated sims, always when a claim depends on dynamic or slider-dependent behaviour — drives the sim in a real browser, screenshots it, and validates the animation + per-slider behaviour against the expected physics. Read-only candidate analysis; groups findings into Physics vs Non-physics, each P0/P1/P2, with issue + fix + (where run) screenshot evidence. NOT for the SR shell course (use review-sim / physics-check).
 ---
 
 # Classical-mechanics sim review
@@ -122,7 +122,7 @@ Apply the ones that fit the sim; verify sign, factor, units, and limits for each
 ## Browser probe (bundled)
 - Script: `browser-probe.mjs` in this skill dir (`<repo>/.claude/skills/review-CM-sims/`).
   Runs system Chrome via puppeteer-core. Both are resolved at runtime, no hard-coded repo path:
-  - **puppeteer-core** — first hit among `<repo>/_review/`, `<repo>/Capacity_SR_sims_v2_engine/_review/`
+  - **puppeteer-core** — first hit among `<repo>/_review/`, `<repo>/Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/`
     (the current install), `<repo>/`. Exits with an install hint if none has it.
   - **Chrome** — `$CHROME_PATH`, else system Google Chrome, else Chromium. Exits with a hint if none.
   - The run prints which Chrome and which `node_modules` base it used.

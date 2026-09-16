@@ -1,6 +1,6 @@
 ---
 name: add-guided-inquiry-and-lecture-mode
-description: Detect, rebuild, or create the GUIDED-INQUIRY card flow for a particle-physics sim in Fermi_Particle_physics_sims/Sims_v2_lecture_versions/ (or any sim on the v2 embedded shell). First CLASSIFIES the sim — no inquiry / weak-or-broken inquiry / well-formed — then either creates a card spine from scratch or reorganises the existing one into a gated, predict-before-reveal card structure with excellent pedagogy, driving the scene step by step via onStep. Also installs LECTURE MODE on every sim (header 🎓 Lecture button - hides the inquiry, jumps to the post-completion free-exploration state; restore chip reopens at card 1; replaces Skip; adds the ‹ › pager) so no separate lecture-mode pass is needed. Uses subagent (LLM) design+critique loops to settle the best card spine before implementing. STRICTLY inquiry-layer only — never changes sim controls, visuals, physics, readouts, or layout. Triggers - "add guided inquiry", "structure the guided inquiry", "rebuild the inquiry cards", "guided inquiry for <sim>", "inquiry for all v2 sims". NOT the SR .mdc rule (Capacity_SR_sims_v2_engine) and NOT a review skill.
+description: Detect, rebuild, or create the GUIDED-INQUIRY card flow for a particle-physics sim in Fermi_Particle_physics_sims/Sims_v2_lecture_versions/ (or any sim on the v2 embedded shell). First CLASSIFIES the sim — no inquiry / weak-or-broken inquiry / well-formed — then either creates a card spine from scratch or reorganises the existing one into a gated, predict-before-reveal card structure with excellent pedagogy, driving the scene step by step via onStep. Also installs LECTURE MODE on every sim (header 🎓 Lecture button - hides the inquiry, jumps to the post-completion free-exploration state; restore chip reopens at card 1; replaces Skip; adds the ‹ › pager) so no separate lecture-mode pass is needed. Uses subagent (LLM) design+critique loops to settle the best card spine before implementing. STRICTLY inquiry-layer only — never changes sim controls, visuals, physics, readouts, or layout. Triggers - "add guided inquiry", "structure the guided inquiry", "rebuild the inquiry cards", "guided inquiry for <sim>", "inquiry for all v2 sims". NOT the SR .mdc rule (Fermi_SR_simulations/Capacity_SR_sims_v2_engine) and NOT a review skill.
 ---
 
 # Guided-inquiry: detect → design → build (v2 particle-physics sims)
@@ -118,7 +118,7 @@ Draft the spine as a TABLE before writing any HTML — one row per card:
 | # | Beat | Title | The ONE idea | Scene state (`onStep` spec, exact params) | Gate? | Choices (correct + distractors←misconception) |
 
 ### The beats — the SME grammar (canonical exemplars:
-`Final_JEE_sims/Sim_use_version_skills/guided-inquiry/references/golden-flows.md`;
+`User_version_sims_skills/guided-inquiry/references/golden-flows.md`;
 when this rubric and those flows disagree, the flows win)
 1. **FRAME** — define the apparatus and its physical quantities, symbolically, ≤3
    sentences. Physics first, UI never. One situating clause if a sibling sim precedes
