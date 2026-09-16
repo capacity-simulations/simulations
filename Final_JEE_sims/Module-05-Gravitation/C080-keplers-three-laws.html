@@ -20,6 +20,7 @@
   --btn-paused-bg:#fff; --btn-paused-text:#1E4D3A; --btn-paused-border:#1E4D3A;
   --btn-reset-bg:#FAF8F4; --btn-reset-hover:#F5EAC4; --btn-reset-text:#B6820C; --btn-reset-border:#B6820C;
   --rest:#06b6d4; --moving:#f59e0b; --photon:#fef3c7;
+  --sun:#fbbf24; --planet:#60a5fa; --heavy:#c084fc;
   --danger:#f43f5e; --ok:#34d399; --warn:#fbbf24;
   --font-sans:'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   --font-nums:'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace;
@@ -34,6 +35,9 @@ body.light-theme,html[data-theme="light"]{
   --accent:#2a8a7e; --accent-soft:rgba(42,138,126,.35);
   --ctrl-bg:rgba(30,77,58,.08); --ctrl-border:rgba(30,77,58,.35); --track-bg:rgba(30,77,58,.20);
   --topbar-border:rgba(19,49,49,.20);
+  /* Canvas accent inks: the dark-theme cyan/amber wash out on the light ground
+     the orbit canvas now paints, so the light theme carries darkened twins. */
+  --rest:#0e7490; --moving:#b45309; --sun:#b45309; --planet:#1d4ed8; --heavy:#7e22ce;
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
@@ -196,6 +200,22 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   #shell,#shell.hide-aside{grid-template-areas:"header" "hero" "aside" "formal";grid-template-columns:1fr;grid-template-rows:auto 62vh auto auto;height:auto;min-height:100vh;}
   .shell-header{flex-wrap:wrap;height:auto;min-height:62px;padding:8px 14px;}
   .shell-aside{border-left:none;border-top:1px solid var(--border);}
+}
+
+/* 1001–1024px: the desktop header still applies here (the stacking breakpoint is
+   1000px) but its 11 controls over-subscribe the viewport and push Reset/Play off
+   screen. Tighten padding, gaps and type only — no control is removed, reordered
+   or resized below a touch target, and the 1500x950 layout is untouched. */
+@media(min-width:1001px) and (max-width:1024px){
+  .shell-header{gap:6px;padding:0 8px;}
+  /* The title is the only elastic item: it truncates so the controls never do. */
+  .shell-title{font-size:14px;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .shell-title span{font-size:11px;}
+  .shell-controls{gap:5px;}
+  .shell-group{gap:5px;padding:0;}
+  .shell-header .shell-btn{padding:0 6px;font-size:12px;gap:4px;}
+  .shell-header .shell-select{font-size:12px;padding:6px 4px;}
+  .shell-header label{font-size:12px;}
 }
 
 /* SIM CSS */
@@ -773,7 +793,28 @@ function fit(canvas,ctx){
   ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);
   return {w:r.width,h:r.height};
 }
-function cssVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
+/* The shell toggles the theme by putting .light-theme on document.BODY, so the
+   design tokens MUST be read from the body first. Reading documentElement first
+   would always return the :root (dark) value and freeze every canvas — ground,
+   ink, border and accent — on the dark palette under a light page. */
+function cssVar(name){
+  const v = getComputedStyle(document.body).getPropertyValue(name).trim();
+  return v || getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+/* --surface is authored with 4-5% alpha for DOM panels stacked over the page.
+   Painted as a CANVAS GROUND that alpha is wrong: the ground is never fully
+   opaque, which is what the clearRect note below is working around (one-shot
+   redraws ghost the previous frame through the 4% hole) and what makes a pixel
+   read of the ground ambiguous. Same colour, full opacity. */
+function opaqueVar(name, fallback){
+  const v = cssVar(name) || fallback || '';
+  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(v);
+  return m ? 'rgb(' + m[1] + ',' + m[2] + ',' + m[3] + ')' : v;
+}
+function themeIsLight(){
+  return document.body.classList.contains('light-theme') ||
+         document.documentElement.getAttribute('data-theme') === 'light';
+}
 
 function accel(x,y){
   const r2=x*x+y*y, r=Math.sqrt(r2), r3=r2*r;
@@ -898,7 +939,7 @@ function drawOrbitCanvas(){
   if(!(w>8 && h>8)) return;
   orbitCx.clearRect(0,0,w,h); /* --surface is 95% alpha — without a hard clear, one-shot
      redraws (e.g. Hide-Text toggles while paused) leave ~5% ghosts of the previous frame */
-  orbitCx.fillStyle=cssVar('--surface')||'#060E11';
+  orbitCx.fillStyle=opaqueVar('--surface','#060E11');
   orbitCx.fillRect(0,0,w,h);
   const a=state.a,e=state.e,b=a*Math.sqrt(1-e*e);
   const cxWorld=-a*e;
@@ -944,8 +985,8 @@ function drawOrbitCanvas(){
       for(let i=0;i<win.samples.length;i++){const p=W(win.samples[i].x,win.samples[i].y);orbitCx.lineTo(p.X,p.Y);}
       orbitCx.closePath();orbitCx.fill();orbitCx.stroke();
     }
-    drawSweep(state.areaWin1,'#f59e0b');
-    drawSweep(state.areaWin2,'#06b6d4');
+    drawSweep(state.areaWin1,cssVar('--moving'));
+    drawSweep(state.areaWin2,cssVar('--rest'));
   }
 
   // Foci
@@ -965,7 +1006,8 @@ function drawOrbitCanvas(){
   const grd=orbitCx.createRadialGradient(f1.X,f1.Y,0,f1.X,f1.Y,14);
   grd.addColorStop(0,'#fde68a');grd.addColorStop(1,'rgba(253,224,71,0)');
   orbitCx.fillStyle=grd;orbitCx.beginPath();orbitCx.arc(f1.X,f1.Y,14,0,Math.PI*2);orbitCx.fill();
-  orbitCx.fillStyle='#fbbf24';orbitCx.beginPath();orbitCx.arc(f1.X,f1.Y,5,0,Math.PI*2);orbitCx.fill();
+  orbitCx.fillStyle=cssVar('--sun');orbitCx.beginPath();orbitCx.arc(f1.X,f1.Y,5,0,Math.PI*2);orbitCx.fill();
+  if(themeIsLight()){orbitCx.strokeStyle='#92400e';orbitCx.lineWidth=1.5;orbitCx.stroke();}
 
   // Semi-major axis marker: centre (−ae, 0) → perihelion (a(1−e), 0) — length a
   const Aperi=W(a*(1-e),0), Acent=W(-a*e,0), Aaph=W(-a-a*e,0);
@@ -995,9 +1037,9 @@ function drawOrbitCanvas(){
   orbitCx.fillStyle=cssVar('--text');
   orbitCx.fillText(sunLabel, sunX, sunY);
   if(!HT()){
-    orbitCx.fillStyle='#f59e0b';
+    orbitCx.fillStyle=cssVar('--moving');
     orbitCx.fillText(periLabel, periX, periY);
-    orbitCx.fillStyle='#06b6d4';
+    orbitCx.fillStyle=cssVar('--rest');
     const aphLabel='aphelion';
     const aphW=orbitCx.measureText(aphLabel).width;
     orbitCx.fillText(aphLabel, Math.min(w-8-aphW, Math.max(8, Aaph.X-6)), Math.max(14, Aaph.Y-14));
@@ -1036,23 +1078,23 @@ function drawOrbitCanvas(){
   // Radius vector
   const pp=state.planet;
   const P=W(pp.x,pp.y);
-  orbitCx.strokeStyle='rgba(226,232,240,0.35)';
+  orbitCx.strokeStyle=themeIsLight()?'rgba(51,65,85,0.45)':'rgba(226,232,240,0.35)';
   orbitCx.lineWidth=1;
   orbitCx.beginPath();orbitCx.moveTo(f1.X,f1.Y);orbitCx.lineTo(P.X,P.Y);orbitCx.stroke();
   // Heavy planet (step-4): hollow ring behind the light marker so both stay visible when co-located
   if(state.showHeavyDemo&&state.planetHeavy){
     const H=W(state.planetHeavy.x,state.planetHeavy.y);
-    orbitCx.strokeStyle='#c084fc';
+    orbitCx.strokeStyle=cssVar('--heavy');
     orbitCx.lineWidth=2.5;
     orbitCx.beginPath();orbitCx.arc(H.X,H.Y,11,0,Math.PI*2);orbitCx.stroke();
     orbitCx.fillStyle=cssVar('--text');
-    orbitCx.font='11px '+cssVar('--font-sans');
+    orbitCx.font='12px '+cssVar('--font-sans');
     orbitCx.fillText('10× heavier (same orbit)', Math.min(w-130, H.X+14), Math.max(14, H.Y-10));
   }
   // Light planet (on top)
-  orbitCx.fillStyle='#60a5fa';
+  orbitCx.fillStyle=cssVar('--planet');
   orbitCx.beginPath();orbitCx.arc(P.X,P.Y,6,0,Math.PI*2);orbitCx.fill();
-  orbitCx.strokeStyle='#93c5fd';orbitCx.lineWidth=1.5;orbitCx.stroke();
+  orbitCx.strokeStyle=themeIsLight()?'#1e3a8a':'#93c5fd';orbitCx.lineWidth=1.5;orbitCx.stroke();
 
   // K2 area-comparison boxes — below the plot-title band
   if(state.mode==='K2' && !HT()){
@@ -1069,8 +1111,8 @@ function drawOrbitCanvas(){
       orbitCx.font='12px '+cssVar('--font-nums');
       orbitCx.fillText(val>0?val.toFixed(4)+' AU²':'…',cx0,boxY+boxH+14);
     }
-    drawBox(30,'#f59e0b','A₁',state.area1);
-    drawBox(w-30-boxW,'#06b6d4','A₂',state.area2);
+    drawBox(30,cssVar('--moving'),'A₁',state.area1);
+    drawBox(w-30-boxW,cssVar('--rest'),'A₂',state.area2);
   }
 }
 
@@ -1079,7 +1121,7 @@ function drawSystemCanvas(){
   const {w,h}=fit(sysCv,sysCx);
   if(!(w>8 && h>8)) return;
   sysCx.clearRect(0,0,w,h);
-  sysCx.fillStyle=cssVar('--surface');sysCx.fillRect(0,0,w,h);
+  sysCx.fillStyle=opaqueVar('--surface','#060E11');sysCx.fillRect(0,0,w,h);
   const emptyEl=document.getElementById('system-empty');
   if(emptyEl)emptyEl.style.display=(state.system.length===0)?'flex':'none';
   let maxA=1.5;
@@ -1106,7 +1148,8 @@ function drawSystemCanvas(){
   const g=sysCx.createRadialGradient(ox,oy,0,ox,oy,12);
   g.addColorStop(0,'#fde68a');g.addColorStop(1,'rgba(253,224,71,0)');
   sysCx.fillStyle=g;sysCx.beginPath();sysCx.arc(ox,oy,12,0,Math.PI*2);sysCx.fill();
-  sysCx.fillStyle='#fbbf24';sysCx.beginPath();sysCx.arc(ox,oy,4,0,Math.PI*2);sysCx.fill();
+  sysCx.fillStyle=cssVar('--sun');sysCx.beginPath();sysCx.arc(ox,oy,4,0,Math.PI*2);sysCx.fill();
+  if(themeIsLight()){sysCx.strokeStyle='#92400e';sysCx.lineWidth=1.2;sysCx.stroke();}
   for(const pl of state.system){
     sysCx.strokeStyle=pl.color+'88';sysCx.lineWidth=1;
     sysCx.beginPath();
@@ -1133,7 +1176,7 @@ function drawSystemCanvas(){
 function drawTPlot(){
   const {w,h}=fit(tpCv,tpCx);
   tpCx.clearRect(0,0,w,h);
-  tpCx.fillStyle=cssVar('--surface');tpCx.fillRect(0,0,w,h);
+  tpCx.fillStyle=opaqueVar('--surface','#060E11');tpCx.fillRect(0,0,w,h);
   const pad={l:56,r:20,t:36,b:44};
   const pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
   const xMin=Math.log10(0.05), xMax=Math.log10(1000);
@@ -1168,7 +1211,7 @@ function drawTPlot(){
     const label=(pl.Tmeasured || HT()) ? pl.name : (pl.name+' · measuring…'); /* Hide Text: straight to the name */
     if(pl.Tmeasured){
       tpCx.fillStyle=pl.color;tpCx.beginPath();tpCx.arc(px,py,5,0,Math.PI*2);tpCx.fill();
-      tpCx.strokeStyle='#fff';tpCx.lineWidth=1;tpCx.stroke();
+      tpCx.strokeStyle=themeIsLight()?'#0f172a':'#fff';tpCx.lineWidth=1;tpCx.stroke();
       tpCx.fillStyle=cssVar('--text');
       tpCx.font='12px '+cssVar('--font-sans');
     }else{
@@ -2201,7 +2244,7 @@ window.__giResume = function(){ onStep((typeof Shell !== 'undefined' && Shell.st
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

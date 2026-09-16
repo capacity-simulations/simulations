@@ -230,6 +230,13 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 }
 
 /* SIM CSS */
+/* The legend pill's background is a dark constant; in light theme its
+   var(--text) labels landed dark-on-dark. Give it a light surface there. */
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(255,255,255,.88);}
+/* Readout rows: the label may wrap, the value never does — "0.0500 s⁻¹" was
+   breaking across two lines once the λ row arrived. */
+#panel-readouts .stat-label{flex:1 1 auto;min-width:0;}
+#panel-readouts .stat-value{flex:0 0 auto;width:max-content;white-space:nowrap;}
 .hero-split{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 @media(max-width:900px){.hero-split{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}}
 .formal-grid{display:grid;grid-template-columns:1fr;gap:12px;}
@@ -1017,7 +1024,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Radioactive Decay</span></h2>
-            <p class="welcome-blurb">Each nucleus has the same chance of decaying every second — the smooth curve is a crowd of coin flips.</p>
+            <p class="welcome-blurb">Each nucleus has the same chance of decaying every second — no ageing, no schedule, no memory of how long it has waited.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1104,6 +1111,7 @@ Object.freeze(Engine);
         <select id="shell-speed" class="shell-select">
           <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
           <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="8">8×</option><option value="16">16×</option>
         </select>
       </div>
       <div class="shell-sep"></div>
@@ -1119,8 +1127,8 @@ Object.freeze(Engine);
       <div class="plot-box">
         <div class="plot-title">Sample <span class="plot-inline" id="grid-caption">— each dot is one nucleus</span></div>
         <div class="legend">
-          <div class="legend-item"><span class="legend-dot" style="background:#3b9b8f"></span>surviving</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#334155"></span>decayed</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#3b9b8f"></span>surviving nucleus</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#64748b;width:6px;height:6px"></span>already decayed</div>
         </div>
         <canvas id="grid-canvas"></canvas>
       </div>
@@ -1205,12 +1213,12 @@ Object.freeze(Engine);
           <div class="ctrl-box ctrl-box--slider" id="box-tau">
             <div class="ctrl-box-head">
               <span class="ctrl-box-label">Mean lifetime τ</span>
-              <span class="slider-val" id="tau-val">100 s</span>
+              <span class="slider-val" id="tau-val">20 s</span>
             </div>
             <div class="ctrl-slider-row">
-              <input type="range" id="tau-slider" min="20" max="400" step="10" value="100">
+              <input type="range" id="tau-slider" min="10" max="400" step="10" value="20">
             </div>
-            <div class="control-range"><span>20 s</span><span>T½ = <span id="thalf-val">69.3</span> s</span><span>400 s</span></div>
+            <div class="control-range"><span>10 s</span><span>T½ = <span id="thalf-val">13.9</span> s</span><span>400 s</span></div>
           </div>
 
           <div class="ctrl-box ctrl-box--slider" id="box-n0">
@@ -1221,7 +1229,7 @@ Object.freeze(Engine);
             <div class="ctrl-slider-row">
               <input type="range" id="n0-slider" min="50" max="5000" step="50" value="2500">
             </div>
-            <div class="control-range"><span>50</span><span>ragged ↔ smooth</span><span>5000</span></div>
+            <div class="control-range"><span>50</span><span>nuclei in the sample</span><span>5000</span></div>
           </div>
 
         </div>
@@ -1232,7 +1240,11 @@ Object.freeze(Engine);
         <div class="shell-panel-body">
           <div class="ctrl-box">
             <div class="stat-row"><span class="stat-label">Elapsed time t</span><span class="stat-value" id="stat-t">0.0 s</span></div>
-            <div class="stat-row"><span class="stat-label">Surviving fraction</span><span class="stat-value" id="stat-frac">1.000</span></div>
+            <div class="stat-row"><span class="stat-label">Surviving count N</span><span class="stat-value" id="stat-n">2500 of 2500</span></div>
+            <div class="stat-row"><span class="stat-label">Surviving fraction N/N₀</span><span class="stat-value" id="stat-frac">1.000</span></div>
+            <div class="divider"></div>
+            <div class="stat-row"><span class="stat-label">Decay constant λ = 1/τ</span><span class="stat-value" id="stat-lambda">0.0500 s⁻¹</span></div>
+            <div class="stat-row"><span class="stat-label">Activity A = λN</span><span class="stat-value" id="stat-act">125.0 decays/s</span></div>
           </div>
         </div>
       </div>
@@ -1256,8 +1268,12 @@ Object.freeze(Engine);
         <div id="eq3"></div>
       </div>
       <div class="eq-row">
-        <div class="eq-label">At t = τ (mean lifetime)</div>
+        <div class="eq-label">After one mean lifetime</div>
         <div id="eq4"></div>
+      </div>
+      <div class="eq-row">
+        <div class="eq-label">Activity — decays per second (same half-life as N)</div>
+        <div id="eq5"></div>
       </div>
     </div>
   </section>
@@ -2000,7 +2016,8 @@ return {
 (function(){
   // ---------- state ----------
   const state = {
-    tau: 100,          // seconds
+    tau: 20,           // seconds — short enough that the whole 6-half-life run
+                       // plays out in ~83 s of wall clock (dt is real seconds)
     N0: 2500,
     t: 0,
     alive: null,       // Uint8Array of length N0
@@ -2072,19 +2089,29 @@ return {
   // ---------- draw: grid of nuclei ----------
   function drawGrid(){
     const {w, h} = fit(gridCanvas, gridCtx);
-    const styles = getComputedStyle(document.documentElement);
+    // Theme vars must be read from BODY: the toggle lands `light-theme` on
+    // <body>, so documentElement still reports the dark palette and the canvas
+    // would ink near-white text onto the light background.
+    const styles = getComputedStyle(document.body);
     const bg = styles.getPropertyValue('--surface').trim() || '#060E11';
     const alive = styles.getPropertyValue('--accent').trim() || '#3b9b8f';
-    const dead = document.body.classList.contains('light-theme') ? '#cbd5e1' : '#334155';
+    // One mid-slate for decayed nuclei in BOTH themes. It is the exact colour of
+    // the "already decayed" legend swatch (a legend that does not match the ink
+    // is not a key), and it clears 4:1 against either background — the old pair
+    // (#334155 on #060E11, #cbd5e1 on #f8fafc) measured 1.9:1 and 1.4:1, so the
+    // decayed half of the sample was effectively invisible.
+    const dead = '#64748b';
 
     gridCtx.fillStyle = document.body.classList.contains('light-theme') ? '#f8fafc' : '#060E11';
     gridCtx.fillRect(0,0,w,h);
 
-    // Reserve top strip for title/legend (about 74px)
+    // Reserve top strip for title/legend (about 74px) and a bottom strip for
+    // the live count — without it the last row of dots sits under the label.
     const topPad = 76;
     const pad = 12;
+    const botPad = 30;
     const availW = w - 2*pad;
-    const availH = h - topPad - pad;
+    const availH = h - topPad - botPad;
 
     // Pick cols/rows so cells are ~square and fit N0 dots
     const aspect = availW / availH;
@@ -2100,14 +2127,18 @@ return {
 
     const dotR = Math.max(1.2, cell * 0.36);
 
+    // Decayed nuclei are drawn SMALLER as well as duller, so the two states are
+    // told apart by size and not by colour alone.
+    const deadR = Math.max(0.9, dotR * 0.55);
     for(let i=0;i<state.N0;i++){
       const cx = (i % cols);
       const cy = Math.floor(i / cols);
       const x = offX + cx*cell + cell/2;
       const y = offY + cy*cell + cell/2;
-      gridCtx.fillStyle = state.alive[i] ? alive : dead;
+      const live = state.alive[i];
+      gridCtx.fillStyle = live ? alive : dead;
       gridCtx.beginPath();
-      gridCtx.arc(x, y, dotR, 0, Math.PI*2);
+      gridCtx.arc(x, y, live ? dotR : deadR, 0, Math.PI*2);
       gridCtx.fill();
     }
 
@@ -2115,16 +2146,33 @@ return {
     const muted = styles.getPropertyValue('--text').trim() || '#e2e8f0';
     gridCtx.fillStyle = muted;
     gridCtx.font = '600 13px ' + (styles.getPropertyValue('--font-nums').trim() || 'JetBrains Mono, monospace');
-    gridCtx.textAlign = 'left';
+    // Bottom-RIGHT: the reviewer Feedback pill is docked at the bottom-left of
+    // the viewport (see .qfb-pill), which is exactly over this canvas corner.
+    gridCtx.textAlign = 'right';
     gridCtx.textBaseline = 'bottom';
     const label = state.survivingCount + ' / ' + state.N0 + ' surviving';
-    gridCtx.fillText(label, pad + 4, h - 8);
+    gridCtx.fillText(label, w - pad - 4, h - 8);
+  }
+
+  // The gold τ / 1-e overlay IS the answer to guided-inquiry card 4 ("after one
+  // mean lifetime τ, what fraction survives?"), so it is withheld while that
+  // prediction is open. Outside the guided inquiry — controls guide, free
+  // exploration, or once the inquiry is finished — it is always drawn.
+  const TAU_CARD = 3;   // zero-based index of the "mean lifetime vs half-life" card
+  function tauOverlayVisible(){
+    const zone = document.getElementById('aside-inquiry');
+    if(!zone || zone.offsetParent === null) return true;      // inquiry not on screen
+    const step = (typeof Shell !== 'undefined' && Shell.step) || 0;
+    if(step > TAU_CARD) return true;
+    if(step < TAU_CARD) return false;
+    const card = document.querySelectorAll('#inq-cards .inq-step')[TAU_CARD];
+    return !!(card && card.hasAttribute('data-answered'));
   }
 
   // ---------- draw: exponential plot ----------
   function drawPlot(){
     const {w, h} = fit(plotCanvas, plotCtx);
-    const styles = getComputedStyle(document.documentElement);
+    const styles = getComputedStyle(document.body);   // see drawGrid — body carries the theme
     const isLight = document.body.classList.contains('light-theme');
     const accent = styles.getPropertyValue('--accent').trim() || '#3b9b8f';
     const text = styles.getPropertyValue('--text').trim() || '#e2e8f0';
@@ -2136,7 +2184,9 @@ return {
 
     // Plot region — reserve top strip for title/legend rectangles
     const topReserved = 80;
-    const padL = 56, padR = 24, padT = topReserved, padB = 42;
+    // padB carries TWO label rows plus the axis title — 42 put the title on top
+    // of the '0' and 'tMax' ticks at 1024x768.
+    const padL = 56, padR = 24, padT = topReserved, padB = 54;
     const px = padL, py = padT;
     const pw = w - padL - padR;
     const ph = h - padT - padB;
@@ -2152,7 +2202,7 @@ return {
     plotCtx.strokeStyle = border;
     plotCtx.lineWidth = 1;
     plotCtx.setLineDash([2,3]);
-    plotCtx.font = '11px ' + (styles.getPropertyValue('--font-nums').trim() || 'monospace');
+    plotCtx.font = '12px ' + (styles.getPropertyValue('--font-nums').trim() || 'monospace');
     plotCtx.fillStyle = muted;
     plotCtx.textAlign = 'right';
     plotCtx.textBaseline = 'middle';
@@ -2186,38 +2236,50 @@ return {
     plotCtx.setLineDash([]);
 
     // ---- mean lifetime line at 1/e, with tick at t=tau
-    const meanColor = '#fbbf24';
-    plotCtx.strokeStyle = meanColor;
-    plotCtx.setLineDash([6,4]);
-    plotCtx.lineWidth = 1.4;
+    // Card 4 asks the student to PREDICT the fraction left after one mean
+    // lifetime; this overlay is that answer, drawn and labelled. It therefore
+    // stays off until the card is answered (and is always on outside inquiry).
+    // Amber against dark, burnt amber against light: #fbbf24 on the light
+    // surface measures 1.6:1, so the whole tau / 1-e annotation was unreadable
+    // in light theme. #b45309 keeps the same hue family at 4.8:1.
+    const meanColor = isLight ? '#b45309' : '#fbbf24';
     const y1e = yOf(1/Math.E);
-    plotCtx.beginPath();
-    plotCtx.moveTo(px, y1e);
-    plotCtx.lineTo(px + pw, y1e);
-    plotCtx.stroke();
-    // tau vertical
-    if(state.tau <= tMax){
-      const xtau = xOf(state.tau);
+    if(tauOverlayVisible()){
+      plotCtx.strokeStyle = meanColor;
+      plotCtx.setLineDash([6,4]);
+      plotCtx.lineWidth = 1.4;
       plotCtx.beginPath();
-      plotCtx.moveTo(xtau, py);
-      plotCtx.lineTo(xtau, py+ph);
+      plotCtx.moveTo(px, y1e);
+      plotCtx.lineTo(px + pw, y1e);
       plotCtx.stroke();
-      // Label "τ" near bottom axis
+      // tau vertical
+      if(state.tau <= tMax){
+        const xtau = xOf(state.tau);
+        plotCtx.beginPath();
+        plotCtx.moveTo(xtau, py);
+        plotCtx.lineTo(xtau, py+ph);
+        plotCtx.stroke();
+        // Label "τ" near bottom axis
+        plotCtx.setLineDash([]);
+        plotCtx.fillStyle = meanColor;
+        plotCtx.textAlign = 'center';
+        plotCtx.textBaseline = 'top';
+        plotCtx.font = '600 12px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
+        // Name the symbol on first appearance — a bare Greek letter on an axis
+        // is not a label for someone meeting mean lifetime for the first time.
+        plotCtx.fillText('τ (mean life)', xtau, py+ph+22);
+      }
       plotCtx.setLineDash([]);
-      plotCtx.fillStyle = meanColor;
-      plotCtx.textAlign = 'center';
-      plotCtx.textBaseline = 'top';
-      plotCtx.font = '600 11px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
-      plotCtx.fillText('τ', xtau, py+ph+22);
-    }
-    plotCtx.setLineDash([]);
 
-    // Label 1/e on left
-    plotCtx.fillStyle = meanColor;
-    plotCtx.textAlign = 'right';
-    plotCtx.textBaseline = 'middle';
-    plotCtx.font = '600 11px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
-    plotCtx.fillText('1/e', px - 6, y1e);
+      // Label 1/e on left, and spell the reading out along the line
+      plotCtx.fillStyle = meanColor;
+      plotCtx.textAlign = 'right';
+      plotCtx.textBaseline = 'middle';
+      plotCtx.font = '600 12px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
+      plotCtx.fillText('1/e', px - 6, y1e);
+      plotCtx.textBaseline = 'bottom';
+      plotCtx.fillText('1/e ≈ 0.37 left at t = τ', px + pw - 4, y1e - 5);
+    }
 
     // ---- reference theoretical exponential (thin)
     plotCtx.strokeStyle = isLight ? 'rgba(51,65,85,.35)' : 'rgba(203,213,225,.35)';
@@ -2238,10 +2300,10 @@ return {
       const tLbl = 3.3 * halfLife;
       if(tLbl < tMax){
         plotCtx.fillStyle = isLight ? 'rgba(51,65,85,.75)' : 'rgba(203,213,225,.75)';
-        plotCtx.font = '600 11px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
+        plotCtx.font = '600 12px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
         plotCtx.textAlign = 'left';
         plotCtx.textBaseline = 'bottom';
-        plotCtx.fillText('e^(\u2212t/\u03c4)', xOf(tLbl) + 5, yOf(Math.exp(-tLbl / state.tau)) - 4);
+        plotCtx.fillText('theory: e^(\u2212t/\u03c4)', xOf(tLbl) + 5, yOf(Math.exp(-tLbl / state.tau)) - 4);
       }
     }
 
@@ -2271,7 +2333,10 @@ return {
     plotCtx.font = '600 12px ' + (styles.getPropertyValue('--font-sans').trim() || 'sans-serif');
     plotCtx.textAlign = 'center';
     plotCtx.textBaseline = 'bottom';
-    plotCtx.fillText('time  (s)', px + pw/2, h - 8);
+    // The axis extent is 6 half-lives of the CURRENT tau, so say so: without it
+    // a student who drags tau and sees the picture hold still reads the control
+    // as broken rather than reading the shape as universal.
+    plotCtx.fillText('time (s) \u2014 axis spans 6 half-lives', px + pw/2, h - 8);
 
     plotCtx.save();
     plotCtx.translate(14, py + ph/2);
@@ -2283,7 +2348,7 @@ return {
 
     // Time tick labels — at 0, T½, tMax
     plotCtx.fillStyle = muted;
-    plotCtx.font = '11px ' + (styles.getPropertyValue('--font-nums').trim() || 'monospace');
+    plotCtx.font = '12px ' + (styles.getPropertyValue('--font-nums').trim() || 'monospace');
     plotCtx.textAlign = 'center';
     plotCtx.textBaseline = 'top';
     plotCtx.fillText('0', xOf(0), py+ph+22);
@@ -2297,7 +2362,10 @@ return {
   const n0Slider = document.getElementById('n0-slider');
   const n0Val = document.getElementById('n0-val');
   const statT = document.getElementById('stat-t');
+  const statN = document.getElementById('stat-n');
   const statFrac = document.getElementById('stat-frac');
+  const statLambda = document.getElementById('stat-lambda');
+  const statAct = document.getElementById('stat-act');
   const gridCaption = document.getElementById('grid-caption');
   const plotCaption = document.getElementById('plot-caption');
 
@@ -2307,8 +2375,14 @@ return {
     thalfVal.textContent = halfLife.toFixed(1);
     n0Val.textContent = String(state.N0);
     statT.textContent = state.t.toFixed(1) + ' s';
+    statN.textContent = state.survivingCount + ' of ' + state.N0;
     statFrac.textContent = (state.survivingCount / state.N0).toFixed(3);
-    gridCaption.textContent = '— ' + state.N0 + ' nuclei';
+    // λ = 1/τ, and the activity A = λN is the count of decays per second —
+    // it falls with exactly the same half-life as N itself.
+    const lambda = 1 / state.tau;
+    statLambda.textContent = lambda.toFixed(4) + ' s⁻¹';
+    statAct.textContent = (lambda * state.survivingCount).toFixed(1) + ' decays/s';
+    gridCaption.textContent = '— ' + state.N0 + ' nuclei, one dot each';
     plotCaption.textContent = 'vs time (τ = ' + state.tau.toFixed(0) + ' s, T½ = ' + halfLife.toFixed(1) + ' s)';
   }
 
@@ -2333,10 +2407,11 @@ return {
   // ---------- KaTeX ----------
   function renderMath(){
     if(typeof katex === 'undefined'){ setTimeout(renderMath, 50); return; }
-    katex.render(String.raw`\frac{N(t)}{N_0} = e^{-t/\tau}`, document.getElementById('eq1'), {throwOnError:false});
-    katex.render(String.raw`T_{1/2} = \tau\,\ln 2 \approx 0.693\,\tau`, document.getElementById('eq2'), {throwOnError:false});
+    katex.render(String.raw`\frac{N(t)}{N_0} = e^{-t/\tau} = e^{-\lambda t},\quad \lambda = \frac{1}{\tau}`, document.getElementById('eq1'), {throwOnError:false});
+    katex.render(String.raw`T_{1/2} = \tau\,\ln 2 = \frac{\ln 2}{\lambda} \approx 0.693\,\tau`, document.getElementById('eq2'), {throwOnError:false});
     katex.render(String.raw`\frac{N}{N_0} = \left(\tfrac{1}{2}\right)^{n}\ \text{after}\ n\ \text{half-lives}`, document.getElementById('eq3'), {throwOnError:false});
     katex.render(String.raw`t=\tau\ \Rightarrow\ \frac{N}{N_0} = e^{-1} \approx 0.368`, document.getElementById('eq4'), {throwOnError:false});
+    katex.render(String.raw`A = \lambda N = A_0\,e^{-\lambda t}\quad(1\ \text{decay/s} = 1\ \text{Bq})`, document.getElementById('eq5'), {throwOnError:false});
   }
   renderMath();
 
@@ -2401,7 +2476,19 @@ return {
 
   function onStep(i){
     // Step 3 encourages small N — but stepper does not force it (student-owned control).
-    // Nothing to change scene-wise beyond what the student's control state already dictates.
+    // The only staged element is the τ / 1-e overlay (see tauOverlayVisible).
+    drawPlot();
+  }
+
+  // Committing the card-4 prediction reveals the overlay. While the run is
+  // playing the next frame would show it anyway; this makes it appear even if
+  // the student answered with the sim paused.
+  {
+    const cards = document.getElementById('inq-cards');
+    if(cards){
+      new MutationObserver(() => drawPlot())
+        .observe(cards, { subtree:true, attributes:true, attributeFilter:['data-answered'] });
+    }
   }
 
   // draw() / onFrame never read Shell.step — nothing is staged. Documented no-op.
@@ -2618,7 +2705,7 @@ return {
     { sel:'#toggle-formal',  mode:'veil', title:'Formal equations', text:'Shows or hides the decay law and T½ identities.' },
     { sel:'#box-tau',        mode:'hide', title:'Mean lifetime τ', text:'Sets mean lifetime τ. T½ = τ ln 2 sits below.' },
     { sel:'#box-n0',         mode:'hide', title:'Initial count N₀', text:'Sets how many nuclei start the run.' },
-    { sel:'#panel-readouts', mode:'hide', title:'Live readouts',   text:'Elapsed time t and the surviving fraction N/N₀.' },
+    { sel:'#panel-readouts', mode:'hide', title:'Live readouts',   text:'Elapsed time, surviving count N and fraction N/N₀, decay constant λ = 1/τ, and activity A = λN.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
   const cel = sel => sel ? document.querySelector(sel) : null;
@@ -2776,7 +2863,7 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to radioactive decay.',
-    'Each nucleus has the same chance of decaying every second. The smooth curve is what a crowd of coin flips looks like.',
+    'Each nucleus has the same chance of decaying every second. No ageing, no schedule, no memory of how long it has already waited.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -2917,13 +3004,25 @@ return {
     ov.classList.add('hidden');
     try { if(WELCOME_ONCE) localStorage.setItem(WELCOME_KEY, '1'); } catch(e){}
     if(window.__setMode) window.__setMode(b.dataset.mode);
+    // The frame loop runs BEHIND this overlay, and the whole run is only
+    // 6 T½ = 83 s at the default τ. A student who listens to the six-line
+    // intro would meet a sample that is already mostly (or entirely) decayed,
+    // with card 1's "watch dots wink out" impossible to follow. Zero the run
+    // at the moment the overlay is dismissed; slider values are preserved and
+    // a run that had already ended is resumed.
+    if(typeof Shell !== 'undefined' && Shell.restartWithCurrentParams) Shell.restartWithCurrentParams();
   }));
 })();
 </script>
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  /* Docked bottom-LEFT, over the sample canvas. At 1024x768 the stock
+     bottom-right position covered #cg-next at every Controls-Guide step and
+     the top 38% of the tau slider's track in Guided Inquiry — the reviewer
+     widget was eating the student's controls. Nothing interactive lives at the
+     bottom-left; the canvas count label moved to the bottom-right to match. */
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
@@ -2943,8 +3042,11 @@ return {
   .qfb-btn1{background:#22d3ee;color:rgba(7,9,20,.92);border:0;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:800}
   .qfb-btn1:disabled{opacity:.55;cursor:not-allowed}
 </style>
-<button class="qfb-pill" id="qfbPill" type="button" title="Report a bug or leave feedback"><span>💬</span><span>Feedback</span></button>
-<div class="qfb-backdrop" id="qfbBackdrop" role="dialog" aria-modal="true" aria-labelledby="qfbTitle">
+<!-- data-no-reset: without it the shell's restartOnParamChange treats these as
+     parameter buttons, so opening (or cancelling, or submitting) the reviewer
+     feedback form zeroed the student's run — measured t 4.4 s -> 0.3 s. -->
+<button class="qfb-pill" id="qfbPill" type="button" data-no-reset title="Report a bug or leave feedback"><span>💬</span><span>Feedback</span></button>
+<div class="qfb-backdrop" id="qfbBackdrop" data-no-reset role="dialog" aria-modal="true" aria-labelledby="qfbTitle">
   <div class="qfb-modal">
     <h3 id="qfbTitle">Feedback</h3>
     <p class="qfb-sub">C230-radioactive-decay-law-and-half-life</p>

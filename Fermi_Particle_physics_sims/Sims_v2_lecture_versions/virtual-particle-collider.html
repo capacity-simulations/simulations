@@ -806,8 +806,9 @@ var THR = [
   { sym: 'tt̅',  m: 345.4 }
 ];
 var T_CYCLE = 2.6;
+var HOLD_CY = 2.35;   /* products fully out — the informative frame to park on */
 
-var S = { E1: 5, E2: 5, link: true, L: 1, eff: 0.9, t: 0, cy: 0.55, evCos: 0.35, evSign: 1, showPlot: true };
+var S = { E1: 5, E2: 5, link: true, L: 1, eff: 0.9, t: 0, cy: HOLD_CY, evCos: 0.35, evSign: 1, showPlot: true, oneShot: false, flavor: 0 };
 
 /* ===== physics ===== */
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -886,17 +887,24 @@ function pauseShell(){ try { if (window.Shell && Shell.setPlaying) Shell.setPlay
 
 /* ===== control wiring (sliders pause + live redraw) ===== */
 els.e1.addEventListener('input', function(){
-  pauseShell(); S.E1 = clamp(Math.pow(10, +els.e1.value), 0.1, 105);
+  pauseShell(); S.cy = 0; S.oneShot = false; S.E1 = clamp(Math.pow(10, +els.e1.value), 0.1, 105);
   if (S.link){ S.E2 = S.E1; els.e2.value = els.e1.value; }
   updateUI(); draw();
 });
 els.e2.addEventListener('input', function(){
-  pauseShell(); S.E2 = clamp(Math.pow(10, +els.e2.value), 0.1, 105);
+  pauseShell(); S.cy = 0; S.oneShot = false; S.E2 = clamp(Math.pow(10, +els.e2.value), 0.1, 105);
   if (S.link){ S.E1 = S.E2; els.e1.value = els.e2.value; }
   updateUI(); draw();
 });
 els.lum.addEventListener('input', function(){ pauseShell(); S.L = clamp(Math.pow(10, +els.lum.value), 0.01, 100); updateUI(); draw(); });
 els.eff.addEventListener('input', function(){ pauseShell(); S.eff = clamp(+els.eff.value, 0, 1); updateUI(); draw(); });
+/* Releasing a slider replays ONE collision at the new settings and freezes on
+   the outcome — every change shows its consequence (HC: "same thing regardless
+   of what energy you set" was a frozen mid-approach frame). */
+els.e1.addEventListener('change', oneShot);
+els.e2.addEventListener('change', oneShot);
+els.lum.addEventListener('change', oneShot);
+els.eff.addEventListener('change', oneShot);
 /* View-only toggle: no pauseShell(), no state change — just redraw with the band
    on or off, so hiding the plot never disturbs a run in progress. */
 if (els.showPlot) els.showPlot.addEventListener('change', function(){ S.showPlot = els.showPlot.checked; draw(); });
@@ -1081,6 +1089,7 @@ function draw(){
       }
       len *= Math.max(0, tt); ex = xIP + dx * len; ey = pipeY + dy * len;
       var bend = q * clamp(70 / Math.max(pm, 0.3), 1.5, 14) * (len / lenMax);
+      if (q === 0) bend = 0;   /* neutral products (Z) fly straight */
       var mx = (xIP + ex) / 2 - dy * bend, my = (pipeY + ey) / 2 + dx * bend;
       ctx.globalAlpha = fade; ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(xIP, pipeY); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
@@ -1100,6 +1109,7 @@ function draw(){
         ctx.textAlign = 'center'; ctx.fillText(tag, lx, ly);
       }
       ctx.globalAlpha = 1;
+      return { ex: ex, ey: ey, dx: dx, dy: dy };
     }
 
     /* residual glow */
@@ -1108,12 +1118,46 @@ function draw(){
     ctx.globalAlpha = 1;
 
     if (open){
-      var Estar = rs / 2, pstar = Math.sqrt(Math.max(0, Estar * Estar - MMU * MMU));
+      /* Event menu (HC review: energy must visibly change what comes out).
+         The counted channel stays μ⁺μ⁻; every third event shows the NEWEST
+         open pair channel, always tagged. Counts/σ readouts remain μ⁺μ⁻. */
+      var CHV = [
+        { m: MMU,     tA: 'μ⁻', tB: 'μ⁺', q: 1, stub: 0 },
+        { m: 1.77686, tA: 'τ⁻', tB: 'τ⁺', q: 1, stub: 2 },
+        { m: 5.27934, tA: 'B⁻', tB: 'B⁺', q: 1, stub: 3 },
+        { m: 80.379,  tA: 'W⁻', tB: 'W⁺', q: 1, stub: 3 },
+        { m: 91.1876, tA: 'Z',  tB: 'Z',  q: 0, stub: 3 },
+        { m: 172.57,  tA: 't̄',  tB: 't',  q: 1, stub: 3 }
+      ];
+      var nw = -1, ci;
+      for (ci = 0; ci < THR.length; ci++){ if (rs >= THR[ci].m - 1e-9) nw = ci; }
+      var chv = (nw >= 1 && (S.flavor % 3 === 2)) ? CHV[nw] : CHV[0];
+      var Estar = rs / 2, pstar = Math.sqrt(Math.max(0, Estar * Estar - chv.m * chv.m));
       var cth = S.evCos, sth = Math.sqrt(Math.max(0, 1 - cth * cth)) * S.evSign;
       var b = (pOf(S.E1) - pOf(S.E2)) / (S.E1 + S.E2);
       var gam = 1 / Math.sqrt(Math.max(1e-12, 1 - b * b));
-      track(gam * (pstar * cth + b * Estar), pstar * sth, P.m1, 'μ⁻', -1);
-      track(gam * (-pstar * cth + b * Estar), -pstar * sth, P.m2, 'μ⁺', 1);
+      var tpA = track(gam * (pstar * cth + b * Estar), pstar * sth, P.m1, chv.tA, -chv.q);
+      var tpB = track(gam * (-pstar * cth + b * Estar), -pstar * sth, P.m2, chv.tB, chv.q);
+      /* decay stubs: heavy products (τ, B, W, Z) fan out at the track end */
+      function stubsAt(tp, col){
+        if (!tp || !chv.stub) return;
+        ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = 0.8 * fade; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        var a0 = Math.atan2(tp.dy, tp.dx), s3;
+        for (s3 = 0; s3 < chv.stub; s3++){
+          var aa = a0 + (s3 - (chv.stub - 1) / 2) * 0.5;
+          ctx.beginPath(); ctx.moveTo(tp.ex, tp.ey);
+          ctx.lineTo(tp.ex + Math.cos(aa) * 15 * ease, tp.ey + Math.sin(aa) * 15 * ease); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      stubsAt(tpA, P.m1); stubsAt(tpB, P.m2);
+      /* on the Z⁰ resonance the flash IS the Z — say so */
+      if (Math.abs(rs - 91.19) < 6){
+        ctx.font = '600 ' + fs + FAM; ctx.fillStyle = P.m2; ctx.textAlign = 'center';
+        ctx.globalAlpha = fade;
+        ctx.fillText('Z⁰ resonance', xIP, pipeY - R * 1.02 - 6);
+        ctx.globalAlpha = 1;
+      }
     } else {
       track(pOf(S.E1) * Math.cos(0.2), pOf(S.E1) * Math.sin(0.2), P.em, 'e⁻', -1);
       track(-pOf(S.E2) * Math.cos(0.2), -pOf(S.E2) * Math.sin(0.2), P.ep, 'e⁺', 1);
@@ -1122,6 +1166,12 @@ function draw(){
       ctx.fillText('μ⁺μ⁻ closed — √s < 2m_μ = 0.2113 GeV', xIP, sceneBot - 6);
       ctx.globalAlpha = 1;
     }
+  }
+
+  /* idle gap between events — at low expected yield, say WHY it is quiet */
+  if (S.cy >= T_CYCLE && !S.oneShot && idleT() > 1.2 && !(window.HT && HT())){
+    ctx.font = '600 ' + fs + FAM; ctx.fillStyle = P.muted; ctx.textAlign = 'center';
+    ctx.fillText('low rate — waiting for the next event (σ·∫L dt·ε is small)', xIP, pipeY + R + fs + 10);
   }
 
   /* ---- chart: sigma vs sqrt(s), thresholds, operating point ---- */
@@ -1233,6 +1283,15 @@ function draw(){
   ctx.setLineDash([]); ctx.globalAlpha = 1;
   if (open){
     var cyv = yOf(sg), pr = 4.5 + 1.5 * Math.sin(S.t * 4);
+    /* the collision flash echoes on the operating point — the event just seen
+       IS this dot on the σ curve (HC: link the top to the bottom) */
+    if (S.cy >= 1.1 && S.cy < 1.45){
+      var ff = (S.cy - 1.1) / 0.35;
+      ctx.strokeStyle = P.accent; ctx.globalAlpha = (1 - ff) * 0.45; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(xIP, pipeY + R * 0.95); ctx.lineTo(cx, cyv); ctx.stroke();
+      ctx.globalAlpha = 1;
+      pr += (1 - ff) * 5;
+    }
     ctx.fillStyle = P.accent;
     ctx.beginPath(); ctx.arc(cx, cyv, pr, 0, 6.2832); ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = P.surface;
@@ -1247,11 +1306,30 @@ function draw(){
 }
 
 /* ===== shell hooks ===== */
+/* Rate-coupled idle gap after each collision cycle: high expected yield (Z pole,
+   big luminosity) -> back-to-back events; low yield -> long quiet gaps. The run
+   plan and the 1/s falloff become VISIBLE, not just readout digits (HC review). */
+function idleT(){
+  var rs = sqrtS(S.E1, S.E2);
+  if (rs < THR[0].m) return 3.5;
+  var N = sigNb(rs) * S.L * 1e6 * S.eff;
+  return clamp(3.5 - 0.9 * Math.log10(Math.max(N, 0.5)), 0, 3.5);
+}
 function onFrame(dt){
   dt = (typeof dt === 'number' && isFinite(dt)) ? clamp(dt, 0, 0.1) : 0.016;
   S.t += dt; S.cy += dt;
-  if (S.cy >= T_CYCLE){ S.cy = S.cy % T_CYCLE; resample(); }
+  if (S.oneShot && S.cy >= HOLD_CY){
+    /* one-shot replay (slider release / card reveal): freeze on the products */
+    S.cy = HOLD_CY; S.oneShot = false; pauseShell();
+  } else if (S.cy >= T_CYCLE + idleT()){
+    S.cy = 0; resample(); S.flavor++;
+  }
   draw();
+}
+/* Play ONE collision at the current settings, then hold on the outcome. */
+function oneShot(){
+  S.cy = 0; S.oneShot = true; resample(); S.flavor++;
+  try { if (window.Shell && Shell.setPlaying) Shell.setPlaying(true); } catch (e) {}
 }
 function onResize(){
   var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
@@ -1263,6 +1341,7 @@ function onResize(){
 }
 function applyState(o){
   S.E1 = o.E1; S.E2 = o.E2; S.link = o.link; S.L = o.L; S.eff = o.eff;
+  S.cy = HOLD_CY; S.oneShot = false;   /* staged frames park on the products, never mid-approach */
   syncControls(); updateUI(); draw();
 }
 function onStep(i){
@@ -1278,11 +1357,12 @@ function onStep(i){
   applyState(st[clamp(i | 0, 0, st.length - 1)]);
 }
 function onReset(){
-  S.t = 0; S.cy = 0.55; S.evCos = 0.35; S.evSign = 1;
+  S.t = 0; S.cy = HOLD_CY; S.evCos = 0.35; S.evSign = 1; S.oneShot = false; S.flavor = 0;
+  S.showPlot = true;   /* display toggle back to its first-load default */
   /* Replay the active inquiry card's scene; default state when collapsed/absent. */
   var live = false;
   try { live = Shell.totalSteps > 0 && !document.getElementById('shell').classList.contains('inquiry-collapsed'); } catch (e) {}
-  if (live){ onStep(Shell.step); return; }
+  if (live){ onStep(Shell.step); syncControls(); return; }
   S.E1 = 5; S.E2 = 5; S.link = true; S.L = 1; S.eff = 0.9;
   syncControls(); updateUI(); draw();
 }
@@ -1327,12 +1407,16 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(function(card){
       if(c.hasAttribute('data-correct')) c.classList.add('correct');
       else if(c===ch) c.classList.add('wrong'); else c.classList.add('dim'); });
     if(evalBox){ evalBox.innerHTML=ch.dataset.fb||''; evalBox.classList.add('show', correct?'correct':'wrong'); }
-    /* data-reveal — the commitment drives the scene via the sim's own setter */
+    /* data-reveal — the commitment drives the scene via the sim's own setter,
+       then plays one collision so the answer is WATCHED, not teleported */
     var r=REVEAL[card.dataset.reveal];
-    if(r) applyState(r);
+    if(r){ applyState(r); oneShot(); }
   }); });
 });
 
+/* verification/debug handle (pattern shared with the other v2 sims; drives
+   the cycle deterministically when rAF is throttled in a hidden tab) */
+window.__vc = { S: S, draw: draw, oneShot: oneShot, frame: onFrame, idleT: idleT };
 Shell.init({ onFrame: onFrame, onReset: onReset, onResize: onResize, onStep: onStep });
 </script>
 <script>/* dev-only reviewer affordance: link this sim to the refinement studio.

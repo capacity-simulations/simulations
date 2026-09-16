@@ -120,6 +120,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
+/* The pill background was hardcoded dark, so in the light theme it put dark
+   --text on a dark chip over a now-light canvas. Flip it with the theme. */
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.82);}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -963,7 +966,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Internal reflection</span></h2>
-            <p class="welcome-blurb">Above the critical angle, no refracted ray exists — all the light reflects.</p>
+            <p class="welcome-blurb">A ray leaves glass for air. Tilt it far enough and the boundary stops behaving like a window.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1063,7 +1066,7 @@ Object.freeze(Engine);
 
   <main class="shell-hero">
     <div class="plot-box" id="box-scene">
-      <div class="plot-title">Interface <span class="plot-inline">incident medium (n₁) below · transmitted (n₂) above</span></div>
+      <div class="plot-title">Interface <span class="plot-inline">incident medium (n₁) below · transmitted (n₂) above · each ray's brightness = its share of the light</span></div>
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:#f472b6"></span>Incident</div>
         <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>Refracted</div>
@@ -1096,9 +1099,9 @@ Object.freeze(Engine);
         </div>
 
         <div class="inq-step">
-          <h4>3 · Observe — reach θ_c</h4>
-          <p>Set θ₁ to the critical angle. In the sidebar, the θ_c readout shows the exact value for n₁=1.50, n₂=1.00 (about 41.81°). The refracted ray now lies flat ALONG the interface.</p>
-          <p>Watch the travelling photon dots — the refracted photon grazes along the surface, while the reflected photon still leaves at θ₁.</p>
+          <h4>3 · Observe — at θ_c</h4>
+          <p>θ₁ is now at the critical angle: 41.81° for n₁=1.50, n₂=1.00, the value in the θ_c readout. The refracted ray lies flat ALONG the interface — θ₂ = 90.00°.</p>
+          <p>It has also gone almost dark. Each ray is drawn with the share of the light it carries, and at θ_c the transmitted share has fallen to zero while the reflected ray has taken all of it.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1113,7 +1116,7 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>5 · The condition</h4>
           <p>Two things are required for TIR:</p>
-          <p>① Light must be going from a <b>denser to a rarer</b> medium (n₁ &gt; n₂). Try flipping to n₁=1.00, n₂=1.50 — the θ_c readout shows "— (none)" because none exists.</p>
+          <p>① Light must be going from a <b>denser to a rarer</b> medium (n₁ &gt; n₂). Try flipping to n₁=1.00, n₂=1.50 — the θ_c readout shows "— (none)" and the Regime reads "rare→dense (no TIR)". Sweep θ₁ all the way to 89°: the refracted ray never leaves.</p>
           <p>② The angle of incidence must <b>exceed</b> θ_c = arcsin(n₂/n₁).</p>
         </div>
 
@@ -1153,7 +1156,7 @@ Object.freeze(Engine);
               <span class="slider-val" id="v-theta">30.0°</span>
             </div>
             <div class="ctrl-slider-row">
-              <input type="range" id="s-theta" min="0" max="89" step="0.5" value="30">
+              <input type="range" id="s-theta" min="0" max="89" step="0.1" value="30">
             </div>
             <div class="control-range"><span>0°</span><span>89°</span></div>
           </div>
@@ -1963,6 +1966,10 @@ return {
   sN1.addEventListener('input', ()=>{ state.n1 = +sN1.value; vN1.textContent = state.n1.toFixed(2); updateReadouts(); });
   sN2.addEventListener('input', ()=>{ state.n2 = +sN2.value; vN2.textContent = state.n2.toFixed(2); updateReadouts(); });
 
+  // Guided-inquiry staging: θ_c is the thing cards 1-2 ask the student to
+  // predict, so it stays off screen until card 3. Every other mode leaves it on.
+  let showCritical = true;
+
   // Physics — ALWAYS via Engine.rays
   function computeAll(n1, n2, theta1Rad){
     const s = Engine.rays.snell(n1, theta1Rad, n2);
@@ -1970,11 +1977,45 @@ return {
     return { snell: s, crit: c };
   }
 
+  /**
+   * Fresnel power split for UNPOLARISED light — the fraction R reflected and
+   * T = 1 − R transmitted.
+   *
+   *   r_s = (n₁cosθ₁ − n₂cosθ₂)/(n₁cosθ₁ + n₂cosθ₂)
+   *   r_p = (n₁cosθ₂ − n₂cosθ₁)/(n₁cosθ₂ + n₂cosθ₁)      R = (r_s² + r_p²)/2
+   *
+   * This is what makes the approach to θ_c honest instead of a cliff: as
+   * θ₁ → θ_c⁻, cosθ₂ → 0, so R → 1 CONTINUOUSLY and the refracted ray fades to
+   * nothing exactly as it swings flat. Drawing both rays at a fixed brightness
+   * (the old behaviour) taught two false things at once — that 55 % reflects at
+   * normal incidence, where it is really 4 %, and that a full-strength
+   * refracted ray is switched off at a threshold.
+   */
+  function fresnelSplit(n1, n2, theta1Rad, theta2Rad){
+    if(theta2Rad === null || theta2Rad === undefined) return { R: 1, T: 0 };
+    const ci = Math.cos(theta1Rad), ct = Math.cos(theta2Rad);
+    const rs = (n1*ci - n2*ct) / (n1*ci + n2*ct);
+    const rp = (n1*ct - n2*ci) / (n1*ct + n2*ci);
+    const R = Math.min(1, Math.max(0, 0.5*(rs*rs + rp*rp)));
+    return { R, T: 1 - R };
+  }
+  // Share → ink. A floor keeps a 4 %-reflection ray as a visible ghost (partial
+  // reflection is always there, and that is a real physics point) without
+  // implying it carries anything like the energy the other ray does.
+  const inkAlpha = f => 0.15 + 0.85*f;
+  const inkWidth = f => 1.6 + 2.4*f;
+  // The ray colours are tuned for the dark canvas; as TEXT on the light theme
+  // they drop below a readable contrast, so labels get a darker same-hue ink.
+  const tagInk = (dark, light, isLight) => isLight ? light : dark;
+
   function updateReadouts(){
     const th1 = state.theta1Deg * Math.PI/180;
     const { snell, crit } = computeAll(state.n1, state.n2, th1);
-    // Critical angle
-    if(crit.exists) rThetac.textContent = (crit.criticalAngle*180/Math.PI).toFixed(2)+'°';
+    // Critical angle. Cards 1-2 ask the student to PREDICT that a critical
+    // angle exists, so the guided inquiry withholds this readout (and the
+    // dashed θ_c reference ray in the scene) until card 3 introduces it.
+    if(!showCritical) rThetac.textContent = '—';
+    else if(crit.exists) rThetac.textContent = (crit.criticalAngle*180/Math.PI).toFixed(2)+'°';
     else rThetac.textContent = '— (none)';
     // Refraction angle
     if(snell.totalInternalReflection) rTheta2.textContent = '— (TIR)';
@@ -1987,7 +2028,9 @@ return {
       rRegime.textContent = 'n₁ = n₂ (no bending)';
       rRegime.className = 'stat-value';
     } else if(state.n1 < state.n2){
-      rRegime.textContent = 'rare→dense';
+      // Naming the missing HALF of the TIR condition, not just the direction:
+      // no angle of incidence gives TIR when the light enters a denser medium.
+      rRegime.textContent = 'rare→dense (no TIR)';
       rRegime.className = 'stat-value';
     } else if(snell.totalInternalReflection){
       rRegime.textContent = 'TIR (θ₁ > θ_c)';
@@ -2013,7 +2056,10 @@ return {
     return { w: r.width, h: r.height };
   }
 
-  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  // Read the custom property from BODY, not documentElement: the light theme is
+  // `body.light-theme`, so :root still resolves --bg to the DARK value and the
+  // canvas used to stay black while the whole page around it went light.
+  function css(v){ return getComputedStyle(document.body).getPropertyValue(v).trim(); }
 
   function draw(){
     const { w, h } = fit();
@@ -2059,6 +2105,14 @@ return {
     ctx.lineTo(xS, yI + normLen);
     ctx.stroke();
     ctx.setLineDash([]);
+    // Name it. Every card measures angles "from the normal"; the dashed line
+    // that word refers to must be identified in the picture.
+    ctx.font = "600 12px 'DMSansUser','DM Sans',sans-serif";
+    ctx.fillStyle = isLight ? '#64748b' : '#cbd5e1';
+    ctx.textAlign = 'center';
+    // offset left of the line (at θ₁ = 0 the refracted ray runs straight up it)
+    // and held below the plot title, which the short canvas at 1024×768 reaches
+    ctx.fillText('normal', xS - 30, Math.max(34, yI - normLen - 7));
 
     // Labels: n1 (below), n2 (above)
     ctx.font = "600 13px 'DMSansUser','DM Sans',sans-serif";
@@ -2100,17 +2154,22 @@ return {
     // Direction going DOWN-RIGHT from strike: (sin θ₁, cos θ₁).
     const xR = xS + sinT1 * rayLen;
     const yR = yI + cosT1 * rayLen;
-    // Only draw prominent reflected ray if there's meaningful reflection to show.
-    // We show reflected ray in TIR (bright) or dim below θ_c (partial reflection exists but keep it clear).
     const tir = snell.totalInternalReflection;
+    // Both rays are inked by the SHARE OF THE LIGHT they carry (Fresnel), so
+    // the reflected ray visibly takes over as θ₁ climbs toward θ_c and the
+    // refracted ray fades out as it swings flat. No switch, no cliff.
+    const split = fresnelSplit(state.n1, state.n2, th1, snell.refractionAngle);
     ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = tir ? 3.5 : 2;
-    ctx.globalAlpha = tir ? 1.0 : 0.55;
+    ctx.lineWidth = inkWidth(split.R);
+    ctx.globalAlpha = inkAlpha(split.R);
     ctx.beginPath();
     ctx.moveTo(xS, yI);
     ctx.lineTo(xR, yR);
     ctx.stroke();
-    drawArrowhead(ctx, xS, yI, xR, yR, tir ? 10 : 8, '#fbbf24');
+    drawArrowhead(ctx, xS, yI, xR, yR, 7 + 3*split.R, '#fbbf24');
+    // dy differs from the incident tag's so the two do not collide at θ₁ = 0,
+    // where the incident and reflected rays are the same line.
+    rayTag(ctx, 'Reflected '+Math.round(split.R*100)+'%', xR, yR, 0, 36, tagInk('#fbbf24','#a16207',isLight), w, h);
     ctx.globalAlpha = 1.0;
 
     // Refracted ray (only if not TIR)
@@ -2120,13 +2179,20 @@ return {
       const xT = xS + Math.sin(t2) * rayLen;
       const yT = yI - Math.cos(t2) * rayLen;
       ctx.strokeStyle = '#60a5fa';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = inkWidth(split.T);
+      ctx.globalAlpha = inkAlpha(split.T);
       ctx.beginPath();
       ctx.moveTo(xS, yI);
       ctx.lineTo(xT, yT);
       ctx.stroke();
-      drawArrowhead(ctx, xS, yI, xT, yT, 9, '#60a5fa');
+      drawArrowhead(ctx, xS, yI, xT, yT, 7 + 3*split.T, '#60a5fa');
+      rayTag(ctx, 'Refracted '+Math.round(split.T*100)+'%', xT, yT, 0, -12, tagInk('#60a5fa','#1d4ed8',isLight), w, h);
+      ctx.globalAlpha = 1.0;
     }
+    // Name the incident ray in the scene too — a legend in the far corner is
+    // not a label (Mayer contiguity), and the colours must not be the only
+    // channel that tells the three rays apart.
+    rayTag(ctx, 'Incident', xSrc, ySrc, 0, 20, tagInk('#f472b6','#be185d',isLight), w, h);
 
     // Angle arcs
     const arcR = Math.min(52, rayLen * 0.28);
@@ -2145,11 +2211,11 @@ return {
     ctx.arc(xS, yI, arcR, Math.PI/2, incOutAng, false);
     ctx.stroke();
     // Label θ₁
-    ctx.fillStyle = '#f472b6';
     ctx.font = "600 12px 'JetBrainsMonoNums','JetBrains Mono',monospace";
     ctx.textAlign = 'center';
     const labA1 = (Math.PI/2 + incOutAng)/2;
-    ctx.fillText('θ₁='+state.theta1Deg.toFixed(1)+'°', xS + Math.cos(labA1)*(arcR+16), yI + Math.sin(labA1)*(arcR+16)+4);
+    // pushed out past the θ_r label's radius so the two chips never collide
+    chipText(ctx, 'θ₁='+state.theta1Deg.toFixed(1)+'°', xS + Math.cos(labA1)*(arcR+34), yI + Math.sin(labA1)*(arcR+34)+4, tagInk('#f472b6','#be185d',isLight), isLight);
 
     // θ₂ arc (only if refraction exists)
     if(!tir && snell.refractionAngle !== null){
@@ -2162,18 +2228,17 @@ return {
       // Sweep from -PI/2 to refrAng, going clockwise (through smaller/more-negative angles won't work; we want small arc)
       ctx.arc(xS, yI, arcR*0.85, -Math.PI/2, refrAng, false);
       ctx.stroke();
-      ctx.fillStyle = '#60a5fa';
       const labA2 = (-Math.PI/2 + refrAng)/2;
-      ctx.fillText('θ₂='+(t2*180/Math.PI).toFixed(1)+'°', xS + Math.cos(labA2)*(arcR*0.85+18), yI + Math.sin(labA2)*(arcR*0.85+18)+4);
+      chipText(ctx, 'θ₂='+(t2*180/Math.PI).toFixed(1)+'°', xS + Math.cos(labA2)*(arcR*0.85+18), yI + Math.sin(labA2)*(arcR*0.85+18)+4, tagInk('#60a5fa','#1d4ed8',isLight), isLight);
     }
 
-    // Reflection angle arc (in TIR, show it bright)
-    if(tir || true){
+    // Reflection angle arc — inked by the reflected share, like the ray itself.
+    {
       // Reflected ray going down-right: direction (sinθ₁, cosθ₁), angle = atan2(cosθ₁, sinθ₁)
       const reflAng = Math.atan2(cosT1, sinT1);
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 1.5;
-      ctx.globalAlpha = tir ? 1 : 0.6;
+      ctx.globalAlpha = inkAlpha(split.R);
       ctx.beginPath();
       // Same inversion, mirrored: reflAng is BELOW pi/2, so the short way here
       // is decreasing — anticlockwise must be true.
@@ -2181,14 +2246,14 @@ return {
       ctx.stroke();
       ctx.globalAlpha = 1;
       if(tir){
-        ctx.fillStyle = '#fbbf24';
         const labA3 = (Math.PI/2 + reflAng)/2;
-        ctx.fillText('θ_r='+state.theta1Deg.toFixed(1)+'°', xS + Math.cos(labA3)*(arcR*0.68+18), yI + Math.sin(labA3)*(arcR*0.68+18)+4);
+        chipText(ctx, 'θ_r='+state.theta1Deg.toFixed(1)+'°', xS + Math.cos(labA3)*(arcR*0.68+18), yI + Math.sin(labA3)*(arcR*0.68+18)+4, tagInk('#fbbf24','#a16207',isLight), isLight);
       }
     }
 
-    // Critical angle reference tick (dense→rare only)
-    if(crit.exists){
+    // Critical angle reference tick (dense→rare only, and only once the guided
+    // inquiry has stopped asking the student to predict that it exists)
+    if(crit.exists && showCritical){
       const tc = crit.criticalAngle;
       // Draw a faint dashed reference ray at θ_c on the INCIDENT side
       const xC = xS - Math.sin(tc) * rayLen * 0.75;
@@ -2201,10 +2266,12 @@ return {
       ctx.lineTo(xC, yC);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = isLight ? 'rgba(180,90,10,0.85)' : 'rgba(251,191,36,0.85)';
+      // Say what the dashed line IS, not only what it measures — a bare "θ_c"
+      // is not decodable by someone meeting the idea for the first time.
       ctx.font = "600 12px 'JetBrainsMonoNums','JetBrains Mono',monospace";
       ctx.textAlign = 'right';
-      ctx.fillText('θ_c='+(tc*180/Math.PI).toFixed(1)+'°', xC - 4, yC - 4);
+      chipText(ctx, 'critical angle θ_c='+(tc*180/Math.PI).toFixed(1)+'°', xC - 4, yC - 4,
+               isLight ? 'rgba(180,90,10,0.95)' : 'rgba(251,191,36,0.9)', isLight);
     }
 
     // Animated photons — small dots traveling along rays for a lively look
@@ -2220,10 +2287,11 @@ return {
       const yT = yI - Math.cos(t2) * rayLen;
       // Refracted photon moves at v = c/n2 vs c/n1 below: scale its phase by n1/n2
       const p2 = (state.photonPhase * (state.n1/state.n2) + 0.5) % 1;
+      ctx.globalAlpha = inkAlpha(split.T);
       drawPhoton(ctx, xS, yI, xT, yT, p2, '#60a5fa');
-      // faint reflected photon too
+      // the reflected photon carries the reflected share, same as its ray
       const p3 = (state.photonPhase + 0.5) % 1;
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = inkAlpha(split.R);
       drawPhoton(ctx, xS, yI, xR, yR, p3, '#fbbf24');
       ctx.globalAlpha = 1;
     }
@@ -2255,6 +2323,40 @@ return {
     ctx.lineTo(x1 - size*Math.cos(ang + 0.4), y1 - size*Math.sin(ang + 0.4));
     ctx.closePath();
     ctx.fill();
+  }
+
+  /* Angle labels used to be painted straight onto the diagram, so at small θ₁
+     the "θ₁=..." text sat on top of the dashed normal and was unreadable. Lay
+     a background chip under the text first — the current font/textAlign are
+     honoured, and the chip follows the theme. */
+  function chipText(ctx, text, x, y, color, isLight){
+    const m = ctx.measureText(text);
+    const pad = 3;
+    const al = ctx.textAlign;
+    const left = al === 'right' ? x - m.width : (al === 'left' ? x : x - m.width/2);
+    ctx.fillStyle = isLight ? 'rgba(226,232,240,0.86)' : 'rgba(6,14,17,0.86)';
+    ctx.fillRect(left - pad, y - 11, m.width + 2*pad, 15);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
+  /* Name a ray where the ray is. `dx,dy` offsets the tag from the ray's far
+     end; the result is clamped inside the canvas so a steep ray never pushes
+     its own label off the edge. */
+  function rayTag(ctx, text, x, y, dx, dy, color, w, h){
+    ctx.font = "600 12px 'DMSansUser','DM Sans',sans-serif";
+    ctx.textAlign = 'center';
+    const m = ctx.measureText(text);
+    const half = m.width/2 + 6;
+    const tx = Math.max(half, Math.min(w - half, x + dx));
+    const ty = Math.max(14, Math.min(h - 6, y + dy));
+    // The tag stays fully opaque even when its ray is a faint 4 % ghost — the
+    // brightness encodes the energy, the label must stay readable either way.
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.fillText(text, tx, ty);
+    ctx.globalAlpha = a;
   }
 
   function drawPhoton(ctx, x0, y0, x1, y1, phase, color){
@@ -2300,26 +2402,49 @@ return {
   function onResize(){
     draw();
   }
+  function critDeg(){ return Math.asin(Math.min(1, state.n2/state.n1)) * 180/Math.PI; }
+  function setTheta(deg){
+    state.theta1Deg = deg;
+    // The slider step is 0.1°, so a one-decimal write always lands ON a step —
+    // it used to be 0.5°, which silently snapped 41.8 to 42.0 and left the
+    // thumb, the echo and the drawn ray showing three different angles.
+    sTheta.value = deg.toFixed(1);
+    vTheta.textContent = deg.toFixed(1)+'°';
+  }
+  function giCard(i){ return document.querySelectorAll('#inq-cards .inq-step')[i] || null; }
+  /* Run `fn` the first time a choice on card `i` is clicked. Used to hold a
+     prediction card's scene at the BEFORE state and advance it only once the
+     student has committed — the shell paints the feedback on the same click. */
+  const armed = new Set();
+  function onCommit(i, fn){
+    if(armed.has(i)) return;
+    const card = giCard(i);
+    if(!card) return;
+    armed.add(i);
+    card.addEventListener('click', e => { if(e.target.closest && e.target.closest('.choice')) fn(); });
+  }
+
   function onStep(i){
     // Deterministic per step
     // Steps: 0 setup, 1 predict small angle, 2 at critical, 3 predict TIR, 4 condition, 5 free
-    if(i===0){ /* baseline */ }
-    else if(i===2){
-      // Move to critical angle for n1=1.5, n2=1.0 => ~41.81°
-      const tc = Math.asin(state.n2/state.n1) * 180/Math.PI;
-      if(state.n1 > state.n2){
-        state.theta1Deg = tc;
-        sTheta.value = tc.toFixed(1);
-        vTheta.textContent = tc.toFixed(1)+'°';
-      }
+    // Cards 1-2 ask the student to predict that a critical angle exists at all,
+    // so θ_c is withheld from the readout and the scene until card 3.
+    showCritical = !(i === 0 || i === 1) || !!(giCard(1) && giCard(1).hasAttribute('data-ready'));
+    if(i===1){
+      onCommit(1, () => { showCritical = true; updateReadouts(); draw(); });
+    } else if(i===2){
+      // Move to the critical angle for n1=1.5, n2=1.0 => ~41.81°
+      if(state.n1 > state.n2) setTheta(critDeg());
     } else if(i===3){
-      // Push past critical
-      if(state.n1 > state.n2){
-        const tc = Math.asin(state.n2/state.n1) * 180/Math.PI;
-        state.theta1Deg = Math.min(89, tc + 8);
-        sTheta.value = state.theta1Deg.toFixed(1);
-        vTheta.textContent = state.theta1Deg.toFixed(1)+'°';
-      }
+      // Card 4 asks what happens PAST θ_c — so the scene must not already be
+      // past it. Hold at θ_c (no TIR banner, no "— (TIR)" readout, refracted
+      // ray still grazing) and push past only once the prediction is committed.
+      const answered = !!(giCard(3) && giCard(3).hasAttribute('data-ready'));
+      if(state.n1 > state.n2) setTheta(answered ? Math.min(89, critDeg() + 8) : critDeg());
+      onCommit(3, () => {
+        if(state.n1 > state.n2) setTheta(Math.min(89, critDeg() + 8));
+        updateReadouts(); draw();
+      });
     }
     updateReadouts();
     draw();
@@ -2724,7 +2849,7 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to total internal reflection.',
-    'Above the critical angle, no refracted ray exists. All the light reflects.',
+    'A ray leaves glass for air. Tilt it far enough and the boundary stops behaving like a window.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -2864,7 +2989,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

@@ -116,8 +116,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  font-size:12px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
   border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.86);color:var(--text);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -1341,7 +1342,7 @@ Object.freeze(Engine);
           <p>Notice the geometry the drawing makes literal:</p>
           <p>• On the LEFT (series), the two capacitors stack — the effective gap grows. Bigger gap ⇒ smaller C.<br>
              • On the RIGHT (parallel), the plates sit side by side — the effective plate area grows. Bigger area ⇒ bigger C.</p>
-          <p>Read the bars underneath: the parallel bar overtakes both series capacitors before charging finishes.</p>
+          <p>The Q bars fill as the plates do, on one shared scale — parallel ends far higher.</p>
         </div>
 
         <div class="inq-step" data-gate>
@@ -1356,9 +1357,10 @@ Object.freeze(Engine);
         <div class="inq-step">
           <h4>4 · Which quantity is SHARED?</h4>
           <p>Two more rules that the picture also tells you:</p>
-          <p>• In <b>series</b>, the two capacitors carry the <b>SAME CHARGE</b> and SPLIT the voltage. (Charge Q₁ = Q₂ — one path, one flow of charge.)<br>
-             • In <b>parallel</b>, the two capacitors carry the <b>SAME VOLTAGE</b> and SPLIT the charge. (Voltage V₁ = V₂ — wired to the same two nodes.)</p>
-          <p>Now play with the sliders. Push C₂ up: which effective capacitance grows faster, series or parallel?</p>
+          <p>• In <b>series</b>, both carry the <b>SAME CHARGE</b> and SPLIT the voltage — one path, one flow of charge.<br>
+             • In <b>parallel</b>, both carry the <b>SAME VOLTAGE</b> and SPLIT the charge — wired to the same two nodes.</p>
+          <p>Both are on screen: V₁ + V₂ = the supply voltage; Q₁ + Q₂ = the charge delivered.</p>
+          <p>Push C₂ up. Parallel grows one-for-one; series saturates at C₁ — never more than the smaller capacitor.</p>
         </div>
 
         <div class="inq-step">
@@ -1428,8 +1430,8 @@ Object.freeze(Engine);
         <div class="shell-panel-head"><h3>Effective capacitance</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box">
-            <div class="stat-row"><span class="stat-label" style="color:#f472b6">● Series  C_s</span><span class="stat-value" id="cs-val">— µF</span></div>
-            <div class="stat-row"><span class="stat-label" style="color:#60a5fa">● Parallel  C_p</span><span class="stat-value" id="cp-val">— µF</span></div>
+            <div class="stat-row"><span class="stat-label" style="color:#f472b6">● Series  Cₛ</span><span class="stat-value" id="cs-val">— µF</span></div>
+            <div class="stat-row"><span class="stat-label" style="color:#60a5fa">● Parallel  Cₚ</span><span class="stat-value" id="cp-val">— µF</span></div>
             <div class="divider" style="margin:6px 0"></div>
             <div class="note-text" id="cap-note">Parallel is <b>bigger than both</b>. Series is <b>smaller than the smaller</b>.</div>
           </div>
@@ -2262,6 +2264,7 @@ return {
   };
   const fmtCharge = (Q)=>{
     const a = Math.abs(Q);
+    if(a===0) return '0.00 µC';   // not "0.00e+0 C" — the uncharged scene is the boot state
     if(a>=1e-3) return (Q*1e3).toFixed(2)+' mC';
     if(a>=1e-6) return (Q*1e6).toFixed(2)+' µC';
     if(a>=1e-9) return (Q*1e9).toFixed(1)+' nC';
@@ -2269,6 +2272,7 @@ return {
   };
   const fmtEnergy = (U)=>{
     const a = Math.abs(U);
+    if(a===0) return '0.00 µJ';
     if(a>=1e-3) return (U*1e3).toFixed(2)+' mJ';
     if(a>=1e-6) return (U*1e6).toFixed(2)+' µJ';
     if(a>=1e-9) return (U*1e9).toFixed(1)+' nJ';
@@ -2287,6 +2291,18 @@ return {
     };
   }
 
+  // Predict-gate staging. Card 1 asks which network draws more charge; while
+  // that card is live and unanswered the two effective capacitances (the
+  // answer, in one number each) stay hidden. Free exploration, the controls
+  // guide and lecture mode never hide anything.
+  function resultsHidden(){
+    if(document.documentElement.classList.contains('gi-off')) return false;
+    const shell = document.getElementById('shell');
+    if(shell && (shell.classList.contains('inquiry-collapsed') || shell.classList.contains('lecture-mode'))) return false;
+    const card = document.querySelector('#inq-cards .inq-step');
+    return !!(card && card.classList.contains('active') && card.hasAttribute('data-gate') && !card.hasAttribute('data-ready'));
+  }
+
   // -------- fit + DPR -------------------------------------------------
   let viewW=800, viewH=500;
   function fit(){
@@ -2301,7 +2317,11 @@ return {
 
   // -------- theme colors ---------------------------------------------
   function css(v, fb){
-    const s = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    // Read from BODY, not documentElement: the light theme lands as
+    // `body.light-theme`, so the light overrides of --text/--muted live on the
+    // body. Reading the root returned the DARK values in light theme and the
+    // whole canvas was drawn in near-white on a near-white panel.
+    const s = getComputedStyle(document.body).getPropertyValue(v).trim();
     return s || fb;
   }
   function colors(){
@@ -2472,6 +2492,11 @@ return {
       ctx.strokeStyle = c.batteryLo;
       ctx.beginPath(); ctx.moveTo(cx-8, cy+4); ctx.lineTo(cx+8, cy+4); ctx.stroke();
       drawLabel(`${V.toFixed(1)} V`, cx+22, cy, {align:'left', baseline:'middle', color:c.text, size:12});
+      // Which terminal is which. Without these the only thing identifying the
+      // orange plate as the POSITIVE one, before any charge is drawn, is a
+      // colour in a legend — nothing a first-time reader can decode.
+      drawLabel('+', cx-20, cy-5, {align:'right', baseline:'middle', color:c.plateP, size:13, weight:700});
+      drawLabel('–', cx-20, cy+6, {align:'right', baseline:'middle', color:c.plateN, size:13, weight:700});
     } else {
       // horizontal battery: long plate left (+), short right (−)  -- not used, but keep for completeness
       ctx.strokeStyle = c.batteryHi;
@@ -2491,13 +2516,15 @@ return {
     ctx.strokeStyle = c.border;
     ctx.lineWidth = 1;
     ctx.strokeRect(x0, y0, w, h);
-    // fill
+    // fill — a floor of 2 px so a genuinely small value still reads as a bar
+    // rather than as nothing at all (the series network at low V).
     const frac = maxVal>0 ? Math.min(1, val/maxVal) : 0;
-    const bh = (h-2) * frac;
+    let bh = (h-2) * frac;
+    if(bh>0 && bh<2) bh = 2;
     ctx.fillStyle = color;
     ctx.fillRect(x0+1, y0+h-1-bh, w-2, bh);
     // labels
-    if(labelTop) drawLabel(labelTop, x0+w/2, y0-4, {align:'center', color:c.muted, size:11, weight:600});
+    if(labelTop) drawLabel(labelTop, x0+w/2, y0-4, {align:'center', color:c.muted, size:12, weight:600});
     if(labelBot) drawLabel(labelBot, x0+w/2, y0+h+14, {align:'center', color:c.text, size:12, weight:700});
     ctx.restore();
   }
@@ -2509,11 +2536,14 @@ return {
     ctx.clearRect(0,0,viewW,viewH);
 
     const {Cs, Cp, Qs, Qp, Us, Up} = computeNetworks(state.c1, state.c2, state.V);
+    const hideResults = resultsHidden();
 
     // Layout: split hero into left (series) + right (parallel) columns
     // Reserve top ~55% for the circuit, bottom ~45% for the bars.
-    // Top-left ~40 px reserved for .plot-title, top-right ~80 px for .legend — keep our drawing well clear.
-    const topPad = 56;
+    // Top-left ~40 px reserved for .plot-title, top-right for .legend — the
+    // legend pill reaches y ≈ 73, so the column headings start below that or
+    // they are overprinted at narrow widths.
+    const topPad = 84;
     const bottomPad = 12;
     const colGapPx = Math.max(20, viewW*0.02);
     const colW = (viewW - colGapPx) / 2;
@@ -2524,6 +2554,12 @@ return {
     const gapCB = usableH * 0.04; // gap between circuit and bars
 
     const circuitTop = topPad;
+    // Header band: four label lines per column. The loop is drawn BELOW it —
+    // without a reserved band the top rail is drawn straight through the
+    // heading text at 1024×768.
+    const headerH = 78;
+    const loopTop = circuitTop + headerH;
+    const loopH = circuitH - headerH;
     const circuitBottom = circuitTop + circuitH;
     const barsTop = circuitBottom + gapCB;
     const barsBottom = barsTop + barsH;
@@ -2551,13 +2587,16 @@ return {
     // ================================================================
     // LEFT: SERIES — two capacitors stacked VERTICALLY (plates horizontal), one battery
     // ================================================================
-    const sxL = colW*0.20, sxR = colW*0.80;
+    // The loop's right branch carries the capacitors AND their labels, so it
+    // stops at 0.66 of the column — at 0.80 the "C₁ = … / V₁ = …" labels ran
+    // across the dashed divider into the parallel column at 1024×768.
+    const sxL = colW*0.12, sxR = colW*0.66;
     const scx = (sxL + sxR)/2;
 
     // Vertical layout: battery on left, two capacitors stacked in the loop's right branch
     // Actually: battery at left mid, wire up to top rail, right side has cap1 then cap2 stacked, back to bottom rail.
-    const sTop = circuitTop + circuitH*0.10;
-    const sBot = circuitTop + circuitH*0.90;
+    const sTop = loopTop + loopH*0.06;
+    const sBot = loopTop + loopH*0.94;
     const sLoopL = sxL;
     const sLoopR = sxR;
     const sBatX = sLoopL;
@@ -2609,13 +2648,24 @@ return {
     // Battery
     drawBattery(sBatX, sBatY, state.V, 'v');
 
-    // Capacitors (vertical orientation: plates horizontal)
-    drawCap(seriesX, cap1cy, 'v', seriesPlateLen, gS1, state.fS, `C₁ = ${uF1.toFixed(1)} µF`);
-    drawCap(seriesX, cap2cy, 'v', seriesPlateLen, gS2, state.fS, `C₂ = ${uF2.toFixed(1)} µF`);
+    // Capacitors (vertical orientation: plates horizontal). Labels are drawn
+    // here rather than inside drawCap so each capacitor can also carry the
+    // voltage it actually holds — card 4 claims series SPLITS the voltage, and
+    // without these numbers the student cannot check it.
+    drawCap(seriesX, cap1cy, 'v', seriesPlateLen, gS1, state.fS, null);
+    drawCap(seriesX, cap2cy, 'v', seriesPlateLen, gS2, state.fS, null);
+    const sLabX = seriesX + seriesPlateLen/2 + 10;
+    drawLabel(`C₁ = ${uF1.toFixed(1)} µF`, sLabX, cap1cy - 7, {align:'left', baseline:'middle', size:12, color:c.muted});
+    drawLabel(`V₁ = ${(state.fS*Qs/state.c1).toFixed(2)} V`, sLabX, cap1cy + 9, {align:'left', baseline:'middle', size:12, color:c.series, weight:700});
+    drawLabel(`C₂ = ${uF2.toFixed(1)} µF`, sLabX, cap2cy - 7, {align:'left', baseline:'middle', size:12, color:c.muted});
+    drawLabel(`V₂ = ${(state.fS*Qs/state.c2).toFixed(2)} V`, sLabX, cap2cy + 9, {align:'left', baseline:'middle', size:12, color:c.series, weight:700});
 
-    // Column heading + "same charge" note
-    drawLabel('SERIES', sxL + (sxR-sxL)*0.5, circuitTop + 14, {align:'center', size:13, weight:700, color:c.series});
-    drawLabel('effective gap = d₁ + d₂  (bigger gap ⇒ smaller C)', sxL + (sxR-sxL)*0.5, circuitTop + 32, {align:'center', size:11, color:c.muted});
+    // Column heading band (four lines, inside the reserved header band)
+    const sHeadX = sxL + (sxR-sxL)*0.5;
+    drawLabel('SERIES', sHeadX, circuitTop + 14, {align:'center', size:13, weight:700, color:c.series});
+    drawLabel('effective gap = d₁ + d₂  (bigger gap ⇒ smaller C)', sHeadX, circuitTop + 33, {align:'center', size:12, color:c.muted});
+    drawLabel(`same charge on both:  Q = ${fmtCharge(state.fS*Qs)}`, sHeadX, circuitTop + 52, {align:'center', size:12, color:c.text});
+    if(!hideResults) drawLabel(`Cₛ = ${fmtCap(Cs)}`, sHeadX, circuitTop + 74, {align:'center', size:14, weight:700, color:c.series});
     // brace indicating d1+d2 sum on the left of the caps
     ctx.save();
     ctx.strokeStyle = c.series; ctx.lineWidth=1.5;
@@ -2627,17 +2677,15 @@ return {
     ctx.lineTo(braceX+6, blockTop+totalBlock);
     ctx.stroke();
     ctx.restore();
-    drawLabel('d₁+d₂', braceX-4, blockTop+totalBlock/2, {align:'right', baseline:'middle', size:11, color:c.series});
-    // shared charge note
-    drawLabel('same charge Q on both', seriesX + seriesPlateLen/2 + 12, (cap1cy+cap2cy)/2, {align:'left', baseline:'middle', size:11, color:c.muted});
+    drawLabel('d₁+d₂', braceX-4, blockTop+totalBlock/2, {align:'right', baseline:'middle', size:12, color:c.series});
 
     // ================================================================
     // RIGHT: PARALLEL — two capacitors side by side (plates vertical), one battery
     // ================================================================
-    const pxL = colW + colGapPx + colW*0.16;
-    const pxR = colW + colGapPx + colW*0.84;
-    const pTop = circuitTop + circuitH*0.10;
-    const pBot = circuitTop + circuitH*0.90;
+    const colStartP = colW + colGapPx;
+    const pxL = colStartP + colW*0.12;
+    const pTop = loopTop + loopH*0.06;
+    const pBot = loopTop + loopH*0.94;
     const pBatX = pxL;
     const pBatY = (pTop+pBot)/2;
 
@@ -2647,87 +2695,110 @@ return {
     const p1LenPar = Math.max(30, pxPerUF_area * uF1);
     const p2LenPar = Math.max(30, pxPerUF_area * uF2);
 
-    // Position two caps horizontally in the right branch
-    const branchXL = pxL + 40, branchXR = pxR;
-    // We'll place cap1 at one x, cap2 at another x, with plates at same y
+    // Centre-to-centre separation is derived from the plate widths (and floored
+    // so the two "C₁ = …" labels clear each other): with a fixed fraction of the
+    // column the two sets of plates OVERLAPPED at C₁ = C₂ = 6 µF on a 1024-wide
+    // viewport.
     const capY = (pTop+pBot)/2;
-    const cap1x = branchXL + (branchXR - branchXL)*0.35;
-    const cap2x = branchXL + (branchXR - branchXL)*0.75;
+    const capSep = Math.max((p1LenPar + p2LenPar)/2 + 26, 100);
+    const parCX = colStartP + colW*0.58;
+    const cap1x = parCX - capSep/2;
+    const cap2x = parCX + capSep/2;
 
     // faint background hint that says "effective plate area = A1 + A2"
     ctx.save();
     ctx.fillStyle = c.areaHint;
-    const totalPlateExtent = Math.max(p1LenPar, p2LenPar);
-    ctx.fillRect(cap1x - pGap/2 - 8, capY - totalPlateExtent/2 - 8, (cap2x - cap1x) + pGap + 16, totalPlateExtent + 16);
+    ctx.fillRect(cap1x - p1LenPar/2 - 8, capY - pGap/2 - 8,
+                 (cap2x - cap1x) + (p1LenPar + p2LenPar)/2 + 16, pGap + 16);
     ctx.restore();
 
-    // Wires: battery + → up to top rail → across to node above cap1 → down to top of cap1 (i.e., left plate=+ side)
-    // Both capacitors: their + plate to top rail, − plate to bottom rail.
-    // Draw:
+    // Wires: battery + → top rail → straight DOWN the centre of each capacitor
+    // onto its + plate; − plate → straight down to the bottom rail. (The drops
+    // used to be offset by ±gap/2 horizontally and to stop at ±plateLength/2
+    // vertically — two axes swapped — so the wires cut across the plates
+    // instead of meeting them and the network did not read as connected.)
     drawWire(pBatX, pBatY-16, pBatX, pTop); // battery + up
-    drawWire(pBatX, pTop, cap2x + pGap/2 + 8, pTop); // top rail extends past both
-    // vertical drops to + plates (left plate of each cap)
-    drawWire(cap1x - pGap/2, pTop, cap1x - pGap/2, capY - p1LenPar/2);
-    drawWire(cap2x - pGap/2, pTop, cap2x - pGap/2, capY - p2LenPar/2);
-    // wire returns from − plates (right plate of each) to bottom rail
-    drawWire(cap1x + pGap/2, capY + p1LenPar/2, cap1x + pGap/2, pBot);
-    drawWire(cap2x + pGap/2, capY + p2LenPar/2, cap2x + pGap/2, pBot);
-    drawWire(cap2x + pGap/2 + 8, pBot, pBatX, pBot); // bottom rail
+    drawWire(pBatX, pTop, cap2x, pTop);     // top rail reaches both caps
+    drawWire(cap1x, pTop, cap1x, capY - pGap/2);
+    drawWire(cap2x, pTop, cap2x, capY - pGap/2);
+    drawWire(cap1x, capY + pGap/2, cap1x, pBot);
+    drawWire(cap2x, capY + pGap/2, cap2x, pBot);
+    drawWire(cap2x, pBot, pBatX, pBot);     // bottom rail
     drawWire(pBatX, pBot, pBatX, pBatY+16); // battery − up
-    // Actually let's fix wire logic — trace it precisely:
-    // Redo: erase and re-do the top rail properly to hit both caps
-    // (Already fine as drawn — top rail runs from battery x to past cap2, verticals drop into both.)
 
     // Battery
     drawBattery(pBatX, pBatY, state.V, 'v');
 
-    // Capacitors — but rotate 90° visually so that plates are VERTICAL and + on left (up on top rail) is up->into +plate
-    // We want the '+' plate connected to the TOP rail: so in orient='v', + plate is on TOP. Good.
-    drawCap(cap1x, capY, 'v', p1LenPar, pGap, state.fP, `C₁ = ${uF1.toFixed(1)} µF`);
-    drawCap(cap2x, capY, 'v', p2LenPar, pGap, state.fP, `C₂ = ${uF2.toFixed(1)} µF`);
+    // Capacitors — orient 'v' puts the + plate on TOP, i.e. on the + rail.
+    drawCap(cap1x, capY, 'v', p1LenPar, pGap, state.fP, null);
+    drawCap(cap2x, capY, 'v', p2LenPar, pGap, state.fP, null);
+    // Labels ABOVE each capacitor, with the charge it actually holds — the
+    // "parallel SPLITS the charge" rule is unverifiable without these.
+    // Chipped: these sit directly over the drop wire feeding each + plate.
+    const capChip = css('--surface', '#060E11');
+    drawLabel(`Q₁ = ${fmtCharge(state.fP*state.c1*state.V)}`, cap1x, capY - pGap/2 - 12, {align:'center', size:12, color:c.parallel, weight:700, bg:capChip});
+    drawLabel(`C₁ = ${uF1.toFixed(1)} µF`, cap1x, capY - pGap/2 - 28, {align:'center', size:12, color:c.muted, bg:capChip});
+    drawLabel(`Q₂ = ${fmtCharge(state.fP*state.c2*state.V)}`, cap2x, capY - pGap/2 - 12, {align:'center', size:12, color:c.parallel, weight:700, bg:capChip});
+    drawLabel(`C₂ = ${uF2.toFixed(1)} µF`, cap2x, capY - pGap/2 - 28, {align:'center', size:12, color:c.muted, bg:capChip});
 
-    // Column heading + "same voltage" note
-    drawLabel('PARALLEL', pxL + (pxR-pxL)*0.5, circuitTop + 14, {align:'center', size:13, weight:700, color:c.parallel});
-    drawLabel('effective plate area = A₁ + A₂  (more area ⇒ bigger C)', pxL + (pxR-pxL)*0.5, circuitTop + 32, {align:'center', size:11, color:c.muted});
+    // Column heading band (mirrors the series column)
+    const pHeadX = colStartP + colW*0.5;
+    drawLabel('PARALLEL', pHeadX, circuitTop + 14, {align:'center', size:13, weight:700, color:c.parallel});
+    drawLabel('effective plate area = A₁ + A₂  (more area ⇒ bigger C)', pHeadX, circuitTop + 33, {align:'center', size:12, color:c.muted});
+    drawLabel(`same voltage on both:  V = ${state.V.toFixed(1)} V`, pHeadX, circuitTop + 52, {align:'center', size:12, color:c.text});
+    if(!hideResults) drawLabel(`Cₚ = ${fmtCap(Cp)}`, pHeadX, circuitTop + 74, {align:'center', size:14, weight:700, color:c.parallel});
+
     // brace under both caps indicating A1+A2
     ctx.save();
     ctx.strokeStyle = c.parallel; ctx.lineWidth=1.5;
-    const bY = capY + totalPlateExtent/2 + 14;
+    const bY = capY + pGap/2 + 16;
     ctx.beginPath();
-    ctx.moveTo(cap1x - pGap/2 - 6, bY-4);
-    ctx.lineTo(cap1x - pGap/2 - 6, bY);
-    ctx.lineTo(cap2x + pGap/2 + 6, bY);
-    ctx.lineTo(cap2x + pGap/2 + 6, bY-4);
+    ctx.moveTo(cap1x - p1LenPar/2, bY-4);
+    ctx.lineTo(cap1x - p1LenPar/2, bY);
+    ctx.lineTo(cap2x + p2LenPar/2, bY);
+    ctx.lineTo(cap2x + p2LenPar/2, bY-4);
     ctx.stroke();
     ctx.restore();
-    drawLabel('A₁+A₂', (cap1x+cap2x)/2, bY+14, {align:'center', size:11, color:c.parallel});
-    drawLabel('same voltage V across both', (cap1x+cap2x)/2, capY - totalPlateExtent/2 - 14, {align:'center', size:11, color:c.muted});
+    drawLabel('A₁+A₂', parCX, bY+15, {align:'center', size:12, color:c.parallel});
 
     // ================================================================
     // BOTTOM: shared-scale bars for Q and U
     // ================================================================
-    // We show TWO bars per column: Charge, Energy — on the SAME axes across columns.
-    const Qmax = Math.max(Qs, Qp)*1.15 || 1;
-    const Umax = Math.max(Us, Up)*1.15 || 1;
+    // We show TWO bars per column: Charge, Energy — on ONE fixed scale shared
+    // by both columns AND both bars. The old axis auto-fitted to max(Qs, Qp),
+    // which cancelled V exactly: Q/Qmax = Cs/(1.15·Cp) has no V in it, so the
+    // supply-voltage slider could not move a single pixel of the bars, and the
+    // Q and U bars were always the same height as each other. Full scale is now
+    // the parallel network at the supply's maximum, 24 V — so Q rises linearly
+    // with V and U quadratically, as they should.
+    const Vfull = 24;
+    const Qmax = Cp * Vfull;
+    const Umax = 0.5 * Cp * Vfull * Vfull;
 
     const barW = Math.min(70, colW*0.16);
-    const twoBarGap = Math.max(28, colW*0.06);
+    // Centre-to-centre must clear the two bar titles: at 1024 the old 28 px gap
+    // printed "Q (charge drawn)" straight through "U (energy stored)".
+    const twoBarGap = Math.max(36, colW*0.06);
     const barsY0 = barsTop + 22; // leave room for labels above
     const barsH2 = barsBottom - barsY0 - 22; // and below
 
+    // Bars track the CHARGING, like the plates do — drawn at their final value
+    // they stood full-height above visibly empty capacitors.
+    const QsNow = Qs*state.fS, UsNow = Us*state.fS, QpNow = Qp*state.fP, UpNow = Up*state.fP;
+
     // Series column bars
     const sBarsCX = sxL + (sxR-sxL)*0.5;
-    drawBars(sBarsCX - barW - twoBarGap/2, barsY0, barW, barsH2, Qs, Qmax, c.series, 'Q (charge drawn)', fmtCharge(Qs));
-    drawBars(sBarsCX + twoBarGap/2, barsY0, barW, barsH2, Us, Umax, c.series, 'U (energy stored)', fmtEnergy(Us));
+    drawBars(sBarsCX - barW - twoBarGap/2, barsY0, barW, barsH2, QsNow, Qmax, c.series, 'Q — charge', fmtCharge(QsNow));
+    drawBars(sBarsCX + twoBarGap/2, barsY0, barW, barsH2, UsNow, Umax, c.series, 'U — energy', fmtEnergy(UsNow));
 
     // Parallel column bars
-    const pBarsCX = pxL + (pxR-pxL)*0.5;
-    drawBars(pBarsCX - barW - twoBarGap/2, barsY0, barW, barsH2, Qp, Qmax, c.parallel, 'Q (charge drawn)', fmtCharge(Qp));
-    drawBars(pBarsCX + twoBarGap/2, barsY0, barW, barsH2, Up, Umax, c.parallel, 'U (energy stored)', fmtEnergy(Up));
+    const pBarsCX = colStartP + colW*0.5;
+    drawBars(pBarsCX - barW - twoBarGap/2, barsY0, barW, barsH2, QpNow, Qmax, c.parallel, 'Q — charge', fmtCharge(QpNow));
+    drawBars(pBarsCX + twoBarGap/2, barsY0, barW, barsH2, UpNow, Umax, c.parallel, 'U — energy', fmtEnergy(UpNow));
 
-    // Effective-C badges under column titles
-    drawLabel(`Cₛ = ${fmtCap(Cs)}`, sBarsCX, barsY0 - 6, {align:'center', size:12, color:c.series, weight:700});
-    drawLabel(`C_p = ${fmtCap(Cp)}`, pBarsCX, barsY0 - 6, {align:'center', size:12, color:c.parallel, weight:700});
+    // What "full height" means — an unlabelled axis is not a scale.
+    drawLabel('all four bars share one scale — full height = the parallel network at 24 V',
+              viewW/2, viewH - 4, {align:'center', size:12, color:c.muted, weight:600});
 
     // Dividing line between columns (subtle)
     ctx.save();
@@ -2743,15 +2814,18 @@ return {
   // -------- readouts --------------------------------------------------
   function updateReadouts(){
     const {Cs, Cp} = computeNetworks(state.c1, state.c2, state.V);
+    const hide = resultsHidden();
     document.getElementById('c1-val').textContent = (state.c1*1e6).toFixed(1)+' µF';
     document.getElementById('c2-val').textContent = (state.c2*1e6).toFixed(1)+' µF';
     document.getElementById('v-val').textContent = state.V.toFixed(1)+' V';
-    document.getElementById('cs-val').textContent = fmtCap(Cs);
-    document.getElementById('cp-val').textContent = fmtCap(Cp);
+    document.getElementById('cs-val').textContent = hide ? '— µF' : fmtCap(Cs);
+    document.getElementById('cp-val').textContent = hide ? '— µF' : fmtCap(Cp);
     const smaller = Math.min(state.c1, state.c2);
     const note = document.getElementById('cap-note');
     if(note){
-      note.innerHTML = `Series ${fmtCap(Cs)} &lt; smaller cap ${fmtCap(smaller)}. Parallel ${fmtCap(Cp)} = ${fmtCap(state.c1)} + ${fmtCap(state.c2)}.`;
+      note.innerHTML = hide
+        ? 'Answer the prediction on card 1 to reveal the two effective capacitances.'
+        : `Series ${fmtCap(Cs)} &lt; smaller cap ${fmtCap(smaller)}. Parallel ${fmtCap(Cp)} = ${fmtCap(state.c1)} + ${fmtCap(state.c2)}.`;
     }
   }
 
@@ -2759,9 +2833,21 @@ return {
   const c1El = document.getElementById('c1');
   const c2El = document.getElementById('c2');
   const vEl  = document.getElementById('vs');
-  c1El.addEventListener('input', ()=>{ state.c1 = parseFloat(c1El.value)*1e-6; updateReadouts(); });
-  c2El.addEventListener('input', ()=>{ state.c2 = parseFloat(c2El.value)*1e-6; updateReadouts(); });
-  vEl .addEventListener('input', ()=>{ state.V  = parseFloat(vEl.value);        updateReadouts(); });
+  // draw() on every input: the sim BOOTS PAUSED (card 1 is a prediction), and
+  // without a repaint here the canvas keeps showing the previous capacitors
+  // while the sidebar already reports the new C_s / C_p — the drawing and the
+  // numbers contradict each other until the student presses Play.
+  c1El.addEventListener('input', ()=>{ state.c1 = parseFloat(c1El.value)*1e-6; updateReadouts(); draw(); });
+  c2El.addEventListener('input', ()=>{ state.c2 = parseFloat(c2El.value)*1e-6; updateReadouts(); draw(); });
+  vEl .addEventListener('input', ()=>{ state.V  = parseFloat(vEl.value);        updateReadouts(); draw(); });
+
+  // Committing the card-1 prediction unhides the effective-capacitance readouts
+  // (see resultsHidden) — the shell's declarative handler does not repaint.
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.closest && e.target.closest('#inq-cards .choice')){
+      setTimeout(()=>{ updateReadouts(); draw(); }, 0);
+    }
+  });
 
   // -------- shell callbacks -----------------------------------------
   function onFrame(dt){
@@ -2794,7 +2880,9 @@ return {
     draw();
   }
   function onStep(i){
-    // deterministic scene per step — we don't gate the sim, so nothing here
+    // deterministic scene per step; updateReadouts re-applies the card-1
+    // predict-gate staging (see resultsHidden) to the sidebar as well.
+    updateReadouts();
     draw();
   }
 
@@ -2875,6 +2963,7 @@ return {
     .replace(/Q = CV/g,'Q equals C V')
     .replace(/C_parallel/g,'C parallel').replace(/C_series/g,'C series')
     .replace(/C_s/g,'C series').replace(/C_p/g,'C parallel')
+    .replace(/Cₛ/g,'C series').replace(/Cₚ/g,'C parallel')
     .replace(/C₁/g,'C one').replace(/C₂/g,'C two')
     .replace(/µF/g,'microfarads')
     .replace(/₀/g,' zero').replace(/₁/g,' one').replace(/₂/g,' two')
@@ -3084,7 +3173,7 @@ return {
     { sel:'#box-c1',         mode:'hide', title:'Capacitor C₁',      text:'Sets the first capacitance.' },
     { sel:'#box-c2',         mode:'hide', title:'Capacitor C₂',      text:'Sets the second capacitance.' },
     { sel:'#box-V',          mode:'hide', title:'Supply voltage V',  text:'Sets the battery voltage on both networks.' },
-    { sel:'#panel-ceff',     mode:'hide', title:'Effective C',       text:'Live series C_s and parallel C_p.' },
+    { sel:'#panel-ceff',     mode:'hide', title:'Effective C',       text:'Live series Cₛ and parallel Cₚ.' },
     { sel:'#pb-scene',       mode:'hide', title:'The two networks',  text:'Series on the left, parallel on the right.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
@@ -3374,7 +3463,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

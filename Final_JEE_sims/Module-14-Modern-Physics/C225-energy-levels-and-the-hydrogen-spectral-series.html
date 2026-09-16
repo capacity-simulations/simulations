@@ -237,8 +237,10 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .eq-row .eq-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:6px;}
 .formal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 @media(max-width:900px){.formal-grid{grid-template-columns:1fr;}}
-.line-list{max-height:140px;overflow-y:auto;font-size:12px;font-family:var(--font-nums);}
-.line-list .line-item{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);}
+.line-list{max-height:150px;overflow-y:auto;font-size:13px;font-family:var(--font-nums);}
+.line-list .line-item{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:3px 0;border-bottom:1px dashed var(--border);}
+.line-list .line-item>span:first-child{flex:0 0 auto;white-space:nowrap;}
+.line-list .line-item>span:last-child{text-align:right;}
 .line-list .line-item:last-child{border-bottom:none;}
 .line-list .line-swatch{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:middle;border:1px solid rgba(255,255,255,.2);}
 
@@ -1204,7 +1206,7 @@ Object.freeze(Engine);
       <div class="shell-panel" id="panel-lines">
         <div class="shell-panel-head"><h3>Lines drawn</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
-          <div id="lineList" class="line-list"><div style="color:var(--text-muted);font-size:12px;">No lines yet — pick n<sub>i</sub> and n<sub>f</sub>.</div></div>
+          <div id="lineList" class="line-list"><div style="color:var(--text-muted);font-size:13px;">No lines yet — pick n<sub>i</sub> and n<sub>f</sub>.</div></div>
         </div>
       </div>
     </div>
@@ -2032,6 +2034,57 @@ function wavelengthToRGB(wl){
   return `rgb(${r},${g},${b})`;
 }
 
+// Out-of-visible jumps have no true colour to show, and the "physical" dim
+// UV/IR tints above landed at ~1.4:1 contrast on the dark ladder and inside the
+// dark UV/IR bands — the Lyman and Paschen lines that cards 4 and 5 are built
+// on were effectively unreadable. Draw them in a muted, deliberately
+// non-spectral ink instead (violet family = UV, warm family = IR), picked for
+// the background it lands on. "Your eye cannot see this one" is carried by the
+// band label, the dashed stroke and the "(invisible)" tag in the list — not by
+// making the line itself invisible.
+function invisibleInk(wl, onDarkBg){
+  const uv = wl < VIS_MIN;
+  if(onDarkBg) return uv ? '#a99fd0' : '#d5a096';
+  return uv ? '#4c3a7a' : '#8a4a3c';
+}
+function isInvisibleWl(wl){ return wl < VIS_MIN || wl > VIS_MAX; }
+
+// Spectral colours near either end of the visible range are genuinely dark or
+// genuinely bright: 434 nm comes out rgb(41,0,255), which is 2.2:1 against the
+// dark ladder, and 486 nm comes out cyan, which is 1.4:1 against the light one.
+// The two bluest Balmer arrows — the ones the crowding lesson turns on — were
+// therefore nearly as hard to see as the UV ones. Lift (or deepen) the ink
+// toward the far end of the current theme until it clears the 3:1 floor for
+// non-text marks. Hue is preserved, so red still reads red.
+function relLum(r, g, b){
+  const f = v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v + 0.055)/1.055, 2.4); };
+  return 0.2126*f(r) + 0.7152*f(g) + 0.0722*f(b);
+}
+function ensureContrast(rgb, onDarkBg){
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
+  if(!m) return rgb;
+  let r = +m[1], g = +m[2], b = +m[3];
+  const bgL = onDarkBg ? relLum(11,20,24) : relLum(248,250,252);
+  const target = onDarkBg ? 255 : 0;
+  for(let i = 0; i < 14; i++){
+    const L = relLum(r,g,b);
+    if((Math.max(L,bgL) + 0.05) / (Math.min(L,bgL) + 0.05) >= 3) break;
+    r = Math.round(r + (target - r) * 0.18);
+    g = Math.round(g + (target - g) * 0.18);
+    b = Math.round(b + (target - b) * 0.18);
+  }
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+// Ink for a jump drawn on the LADDER, whose background follows the theme.
+function ladderInk(wl){
+  return isInvisibleWl(wl) ? invisibleInk(wl, !isLight())
+                           : ensureContrast(wavelengthToRGB(wl), !isLight());
+}
+// The spectrum strip stays dark in BOTH themes, so text/marks inside it need a
+// light ink regardless of theme.
+const STRIP_INK = 'rgba(226,232,240,0.92)';
+const SERIES_NAME = { 1:'Lyman', 2:'Balmer', 3:'Paschen', 4:'Brackett', 5:'Pfund' };
+
 // ---- Physics via engine ----
 function levelEnergy(n){
   return Engine.qstate.hydrogenLevel(n).energyElectronVolts;
@@ -2052,6 +2105,9 @@ function wlToX(wl, W, padL, padR){
   const t = (Math.log10(wl) - lo) / (hi - lo);
   return padL + t * (W - padL - padR);
 }
+// Short-wavelength edge of a series: n_i -> infinity, so the photon carries the
+// whole binding energy of level n_f. 1e5 is already converged to <1e-9 nm.
+function seriesLimitNm(nf){ return transition(100000, nf).wavelength; }
 
 // ---- Draw ladder ----
 function drawLadder(){
@@ -2086,7 +2142,7 @@ function drawLadder(){
   lctx.stroke();
   lctx.setLineDash([]);
   lctx.fillStyle = mutedCol;
-  lctx.font = '11px ' + FONT_SANS;
+  lctx.font = '12px ' + FONT_SANS;
   lctx.textAlign = 'right';
   lctx.fillText('E = 0  (ionisation)', w - padR, drawTop - 6);
   lctx.textAlign = 'left';
@@ -2094,27 +2150,51 @@ function drawLadder(){
   // Draw levels
   const levelY = [];
   levelY[0] = null;
+  for(let n = 1; n <= NMAX; n++) levelY[n] = eToY(levelEnergy(n));
+
+  // The whole point of the ladder is that the top rungs crowd — by n = 5 the
+  // gaps are 5-8 px, well under the text height, so the "n=" and "eV" labels
+  // used to overprint into an unreadable smear. Anchor the top label and push
+  // each one below it just far enough DOWN (into the empty n=2..n=1 gap) to
+  // clear it, with a leader back to its own rung. The rungs themselves stay
+  // exactly on their energies — only the text moves.
+  const LAB_GAP = 14;
+  const labY = [];
+  for(let n = NMAX; n >= 1; n--){
+    labY[n] = (n === NMAX) ? levelY[n] : Math.max(levelY[n], labY[n + 1] + LAB_GAP);
+  }
+  const lineR = w - padR - 66;
+
   for(let n = 1; n <= NMAX; n++){
     const E = levelEnergy(n);
-    const y = eToY(E);
-    levelY[n] = y;
+    const y = levelY[n], ly = labY[n];
+    const sel = (n === state.ni || n === state.nf);
     // level line
-    lctx.strokeStyle = (n === state.ni || n === state.nf) ? accent : textCol;
-    lctx.lineWidth = (n === state.ni || n === state.nf) ? 2.2 : 1.4;
+    lctx.strokeStyle = sel ? accent : textCol;
+    lctx.lineWidth = sel ? 2.2 : 1.4;
     lctx.beginPath();
     lctx.moveTo(padL, y);
-    lctx.lineTo(w - padR - 60, y);
+    lctx.lineTo(lineR, y);
     lctx.stroke();
+    // leaders, only where the label had to be displaced
+    if(ly - y > 1){
+      lctx.strokeStyle = mutedCol;
+      lctx.lineWidth = 0.8;
+      lctx.beginPath();
+      lctx.moveTo(padL - 4, y);  lctx.lineTo(padL - 11, ly - 3);
+      lctx.moveTo(lineR + 1, y); lctx.lineTo(lineR + 7, ly - 3);
+      lctx.stroke();
+    }
     // label left
     lctx.fillStyle = textCol;
     lctx.font = '12px ' + FONT_NUMS;
     lctx.textAlign = 'right';
-    lctx.fillText('n=' + n, padL - 8, y + 4);
+    lctx.fillText('n=' + n, padL - 13, ly + 4);
     // energy right
     lctx.fillStyle = mutedCol;
-    lctx.font = '11px ' + FONT_NUMS;
+    lctx.font = '12px ' + FONT_NUMS;
     lctx.textAlign = 'left';
-    lctx.fillText(E.toFixed(2) + ' eV', w - padR - 55, y + 4);
+    lctx.fillText(E.toFixed(2) + ' eV', lineR + 9, ly + 4);
   }
 
   // Y-axis label
@@ -2122,28 +2202,27 @@ function drawLadder(){
   lctx.translate(16, (drawTop + drawBot)/2);
   lctx.rotate(-Math.PI/2);
   lctx.fillStyle = mutedCol;
-  lctx.font = '11px ' + FONT_SANS;
+  lctx.font = '12px ' + FONT_SANS;
   lctx.textAlign = 'center';
   lctx.fillText('Energy (eV)', 0, 0);
   lctx.restore();
 
   // Draw all persisted arrows in muted colour
   for(const line of state.lines){
-    drawArrow(line.ni, line.nf, levelY, padL, w - padR - 60, line.color, 1.4, 0.55);
+    drawArrow(line.ni, line.nf, levelY, padL, lineR, ladderInk(line.wl_nm), 1.4, 0.7);
   }
 
   // Draw current selection arrow, brighter
   if(state.ni !== state.nf && state.ni >= 1 && state.nf >= 1){
     const t = transition(state.ni, state.nf);
     if(t){
-      const color = wavelengthToRGB(t.wavelength);
-      drawArrow(state.ni, state.nf, levelY, padL, w - padR - 60, color, 3.0, 1.0);
+      drawArrow(state.ni, state.nf, levelY, padL, lineR, ladderInk(t.wavelength), 3.0, 1.0);
     }
   }
 
   // Bottom hint
   lctx.fillStyle = mutedCol;
-  lctx.font = '11px ' + FONT_SANS;
+  lctx.font = '12px ' + FONT_SANS;
   lctx.textAlign = 'left';
   const hint = 'Levels crowd toward E = 0 as −13.6/n² eV';
   lctx.fillText(hint, padL, h - 14);
@@ -2181,7 +2260,7 @@ function drawArrow(ni, nf, levelY, xL, xR, color, lw, alpha){
   // Small "emit" / "absorb" tag at midpoint (only for the bright active arrow)
   if(alpha > 0.9){
     const midY = (yStart + yEnd)/2;
-    lctx.font = '11px ' + FONT_SANS;
+    lctx.font = '12px ' + FONT_SANS;
     lctx.textAlign = 'left';
     lctx.fillStyle = color;
     const tag = emission ? 'emit' : 'absorb';
@@ -2205,7 +2284,10 @@ function drawSpectrum(){
   const padL = 46;
   const padR = 24;
 
-  const stripTop = padTop + 20;
+  // 38, not 20: the "nᵢ→n_f" tags stack upward when lines crowd, and at 20 the
+  // second row already ran into the plot-title and the third was clipped off
+  // the top of the canvas. This gives three usable label rows above the strip.
+  const stripTop = padTop + 38;
   const stripBot = h - padBot;
   const stripH = stripBot - stripTop;
 
@@ -2242,40 +2324,7 @@ function drawSpectrum(){
   sctx.lineWidth = 1;
   sctx.strokeRect(xUVstart, stripTop, xIRend - xUVstart, stripH);
 
-  // Band labels
-  sctx.fillStyle = mutedCol;
-  sctx.font = '11px ' + FONT_SANS;
-  sctx.textAlign = 'center';
-  if(xUVend - xUVstart > 40){
-    sctx.fillText('ultraviolet (invisible)', (xUVstart+xUVend)/2, stripTop - 6);
-  }
-  sctx.fillText('visible', (xVISstart+xVISend)/2, stripTop - 6);
-  if(xIRend - xIRstart > 40){
-    sctx.fillText('infrared (invisible)', (xIRstart+xIRend)/2, stripTop - 6);
-  }
-
-  // Wavelength ticks (log scale): 100, 200, 400, 700, 1000, 2000
-  const ticks = [100, 150, 200, 300, 400, 500, 700, 1000, 1500, 2000];
-  sctx.strokeStyle = mutedCol;
-  sctx.fillStyle = mutedCol;
-  sctx.font = '11px ' + FONT_NUMS;
-  sctx.textAlign = 'center';
-  for(const t of ticks){
-    if(t < WL_MIN || t > WL_MAX) continue;
-    const x = wlToX(t, w, padL, padR);
-    sctx.beginPath();
-    sctx.moveTo(x, stripBot);
-    sctx.lineTo(x, stripBot + 5);
-    sctx.stroke();
-    sctx.fillText(t + ' nm', x, stripBot + 18);
-  }
-  sctx.textAlign = 'center';
-  sctx.fillStyle = mutedCol;
-  sctx.font = '11px ' + FONT_SANS;
-  sctx.fillText('wavelength (nm, log scale)', (padL + w - padR)/2, h - 14);
-
-  // Draw persisted lines
-  // Track label rectangles to avoid overlap
+  // Track label rectangles to avoid overlap (band labels claim theirs first)
   const labelRects = [];
   const bottomRects = [];   // wavelength texts under the strip: skip on collision
   function labelCollides(x, y, w2, h2){
@@ -2285,6 +2334,48 @@ function drawSpectrum(){
     return false;
   }
 
+  // Band labels
+  sctx.fillStyle = mutedCol;
+  sctx.font = '12px ' + FONT_SANS;
+  sctx.textAlign = 'center';
+  function bandLabel(text, cx){
+    sctx.fillText(text, cx, stripTop - 8);
+    const bw = sctx.measureText(text).width;
+    labelRects.push({ x: cx - bw/2 - 3, y: stripTop - 20, w: bw + 6, h: 15 });
+  }
+  if(xUVend - xUVstart > 40) bandLabel('ultraviolet (invisible)', (xUVstart+xUVend)/2);
+  bandLabel('visible', (xVISstart+xVISend)/2);
+  if(xIRend - xIRstart > 40) bandLabel('infrared (invisible)', (xIRstart+xIRend)/2);
+
+  // Wavelength ticks (log scale). On a narrow canvas these labels collided —
+  // 9 of the 10 overlapped at 1024x768 — so the tick mark is always drawn but a
+  // label that would overprint the previous one is dropped.
+  const ticks = [100, 150, 200, 300, 400, 500, 700, 1000, 1500, 2000];
+  sctx.strokeStyle = mutedCol;
+  sctx.fillStyle = mutedCol;
+  sctx.font = '12px ' + FONT_NUMS;
+  sctx.textAlign = 'center';
+  let lastTickR = -1e9;
+  for(const t of ticks){
+    if(t < WL_MIN || t > WL_MAX) continue;
+    const x = wlToX(t, w, padL, padR);
+    sctx.beginPath();
+    sctx.moveTo(x, stripBot);
+    sctx.lineTo(x, stripBot + 5);
+    sctx.stroke();
+    const tickText = t + ' nm';
+    const half = sctx.measureText(tickText).width / 2 + 5;
+    if(x - half < lastTickR) continue;
+    sctx.fillText(tickText, x, stripBot + 18);
+    lastTickR = x + half;
+  }
+  sctx.textAlign = 'center';
+  sctx.fillStyle = mutedCol;
+  sctx.font = '12px ' + FONT_SANS;
+  sctx.fillText('wavelength (nm, log scale)', (padL + w - padR)/2, h - 14);
+
+  // Draw persisted lines
+
   // Sort so labels stack nicely: shortest wavelength first
   const sorted = state.lines.slice().sort((a,b)=>a.wl_nm - b.wl_nm);
 
@@ -2292,10 +2383,14 @@ function drawSpectrum(){
     const wl = line.wl_nm;
     if(wl < WL_MIN || wl > WL_MAX) continue;
     const x = wlToX(wl, w, padL, padR);
-    // Line colour — for visible band, use vivid; for UV/IR, use its dimmer wavelength colour but outline
+    // Visible lines: white casing + vivid core. UV/IR: a legible non-spectral
+    // ink (the bands are dark in both themes) plus a DASHED stroke, so
+    // "invisible to the eye" is carried by a second channel and not by colour
+    // alone — and so the Lyman/Paschen lines can actually be seen at all.
     const isVisible = wl >= VIS_MIN && wl <= VIS_MAX;
-    sctx.strokeStyle = isVisible ? 'white' : line.color;
-    sctx.lineWidth = isVisible ? 2 : 2;
+    sctx.setLineDash(isVisible ? [] : [6,4]);
+    sctx.strokeStyle = isVisible ? 'white' : invisibleInk(wl, true);
+    sctx.lineWidth = 2;
     sctx.beginPath();
     sctx.moveTo(x, stripTop);
     sctx.lineTo(x, stripBot);
@@ -2309,21 +2404,26 @@ function drawSpectrum(){
       sctx.lineTo(x, stripBot);
       sctx.stroke();
     }
+    sctx.setLineDash([]);
 
-    // Label "ni→nf" above the strip (kept clear of the band labels at stripTop-6)
+    // Label "ni→nf" above the strip (kept clear of the band labels)
     const labelText = line.ni + '→' + line.nf;
-    sctx.font = 'bold 11px ' + FONT_NUMS;
+    sctx.font = 'bold 12px ' + FONT_NUMS;
     const tw = sctx.measureText(labelText).width;
     let lx = x - tw/2;
-    let ly = stripTop - 28;
+    let ly = stripTop - 34;
     // Clamp to canvas
     lx = Math.max(4, Math.min(w - tw - 4, lx));
-    // Avoid overlap with band labels: nudge upward if collides
+    // Nudge upward on collision, but only within the three rows that clear the
+    // plot title — a fourth row used to be drawn clipped off the canvas top.
+    // If it still will not fit, drop the tag: the exact jump stays in the
+    // "Lines drawn" list rather than being printed where it cannot be read.
     let tries = 0;
-    while(labelCollides(lx, ly, tw, 14) && tries < 5){
+    while(labelCollides(lx, ly, tw, 14) && tries < 2){
       ly -= 14;
       tries++;
     }
+    if(labelCollides(lx, ly, tw, 14)) continue;
     // Draw label background
     sctx.fillStyle = isLight() ? 'rgba(248,250,252,0.85)' : 'rgba(6,14,17,0.85)';
     sctx.fillRect(lx - 3, ly - 2, tw + 6, 14);
@@ -2335,7 +2435,7 @@ function drawSpectrum(){
     // Wavelength below strip — skip if it would overprint a neighbour
     // (crowded Balmer-limit lines; exact values stay in the Lines drawn list)
     const wlText = wl.toFixed(1) + ' nm';
-    sctx.font = '11px ' + FONT_NUMS;
+    sctx.font = '12px ' + FONT_NUMS;
     const ww2 = sctx.measureText(wlText).width;
     let wx = x - ww2/2;
     wx = Math.max(4, Math.min(w - ww2 - 4, wx));
@@ -2348,6 +2448,61 @@ function drawSpectrum(){
       sctx.fillText(wlText, wx, stripBot + 32);
       bottomRects.push({ x: wx - 4, w: ww2 + 8 });
     }
+  }
+
+  // Series limit: card 3 claims the Balmer lines crowd "toward a limit near
+  // 365 nm", and nothing on screen showed where that limit is. Draw it for any
+  // series with two or more lines committed — two lines is also the point at
+  // which the crowding first means anything, so it never appears during the
+  // card-2 gate, which has a single line on the board.
+  const perSeries = {};
+  for(const l of state.lines){ const k = Math.min(l.ni, l.nf); perSeries[k] = (perSeries[k] || 0) + 1; }
+  for(const key of Object.keys(perSeries)){
+    if(perSeries[key] < 2) continue;
+    const nf = +key;
+    const limWl = seriesLimitNm(nf);
+    if(limWl < WL_MIN || limWl > WL_MAX) continue;
+    const xl = wlToX(limWl, w, padL, padR);
+    sctx.strokeStyle = STRIP_INK;
+    sctx.setLineDash([2,4]);
+    sctx.lineWidth = 1;
+    sctx.beginPath();
+    sctx.moveTo(xl, stripTop);
+    sctx.lineTo(xl, stripBot);
+    sctx.stroke();
+    sctx.setLineDash([]);
+    sctx.fillStyle = STRIP_INK;
+    sctx.textAlign = 'right';
+    const limTitle = (SERIES_NAME[nf] || ('n_f = ' + nf)) + ' series limit';
+    const limSub = limWl.toFixed(0) + ' nm  (nᵢ → ∞)';
+    sctx.font = '12px ' + FONT_SANS;
+    const limW = sctx.measureText(limTitle).width;
+    sctx.font = '12px ' + FONT_NUMS;
+    // STRIP_INK only reads against the dark strip, so keep the whole label
+    // inside it rather than letting it spill onto the themed canvas at
+    // narrow widths.
+    const limX = Math.max(xUVstart + 6 + Math.max(limW, sctx.measureText(limSub).width), xl - 5);
+    sctx.fillText(limSub, limX, stripBot - 6);
+    sctx.font = '12px ' + FONT_SANS;
+    sctx.fillText(limTitle, limX, stripBot - 20);
+  }
+
+  // Jumps longer than WL_MAX (5->4 at 4050 nm, 6->5 at 7456 nm, ...) have no
+  // place on this axis. They used to be dropped in silence while the readout
+  // still claimed "4050.08 nm" — name them at the edge instead of clamping a
+  // marker to a wavelength they do not have.
+  const offAxis = state.lines.filter(l => l.wl_nm > WL_MAX || l.wl_nm < WL_MIN)
+                             .sort((a,b) => a.wl_nm - b.wl_nm);
+  if(offAxis.length){
+    sctx.font = '12px ' + FONT_SANS;
+    sctx.textAlign = 'right';
+    sctx.fillStyle = STRIP_INK;
+    let oy = stripTop + 18;
+    for(const l of offAxis.slice(0,4)){
+      sctx.fillText('off this axis ▸  ' + l.ni + '→' + l.nf + '   ' + l.wl_nm.toFixed(0) + ' nm', xIRend - 8, oy);
+      oy += 16;
+    }
+    if(offAxis.length > 4) sctx.fillText('+' + (offAxis.length - 4) + ' more', xIRend - 8, oy);
   }
 
   // Highlight the current (not-yet-committed) transition with a dashed marker
@@ -2363,6 +2518,14 @@ function drawSpectrum(){
       sctx.lineTo(x, stripBot + 4);
       sctx.stroke();
       sctx.setLineDash([]);
+    } else if(t){
+      // The pair you have picked is off this axis — say where it went.
+      const right = t.wavelength > WL_MAX;
+      sctx.fillStyle = cssVar('--accent') || '#3b9b8f';
+      sctx.font = 'bold 12px ' + FONT_SANS;
+      sctx.textAlign = right ? 'right' : 'left';
+      sctx.fillText(state.ni + '→' + state.nf + ' lands at ' + t.wavelength.toFixed(0) + ' nm — beyond this axis',
+                    right ? xIRend - 8 : xUVstart + 8, stripBot - 40);
     }
   }
 }
@@ -2381,7 +2544,10 @@ function updateReadouts(){
   } else {
     const t = transition(state.ni, state.nf);
     eEl.textContent = t.photonEnergyElectronVolts.toFixed(3) + ' eV';
-    wlEl.textContent = t.wavelength.toFixed(2) + ' nm';
+    // 1 dp, matching the list and the canvas: this is the infinite-nuclear-mass
+    // Bohr result, which is ~0.2 nm from the measured line, so a second decimal
+    // would claim precision the model does not have.
+    wlEl.textContent = t.wavelength.toFixed(1) + ' nm';
     sEl.textContent = t.seriesName;
     dEl.textContent = t.emission ? 'emit ↓' : 'absorb ↑';
   }
@@ -2389,12 +2555,15 @@ function updateReadouts(){
   // Line list
   const list = document.getElementById('lineList');
   if(state.lines.length === 0){
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">No lines yet — pick n<sub>i</sub> and n<sub>f</sub>.</div>';
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No lines yet — pick n<sub>i</sub> and n<sub>f</sub>.</div>';
   } else {
     const sorted = state.lines.slice().sort((a,b)=>a.wl_nm - b.wl_nm);
     list.innerHTML = sorted.map(l => {
-      const invis = (l.wl_nm < 380 || l.wl_nm > 780) ? ' <span style="color:var(--warn);">(invisible)</span>' : '';
-      return `<div class="line-item"><span><span class="line-swatch" style="background:${l.color};"></span>${l.ni}→${l.nf}</span><span>${l.wl_nm.toFixed(1)} nm · ${l.series}${invis}</span></div>`;
+      // The swatch must match the line actually drawn on the strip, which uses
+      // the legible non-spectral ink for UV/IR rather than the true dim tint.
+      const swatch = isInvisibleWl(l.wl_nm) ? invisibleInk(l.wl_nm, true) : l.color;
+      const invis = isInvisibleWl(l.wl_nm) ? ' <span style="color:var(--warn);">(invisible)</span>' : '';
+      return `<div class="line-item"><span><span class="line-swatch" style="background:${swatch};"></span>${l.ni}→${l.nf}</span><span>${l.wl_nm.toFixed(1)} nm · ${l.series}${invis}</span></div>`;
     }).join('');
   }
 }
@@ -2544,7 +2713,11 @@ function renderMath(){
   if(typeof katex === 'undefined'){ setTimeout(renderMath, 50); return; }
   try{
     katex.render(String.raw`E_n = -\frac{13.6\,\text{eV}}{n^{2}}`, document.getElementById('eq1'), {throwOnError:false});
-    katex.render(String.raw`\frac{1}{\lambda} = R\!\left(\frac{1}{n_f^{2}} - \frac{1}{n_i^{2}}\right)`, document.getElementById('eq2'), {throwOnError:false});
+    // Absolute value, not a bare difference: n_i < n_f is a legal pick here
+    // (absorption), and the unsigned form is what the sim computes (|ΔE|) — the
+    // gap is the same whichever way the electron goes. R is named and valued so
+    // the symbol is not left bare.
+    katex.render(String.raw`\frac{1}{\lambda} = R\left|\frac{1}{n_f^{2}} - \frac{1}{n_i^{2}}\right| \qquad R = 1.097\times10^{7}\,\text{m}^{-1}`, document.getElementById('eq2'), {throwOnError:false});
     katex.render(String.raw`E_\gamma = \frac{hc}{\lambda} \;\;\;\; hc \approx 1240\,\text{eV·nm}`, document.getElementById('eq3'), {throwOnError:false});
   }catch(e){ /* swallow */ }
 }
@@ -3087,7 +3260,7 @@ Shell.init({
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

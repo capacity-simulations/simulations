@@ -92,8 +92,11 @@ only, no behaviour change. Group tightly-coupled controls with `also`
 and glow together.
 
 ### 2. Insert the three blocks (reference §1–3)
-CSS before `</style>`; the button beside the sim's existing top-bar action
-buttons (left of Reset/Play); the controller `<script>` before `</body>` —
+CSS before `</style>`; the button pair in the top bar's LEFT cluster,
+immediately AFTER the theme toggle (order: title/info → theme → Guided
+Inquiry → Controls Guide … Reset/Play stay right-anchored — the JEE fleet
+reference; never glue the pair to Reset with margin-left:auto); the
+controller `<script>` before `</body>` —
 INCLUDING its `<script>` wrapper. ADAPT only the `steps` array (selectors,
 mode, `also`, title, text) and the Reset selector.
 

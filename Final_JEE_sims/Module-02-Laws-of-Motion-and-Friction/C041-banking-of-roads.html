@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Banked Turn — One Speed the Road Was Built For</title>
+<!-- THEME-PROBE-OPT-OUT: deliberate dark tarmac stage (49 hardcoded colours, no light palette; a body-first read renders it unreadable); canvas ink 5.76-14.24:1, DOM title/legend pinned light 1.88/1.09 -> 13.11/15.79:1 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
@@ -112,12 +113,17 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-box{flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;
   position:relative;overflow:hidden;display:flex;box-shadow:0 1px 3px rgba(0,0,0,.18);}
 .plot-box canvas{display:block;width:100%;height:100%;}
-.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
+/* The scene canvas is a NIGHT ROAD in BOTH themes — the tarmac, the sky wash
+   and every arrow, chip and label on it are painted light-on-dark. Its DOM
+   overlays therefore keep LIGHT ink in both themes: inheriting var(--muted) /
+   var(--text) turned this title and legend dark-on-dark and unreadable the
+   moment the light theme was switched on. */
+.plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:#cbd5e1;
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
-.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
+.plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:#e2e8f0;text-transform:none;margin-left:6px;}
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
-  border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+  font-size:11px;font-weight:600;color:#e2e8f0;z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
+  border:1px solid rgba(148,163,184,.28);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
 
@@ -2728,11 +2734,13 @@ return {
     VIEW.w = r.width; VIEW.h = r.height;
   }
 
-  // ---- Colours from the design tokens (so theme toggle works)
-  function css(name, fallback){
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
+  // ---- Canvas font stacks, spelled out literally.
+  // A 2D context cannot resolve CSS custom properties: `ctx.font` containing
+  // var(--font-sans) is silently REJECTED and the context keeps whatever font it
+  // had (the 10px sans default), so every label shrank and changed typeface.
+  // These mirror --font-sans / --font-nums declared at the top of this file.
+  const FSANS = "'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+  const FNUMS = "'JetBrainsMonoNums','JetBrains Mono',ui-monospace,monospace";
 
   // ---- Drawing helpers
   function arrow(x0, y0, x1, y1, colour, width=2.5, headSize=9, label=null){
@@ -2782,7 +2790,9 @@ return {
         out.push([s,1]); i=j-1;
       } else cur+=ch; }
     if(cur) out.push([cur,0]); return out; }
-  function subFont(f){ return f.replace(/(\d+(?:\.\d+)?)px/, (mm,n)=>Math.round(n*0.72)+'px'); }
+  // Subscripts read as subscripts from their LOWERED BASELINE, never from
+  // dropping under the 12px canvas-text floor.
+  function subFont(f){ return f.replace(/(\d+(?:\.\d+)?)px/, (mm,n)=>Math.max(12, Math.round(n*0.72))+'px'); }
   function subWidth(t){ const f=ctx.font; let w=0;
     subSegs(t).forEach(([s,sub])=>{ ctx.font = sub? subFont(f):f; w += ctx.measureText(s).width; });
     ctx.font=f; return w; }
@@ -2795,9 +2805,9 @@ return {
 
   function labelBoxed(x, y, text, colour, align='left'){
     ctx.save();
-    ctx.font = '600 12px var(--font-sans), sans-serif';
+    ctx.font = '600 13px ' + FSANS;
     const pad = 5;
-    const w = subWidth(text) + pad*2, h = 18;
+    const w = subWidth(text) + pad*2, h = 20;
     let bx = x;
     if(align === 'center') bx = x - w/2;
     if(align === 'right') bx = x - w;
@@ -2822,8 +2832,14 @@ return {
   function draw(dt){
     fit();
     const w = VIEW.w, h = VIEW.h;
-    // background wash
-    ctx.fillStyle = css('--surface', 'rgba(6,14,17,.95)');
+    // Background wash. The stage is a NIGHT ROAD in both themes — the tarmac,
+    // the sky, the car and every arrow/chip/label on it are painted
+    // light-on-dark, so this ground is deliberately theme-independent rather
+    // than following the light/dark UI token. (It used to read --surface off
+    // documentElement, which the shell never themes, so it was dark by accident
+    // and not by intent; the DOM title and legend over it are pinned light in
+    // CSS to match.)
+    ctx.fillStyle = '#060E11';
     ctx.fillRect(0, 0, w, h);
 
     const bt = compute(R, state.thetaDeg, state.mu);
@@ -2972,9 +2988,13 @@ return {
     const cueX = Math.max(126, inX - batIn - 26), cueY = datumY - 22;
     arrow(cueX, cueY, cueX - 92, cueY, 'rgba(148,163,184,.7)', 1.6, 7);
     ctx.fillStyle = 'rgba(148,163,184,.85)';
-    ctx.font = '600 11px var(--font-sans), sans-serif';
+    ctx.font = '600 12px ' + FSANS;
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('to the centre of the turn  (r = ' + R + ' m)', cueX - 46, cueY - 9);
+    // Centred on the arrow where there is room, slid inboard where there is not:
+    // on a narrow viewport cueX bottoms out at its clamp and the centred label
+    // used to run off the left edge of the canvas.
+    const cueTxt = 'to the centre of the turn  (r = ' + R + ' m)';
+    ctx.fillText(cueTxt, Math.max(ctx.measureText(cueTxt).width/2 + 6, cueX - 46), cueY - 9);
     ctx.restore();
 
     // ---- Bank angle, measured from the horizontal at the inner edge
@@ -2987,7 +3007,7 @@ return {
     const arcR = 46;
     ctx.beginPath(); ctx.arc(inX, inY, arcR, -theta, 0); ctx.stroke();
     ctx.fillStyle = 'rgba(226,232,240,.95)';
-    ctx.font = '600 12px var(--font-sans), sans-serif';
+    ctx.font = '600 12px ' + FSANS;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText('θ = ' + state.thetaDeg + '°',
                  inX + rux*(arcR+16) + rnx*17, inY + ruy*(arcR+16) + rny*17);
@@ -3149,7 +3169,7 @@ return {
     // Note on the design condition when we're at v_d
     if(Math.abs(state.v - bt.designSpeed) < 0.05){
       ctx.save();
-      ctx.font = '600 12px var(--font-sans), sans-serif';
+      ctx.font = '600 13px ' + FSANS;
       ctx.fillStyle = '#34d399';
       ctx.textAlign = 'center';
       fillSub('v = v_d: N and W alone produce F_c — friction is idle.', sceneCx, sceneTop + 36);
@@ -3165,7 +3185,7 @@ return {
       ctx.save();
       ctx.strokeStyle = '#fbbf24'; ctx.fillStyle = '#fbbf24';
       arrow(ax, ay, ax + tX*s*42, ay + tY*s*42, '#fbbf24', 3, 10);
-      ctx.font = '700 12px var(--font-sans), sans-serif';
+      ctx.font = '700 12px ' + FSANS;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(down ? 'slides DOWN the bank' : 'slides UP and off',
                    carX + tX*s*(carW/2 + 66) + nX*52, carY + tY*s*(carW/2 + 66) + nY*52);
@@ -3185,7 +3205,7 @@ return {
     ctx.moveTo(bgx - bgr*0.7, bgy + bgr*0.7); ctx.lineTo(bgx + bgr*0.7, bgy - bgr*0.7);
     ctx.stroke();
     ctx.fillStyle = 'rgba(147,197,253,.95)';
-    ctx.font = '600 12px var(--font-sans), sans-serif';
+    ctx.font = '600 12px ' + FSANS;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText('v = ' + state.v.toFixed(1) + ' m/s — into the page', bgx + bgr + 8, bgy);
     ctx.restore();
@@ -3193,7 +3213,10 @@ return {
     // ---- Plan-view inset: the same turn seen from above, so "curve" is
     // unmistakable and r has a picture rather than just a number.
     if(w > 620){
-      const insW = 176, insH = 116;
+      // insW carries the 12px 'PLAN VIEW — FROM ABOVE' caption (165px from
+      // insX+11) with margin to spare — the box is clipped, so a caption wider
+      // than the box loses its tail.
+      const insW = 188, insH = 116;
       const insX = 22, insY = sceneTop + 34;
       ctx.save();
       ctx.beginPath();
@@ -3204,7 +3227,7 @@ return {
       ctx.fill(); ctx.stroke();
       ctx.clip();
       ctx.fillStyle = 'rgba(148,163,184,.85)';
-      ctx.font = '600 10px var(--font-sans), sans-serif';
+      ctx.font = '600 12px ' + FSANS;
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
       ctx.fillText('PLAN VIEW — FROM ABOVE', insX + 11, insY + 16);
       const pcx = insX + 16, pcy = insY + insH - 16, pR = 78;
@@ -3227,7 +3250,7 @@ return {
       ctx.moveTo(pcx, pcy-4); ctx.lineTo(pcx, pcy+4);
       ctx.stroke();
       ctx.fillStyle = 'rgba(148,163,184,.9)';
-      ctx.font = '600 9px var(--font-sans), sans-serif';
+      ctx.font = '600 12px ' + FSANS;
       ctx.fillText('r = ' + R + ' m', pcx + 24, pcy - 26);
       ctx.fillStyle = '#60a5fa';                         // the car, and where it is going
       ctx.beginPath(); ctx.arc(pxc, pyc, 4, 0, Math.PI*2); ctx.fill();
@@ -3265,7 +3288,7 @@ return {
     // ticks: 0, 5, 10, 15, 20, 25, 30
     ctx.strokeStyle = 'rgba(148,163,184,.5)';
     ctx.fillStyle = 'rgba(203,213,225,.85)';
-    ctx.font = '500 10px var(--font-nums), monospace';
+    ctx.font = '500 12px ' + FNUMS;
     ctx.textAlign = 'center';
     for(let s=0; s<=30; s+=5){
       const xt = xOfV(s);
@@ -3273,22 +3296,41 @@ return {
       ctx.fillText(s.toString(), xt, by+bh+15);
     }
     ctx.textAlign = 'center';
-    ctx.font = '600 10px var(--font-sans), sans-serif';
+    ctx.font = '600 12px ' + FSANS;
     ctx.fillStyle = 'rgba(148,163,184,.9)';
     ctx.fillText('m/s', bx + bw + 12, by + bh - 4);
 
-    // v_min / v_max markers
+    // v_min / v_max markers.
+    // Both labels share one line above the band, and both must stay inside the
+    // track: v_max pinned at the top of the speed scale used to print half off
+    // the canvas and over the "m/s" unit. And at small μ the safe band collapses
+    // towards v_d, so the two markers land within a few pixels of each other and
+    // their centred labels printed on top of one another (at μ = 0 they coincide
+    // exactly). When they are that close the pair is SPLAYED about its midpoint
+    // — v_min left of it, v_max right of it — as one block that is then clamped
+    // into the track, so the two can never overlap however narrow the band gets.
+    ctx.font = '600 13px ' + FSANS;
+    const minTxt = `v_min ${bt.minimumSpeed.toFixed(2)}`;
+    const maxTxt = 'v_max ' + (isFinite(bt.maximumSpeed) ? bt.maximumSpeed.toFixed(2) : '∞');
+    const wMinTxt = subWidth(minTxt), wMaxTxt = subWidth(maxTxt);
+    const vLabelsClose = Math.abs(xMax - xMin) < wMinTxt/2 + wMaxTxt/2 + 14;
+    // Left edge of the splayed [v_min | gap | v_max] block, clamped to the track.
+    const splayBlockW = wMinTxt + 14 + wMaxTxt;
+    const splayLeft = Math.max(bx, Math.min(bx + bw - splayBlockW,
+                               (xMin + xMax)/2 - splayBlockW/2));
+    // Centred placement, kept clear of both ends of the track.
+    const centred = (w, x) => Math.max(bx + w/2, Math.min(bx + bw - w/2, x));
     if(bt.minimumSpeed > 0){
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(xMin, by-4); ctx.lineTo(xMin, by+bh+4); ctx.stroke();
       ctx.fillStyle = '#fbbf24';
-      ctx.font = '600 11px var(--font-sans), sans-serif';
-      ctx.textAlign = 'center';
-      fillSub(`v_min ${bt.minimumSpeed.toFixed(2)}`, xMin, by - 8);
+      ctx.font = '600 13px ' + FSANS;
+      ctx.textAlign = 'left';
+      fillSub(minTxt, vLabelsClose ? splayLeft : centred(wMinTxt, xMin) - wMinTxt/2, by - 8);
     } else {
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '600 10px var(--font-sans), sans-serif';
+      ctx.font = '600 13px ' + FSANS;
       ctx.textAlign = 'left';
       fillSub('v_min = 0 (cannot slide down)', bx, by - 8);
     }
@@ -3297,12 +3339,12 @@ return {
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(xMax, by-4); ctx.lineTo(xMax, by+bh+4); ctx.stroke();
       ctx.fillStyle = '#fbbf24';
-      ctx.font = '600 11px var(--font-sans), sans-serif';
-      ctx.textAlign = 'center';
-      fillSub(`v_max ${bt.maximumSpeed.toFixed(2)}`, xMax, by - 8);
+      ctx.font = '600 13px ' + FSANS;
+      ctx.textAlign = 'left';
+      fillSub(maxTxt, vLabelsClose ? splayLeft + wMinTxt + 14 : centred(wMaxTxt, xMax) - wMaxTxt/2, by - 8);
     } else {
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '600 10px var(--font-sans), sans-serif';
+      ctx.font = '600 13px ' + FSANS;
       ctx.textAlign = 'right';
       fillSub('v_max = ∞ (no upper limit)', bx + bw, by - 8);
     }
@@ -3320,7 +3362,7 @@ return {
     ctx.lineTo(xVd - 5, by + bh + 18);
     ctx.lineTo(xVd + 5, by + bh + 18);
     ctx.closePath(); ctx.fill();
-    ctx.font = '700 11px var(--font-sans), sans-serif';
+    ctx.font = '700 13px ' + FSANS;
     ctx.textAlign = 'center';
     fillSub(`v_d ${bt.designSpeed.toFixed(2)}`, xVd, by + bh + 32);
 
@@ -3338,7 +3380,7 @@ return {
     ctx.fill(); ctx.stroke();
     ctx.restore();
     ctx.fillStyle = '#93c5fd';
-    ctx.font = '700 12px var(--font-nums), monospace';
+    ctx.font = '700 12px ' + FNUMS;
     ctx.textAlign = 'center';
     ctx.fillText(`v = ${state.v.toFixed(1)}`, xVcur, by - 30);
 
@@ -3346,10 +3388,10 @@ return {
 
     // ---- Small legend for the band (below the band ticks)
     ctx.save();
-    ctx.font = '500 11px var(--font-sans), sans-serif';
+    ctx.font = '500 13px ' + FSANS;
     ctx.fillStyle = 'rgba(148,163,184,.85)';
     ctx.textAlign = 'left';
-    fillSub('SAFE-SPEED BAND — green: v_d fixed by geometry;  amber: v_min / v_max shift with μ', bx, h - 6);
+    fillSub('SAFE-SPEED BAND — green: v_d fixed by geometry;  amber: v_min / v_max shift with μ', bx, h - 9);
     ctx.restore();
   }
 
@@ -4036,7 +4078,7 @@ return {
     // Two-pass subscript text: '_' marks the next alphanumeric run as a sub.
     const subText = (t, x, y) => {
       const f = ctx.font, al = ctx.textAlign;
-      const small = f.replace(/(\d+(?:\.\d+)?)px/, (m,n)=>Math.round(n*0.72)+'px');
+      const small = f.replace(/(\d+(?:\.\d+)?)px/, (m,n)=>Math.max(12, Math.round(n*0.72))+'px');
       const segs = []; let cur='';
       for(let i=0;i<t.length;i++){ const ch=t[i];
         if(ch==='_'){ if(cur){segs.push([cur,0]); cur='';} let j=i+1,s='';
@@ -4060,8 +4102,8 @@ return {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     subText('v = v_d  —  the bank alone supplies F_c', W*0.20, 10);
     ctx.fillStyle = LIGHT ? '#475569' : '#94a3b8';
-    ctx.font = '600 11px '+font;
-    subText('N cosθ = W     ·     F_c = W tanθ     ·     friction idle', W*0.20, 28);
+    ctx.font = '600 13px '+font;
+    subText('N cosθ = W     ·     F_c = W tanθ     ·     friction idle', W*0.20, 31);
   }
   drawHero();
   addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
@@ -4163,7 +4205,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

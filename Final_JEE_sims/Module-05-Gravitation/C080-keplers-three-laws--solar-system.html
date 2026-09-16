@@ -234,6 +234,23 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   .shell-aside{border-left:none;border-top:1px solid var(--border);}
 }
 
+/* Header fit at 1024 — the band between the stacking breakpoint (1000px) and
+   the desktop layout. The bar is flex-wrap:nowrap there, so eleven controls
+   plus a long title over-subscribed the viewport by ~250px and pushed
+   Reset / Play off screen. Nothing is removed or reordered: paddings, gaps and
+   type shrink a notch, and the title becomes the one shrinkable item so it
+   ellipsizes instead of shoving the controls out. 1500x950 is untouched. */
+@media(min-width:1001px) and (max-width:1024px){
+  .shell-header{gap:6px;padding:0 8px;}
+  .shell-title{font-size:15px;min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;}
+  .shell-title span{font-size:11px;}
+  .shell-controls{gap:5px;flex:0 0 auto;}
+  .shell-group{gap:5px;padding:0;flex:0 0 auto;}
+  .shell-header .shell-btn{padding:0 7px;font-size:12px;gap:4px;}
+  .shell-header .shell-select{font-size:12px;padding:6px 4px;}
+  .shell-header label{font-size:11px;}
+}
+
 /* SIM CSS */
 .formal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 @media(max-width:1000px){.formal-grid{grid-template-columns:1fr;}}
@@ -1349,6 +1366,13 @@ const Shell = (function(){
     return `rgba(${r},${g},${b},${a})`;
   }
 
+  // A 2d context cannot resolve CSS custom properties: `ctx.font = '12px
+  // var(--font-sans)'` is rejected outright and the context silently keeps
+  // whatever it had — here the 10px sans-serif default, which put every canvas
+  // label under the 12px legibility floor. The literal stack below is the same
+  // list `--font-sans` holds at the top of this file; keep the two in step.
+  const CANVAS_FONT = "'DMSansUser','DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+
   // Shared per-frame canvas label slots (planet names claim first; ghost defers).
   let labelRects = [];
   function resetLabelRects(){ labelRects = []; }
@@ -1356,7 +1380,7 @@ const Shell = (function(){
     return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
   }
   function placeCanvasLabel(anchorX, anchorY, text, opts){
-    const font = opts.font || '12px var(--font-sans), sans-serif';
+    const font = opts.font || ('12px ' + CANVAS_FONT);
     const pad = opts.pad != null ? opts.pad : 6;
     ctx.font = font;
     const w = ctx.measureText(text).width;
@@ -1406,7 +1430,7 @@ const Shell = (function(){
     const gs = W2S(0, g.a * Math.cos(g.theta), g.a * Math.sin(g.theta));
     const gx = gs.x, gy = gs.y;
     const glbl = 'ghost — constant speed';
-    const font = '12px var(--font-sans), sans-serif';
+    const font = '12px ' + CANVAS_FONT;
     ctx.font = font;
     const tw = ctx.measureText(glbl).width;
     placeCanvasLabel(gx, gy, glbl, {
@@ -1430,7 +1454,16 @@ const Shell = (function(){
     const vis = visibleIndices();
     const sunScr = projPt(0,0);
     const PAD = 4;          /* few-px padding between label rects */
-    const LINE = 15;        /* vertical step between tiers */
+    /* Tier step. A label rect is lh=14 tall and freeOf() grows it by PAD on each
+       side, so two rects on the same vertical only clear each other once their
+       baselines are lh + PAD = 18 px apart. At the old LINE = 15 the ladder was
+       shorter than that: every tier still collided with the one before it, all
+       four candidates failed for the crowded inner planets and the fallback
+       stamped the label down on top of its neighbour. It went unnoticed while
+       the canvas font was silently stuck at the 10px default and the rects were
+       wider apart than the glyphs; with the real 12px face restored, Earth and
+       Mars overprinted in the Full view. 20 clears 18 with a margin. */
+    const LINE = 20;        /* vertical step between tiers */
     const SUN_CLEAR = 34;   /* keep labels off the Sun's glow */
     const placed = [];      /* accepted label rects this frame */
 
@@ -1469,13 +1502,16 @@ const Shell = (function(){
         ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.arc(scr.x,scr.y,pr+5,0,Math.PI*2); ctx.stroke();
       }
-      const font = (sel ? 'bold ' : '') + '12px var(--font-sans), sans-serif';
+      const font = (sel ? 'bold ' : '') + '12px ' + CANVAS_FONT;
       ctx.font = font;
       const tw = ctx.measureText(p.name).width;
       const lh = 14;
       /* Tier baselines (text baseline y): T1 above, T2 below, T3 further above, T4 further below.
-         Earth sits a few px higher so its name clears Mars when both want “above”. */
-      const up = (p.name === 'Earth') ? 10 : 0;
+         Earth sits a few px higher so its name clears Mars when both want “above”.
+         The offset has to beat the same lh + PAD = 18 px clearance the tier step
+         does — at 10 the two names still shared rows once the real 12px face was
+         restored, which is exactly what overprinted them in the Full view. */
+      const up = (p.name === 'Earth') ? 20 : 0;
       const tiers = [
         scr.y - pr - 6 - up,
         scr.y + pr + lh + 2,
@@ -1530,7 +1566,7 @@ const Shell = (function(){
     if(!ready3d){
       ctx.fillStyle = '#05070e'; ctx.fillRect(0,0,state.W,state.H);
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '13px var(--font-sans), sans-serif';
+      ctx.font = '13px ' + CANVAS_FONT;
       ctx.fillText('3D renderer unavailable — three.js failed to load (check network access).', 16, 28);
       return;
     }
@@ -2254,7 +2290,7 @@ const Shell = (function(){
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

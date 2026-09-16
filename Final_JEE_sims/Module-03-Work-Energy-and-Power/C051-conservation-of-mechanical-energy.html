@@ -2005,7 +2005,9 @@ return {
 
   // --- Drawing ---
   function drawGrid(){
-    const cs = getComputedStyle(document.documentElement);
+    // (No documentElement palette read here: the shell puts .light-theme on
+    // document.body, so a :root read would return the dark tokens in both
+    // themes. Every colour below is chosen from the body class instead.)
     const gridCol = document.body.classList.contains('light-theme') ? 'rgba(51,65,85,0.10)' : 'rgba(148,163,184,0.10)';
     ctx.strokeStyle = gridCol;
     ctx.lineWidth = 1;
@@ -2030,17 +2032,20 @@ return {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Finish line at x=WORLD_W
+    // Finish line at x=WORLD_W. The bright amber is tuned for the dark plate;
+    // on the light plate "FINISH" measured 2.2:1, so the marker takes the
+    // darker same-hue amber there (measured 4.6:1 on the light surface).
     const fx = wx(WORLD_W);
-    ctx.strokeStyle = '#fbbf24';
+    const finCol = document.body.classList.contains('light-theme') ? '#92400e' : '#fbbf24';
+    ctx.strokeStyle = finCol;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(fx, wy(state.h0*1.02));
     ctx.lineTo(fx, groundY+18);
     ctx.stroke();
 
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = canvasFont('600 11px');
+    ctx.fillStyle = finCol;
+    ctx.font = canvasFont('600 12px');
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
     const label = 'FINISH';
@@ -2088,7 +2093,7 @@ return {
 
     // Label above the release line so it does not sit on the balls at x = 0
     ctx.fillStyle = document.body.classList.contains('light-theme') ? '#334155' : '#cbd5e1';
-    ctx.font = canvasFont('600 11px');
+    ctx.font = canvasFont('600 12px');
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     const label = `h₀ = ${state.h0.toFixed(1)} m`;
@@ -2114,6 +2119,11 @@ return {
     const bw = (layout.barsW - 2*gap) / 3;
     const labels = ['KE', 'PE', 'Total'];
     const colors = ['#34d399', '#60a5fa', '#fbbf24'];
+    // The bar FILLS are large shapes and read fine either way, but the same
+    // three hues used as the value NUMERALS measured 1.25–1.85:1 on the light
+    // plate. Same hues, darker inks, for text only (4.6–6.1:1 measured).
+    const isLightTheme = document.body.classList.contains('light-theme');
+    const inkColors = isLightTheme ? ['#065f46', '#1d4ed8', '#92400e'] : colors;
 
     // We show track 0 (gentle) as the "canonical" bars — clearest for the lesson.
     // But the pedagogy is about the TOTAL not moving; both tracks have the same total.
@@ -2133,7 +2143,7 @@ return {
 
     // Panel title
     ctx.fillStyle = document.body.classList.contains('light-theme') ? '#334155' : '#cbd5e1';
-    ctx.font = canvasFont('600 11px');
+    ctx.font = canvasFont('600 12px');
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ENERGY (J)', layout.barsX-2, layout.barsY-26);
@@ -2162,17 +2172,17 @@ return {
       ctx.fillText(labels[i], x + bw/2, barsBottom + 4);
 
       // Value above bar
-      ctx.font = canvasFont('600 11px');
-      ctx.fillStyle = colors[i];
+      ctx.font = canvasFont('600 12px');
+      ctx.fillStyle = inkColors[i];
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       const valStr = energies[i].toFixed(1);
       ctx.fillText(valStr, x + bw/2, barsBottom - barH - 3);
     }
 
-    // "Total does not move" annotation
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = canvasFont('600 10px');
+    // "Total does not move" annotation — same darker amber as the Total numeral
+    ctx.fillStyle = inkColors[2];
+    ctx.font = canvasFont('600 12px');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const noteX = layout.barsX + 2*(bw+gap) + bw/2;
@@ -2181,7 +2191,11 @@ return {
     // Only draw if it fits above the panel
     if(noteY > layout.sceneY - 4){
       const w = ctx.measureText(noteStr).width;
-      const nx = Math.max(w/2 + 2, Math.min(layout.w - w/2 - 2, noteX));
+      // Keep the note inside the energy panel's own outline (strokeRect above
+      // spans barsX-6 … barsX+barsW+6), not merely inside the canvas — at the
+      // 12px legibility floor a canvas-edge clamp lets it cross the border.
+      const panelL = layout.barsX - 4, panelR = layout.barsX + layout.barsW + 4;
+      const nx = Math.max(panelL + w/2, Math.min(panelR - w/2, noteX));
       ctx.fillText(noteStr, nx, noteY);
     }
     ctx.textAlign = 'start';
@@ -2192,7 +2206,12 @@ return {
     const p = pointAt(idx, arcTables[idx].L); // at finish
     const px = wx(p.x);
     const py = wy(p.y);
+    // Track hue for the badge's border (a shape), and a darker same-hue ink for
+    // its text: on the light theme's white backdrop the bright track colours
+    // measured 2.3:1 (gentle) and 2.7:1 (steep).
+    const lightNow = document.body.classList.contains('light-theme');
     const color = idx===0 ? '#60a5fa' : '#f472b6';
+    const inkColor = lightNow ? (idx===0 ? '#1d4ed8' : '#be185d') : color;
     const label = `v = ${speed.toFixed(3)} m/s`;
     ctx.font = canvasFont('700 12px');
     const tw = ctx.measureText(label).width;
@@ -2211,7 +2230,7 @@ return {
     ctx.fill();
     ctx.stroke();
     // Text
-    ctx.fillStyle = color;
+    ctx.fillStyle = inkColor;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, bx + pad, by + bh/2);
@@ -3001,7 +3020,7 @@ return {
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}

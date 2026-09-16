@@ -1,5 +1,13 @@
 # Canonical implementation (extracted from the validated L1 inquiry-v2 build)
 
+> **MECHANICS ONLY — the card CONTENT in these examples predates the SME
+> grammar (9 Sept 2026) and must not be imitated.** The example cards below
+> show observe-asks/resolve-tells splits and forward-pointing feedback that
+> the grammar has since retired. For what cards should SAY, `SKILL.md` and
+> `references/golden-flows.md` govern. This file remains authoritative for
+> HOW cards are wired: markup shape, `data-gate`, `setupChoiceCard`,
+> `onStep`, `applyStepReveals`, hooks.
+
 Blocks are verbatim from `L1-Solar_System_Orbits-inquiry-v2.html`. Copy the
 patterns; touch only what's marked ADAPT. Sims using the data-attribute
 wiring style (choices carry `data-correct`/`data-fb`) keep that style —

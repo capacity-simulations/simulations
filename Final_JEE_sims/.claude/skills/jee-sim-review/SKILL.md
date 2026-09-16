@@ -101,6 +101,33 @@ A first-class physics check on the *picture*, in the live browser:
 - Simplifications (no drag, ideal wires, point masses) are fine **if stated**; unstated ones a JEE student would trip over are P1. Never propose adding physics the sim deliberately omits and declares.
 - Confirm the sim actually teaches its `COVERAGE-MAP.md`/curriculum entry; note gaps (e.g., a "polarization" sim missing the single-slit half of its P0 entry) as pedagogy findings, not as features to build.
 
+### D4b — Novice (K-12) visual legibility
+
+The physics depth is JEE Main/Advanced and never drops. But the humans using
+these sims are **school students in classes 11–12 (~16–18)**, usually meeting
+the topic for the first time — a diagram only a person who already understands
+the topic can decode has failed, however correct it is. Audit in the live
+browser at 1500×950 and 1024×768; each failure is a pedagogy finding:
+
+- every arrow, colour, dashed line, shaded region and symbol is identified on
+  first appearance, in the scene or an adjacent key — not only in a distant
+  legend or the voiceover;
+- a quantity's first appearance carries its NAME, not just its symbol
+  ("induced EMF ε", not a bare "ε");
+- text is legible after DPR (canvas ≥12px, sidebar ≥13px — measure it), nothing
+  clipped at a canvas edge or hidden behind another element
+  (`ctx.font='var(--font-sans)'` silently renders 10px — grep for it);
+- colour is never the only channel for a distinction (shape/label/dash too),
+  and the palette survives red-green colour blindness;
+- the DEFAULT scene, paused at t = 0, is self-explanatory from pixels alone;
+- ≤ ~3 novel visual encodings competing at once without staging or highlight;
+- guided-inquiry cards use no term before defining it and name every control
+  exactly as its on-screen label reads.
+
+Labelling, glossing, font size, contrast, colour redundancy and legend
+placement are surgical fixes. A new inset/panel/redrawn schematic is an
+ENHANCEMENT proposal. **Never resolve one of these by simplifying the physics.**
+
 ---
 
 # PART B — Orchestrated agent flow (parallelize per sim)

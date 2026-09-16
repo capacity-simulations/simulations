@@ -89,6 +89,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
 .legend-item{display:flex;align-items:center;gap:6px;}
 .legend-dot{width:10px;height:10px;border-radius:999px;}
+/* The pill's background is hard-coded dark; without this the light theme drew
+   --text (#0f172a) on it at 2.0:1. Matches the sibling sims' override. */
+body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.86);color:var(--text);}
 
 .shell-panel{flex-shrink:0;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .shell-panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;}
@@ -2861,7 +2864,18 @@ const ctx = canvas.getContext('2d');
 let viewW = 0, viewH = 0, cx = 0, cy = 0;
 let pxPerMetre = 1;  // world→screen scale (fit to max orbit)
 
-function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// The shell puts `light-theme` on <body>, and the light palette is declared on
+// `body.light-theme` — so the vars MUST be read from <body>. Reading
+// documentElement always returned the :root (dark) values, which is why the
+// canvas stayed a night sky under a light page.
+function cssVar(name){
+  const v = getComputedStyle(document.body).getPropertyValue(name).trim();
+  return v || getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function isLight(){ return document.body.classList.contains('light-theme'); }
+// Scene inks that are not theme vars (starfield, chips, markers) still have to
+// flip, or the light sky would carry white stars and amber-on-white readouts.
+function ink(darkVal, lightVal){ return isLight() ? lightVal : darkVal; }
 
 function fitCanvas(){
   const dpr = window.devicePixelRatio || 1;
@@ -2908,7 +2922,7 @@ function draw(){
   ctx.fillRect(0, 0, viewW, viewH);
 
   // Starfield (very sparse, deterministic)
-  ctx.fillStyle = 'rgba(203,213,225,0.28)';
+  ctx.fillStyle = ink('rgba(203,213,225,0.28)', 'rgba(71,85,105,0.30)');
   for (let i = 0; i < 60; i++){
     const x = (i * 97) % viewW;
     const y = (i * 53 + 31) % viewH;
@@ -2922,7 +2936,7 @@ function draw(){
     const rMet = (p.radiusKm + pr.altKm) * 1000;
     const rPx = rMet * pxPerMetre;
     if (rPx > viewW * 0.75) continue; // off-canvas guard
-    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+    ctx.strokeStyle = ink('rgba(148,163,184,0.35)', 'rgba(71,85,105,0.45)');
     ctx.beginPath();
     ctx.arc(cx, cy, rPx, 0, Math.PI * 2);
     ctx.stroke();
@@ -2932,8 +2946,8 @@ function draw(){
     const lx = cx + rPx * Math.cos(labelAngle);
     const ly = cy + rPx * Math.sin(labelAngle);
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(148,163,184,0.9)';
-    ctx.font = '11px ' + (cssVar('--font-sans') || 'sans-serif');
+    ctx.fillStyle = ink('rgba(148,163,184,0.9)', 'rgba(51,65,85,0.95)');
+    ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     const txt = pr.label;
@@ -2948,7 +2962,7 @@ function draw(){
 
   // Current orbit (solid, accent)
   const rPxNow = rMetres * pxPerMetre;
-  ctx.strokeStyle = state.dragging ? '#fbbf24' : (cssVar('--accent') || '#3b9b8f');
+  ctx.strokeStyle = state.dragging ? ink('#fbbf24', '#b45309') : (cssVar('--accent') || '#3b9b8f');
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(cx, cy, rPxNow, 0, Math.PI * 2);
@@ -2964,7 +2978,7 @@ function draw(){
   ctx.arc(cx, cy, planetPx, 0, Math.PI * 2);
   ctx.fill();
   // Planet outline
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.strokeStyle = ink('rgba(255,255,255,0.15)', 'rgba(15,23,42,0.25)');
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -2980,24 +2994,24 @@ function draw(){
   const sy = cy + rPxNow * Math.sin(state.angle);
   // Halo when hovering/dragging
   if (state.hovering || state.dragging){
-    ctx.fillStyle = 'rgba(251,191,36,0.20)';
+    ctx.fillStyle = ink('rgba(251,191,36,0.20)', 'rgba(180,83,9,0.18)');
     ctx.beginPath();
     ctx.arc(sx, sy, 14, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.fillStyle = '#fbbf24';
+  ctx.fillStyle = ink('#fbbf24', '#b45309');
   ctx.beginPath();
   ctx.arc(sx, sy, 6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.strokeStyle = ink('rgba(255,255,255,0.6)', 'rgba(15,23,42,0.55)');
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   // On-canvas readouts (TWO — speed and period, the pair the inquiry compares).
   // Reserved corner: bottom-left, kept clear of .plot-title (top-left) and .legend (top-right).
-  const boxX = 16, boxY = viewH - 92, boxW = 220, boxH = 76;
-  ctx.fillStyle = 'rgba(6,14,17,0.78)';
-  ctx.strokeStyle = 'rgba(148,163,184,0.25)';
+  const boxX = 16, boxY = viewH - 92, boxW = 246, boxH = 76;
+  ctx.fillStyle = ink('rgba(6,14,17,0.78)', 'rgba(255,255,255,0.88)');
+  ctx.strokeStyle = ink('rgba(148,163,184,0.25)', 'rgba(51,65,85,0.30)');
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.roundRect ? ctx.roundRect(boxX, boxY, boxW, boxH, 8) : ctx.rect(boxX, boxY, boxW, boxH);
@@ -3006,15 +3020,17 @@ function draw(){
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = 'rgba(203,213,225,0.85)';
-  ctx.font = '600 10px ' + (cssVar('--font-sans') || 'sans-serif');
+  ctx.fillStyle = ink('rgba(203,213,225,0.85)', 'rgba(51,65,85,0.95)');
+  ctx.font = '600 12px ' + (cssVar('--font-sans') || 'sans-serif');
   ctx.fillText('SPEED', boxX + 12, boxY + 10);
   ctx.fillText('PERIOD', boxX + 12, boxY + 42);
 
-  ctx.fillStyle = '#fbbf24';
+  // Values start at +86 (was +70): at the 12px legibility floor 'PERIOD' is
+  // ~48px wide from +12, so the old column would have run into it.
+  ctx.fillStyle = ink('#fbbf24', '#b45309');
   ctx.font = '700 18px ' + (cssVar('--font-nums') || 'monospace');
-  ctx.fillText(fmtSpeed(speedMps), boxX + 70, boxY + 6);
-  ctx.fillText(fmtPeriod(periodSeconds), boxX + 70, boxY + 38);
+  ctx.fillText(fmtSpeed(speedMps), boxX + 86, boxY + 6);
+  ctx.fillText(fmtPeriod(periodSeconds), boxX + 86, boxY + 38);
 
   // Altitude label near the satellite (clamped inside canvas, non-overlapping)
   const altText = 'h = ' + fmtKm(state.altitudeKm);
@@ -3034,17 +3050,17 @@ function draw(){
   if (lx - altW/2 < readoutRect.x + readoutRect.w + 4 && ly + 6 > readoutRect.y && ly - 6 < readoutRect.y + readoutRect.h){
     ly = readoutRect.y - 10;
   }
-  ctx.fillStyle = 'rgba(6,14,17,0.72)';
+  ctx.fillStyle = ink('rgba(6,14,17,0.72)', 'rgba(255,255,255,0.86)');
   ctx.fillRect(lx - altW/2 - 4, ly - 8, altW + 8, 16);
-  ctx.fillStyle = '#fbbf24';
+  ctx.fillStyle = ink('#fbbf24', '#b45309');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(altText, lx, ly);
 
   // Drag hint (only when idle at first paint — subtle)
   if (!state.dragging && !state.hovering){
-    ctx.fillStyle = 'rgba(148,163,184,0.55)';
-    ctx.font = '11px ' + (cssVar('--font-sans') || 'sans-serif');
+    ctx.fillStyle = ink('rgba(148,163,184,0.55)', 'rgba(71,85,105,0.80)');
+    ctx.font = '12px ' + (cssVar('--font-sans') || 'sans-serif');
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
     ctx.fillText('drag the satellite to change altitude ↑', viewW - 12, viewH - 8);
@@ -3771,7 +3787,7 @@ Shell.init({
 <!-- Feedback pill: posts to the Sims_Feedback sheet (JEE tab) via the shared Apps Script endpoint.
      Same payload/endpoint as the QM/PP/SR/CM pills — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
+  .qfb-pill{position:fixed;left:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
   .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
   .qfb-pill:active{transform:translateY(1px) scale(.99)}
   .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
