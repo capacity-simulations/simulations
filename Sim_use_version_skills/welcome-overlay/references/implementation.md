@@ -230,9 +230,17 @@ guards — stays as is.
       // Transport state: current line, char offset inside it (from boundary events), playing flag.
       let idx = 0, charAt = 0, playing = false, current = null, finished = false;
 
+      // Quality-ranked: Chrome's remote Google voices sound natural; macOS's
+      // local compact voices (Samantha/Daniel/Fred…) are mechanical — last resort.
       function pickVoice(){
         const vs = synth ? synth.getVoices() : [];
-        return vs.find(v => /en[-_](US|GB)/i.test(v.lang) && /Google|Samantha|Daniel|Natural/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang)) || null;
+        const en = vs.filter(v => /^en/i.test(v.lang));
+        return en.find(v => v.name === 'Google US English')
+            || en.find(v => v.name === 'Google UK English Female')
+            || en.find(v => v.name === 'Google UK English Male')
+            || en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name) && v.localService)
+            || en.find(v => v.name === 'Samantha')
+            || en[0] || null;
       }
       function render(){
         playBtn.dataset.state = playing ? 'playing' : (finished ? 'done' : 'idle');

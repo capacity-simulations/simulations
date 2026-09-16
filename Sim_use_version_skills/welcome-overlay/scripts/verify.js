@@ -72,7 +72,10 @@ const fails = []; const ok = (c, m) => { if (!c) fails.push(m); };
     }});
     // transport present + speech attempted + progress text
     ['#welcome-prev', '#welcome-speak', '#welcome-next', '#welcome-progress', '#welcome-seg'].forEach(s => ok(!!$(s), `${s} present`));
-    ok(speech.speak > 0, 'auto read-aloud attempted (timed fallback with no voices)');
+    // 2026-09-04 design change: auto-start was REMOVED (the platform's same-origin
+    // iframe inherited click activation, so it fired audibly on every load).
+    // Narration must now start only from the play button.
+    ok(speech.speak === 0, 'no auto read-aloud at load (narration starts only on user play)');
     ok(/^1 \/ \d+$/.test($('#welcome-progress').textContent.trim()), 'progress reads "1 / N"');
     $('#welcome-next').click(); $('#welcome-next').click();
     ok($('#welcome-progress').textContent.trim().startsWith('3 /'), 'forward twice → line 3');

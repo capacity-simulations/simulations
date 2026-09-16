@@ -255,7 +255,7 @@ DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
   to removed buttons, wrong colors, wrong panel positions, actions `onStep`
   already performs, transport instructions contradicting boot state).
 - **Any card copy you rewrite follows the SME grammar** — canonical flows in
-  `../Sim_use_version_skills/guided-inquiry/references/golden-flows.md`,
+  `../../Sim_use_version_skills/guided-inquiry/references/golden-flows.md`,
   rules in that skill's `SKILL.md`: question-before-observation, a classical /
   naive baseline first, answers that RESOLVE on the spot (the old
   forward-pointing style is retired), neutral stems, terse claim-only choices,
@@ -284,12 +284,12 @@ DEMONSTRATION finding or ENHANCEMENT must explain it). Do not inflate.
      `git show <pre-replacement-commit>:<path>` if a baseline is needed);
    - `node tools/user-version-eval.mjs <port> <module-relative-path>` (deep
      browser eval: overlay, 3 modes, inquiry, controls walk, voiceover wiring);
-   - **`node ../Sim_use_version_skills/tests/layout-probe.mjs <file>`** — the
+   - **`node ../../Sim_use_version_skills/tests/layout-probe.mjs <file>`** — the
      five layout contracts (inquiry zone first under the top bar, guide buttons
      in the left cluster, guide nav docked at the viewport bottom and centred
      on the sidebar, sidebar opens empty at guide step 1). A fix that moves a
      panel or re-parents a control can break these silently;
-   - **`node ../Sim_use_version_skills/tests/canvas-check.mjs`** (or the same
+   - **`node ../../Sim_use_version_skills/tests/canvas-check.mjs`** (or the same
      backing-store:display ratio comparison against the pre-fix file) whenever
      a fix touches canvas sizing, layout, or CSS. A wrong backing store ships a
      stretched/blurred plot that EVERY other gate passes — this class has bitten

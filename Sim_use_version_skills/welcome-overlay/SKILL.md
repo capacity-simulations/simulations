@@ -147,3 +147,14 @@ Look at `00-welcome.png`: contrast, the hero, two-line title.
 - A theory curve drawn over the dots reads as clutter; the centered layout
   has no curve.
 - Test click-counting: assert state (labels, progress text), not clicks.
+- The original `pickVoice` regex matched whichever local voice listed first
+  (Daniel/Samantha — mechanical). The reference now carries the quality-ranked
+  picker (Google US English first); keep it identical to the card-voiceover
+  engine's ranking (controls-tutorial reference §6) so all narration on a sim
+  shares one voice. Chrome TTS hazards (deferred speak, idle-cancel wedging
+  the browser-wide service, remote-voice hangs) are documented in §6.5 there
+  and apply to this player too. Builds shipped BEFORE Sept 2026 still carry
+  the old regex picker — retrofit the ranked picker whenever such a build is
+  touched for any reason. (Future retrofit candidate: the welcome player still
+  calls `synth.cancel()` unguarded — the idle-cancel hazard of §6.5; route it
+  through a `safeCancel` if the player is ever reworked.)

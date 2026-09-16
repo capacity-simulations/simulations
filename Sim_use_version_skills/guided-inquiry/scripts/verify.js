@@ -61,7 +61,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dots = d.getElementById('inq-dots');
   const active = () => cards.findIndex(c => c.classList.contains('active'));
 
-  ok(cards.length >= 4, `at least 4 cards (found ${cards.length})`);
+  // SME grammar (golden-flows.md): decks run 3-6 cards — two golden decks are
+  // exactly 3 (Spacetime Explorer, Standard Model). Floor lowered from 4.
+  // The 6-card ceiling WARNS rather than fails so pre-grammar builds (7-8
+  // cards) can still take surgical fixes before their full rewrite lands.
+  ok(cards.length >= 3, `at least 3 cards (found ${cards.length})`);
+  if (cards.length > 6) console.log(`  ⚠ ${cards.length} cards exceeds the SME grammar max of 6 — restructure on the next content pass`);
   ok(!!next && !!prev && !!dots, 'inq nav elements present');
   if (fails.length) return report();
   ok(dots.children.length === cards.length, `dots (${dots.children.length}) == cards (${cards.length})`);

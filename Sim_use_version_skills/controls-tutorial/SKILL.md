@@ -59,6 +59,19 @@ blocks; adapt only the parts marked ADAPT.
    step or a written reason it doesn't (meta-UI only: theme toggle, info,
    hover-hint switches). A missed panel (the View panel was missed once)
    fails the manual check.
+8. **Card voiceover + Auto walkthrough** (validated on C025). The nav is
+   TWO rows: a "Listen" row (⏮ ▶ ⏭ transport + Auto pill) above the card-nav
+   row (‹ › Next), split by a hairline — a single wide row would overflow
+   onto the canvas. Play reads the current step (title + text) from the top; pause
+   keeps position; resume continues; finish flips to replay. Navigation by
+   ANY route keeps narration card-synced. Auto narrates each step then
+   advances after a 700 ms dwell, turning itself off on the closing card.
+   Auto pill: muted outline off, solid purple + glow on. Voice: quality-
+   ranked (Google US English first, locals as fallback). All code + the
+   Chrome TTS pitfalls (deferred speak, guarded cancel, hang watchdog,
+   engineDead) are verbatim in `references/implementation.md` §6 — the
+   defenses are load-bearing, copy them exactly; ADAPT only the `norm()`
+   speech replacements for the sim's symbols.
 
 **Scene/mode-dependent controls.** If a guided control is hidden by the sim
 in some scenes or modes, publish `window.__cgPrepare` from the sim (pin a
@@ -79,8 +92,11 @@ only, no behaviour change. Group tightly-coupled controls with `also`
 and glow together.
 
 ### 2. Insert the three blocks (reference §1–3)
-CSS before `</style>`; the button beside the sim's existing top-bar action
-buttons (left of Reset/Play); the controller `<script>` before `</body>` —
+CSS before `</style>`; the button pair in the top bar's LEFT cluster,
+immediately AFTER the theme toggle (order: title/info → theme → Guided
+Inquiry → Controls Guide … Reset/Play stay right-anchored — the JEE fleet
+reference; never glue the pair to Reset with margin-left:auto); the
+controller `<script>` before `</body>` —
 INCLUDING its `<script>` wrapper. ADAPT only the `steps` array (selectors,
 mode, `also`, title, text) and the Reset selector.
 
@@ -106,6 +122,12 @@ then takes over.
 them on `window` or the sim's public object; a `typeof fn === 'function'`
 guard silently no-ops otherwise — this bug shipped once and only showed in
 a real browser.
+
+### 3b. Voiceover + Auto (reference §6)
+Insert the engine script BEFORE the controller, append the voiceover CSS,
+apply the controller deltas (two-row nav, `setCgAuto`, sync/stop hooks).
+Extend `norm()` with this sim's physics symbols. Match the Listen-row button
+height to the sim's existing pager buttons — never grow the sidebar row.
 
 ### 4. Verify
 ```
@@ -149,6 +171,11 @@ Deliver as a new file; never overwrite the upload in place.
   must match the callout; the reference CSS now carries the purple nav.
 - Testing: jsdom walkthroughs must count clicks exactly; several "bugs"
   were test off-by-ones. Assert state, not click counts.
+- Voiceover: every Chrome TTS pitfall in reference §6.5 was hit for real on
+  C025 — deferred speak after cancel, `safeCancel` (an idle cancel wedges the
+  browser's TTS service until a FULL browser restart), the no-events remote-
+  voice hang caught by the `onstart` watchdog, `resume()` only when paused,
+  and real-gesture-only audio testing. Never re-derive this from scratch.
 
 ## Bulk application
 One sim at a time, full mapping each time; never reuse another sim's

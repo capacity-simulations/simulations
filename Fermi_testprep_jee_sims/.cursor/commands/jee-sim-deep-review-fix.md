@@ -41,7 +41,7 @@ parallel-run mechanics below.
 - jsdom verifiers (baselines from git history — the pre-user-version originals):
   ```
   git show 6ba6f47:"<module-path>" > $TMPDIR/baseline.html
-  cd Sim_use_version_skills
+  cd ../Sim_use_version_skills
   node guided-inquiry/scripts/verify.js "../<module-path>" --baseline "$TMPDIR/baseline.html"
   node controls-tutorial/scripts/verify.js "../<module-path>" --baseline "$TMPDIR/baseline.html"
   node welcome-overlay/scripts/verify.js "../<module-path>" --baseline "$TMPDIR/baseline.html"

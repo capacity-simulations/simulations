@@ -26,6 +26,18 @@ Each skill has `SKILL.md` (rules + workflow), `references/implementation.md`
 (config-free jsdom gate; `npm i jsdom` once; always pass `--baseline
 <original.html>` so CDN-library errors don't count against you).
 
+## Safety + layout gates (run on every build)
+
+- `tests/kernel-diff.mjs <original> <build>` — the production sim is intact:
+  every original script byte-identical (physics/controls untouched), no id,
+  canvas or visible text removed, styles append-only. `--allow-script-edits`
+  downgrades sanctioned L-series in-script deltas to reviewed warnings.
+- `tests/canvas-check.mjs` — proves the layers did not corrupt any rendering
+  buffer (parse-time-sized canvases ship stretched while every structural gate
+  passes; caught two builds this way).
+- `tests/layout-probe.mjs <build>` — the inquiry sits in the cross-course
+  layout (right column, first block under the top bar, controls below).
+
 ## Browser test (mandatory before delivery)
 `tests/browser-smoke.js` runs the templated sim in real Chromium:
 `npm i playwright && npx playwright install chromium` once, then
@@ -40,3 +52,18 @@ Review screenshots (both themes).
 Suggested order per sim: guided-inquiry first (if the sim has/needs one),
 then controls-tutorial, then welcome-overlay, then every verifier plus the
 browser smoke.
+
+## Card voiceover + Auto walkthrough (added Sept 2026, validated on C025)
+
+Both flows can carry narration: a Listen row (play/pause + Auto pill) above
+the Guided Inquiry pager, and a two-row Controls Guide nav (transport + Auto
+over the card nav). One shared speech engine drives both — per-card
+play/pause/resume/replay, card-synced narration on every navigation route,
+and Auto walkthroughs (the inquiry Auto waits at prediction gates, reads the
+feedback after the student commits, then continues; it never answers).
+Everything — engine, markup, CSS, controller deltas, the behaviour contract,
+and the hard-won Chrome TTS pitfalls (deferred speak, guarded cancel, remote-
+voice hang watchdog, real-gesture-only testing) — is verbatim in
+`controls-tutorial/references/implementation.md` §6; the guided-inquiry and
+welcome-overlay SKILLs point there. Apply it after the three base skills.
+The reference build is `../sim-use-builds/C025-projectile-motion-ground-to-ground.html`.
