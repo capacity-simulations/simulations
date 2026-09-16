@@ -304,6 +304,11 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 #topoSeg .sim-btn.sim-on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 .sim-chiprow + .sim-chiprow{margin-top:6px}
 .sim-bchip{font-size:14px}
+.sim-puzcol{display:flex;flex-direction:column;gap:5px}
+.sim-puz{text-align:left;padding:7px 10px}
+.sim-puz.sim-on{border-color:var(--accent);color:var(--accent)}
+.sim-puz.done{border-color:#22c55e}
+.sim-puz.done::after{content:" ✓";color:#22c55e;font-weight:800}
 .sim-btnrow{display:flex;gap:6px;margin-top:8px}
 .sim-btn{flex:1 1 0;min-width:0;box-sizing:border-box;font-size:13.5px;font-weight:600;padding:6px 4px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
 .sim-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -480,6 +485,18 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="aside-controls" class="aside-zone">
 
       <div class="shell-panel sim-panel">
+  <h3 class="sim-h">Puzzles — build the lowest-order diagram</h3>
+  <div class="sim-puzcol" id="puzRow">
+    <button class="sim-btn sim-puz" data-puz="mumu">e⁻e⁺ → μ⁻μ⁺</button>
+    <button class="sim-btn sim-puz" data-puz="emu">e⁻μ⁻ → e⁻μ⁻</button>
+    <button class="sim-btn sim-puz" data-puz="bhabha">e⁻e⁺ → e⁻e⁺ — find both diagrams</button>
+    <button class="sim-btn sim-puz" data-puz="wexch">ν_μ e⁻ → μ⁻ νₑ</button>
+    <button class="sim-btn sim-puz" data-puz="qq">e⁻e⁺ → q q̄</button>
+  </div>
+  <div class="sim-note" id="puzGoal">Pick a puzzle — or free-build below.</div>
+</div>
+
+<div class="shell-panel sim-panel">
   <h3 class="sim-h">Build the diagram</h3>
   <div class="sim-sub">Topology</div>
   <div class="sim-btnrow" id="topoSeg">
@@ -972,6 +989,80 @@ window.__audit = {
     r.col = 'good';
     return r;
   }
+  /* ---------- puzzles: build the lowest-order diagram for process X (HC) ---------- */
+  const PUZZLES = {
+    mumu:   { lab: 'e⁻e⁺ → μ⁻μ⁺', pin: ['e-', 'e+'], pout: ['mu-', 'mu+'],
+              sols: [{ topo: 's', props: ['gamma', 'Z'] }],
+              hint: 'e and μ are different flavours — the pair must annihilate first' },
+    emu:    { lab: 'e⁻μ⁻ → e⁻μ⁻', pin: ['e-', 'mu-'], pout: ['e-', 'mu-'],
+              sols: [{ topo: 't', props: ['gamma', 'Z'] }],
+              hint: 'e⁻ and μ⁻ cannot annihilate — they can only exchange something' },
+    bhabha: { lab: 'e⁻e⁺ → e⁻e⁺', pin: ['e-', 'e+'], pout: ['e-', 'e+'], both: true,
+              sols: [{ topo: 's', props: ['gamma', 'Z'] }, { topo: 't', props: ['gamma', 'Z'] }],
+              hint: 'same legs, two legal shapes — nature adds BOTH amplitudes' },
+    wexch:  { lab: 'ν_μ e⁻ → μ⁻ νₑ', pin: ['num', 'e-'], pout: ['mu-', 'nue'],
+              sols: [{ topo: 't', props: ['W'] }],
+              hint: 'every particle changes species — only one boson can do that' },
+    qq:     { lab: 'e⁻e⁺ → q q̄', pin: ['e-', 'e+'], quarkOut: true,
+              sols: [{ topo: 's', props: ['gamma', 'Z'] }],
+              hint: 'any quark with its own antiquark counts' }
+  };
+  let puz = null;                 /* active puzzle id or null */
+  const puzDone = {};             /* id -> true, or {s,t} for the two-diagram puzzle */
+  function pairMatch(a1, a2, want) {
+    return (a1 === want[0] && a2 === want[1]) || (a1 === want[1] && a2 === want[0]);
+  }
+  function puzzleEval() {
+    if (!puz || !AN) return null;
+    const P = PUZZLES[puz], s = D.slots;
+    if (!AN.valid) return { ok: false };
+    if (!pairMatch(s.in1, s.in2, P.pin)) return { ok: false, why: 'incoming pair ≠ ' + P.lab.split(' → ')[0] };
+    if (P.quarkOut) {
+      const oq = PD[s.out1] && PD[s.out1].qk && s.out2 === ANTI[s.out1];
+      if (!oq) return { ok: false, why: 'final state must be a quark + its own antiquark' };
+    } else if (!pairMatch(s.out1, s.out2, P.pout)) {
+      return { ok: false, why: 'outgoing pair ≠ ' + P.lab.split(' → ')[1] };
+    }
+    const sol = P.sols.find(x => x.topo === D.topo && x.props.indexOf(D.prop) >= 0);
+    if (!sol) return { ok: false, why: 'legs match — but not with this topology/boson' };
+    return { ok: true, topo: D.topo };
+  }
+  function syncPuzzles() {
+    document.querySelectorAll('#puzRow .sim-puz').forEach(b => {
+      const id = b.dataset.puz, P = PUZZLES[id], d = puzDone[id];
+      b.classList.toggle('sim-on', id === puz);
+      b.classList.toggle('done', P.both ? !!(d && d.s && d.t) : !!d);
+    });
+    const gl = $('puzGoal');
+    if (!gl) return;
+    if (!puz) { gl.textContent = 'Pick a puzzle — or free-build below.'; return; }
+    const P = PUZZLES[puz], d = puzDone[puz];
+    if (P.both) {
+      const nf = (d && d.s ? 1 : 0) + (d && d.t ? 1 : 0);
+      gl.textContent = nf === 2 ? '✓ solved — both diagrams found. Nature adds the two amplitudes, then squares.'
+        : 'Build: ' + P.lab + ' — ' + nf + '/2 diagrams found. ' + P.hint;
+    } else {
+      gl.textContent = d ? '✓ solved — ' + P.lab : 'Build: ' + P.lab + '. Hint: ' + P.hint;
+    }
+  }
+  function puzzleCheck() {
+    if (!puz) return;
+    const res = puzzleEval();
+    const P = PUZZLES[puz];
+    if (res && res.ok) {
+      if (P.both) { puzDone[puz] = puzDone[puz] || {}; puzDone[puz][res.topo] = true; }
+      else puzDone[puz] = true;
+      const d = puzDone[puz];
+      const full = P.both ? (d.s && d.t) : true;
+      AN.status = (P.both && !full)
+        ? '★ diagram 1 of 2 — the other topology also works'
+        : '★ solves the puzzle — ' + AN.status.replace(/^✓ /, '');
+      AN.col = 'good';
+    } else if (res && res.why && AN.valid) {
+      AN.status = '✓ legal diagram · but ' + res.why;
+    }
+    syncPuzzles();
+  }
   function setBandUnlocked(v) {
     if (v === bandUnlocked) return;
     bandUnlocked = v;
@@ -979,6 +1070,7 @@ window.__audit = {
   }
   function updateAll() {
     AN = analyze();
+    puzzleCheck();
     const shown = D.pred !== null || inqDone;
     /* A closed channel is a legal diagram too, and its σ(√s) curve rising out of 2m is
        precisely the lesson — so it unlocks the band just like an open one. */
@@ -1494,6 +1586,12 @@ window.__audit = {
     pause(); cyc = +els.slT.value / 1000; D.t = cyc;
     if (els.vT) els.vT.textContent = D.t.toFixed(2); drawAll();
   });
+  /* puzzle picker: choosing a puzzle clears the legs — the build is the exercise */
+  document.querySelectorAll('#puzRow .sim-puz').forEach(b => b.addEventListener('click', () => {
+    puz = (puz === b.dataset.puz) ? null : b.dataset.puz;
+    if (puz) { D.slots = { in1: null, in2: null, out1: null, out2: null }; sel = null; updSel(); }
+    syncPuzzles(); updateAll(); drawAll();
+  }));
   /* topology + boson pickers */
   document.querySelectorAll('#topoSeg .sim-btn').forEach(b => b.addEventListener('click', () => {
     if (D.topo === b.dataset.topo) return;
@@ -1682,6 +1780,8 @@ window.__audit = {
   function onReset() {
     D.slots = { in1: null, in2: null, out1: null, out2: null };
     D.topo = 's'; D.prop = 'gamma';
+    puz = null; for (const k in puzDone) delete puzDone[k];
+    syncPuzzles();
     D.sqrtS = 3; cyc = 0; D.t = 0;
     sel = null; hover = null; updSel();
     setBandUnlocked(false);
