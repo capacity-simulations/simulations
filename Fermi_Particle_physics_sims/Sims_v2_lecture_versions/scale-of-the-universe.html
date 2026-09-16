@@ -1026,7 +1026,10 @@ function bgNuc(t){
   ctx.fillStyle='#190c08'; ctx.fillRect(0,0,CW,sceneH);
   const R = Math.min(CW,sceneH)*0.3;
   for (let i=0;i<9;i++){
-    const x=hash(i*4.3)*CW + Math.sin(t*0.6+i)*6, y=hash(i*6.1+2)*sceneH + Math.cos(t*0.5+i)*6;
+    /* staggered grid (packed neighbours), not a random jumble */
+    const gx=(i%3), gy=(i/3|0);
+    const x=CW*(0.17+gx*0.33)+(gy%2?CW*0.16:0) + Math.sin(t*0.6+i)*6;
+    const y=sceneH*(0.14+gy*0.36) + Math.cos(t*0.5+i)*6;
     const g = ctx.createRadialGradient(x,y,0,x,y,R);
     g.addColorStop(0, i%2 ? 'rgba(200,80,64,0.30)' : 'rgba(140,150,165,0.25)');
     g.addColorStop(1,'rgba(0,0,0,0)');
@@ -1094,6 +1097,10 @@ function drawHuman(cx,cy,R,t){
   ctx.lineWidth=0.055*H;
   ctx.beginPath(); ctx.moveTo(cx-0.05*H, top+0.51*H); ctx.lineTo(cx-0.07*H, top+0.98*H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx+0.05*H, top+0.51*H); ctx.lineTo(cx+0.07*H, top+0.98*H); ctx.stroke();
+  /* visible hands at the arm ends — the right one is the zoom target */
+  ctx.fillStyle='#e9c19b';
+  ctx.beginPath(); ctx.ellipse(cx-0.17*H, top+0.485*H, 0.016*H, 0.021*H, 0.35, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx+0.17*H, top+0.485*H, 0.016*H, 0.021*H, -0.35, 0, 7); ctx.fill();
   ctx.restore();
 }
 function drawHair(cx,cy,R,t){
@@ -1210,11 +1217,16 @@ function drawAtom(cx,cy,R,t){
   }
   ball(cx,cy,Math.max(2,R*0.012),'#ffffff','#9cc0ff');
 }
+/* close-packed nucleus: nucleons on a triangular (hexagonal) lattice clipped to a
+   disc — evenly packed, deterministic, alternating protons/neutrons */
 const NUC=[];
-for (let i=0;i<26;i++){
-  const a=hash(i*3.7+1)*6.283, r=Math.sqrt(hash(i*1.9+7));
-  NUC.push([Math.cos(a)*r, Math.sin(a)*r, i%2]);
-}
+(function(){
+  const a0=0.40;
+  for (let j=-2;j<=2;j++) for (let i=-3;i<=3;i++){
+    const x=(i+j/2)*a0, y=j*a0*0.866;
+    if (Math.hypot(x,y)<=0.82) NUC.push([x,y,(i+j*3)&1]);
+  }
+})();
 function drawNucleus(cx,cy,R,t){
   const g = ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.3);
   g.addColorStop(0,'rgba(255,150,80,0.25)'); g.addColorStop(1,'rgba(255,150,80,0)');
@@ -1222,10 +1234,10 @@ function drawNucleus(cx,cy,R,t){
   const sorted = NUC.slice().sort((a,b)=>a[1]-b[1]);
   for (let i=0;i<sorted.length;i++){
     const n=sorted[i];
-    const x=cx+n[0]*R*0.72+Math.sin(t*2.3+i)*R*0.015;
-    const y=cy+n[1]*R*0.72+Math.cos(t*2.1+i*1.3)*R*0.015;
-    if (n[2]) ball(x,y,R*0.24,'#ffb0a6','#c0392b');
-    else      ball(x,y,R*0.24,'#cdd6e2','#7b8a9c');
+    const x=cx+n[0]*R*0.92+Math.sin(t*2.3+i)*R*0.015;
+    const y=cy+n[1]*R*0.92+Math.cos(t*2.1+i*1.3)*R*0.015;
+    if (n[2]) ball(x,y,R*0.21,'#ffb0a6','#c0392b');
+    else      ball(x,y,R*0.21,'#cdd6e2','#7b8a9c');
   }
 }
 function drawProton(cx,cy,R,t){
@@ -1268,13 +1280,264 @@ function drawQuark(cx,cy,R,t){
   ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx,cy,2.6,0,7); ctx.fill();
 }
 
+/* ---------- macro filler objects (scenery only: minor pins, no controls) ---------- */
+function drawMountain(cx,cy,R,t){
+  /* faceted peaks: lit left face / shaded right face, atmospheric back range,
+     irregular snow caps, forest band at the foot */
+  ctx.save(); ctx.translate(cx,cy);
+  const base=R*0.55;
+  const peak=(px2,apy,hwL,hwR,cL,cR)=>{
+    ctx.fillStyle=cL;
+    ctx.beginPath(); ctx.moveTo(px2-hwL,base); ctx.lineTo(px2,apy); ctx.lineTo(px2,base); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=cR;
+    ctx.beginPath(); ctx.moveTo(px2,base); ctx.lineTo(px2,apy); ctx.lineTo(px2+hwR,base); ctx.closePath(); ctx.fill();
+  };
+  const snow=(px2,apy,s)=>{
+    ctx.fillStyle='rgba(250,252,255,0.95)';
+    ctx.beginPath();
+    ctx.moveTo(px2,apy);
+    ctx.lineTo(px2-s*0.55,apy+s*0.75);
+    ctx.lineTo(px2-s*0.28,apy+s*0.55);
+    ctx.lineTo(px2-s*0.05,apy+s*0.85);
+    ctx.lineTo(px2+s*0.22,apy+s*0.60);
+    ctx.lineTo(px2+s*0.50,apy+s*0.80);
+    ctx.closePath(); ctx.fill();
+  };
+  peak(-0.62*R,-0.48*R,0.55*R,0.50*R,'#adbdd1','#98a9c0');
+  peak( 0.10*R,-0.60*R,0.55*R,0.60*R,'#a2b3c9','#8ea0b8');
+  peak( 0.72*R,-0.38*R,0.48*R,0.45*R,'#b0c0d2','#9cadc2');
+  peak(-0.38*R,-0.62*R,0.52*R,0.44*R,'#8fa5ba','#5a6d84');
+  peak( 0.40*R,-0.95*R,0.55*R,0.58*R,'#7e94a9','#485b72');
+  snow(-0.38*R,-0.62*R,R*0.30);
+  snow( 0.40*R,-0.95*R,R*0.36);
+  const fg2=ctx.createLinearGradient(0,base-R*0.22,0,base);
+  fg2.addColorStop(0,'rgba(62,96,60,0)'); fg2.addColorStop(1,'rgba(52,84,52,0.85)');
+  ctx.fillStyle=fg2; ctx.fillRect(-R*1.02,base-R*0.22,R*2.04,R*0.22);
+  ctx.restore();
+}
+function drawCity(cx,cy,R,t){
+  /* skyline with depth: hazy back row, two-tone front towers, antennas */
+  ctx.save(); ctx.translate(cx,cy);
+  const base=R*0.48;
+  ctx.fillStyle='rgba(90,105,95,0.5)';
+  ctx.beginPath(); ctx.ellipse(0,base,R*1.05,R*0.13,0,0,7); ctx.fill();
+  for (let i=0;i<8;i++){
+    const x=((i/7)-0.5)*1.7*R+R*0.06;
+    const h=R*(0.5+0.75*hash(i*5.1+3)), w=R*(0.12+0.07*hash(i*2.9));
+    ctx.fillStyle='rgba(150,163,178,0.55)';
+    ctx.fillRect(x-w/2,base-h,w,h);
+  }
+  for (let i=0;i<9;i++){
+    const x=((i/8)-0.5)*1.9*R;
+    const h=R*(0.30+0.80*hash(i*3.3+2)), w=R*(0.11+0.09*hash(i*1.7));
+    ctx.fillStyle='#7d8ca0';  ctx.fillRect(x-w/2,base-h,w*0.72,h);
+    ctx.fillStyle='#5a6779'; ctx.fillRect(x-w/2+w*0.72,base-h,w*0.28,h);
+    ctx.fillStyle='rgba(235,243,252,0.5)';
+    const rows2=Math.max(3,(h/R*7)|0);
+    for (let wy=0;wy<rows2;wy++) for (let wx=0;wx<2;wx++){
+      if (hash(i*17+wy*3.1+wx)<0.55)
+        ctx.fillRect(x-w/2+w*(0.12+wx*0.30), base-h+h*(0.06+wy*0.9/rows2), w*0.20, Math.max(1.5,h*0.35/rows2));
+    }
+    if (hash(i+21)<0.35){
+      ctx.strokeStyle='rgba(90,103,121,0.9)'; ctx.lineWidth=Math.max(1,R*0.015);
+      ctx.beginPath(); ctx.moveTo(x,base-h); ctx.lineTo(x,base-h-R*0.12); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+function drawBuilding(cx,cy,R,t){
+  /* 2.5D tower: lit front face + shaded side face, floor grid, roof units,
+     blinking aircraft-warning light, glass entrance */
+  ctx.save(); ctx.translate(cx,cy);
+  const w=R*0.84,h=R*1.9,x0=-w/2,y0=-h/2,side=R*0.26;
+  ctx.fillStyle='rgba(0,0,0,0.16)';
+  ctx.beginPath(); ctx.ellipse(side*0.3,y0+h+R*0.015,w*0.85,R*0.05,0,0,7); ctx.fill();
+  ctx.fillStyle='#7b8798';
+  ctx.beginPath(); ctx.moveTo(x0+w,y0); ctx.lineTo(x0+w+side,y0+R*0.06);
+  ctx.lineTo(x0+w+side,y0+h-R*0.02); ctx.lineTo(x0+w,y0+h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(30,42,58,0.45)';
+  for (let r2=0;r2<10;r2++) ctx.fillRect(x0+w+side*0.15, y0+R*0.09+r2*(h-R*0.15)/10, side*0.7, (h/10)*0.42);
+  const g=ctx.createLinearGradient(x0,0,x0+w,0);
+  g.addColorStop(0,'#c7d2df'); g.addColorStop(0.55,'#e6edf4'); g.addColorStop(1,'#aab7c6');
+  ctx.fillStyle=g; ctx.fillRect(x0,y0,w,h);
+  for (let r2=0;r2<10;r2++){
+    const fy=y0+R*0.06+r2*(h-R*0.12)/10, fh=(h-R*0.12)/10;
+    for (let c2=0;c2<4;c2++){
+      ctx.fillStyle=hash(r2*7+c2*3.1)<0.3?'rgba(255,224,150,0.9)':'rgba(52,68,88,0.75)';
+      ctx.fillRect(x0+w*(0.08+c2*0.23), fy, w*0.16, fh*0.5);
+    }
+  }
+  ctx.strokeStyle='rgba(120,134,150,0.35)'; ctx.lineWidth=Math.max(1,R*0.012);
+  for (let c2=1;c2<4;c2++){ ctx.beginPath(); ctx.moveTo(x0+w*0.045+c2*w*0.23,y0); ctx.lineTo(x0+w*0.045+c2*w*0.23,y0+h); ctx.stroke(); }
+  ctx.fillStyle='#8fa0b2'; ctx.fillRect(x0-R*0.02,y0-R*0.035,w+R*0.04,R*0.035);
+  ctx.fillStyle='#6d7d90'; ctx.fillRect(x0+w*0.15,y0-R*0.08,w*0.18,R*0.045); ctx.fillRect(x0+w*0.55,y0-R*0.07,w*0.14,R*0.035);
+  ctx.strokeStyle='#6d7d90'; ctx.lineWidth=Math.max(1,R*0.02);
+  ctx.beginPath(); ctx.moveTo(x0+w*0.78,y0-R*0.035); ctx.lineTo(x0+w*0.78,y0-R*0.22); ctx.stroke();
+  const blink=0.5+0.5*Math.sin(t*2.2);
+  ctx.fillStyle='rgba(255,80,70,'+(0.35+0.55*blink).toFixed(2)+')';
+  ctx.beginPath(); ctx.arc(x0+w*0.78,y0-R*0.22,Math.max(1.5,R*0.022),0,7); ctx.fill();
+  ctx.fillStyle='rgba(40,52,68,0.9)'; ctx.fillRect(x0+w*0.38,y0+h-R*0.11,w*0.24,R*0.11);
+  ctx.fillStyle='rgba(180,195,210,0.5)'; ctx.fillRect(x0+w*0.38,y0+h-R*0.125,w*0.24,R*0.018);
+  ctx.restore();
+}
+function drawHand(cx,cy,R,t){
+  /* hanging hand, fingers DOWN (natural for a standing figure) — drawn fingers-up
+     in local coords, then flipped; forearm tapers upward into the figure's arm */
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(1,-1);
+  const s1='#e9c19b', s2='#cf9f77';
+  const cap=(x1,y1,x2,y2,w)=>{ ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+  ctx.lineCap='round';
+  const fg=ctx.createLinearGradient(0,R*0.45,0,R*1.2);
+  fg.addColorStop(0,s2); fg.addColorStop(1,'rgba(207,159,119,0)');
+  ctx.strokeStyle=fg; cap(0,R*0.55,0,R*1.15,R*0.44);
+  const pg=ctx.createRadialGradient(-R*0.08,R*0.18,R*0.05,0,R*0.25,R*0.75);
+  pg.addColorStop(0,s1); pg.addColorStop(1,s2);
+  ctx.fillStyle=pg;
+  ctx.beginPath();
+  ctx.moveTo(-R*0.32,R*0.70);
+  ctx.quadraticCurveTo(-R*0.42,R*0.28,-R*0.34,-R*0.10);
+  ctx.lineTo(R*0.34,-R*0.10);
+  ctx.quadraticCurveTo(R*0.44,R*0.28,R*0.32,R*0.70);
+  ctx.quadraticCurveTo(0,R*0.84,-R*0.32,R*0.70);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=s1;
+  /* fingers must be clearly thinner than their spacing or they merge into a mitten */
+  const FX=[-0.255,-0.085,0.085,0.255], FL=[0.72,0.85,0.78,0.58], FS=[-0.13,-0.04,0.05,0.16];
+  for (let i=0;i<4;i++){
+    const bx=FX[i]*R, by=-R*0.06;
+    cap(bx,by, bx+Math.sin(FS[i])*FL[i]*R, by-Math.cos(FS[i])*FL[i]*R, R*0.125);
+  }
+  cap(-R*0.30,R*0.38,-R*0.56,R*0.10,R*0.17);
+  cap(-R*0.56,R*0.10,-R*0.70,-R*0.16,R*0.15);
+  ctx.lineCap='butt';
+  ctx.strokeStyle='rgba(146,92,58,0.25)'; ctx.lineWidth=Math.max(1,R*0.028);
+  ctx.beginPath(); ctx.moveTo(-R*0.26,R*0.18); ctx.quadraticCurveTo(0,R*0.36,R*0.28,R*0.22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-R*0.24,R*0.32); ctx.quadraticCurveTo(0,R*0.48,R*0.24,R*0.38); ctx.stroke();
+  ctx.restore();
+}
+function drawFingertip(cx,cy,R,t){
+  /* pad side of the fingertip (print visible), shaft running past the frame —
+     sets up the next stop, the skin-ridge whorl */
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(0.35);
+  const g=ctx.createRadialGradient(-R*0.15,-R*0.5,R*0.1,0,0,R*1.3);
+  g.addColorStop(0,'#f0c9a4'); g.addColorStop(1,'#cf9a72');
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.moveTo(-R*0.48,R*1.5);
+  ctx.lineTo(-R*0.48,-R*0.3);
+  ctx.quadraticCurveTo(-R*0.48,-R*0.92,0,-R*0.92);
+  ctx.quadraticCurveTo(R*0.48,-R*0.92,R*0.48,-R*0.3);
+  ctx.lineTo(R*0.48,R*1.5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(150,95,60,0.35)'; ctx.lineWidth=Math.max(1,R*0.035);
+  for (let i=1;i<=6;i++){
+    ctx.beginPath(); ctx.arc(0,-R*0.25,R*(0.10+i*0.115),3.34,6.08); ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(150,95,60,0.30)'; ctx.lineWidth=Math.max(1,R*0.045);
+  for (const yy of [R*0.78,R*0.90]){
+    ctx.beginPath(); ctx.moveTo(-R*0.42,yy); ctx.quadraticCurveTo(0,yy+R*0.08,R*0.42,yy); ctx.stroke();
+  }
+  const sh=ctx.createLinearGradient(-R*0.48,0,R*0.48,0);
+  sh.addColorStop(0,'rgba(120,70,40,0.18)'); sh.addColorStop(0.3,'rgba(0,0,0,0)');
+  sh.addColorStop(0.8,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(120,70,40,0.22)');
+  ctx.fillStyle=sh;
+  ctx.beginPath();
+  ctx.moveTo(-R*0.48,R*1.5); ctx.lineTo(-R*0.48,-R*0.3);
+  ctx.quadraticCurveTo(-R*0.48,-R*0.92,0,-R*0.92);
+  ctx.quadraticCurveTo(R*0.48,-R*0.92,R*0.48,-R*0.3);
+  ctx.lineTo(R*0.48,R*1.5); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawRidges(cx,cy,R,t){
+  ctx.save(); ctx.translate(cx,cy);
+  const g=ctx.createRadialGradient(0,0,0,0,0,R);
+  g.addColorStop(0,'#e9c09a'); g.addColorStop(1,'#d0a077');
+  rrPath(-R,-R*0.8,2*R,R*1.6,R*0.3); ctx.fillStyle=g; ctx.fill();
+  ctx.save(); rrPath(-R,-R*0.8,2*R,R*1.6,R*0.3); ctx.clip();
+  ctx.strokeStyle='rgba(146,92,58,0.45)'; ctx.lineWidth=Math.max(1,R*0.045);
+  for (let i=1;i<=8;i++){
+    const f=i/8;
+    ctx.beginPath();
+    for (let k=0;k<=40;k++){
+      const a=k/40*6.283;
+      const wob=1+0.18*Math.sin(a*2+i*0.7)+0.07*Math.sin(a*3-i);
+      const X=Math.cos(a)*R*0.95*f*wob, Y=Math.sin(a)*R*0.68*f*wob;
+      k?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+    }
+    ctx.closePath(); ctx.stroke();
+  }
+  ctx.restore(); ctx.restore();
+}
+
+function drawCloudbank(cx,cy,R,t){
+  /* long layered cloud band — the one object that legitimately floats in the sky */
+  ctx.save(); ctx.translate(cx,cy);
+  const rows=[[0.30,'rgba(255,255,255,0.55)'],[0.12,'rgba(235,242,250,0.75)'],[-0.06,'rgba(255,255,255,0.9)']];
+  for (let r2=0;r2<3;r2++){
+    const yy=rows[r2][0]; ctx.fillStyle=rows[r2][1];
+    for (let i=0;i<7;i++){
+      const x=((i/6)-0.5)*2.3*R + Math.sin(t*0.2+i*2.1+r2)*R*0.02;
+      const rr2=R*(0.28+0.16*hash(i*1.3+r2*7));
+      ctx.beginPath(); ctx.ellipse(x, yy*R+Math.sin(i+r2)*R*0.03, rr2, rr2*0.42, 0, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+function drawMito(cx,cy,R,t){
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.35);
+  const g=ctx.createLinearGradient(0,-R*0.5,0,R*0.5);
+  g.addColorStop(0,'#d98a66'); g.addColorStop(1,'#b4633f');
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.ellipse(0,0,R,R*0.52,0,0,7); ctx.fill();
+  ctx.strokeStyle='rgba(255,220,200,0.7)'; ctx.lineWidth=Math.max(1.5,R*0.05);
+  ctx.beginPath(); ctx.ellipse(0,0,R*0.88,R*0.42,0,0,7); ctx.stroke();
+  /* cristae: membrane folds from alternating sides */
+  ctx.lineWidth=Math.max(1.5,R*0.045); ctx.lineCap='round';
+  for (let i=-2;i<=2;i++){
+    const x=i*R*0.32, dir=(i%2)?1:-1;
+    ctx.beginPath();
+    ctx.moveTo(x,-dir*R*0.40);
+    ctx.quadraticCurveTo(x+R*0.10,0,x,dir*R*0.18);
+    ctx.stroke();
+  }
+  ctx.lineCap='butt';
+  ctx.restore();
+}
+function drawMicrofibril(cx,cy,R,t){
+  /* keratin coiled-coil: three braided strands, warm hair-protein tones */
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(0.55);
+  const cols=['#e8d3a8','#d8ba7f','#c4a05e'];
+  ctx.lineCap='round';
+  for (let s2=0;s2<3;s2++){
+    ctx.strokeStyle=cols[s2]; ctx.lineWidth=Math.max(2,R*0.16);
+    ctx.beginPath();
+    for (let k=0;k<=40;k++){
+      const u=k/40, y=(u-0.5)*2.4*R;
+      const x=Math.sin(u*13.8+s2*2.094)*R*0.22;
+      k?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap='butt';
+  ctx.restore();
+}
+
 /* ---------- pinned scales ---------- */
 const pins=[
   {n:'Earth',    s:1.274e7, lbl:'1.27×10⁷ m', row:0, pr:9,  draw:drawEarth,    bg:bgSky},
-  {n:'human',    s:1.7,     lbl:'1.7 m',      row:1, pr:8,  draw:drawHuman,    bg:bgSkin},
+  {n:'cloud bank', s:5e5,   lbl:'~500 km',    row:0, pr:2,  draw:drawCloudbank,bg:null, off:0.40, ground:1, gh:0.35, minor:1},
+  {n:'mountain', s:1e4,     lbl:'~10 km',     row:1, pr:2,  draw:drawMountain, bg:null, off:-0.55, ground:1, gh:0.28, minor:1},
+  {n:'city',     s:500,     lbl:'~500 m',     row:0, pr:2,  draw:drawCity,     bg:null, off:0.55,  ground:1, gh:0.30, minor:1},
+  {n:'building', s:30,      lbl:'~30 m',      row:1, pr:2,  draw:drawBuilding, bg:null, off:-0.50, ground:1, gh:0.475, minor:1},
+  {n:'human',    s:1.7,     lbl:'1.7 m',      row:1, pr:8,  draw:drawHuman,    bg:bgSkin, off:-0.17, oy:0.015},
+  {n:'hand',     s:0.18,    lbl:'18 cm',      row:0, pr:2,  draw:drawHand,     bg:null, oy:0.15, minor:1},
+  {n:'fingertip',s:0.015,   lbl:'1.5 cm',     row:1, pr:2,  draw:drawFingertip,bg:null, off:-1.25, oy:0.06, minor:1},
+  {n:'skin ridges', s:4e-4, lbl:'0.4 mm',     row:1, pr:2,  draw:drawRidges,   bg:null, off:-0.55, minor:1},
   {n:'hair',     s:8e-5,    lbl:'80 µm wide', row:0, pr:5,  draw:drawHair,     bg:bgTissue, off:0.42},
   {n:'cell',     s:1.2e-5,  lbl:'12 µm',      row:1, pr:7,  draw:drawCell,     bg:bgCyto},
+  {n:'mitochondrion', s:1e-6, lbl:'~1 µm',    row:0, pr:2,  draw:drawMito,     bg:null, off:0.50, minor:1},
   {n:'virus',    s:1e-7,    lbl:'100 nm',     row:0, pr:6,  draw:drawVirus,    bg:bgCapsid},
+  {n:'microfibril', s:8e-9, lbl:'~8 nm',      row:1, pr:2,  draw:drawMicrofibril, bg:null, off:-0.45, minor:1},
   {n:'molecule', s:1e-9,    lbl:'1 nm',       row:1, pr:7,  draw:drawMolecule, bg:bgVac},
   {n:'atom',     s:1e-10,   lbl:'10⁻¹⁰ m',    row:0, pr:9,  draw:drawAtom,     bg:bgCloud},
   {n:'nucleus',  s:1e-14,   lbl:'10 fm',      row:1, pr:8,  draw:drawNucleus,  bg:bgNuc},
@@ -1450,6 +1713,7 @@ function ruler(){
   for (const p of order){
     const L=Math.log10(p.s), x=fx(L);
     const active=Math.abs(S.view-L)<0.35;
+    if (p.minor && !active) continue;  /* scenery pins label only as you pass them */
     const rowY=p.row?yB:yA;
     ctx.font=(active?'700 15px ':'600 14px ')+FONT;
     const tw=ctx.measureText(p.n).width;
@@ -1495,16 +1759,42 @@ function draw(){
   if (CW<40 || CH<120) return;
   const d=Math.pow(10,S.view), W=K*d;
   const pxOf=s=>s/W*CW;
-  /* nearest ENCLOSING object supplies the background */
-  let bgFn=bgSpace, bestS=Infinity;
-  for (const p of pins) if (p.bg && p.s>W && p.s<bestS){ bestS=p.s; bgFn=p.bg; }
-  bgFn(S.t);
+  /* enclosing objects supply the background — crossfaded over BGF decades of zoom
+     so every scale boundary dissolves instead of cutting. Driven by S.view (not
+     time), so scrubbing the slider is exactly as smooth as playing. */
+  const Lw=Math.log10(W), BGF=0.5;
+  const layers=[];
+  for (const p of pins) if (p.bg){
+    const ba=clamp((Math.log10(p.s)-Lw)/BGF,0,1);
+    if (ba>0) layers.push({s:p.s, bg:p.bg, a:ba});
+  }
+  layers.sort((u,v)=>v.s-u.s);            /* outermost first */
+  let baseIdx=-1;
+  for (let i=0;i<layers.length;i++) if (layers[i].a>=1) baseIdx=i;  /* innermost fully-entered */
+  if (baseIdx>=0) layers[baseIdx].bg(S.t); else bgSpace(S.t);
+  for (let i=baseIdx+1;i<layers.length;i++){
+    ctx.save(); ctx.globalAlpha=layers[i].a; layers[i].bg(S.t); ctx.restore();
+  }
   for (const p of pins){
     const px=pxOf(p.s);
-    if (px>CUT*1.6 || px<1.1) continue;
-    const a=clamp((px-1.1)/2.5,0,1);
+    /* fade-in when tiny; fade-out over ~BGF decades as the object outgrows the
+       frame, synchronized with its interior background fading in above — the
+       zoom reads as falling THROUGH the object, never a cut */
+    if (px>CUT*4.5 || px<1.1) continue;
+    /* major pins fade in as distant specks (nucleus-as-a-star is the point);
+       minor scenery appears only once it reads as an object (~5% of the stage),
+       so a tiny hand never hovers over the featured human */
+    let a = p.minor ? clamp((px-0.05*CW)/(0.08*CW),0,1) : clamp((px-1.1)/2.5,0,1);
+    /* scenery bows out once it exceeds the frame — the next stop stands alone,
+       so a mountain never wears a city and a human never wears a hand */
+    if (p.minor && px>CW*1.2) a*=clamp(1-Math.log10(px/(CW*1.2))/BGF,0,1);
+    if (px>CUT*1.4) a*=clamp(1-Math.log10(px/(CUT*1.4))/BGF,0,1);
+    if (a<=0.01) continue;
+    const ocx=CW/2+(p.off?p.off*px:0);
+    /* ground:1 pins stand ON the sky backdrop's horizon line, whatever their size */
+    const ocy=p.ground ? sceneH*0.72-px*(p.gh!=null?p.gh:0.48) : sceneH*0.52+(p.oy?p.oy*px:0);
     ctx.save(); ctx.globalAlpha=a;
-    p.draw(CW/2+(p.off?p.off*px:0), sceneH*0.52, px/2, S.t);
+    p.draw(ocx, ocy, px/2, S.t);
     ctx.restore();
   }
   drawWaves(d);
@@ -1519,10 +1809,36 @@ function draw(){
     const alpha=near ? clamp(1-fBest/0.55*0.5, 0.5, 1) : 0.42;
     /* Hide Text gates ONLY the "nearest · " prefix — the feature's own name and size
        label still draw, and the reduced alpha above still marks an off-scale match. */
-    labelFeat(feat, CW/2+(feat.off?feat.off*px:0), sceneH*0.52, px, alpha, (near||HT())?'':'nearest · ');
+    const fy=feat.ground ? sceneH*0.72-px*(feat.gh!=null?feat.gh:0.48) : sceneH*0.52+(feat.oy?feat.oy*px:0);
+    labelFeat(feat, CW/2+(feat.off?feat.off*px:0), fy, px, alpha, (near||HT())?'':'nearest · ');
   }
   scaleBar(d);
   probeChip(d);
+  /* intentional-emptiness captions: the atom->nucleus and proton->quark stretches
+     are deliberately object-free (that IS the physics); a zoom-gated caption makes
+     the emptiness read as intentional. Hidden by Hide Text for lecture use. */
+  if (!HT()){
+    const caps=[
+      { c:-12.5, w:1.0, txt:'the atom is mostly empty space — the nucleus is 10,000× smaller' },
+      { c:-16.6, w:0.7, txt:'below the proton, quarks show no substructure — no one has ever “seen” one' }
+    ];
+    for (const cp of caps){
+      const ca=clamp((cp.w-Math.abs(S.view-cp.c))/0.3,0,1);
+      if (ca<=0) continue;
+      ctx.save(); ctx.globalAlpha=ca;
+      ctx.font='600 15px '+FONT;
+      let tw=ctx.measureText(cp.txt).width;
+      if (tw>CW-80){ ctx.font='600 13px '+FONT; tw=ctx.measureText(cp.txt).width; }
+      const y0=sceneH-34;
+      rrPath(CW/2-tw/2-14, y0-14, tw+28, 28, 14);
+      ctx.fillStyle='rgba(6,12,24,0.62)'; ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle='#dfe7f2'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(cp.txt, CW/2, y0);
+      ctx.restore();
+    }
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  }
   ruler();
 }
 
@@ -1671,14 +1987,22 @@ function onFrame(dt){
   S.t+=dt;
   if (Math.abs(S.logd-S.view)>0.0008){
     if (S.autoTour){
-      /* Auto-tour: sweep at a constant ~3 decades/s so all 27 decades take ≈9 s */
+      /* Auto-tour: constant 1.2 decades/s (scaled by the Speed control) —
+         at the 0.25× default that is ~3.3 s per decade, slow enough to read
+         each scenery stop (curriculum feedback: 3.0 was fast even at 0.25×) */
       const dir=S.logd>S.view?1:-1;
-      S.view+=dir*3.0*dt;
+      S.view+=dir*1.2*dt;
       if (dir>0 && S.view>=S.logd) S.view=S.logd;
       if (dir<0 && S.view<=S.logd) S.view=S.logd;
     } else {
-      const k=1-Math.exp(-1.15*dt);          /* τ ≈ 0.9 s — three decades read as three decades */
-      S.view+=(S.logd-S.view)*k;
+      /* Rate-limited approach: cruise at ≤1.5 decades/s (the slowness lives here,
+         scaled by the Speed control), then a brisk ease-in near the target
+         (τ ≈ 0.33 s) so arrivals stay crisp instead of crawling */
+      const k=1-Math.exp(-3.0*dt);
+      let step=(S.logd-S.view)*k;
+      const cap=1.5*dt;
+      if (step>cap) step=cap; else if (step<-cap) step=-cap;
+      S.view+=step;
       if (Math.abs(S.logd-S.view)<=0.0008) S.view=S.logd;
     }
     updateUI();

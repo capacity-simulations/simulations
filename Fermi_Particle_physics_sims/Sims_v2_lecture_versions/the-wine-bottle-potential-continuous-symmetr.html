@@ -816,9 +816,10 @@ const FS = 'ui-sans-serif,system-ui,sans-serif';
 
 /* ---------- dom ---------- */
 const cv = document.getElementById('sim-canvas');
-/* willReadFrequently: draw() samples one pixel per frame to test whether the surface
-   painted over the ball (see the occlusion echo), so the canvas is read every frame. */
-const ctx = cv.getContext('2d', { willReadFrequently: true });
+/* No willReadFrequently: the occlusion echo is now decided geometrically
+   (point-in-quad on the front quads), so the canvas is never read back and
+   the browser keeps GPU-accelerated rendering (perf review). */
+const ctx = cv.getContext('2d');
 const $id = s => document.getElementById(s);
 const el = {
   mu2: $id('sim-mu2'), mu2v: $id('sim-mu2-val'),
@@ -1205,10 +1206,10 @@ function draw() {
 
   const Lx = -0.45, Ly = -0.35, Lz = 0.82;
   const ballW = S.x * sA + S.y * cA;
-  let ballDone = false, quadsOverBall = 0;
+  let ballDone = false, quadsOverBall = 0, ballK = -1;
   for (let k = 0; k < NQ; k++) {
     const q = ORDER[k];
-    if (!ballDone && QD[q] * 0.5 >= ballW) { ballLayer(); ballDone = true; }
+    if (!ballDone && QD[q] * 0.5 >= ballW) { ballLayer(); ballDone = true; ballK = k; }
     else if (ballDone) quadsOverBall++;
     const i = (q / NA) | 0, j = q - i * NA, j2 = (j + 1) % NA;
     const a = i * NA + j, b = i * NA + j2, c2 = (i + 1) * NA + j2, d2 = (i + 1) * NA + j;
@@ -1241,18 +1242,31 @@ function draw() {
      position whenever surface was painted over it, so φ is never lost mid-swing. */
   let ballHidden = false;
   if (ballDone && quadsOverBall > 0) {
-    /* Ask the canvas directly rather than guessing from depth order: if the ball's own
-       centre pixel is no longer its red, a surface quad painted over it. One pixel per
-       frame, and it is exact at every yaw, tilt and μ². */
+    /* Geometric containment instead of a per-frame getImageData: the ball is
+       hidden exactly when one of the quads painted AFTER it (ORDER[ballK..])
+       contains its projected centre. Same intent as the old centre-pixel test,
+       but deterministic, theme-independent, and it never forces the canvas
+       onto the CPU path (perf review). */
     const tr2 = S.x * S.x + S.y * S.y;
     prj(S.x, S.y, Vp2(tr2) + 0.012 * ZSPAN, o);
-    const dpr = cv.width / LW;
-    const sxp = Math.round(o[0] * dpr), syp = Math.round(o[1] * dpr);
-    if (sxp >= 0 && syp >= 0 && sxp < cv.width && syp < cv.height) {
-      try {
-        const d = ctx.getImageData(sxp, syp, 1, 1).data;
-        ballHidden = !(d[0] > 140 && d[1] < 130 && d[2] < 120);
-      } catch (e) { ballHidden = true; }   /* tainted/blocked read: fail safe to visible marker */
+    const bx = o[0], by = o[1];
+    for (let k = ballK; k < NQ && !ballHidden; k++) {
+      const q = ORDER[k];
+      const i = (q / NA) | 0, j = q - i * NA, j2 = (j + 1) % NA;
+      const a = i * NA + j, b = i * NA + j2, c2 = (i + 1) * NA + j2, d2 = (i + 1) * NA + j;
+      /* cheap bbox reject first */
+      const x0 = Math.min(PX[a], PX[b], PX[c2], PX[d2]), x1 = Math.max(PX[a], PX[b], PX[c2], PX[d2]);
+      if (bx < x0 || bx > x1) continue;
+      const y0 = Math.min(PY[a], PY[b], PY[c2], PY[d2]), y1 = Math.max(PY[a], PY[b], PY[c2], PY[d2]);
+      if (by < y0 || by > y1) continue;
+      /* even-odd ray cast over the quad a→b→c2→d2 */
+      let inside = false;
+      const qx = [PX[a], PX[b], PX[c2], PX[d2]], qy = [PY[a], PY[b], PY[c2], PY[d2]];
+      for (let e2 = 0, e1 = 3; e2 < 4; e1 = e2++) {
+        if ((qy[e2] > by) !== (qy[e1] > by) &&
+            bx < (qx[e1] - qx[e2]) * (by - qy[e2]) / (qy[e1] - qy[e2]) + qx[e2]) inside = !inside;
+      }
+      if (inside) ballHidden = true;
     }
   }
   if (ballHidden) {
