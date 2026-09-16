@@ -364,8 +364,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <tr><th>Principle</th><th>How it appears here</th></tr>
   <tr><td>Predict first, never blocking</td><td>An optional three-chip prediction sits above the controls; the sim runs fully without it.</td></tr>
   <tr><td>Targeted cognitive conflict</td><td>The "stay +1" chip encodes the intrinsic-helicity misconception; its rebuttal appears only when that student crosses the flip.</td></tr>
-  <tr><td>Invariant vs. varying</td><td>The spin arrow and rotation sense never respond to the boost slider; p′, the helix handedness, h and the chirality bar do — and the bar reads 50 : 50 whenever p′ = 0.</td></tr>
-  <tr><td>Operational quantities</td><td>E′, p′, relative speed and chiral fractions update live from p′ = γ(p − βE), E′ = γ(E − βp), P<sub>R,L</sub> = (1±β′)/2 with β′ = p′/E′.</td></tr>
+  <tr><td>Invariant vs. varying</td><td>The spin arrow and the ball's rotation sense never respond to the boost slider; p′, h and the chirality bar do — and the bar reads 50 : 50 whenever p′ = 0.</td></tr>
+  <tr><td>Operational quantities</td><td>E′, p′, relative speed and chiral fractions update live from p′ = γ(p − βE), E′ = γ(E − βp), P<sub>R,L</sub> = (1±β′)/2 = (E′±p′c)/2E′ with E′ = √((p′c)²+(mₑc²)²).</td></tr>
   <tr><td>Formal layer on demand</td><td>The helicity definition, boost transform and chiral-fraction formulas live behind the formal-tools toggle.</td></tr>
 </table>
       </div>
@@ -504,7 +504,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="sim-formal">
   <div class="sim-eq"><div class="sim-eq-c">helicity</div><span id="eqH">h = S·<span class="sym-mk">p̂</span> = ±ħ/2</span></div>
   <div class="sim-eq"><div class="sim-eq-c">boost along p</div><span id="eqB">p′ = γ(p − βE),  E′ = γ(E − βp)</span></div>
-  <div class="sim-eq"><div class="sim-eq-c">chiral content of h = +½ħ</div><span id="eqC">P_R = (1+β′)/2, P_L = (1−β′)/2, β′ = p′/E′ → {1, 0} as E ≫ mc²</span></div>
+  <div class="sim-eq"><div class="sim-eq-c">chiral content of h = +½ħ</div><span id="eqC">P_R,L = (1±β′)/2 = (E′ ± p′c)/2E′,  E′ = √((p′c)² + (mₑc²)²) → {1, 0} as p′c ≫ mₑc²</span></div>
 </div>
   </section>
 
@@ -773,7 +773,7 @@ window.__audit = {
 
   var state = {
     pMeV: 1, betaObs: 0,
-    phase: 0, phaseWave: 0, xe: 0.35, labOff: 0
+    phase: 0, xe: 0.35, labOff: 0
   };
 
   // ---------- DOM ----------
@@ -861,28 +861,6 @@ window.__audit = {
   }
 
   // ---------- draw ----------
-  function drawHelixPass(pass, d, xe, yT, A, hCol) {
-    var dir = d.betaRel > 0 ? 1 : -1;
-    var V0 = W * 0.16, vpx = Math.abs(d.betaRel) * V0;
-    var kk = Math.min(OMEGA / Math.max(vpx, 1e-6), 2 * Math.PI / 70);
-    var trail = W * 0.45;
-    var g = ctx.createLinearGradient(xe, 0, xe - dir * trail, 0);
-    g.addColorStop(0, rgba(hCol, pass ? 0.95 : 0.3));
-    g.addColorStop(1, rgba(hCol, 0));
-    ctx.strokeStyle = g; ctx.lineWidth = pass ? 3.5 : 2; ctx.lineCap = 'round';
-    ctx.beginPath();
-    var open = false;
-    for (var s = 0; s <= trail; s += 6) {
-      var th = state.phaseWave - kk * s;
-      var front = Math.cos(th) >= 0;
-      var x = xe - dir * s;
-      if (((pass === 1) !== front) || x < W * 0.02 || x > W * 0.98) { open = false; continue; }
-      var y = yT + A * Math.sin(th);
-      if (open) ctx.lineTo(x, y); else { ctx.moveTo(x, y); open = true; }
-    }
-    ctx.stroke();
-  }
-
   function draw(d) {
     if (!ctx || W < 10 || H < 10) return;
     d = d || phys();
@@ -898,7 +876,6 @@ window.__audit = {
     var short = W < 620;
     var xe = W * (0.08 + wrap01(state.xe) * 0.84);
     var hCol = d.pT >= 0 ? C.right : C.left;
-    var nearFlip = Math.abs(d.betaRel) < 0.02;
     var undef = Math.abs(d.betaRel) < 0.004;
 
     // lab posts streaming past the observer at −β_obs
@@ -915,20 +892,21 @@ window.__audit = {
     ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(W * 0.03, yT); ctx.lineTo(W * 0.97, yT); ctx.stroke();
 
-    // spin-orbit guide ellipse
-    ctx.save(); ctx.setLineDash([4, 5]); ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(xe, yT, A * 0.32, A, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-
-    // helix (handedness = sign of p′)
-    if (!nearFlip) drawHelixPass(0, d, xe, yT, A, hCol);
-
-    // spinning marker (fixed rotation sense)
-    var mx = xe + A * 0.32 * Math.cos(state.phase);
-    var my = yT + A * Math.sin(state.phase);
+    /* Intrinsic spin (HC review): the electron is a ball rotating about an axis
+       through its OWN centre — nothing orbits it, no trail. The axis runs along
+       the spin arrow (horizontal); the surface dot circulates on a meridian ring
+       at a fixed sense the boost slider can never touch. Classical picture,
+       knowingly wrong — but no longer wrong in the "orbiting an atom" way. */
+    var mx = xe + re * 0.34 * Math.cos(state.phase);
+    var my = yT + re * 0.85 * Math.sin(state.phase);
     var frontM = Math.cos(state.phase) >= 0;
-    var mr = Math.max(3.5, re * 0.34);
-    if (!frontM) { ctx.fillStyle = COL_S; ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+    var mr = Math.max(2.5, re * 0.26);
+    if (!frontM) { ctx.fillStyle = rgba(COL_S, 0.45); ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+
+    // spin axis through the centre, along S
+    ctx.save(); ctx.strokeStyle = COL_S; ctx.globalAlpha = 0.9; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(xe - re * 2.0, yT); ctx.lineTo(xe + re * 2.0, yT); ctx.stroke();
+    ctx.restore();
 
     // electron glow + body
     ctx.fillStyle = rgba(hCol, 0.14);
@@ -937,7 +915,10 @@ window.__audit = {
     ctx.beginPath(); ctx.arc(xe, yT, re, 0, 7); ctx.fill();
     ctx.strokeStyle = C.bg; ctx.lineWidth = 2; ctx.stroke();
 
-    if (!nearFlip) drawHelixPass(1, d, xe, yT, A, hCol);
+    // meridian ring (perpendicular to the axis) + circulating surface dot
+    ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(COL_S, 0.6); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(xe, yT, re * 0.34, re * 0.85, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
     if (frontM) { ctx.fillStyle = COL_S; ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
 
     // spin arrow (never changes)
@@ -1007,6 +988,13 @@ window.__audit = {
     ctx.fillStyle = COL_R; ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx, ly);
     ctx.fillStyle = COL_L; ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw, ly);
     ctx.textAlign = 'left';
+    /* chiral weights in terms of momentum and rest mass (HC review) */
+    if (!HT() && pwd > 470) {
+      ctx.font = '600 ' + Math.max(12, fs - 2) + 'px ' + FONT;
+      ctx.fillStyle = C.muted; ctx.textAlign = 'center';
+      ctx.fillText('Pᵣ,ₗ = (E′ ± p′c) / 2E′ ,   E′ = √( (p′c)² + (mₑc²)² ) ,   mₑc² = 0.511 MeV', px0 + pwd / 2, py0 + fs + 2);
+      ctx.textAlign = 'left';
+    }
   }
 
   // ---------- readouts / prediction ----------
@@ -1043,7 +1031,7 @@ window.__audit = {
   /* User-driven parameter change: rewind the animation state (phase, positions) so
      the new configuration starts from t = 0 in view at the left edge, and (re)start playback. */
   function restartAnim() {
-    state.phase = 0; state.phaseWave = 0; state.xe = 0; state.labOff = 0;
+    state.phase = 0; state.xe = 0; state.labOff = 0;
     try { if (Shell && Shell.setPlaying) Shell.setPlaying(true); } catch (e) { }
   }
 
@@ -1086,23 +1074,13 @@ window.__audit = {
     /* Spin phase — invariant rotation rate. Drives the spin marker on the ball. */
     state.phase += OMEGA * dt;
     if (state.phase > 6.283185307179586) state.phase %= 6.283185307179586;
-    /* Wave phase — advances so the drawn crests slide at the electron's own velocity even
-       when kk is clamped for visibility (fixes low-momentum flicker: without this the crests
-       swept through a nearly-stationary ball at OMEGA/kk_clamped ≈ 67 px/s while the ball
-       itself drifted at only vpx px/s). */
-    var vpx = Math.abs(d.betaRel) * W * 0.16;
-    var kkMax = 2 * Math.PI / 70;
-    var kkPhys = OMEGA / Math.max(vpx, 1e-6);
-    var omegaWave = kkPhys <= kkMax ? OMEGA : kkMax * vpx;
-    state.phaseWave += omegaWave * dt;
-    if (state.phaseWave > 6.283185307179586) state.phaseWave %= 6.283185307179586;
     state.xe = wrap01(state.xe + d.betaRel * 0.16 * dt);
     state.labOff += state.betaObs * W * 0.16 * dt;
     if (state.labOff > 1e6) state.labOff %= 1e4;
     tick(d);
   }
   function onReset() {
-    state.phase = 0; state.phaseWave = 0; state.xe = 0.35; state.labOff = 0;
+    state.phase = 0; state.xe = 0.35; state.labOff = 0;
     apply(1, 0);
     tick();
   
@@ -1120,7 +1098,7 @@ window.__audit = {
     tick();
   }
   function onStep(i) {
-    state.phase = 0; state.phaseWave = 0; state.xe = 0.35; state.labOff = 0;
+    state.phase = 0; state.xe = 0.35; state.labOff = 0;
     // One entry per inquiry card — deterministic, self-contained scenes:
     // 1 lab frame · 2 chase at β=0.5 · 3 overtaken at β=0.9 · 4 p=20 MeV, β=0.9.
     var presets = [[1, 0], [1, 0.5], [1, 0.9], [20, 0.9]];
@@ -1131,7 +1109,7 @@ window.__audit = {
   function onComplete() {
     // Free exploration from the baseline: flip point reachable, all controls live.
     // Boot ball at the left edge so Play sweeps the animation rightward across the canvas.
-    state.phase = 0; state.phaseWave = 0; state.xe = 0; state.labOff = 0;
+    state.phase = 0; state.xe = 0; state.labOff = 0;
     apply(1, 0);
     tick();
     /* Boot / lecture-completion: pause on entry — student clicks Play to start the animation. */
