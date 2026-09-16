@@ -363,6 +363,198 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 @keyframes hlpulse{0%,100%{outline-color:rgba(96,165,250,.7);}50%{outline-color:rgba(96,165,250,.18);}}
 
 </style>
+<style>
+/* ============================================================================
+   USER-VERSION LAYERS (append-only) — welcome overlay, guided-inquiry chrome,
+   controls-guide overlay, card voiceover. Nothing here restyles the simulation:
+   every selector below targets an element this layer introduced, or an inquiry
+   element the layer owns.
+   ========================================================================== */
+
+/* Lecture mode is retired in the user versions: the two top-bar buttons own
+   zone visibility. The legacy button and restore strip stay in the DOM
+   (production ids are never removed) but are never shown. */
+#shell-lecture{display:none !important;}
+#aside-inquiry-restore{display:none !important;}
+
+/* The 🧭 button owns the inquiry zone's visibility. */
+.gi-off #aside-inquiry{display:none !important;}
+
+/* An unanswered card's feedback box is empty; keep it collapsed until it
+   carries text (the sim adds .show on commit — this is belt and braces). */
+.inq-step .predict-eval:empty{display:none;}
+
+/* Staged anti-lookup reveal, layer-owned: a formal-panel row that states the
+   answer to a gated card in words is withheld while that card is active,
+   gated and still uncommitted. Derived from the live DOM on every step and
+   every commit — never latched, so Reset, the pager and re-entry cannot
+   strand it. No simulation control is operated and nothing on the canvas
+   moves. */
+.gi-held{display:none !important;}
+
+/* The two template buttons drop to icon-only on narrow viewports so the cream
+   top bar does not grow. Scoped to the layer's own buttons. */
+@media (max-width:1280px){ #btn-gi .btn-lbl, #btn-cg .btn-lbl{display:none;} }
+
+/* ===== Controls Guide overlay ===== */
+.cg-hidden{display:none !important;}
+.cg-veiled{visibility:hidden !important;pointer-events:none;}
+.cg-glow{outline:1px solid #10b981;border-radius:8px;
+  box-shadow:0 0 0 1px #10b981,0 0 14px rgba(16,185,129,.55);
+  animation:cgPulse 1.6s ease-in-out infinite;}
+@keyframes cgPulse{0%,100%{box-shadow:0 0 0 1px #10b981,0 0 10px rgba(16,185,129,.4);}
+  50%{box-shadow:0 0 0 2px #10b981,0 0 20px rgba(16,185,129,.7);}}
+.cg-callout{position:fixed;z-index:4000;max-width:260px;background:#0d1522;color:#e2e8f0;
+  border:1.5px solid #8b5cf6;border-radius:10px;padding:10px 12px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-callout h5{margin:0 0 4px;font-size:0.8rem;font-weight:700;color:#a78bfa;}
+.cg-callout p{margin:0;font-size:0.78rem;line-height:1.45;}
+.cg-arrow{position:absolute;width:12px;height:12px;background:#0d1522;transform:rotate(45deg);}
+.cg-callout.arrow-top .cg-arrow{top:-7px;border-top:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.arrow-bottom .cg-arrow{bottom:-7px;border-bottom:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-right .cg-arrow{right:-7px;border-top:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-left .cg-arrow{left:-7px;border-bottom:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.no-arrow .cg-arrow{display:none;}
+html[data-theme="light"] .cg-callout, body.light-theme .cg-callout{background:#fff;color:#0f172a;border-color:#7c3aed;}
+html[data-theme="light"] .cg-callout h5, body.light-theme .cg-callout h5{color:#7c3aed;}
+html[data-theme="light"] .cg-arrow, body.light-theme .cg-arrow{background:#fff;border-color:#7c3aed !important;}
+/* Nav bar matches the purple callout: same panel fill, purple border, purple buttons.
+   Width = sidebar (320px) minus equal 18px side margins, so the nav sits centred on
+   the sidebar column rather than skewed to its right edge. */
+.cg-nav{position:fixed;z-index:4000;right:18px;bottom:16px;width:284px;max-width:calc(100vw - 36px);display:flex;gap:8px;align-items:center;
+  background:#0d1522;border:1.5px solid #8b5cf6;border-radius:10px;padding:8px 10px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-nav button{height:30px;padding:0 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;
+  background:transparent;border:1px solid #8b5cf6;color:#a78bfa;font-family:var(--font-sans);transition:background .15s,color .15s;}
+.cg-nav button:hover:not(:disabled){background:rgba(139,92,246,.18);color:#e2e8f0;}
+.cg-nav button:disabled{opacity:.35;cursor:default;}
+.cg-nav #cg-next{background:#8b5cf6;border-color:#8b5cf6;color:#fff;min-width:76px;}
+.cg-nav #cg-next:hover:not(:disabled){background:#7c3aed;border-color:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav, body.light-theme .cg-nav{background:#fff;border-color:#7c3aed;}
+html[data-theme="light"] .cg-nav button, body.light-theme .cg-nav button{border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav button:hover:not(:disabled), body.light-theme .cg-nav button:hover:not(:disabled){background:rgba(124,58,237,.12);color:#5b21b6;}
+html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{background:#7c3aed;color:#fff;}
+
+/* ===== Welcome overlay (first landing) ===== */
+#welcome-overlay{position:fixed;inset:0;z-index:5000;background:radial-gradient(ellipse at center,rgba(2,6,12,.94) 0%,rgba(2,6,12,.86) 55%,rgba(2,6,12,.7) 100%);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);}
+#welcome-overlay.hidden{display:none;}
+.welcome-card{position:relative;width:min(760px,92vw);margin:0 auto;background:transparent;color:#E6EDF5;border-radius:0;overflow:visible;
+  box-shadow:none;
+  animation:wcIn .55s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes wcIn{from{opacity:0;transform:translateY(14px) scale(.985);}to{opacity:1;transform:none;}}
+.welcome-hero{position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:140px;background:transparent;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);opacity:.9;}
+.welcome-hero canvas{display:block;width:100%;height:100%;}
+.welcome-hero::after{content:none;}
+.welcome-hero .hero-label{display:none;}
+.welcome-body{padding:156px 0 0;}
+.welcome-card h2{margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;}
+.welcome-kicker{font-size:.95rem;font-weight:500;letter-spacing:.02em;color:#AAB6C6;}
+.welcome-name{font-size:2.3rem;line-height:1.08;letter-spacing:-.02em;font-weight:700;max-width:22ch;}
+.welcome-blurb{margin:0 auto 26px;font-size:1rem;line-height:1.55;color:#AAB6C6;max-width:44ch;text-align:center;}
+.welcome-ask{margin:0 0 8px;font-size:.82rem;font-weight:600;color:#E6EDF5;text-align:center;}
+html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F172A;}
+.welcome-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0;}
+.welcome-mode{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;
+  padding:18px 16px 16px;border-radius:14px;cursor:pointer;color:#E6EDF5;font-family:var(--font-sans);
+  background:rgba(255,255,255,.045);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(148,163,184,.18);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transition:transform .16s,border-color .16s,background .16s,box-shadow .16s;}
+.welcome-mode:hover,.welcome-mode:focus-visible{transform:translateY(-3px);background:rgba(255,255,255,.075);outline:none;box-shadow:0 14px 34px rgba(0,0,0,.35);}
+.welcome-mode[data-mode="inquiry"]:hover,.welcome-mode[data-mode="inquiry"]:focus-visible{border-color:rgba(52,211,153,.7);}
+.welcome-mode[data-mode="controls"]:hover,.welcome-mode[data-mode="controls"]:focus-visible{border-color:rgba(167,139,250,.7);}
+.welcome-mode[data-mode="free"]:hover,.welcome-mode[data-mode="free"]:focus-visible{border-color:rgba(251,191,36,.7);}
+.wm-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;}
+.wm-icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode[data-mode="inquiry"] .wm-icon{background:rgba(16,185,129,.16);color:#34d399;}
+.welcome-mode[data-mode="controls"] .wm-icon{background:rgba(139,92,246,.18);color:#a78bfa;}
+.welcome-mode[data-mode="free"] .wm-icon{background:rgba(245,158,11,.16);color:#fbbf24;}
+.wm-text{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.wm-title{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;font-weight:600;font-size:.95rem;white-space:nowrap;}
+.wm-tag{font-size:.6rem;font-weight:600;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,.16);color:#6ee7b7;letter-spacing:.01em;}
+.wm-desc{display:block;font-size:.8rem;line-height:1.45;color:#AAB6C6;}
+.wm-go{margin-top:auto;padding-top:6px;display:flex;align-items:center;gap:4px;font-size:.78rem;font-weight:600;color:#94A3B8;}
+.wm-go svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode:hover .wm-go{color:#E6EDF5;}
+@media (max-width:760px){.welcome-modes{grid-template-columns:1fr;}}
+.welcome-foot{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:22px;padding-top:0;border-top:none;}
+.welcome-listen{font-size:.8rem;color:#AAB6C6;line-height:1.35;}
+.welcome-listen b{display:block;color:#E6EDF5;font-weight:600;font-size:.84rem;}
+.welcome-audio{display:flex;align-items:center;gap:10px;}
+.welcome-audio button{display:grid;place-items:center;border:none;cursor:pointer;background:transparent;color:#C7D2E0;padding:0;font-family:var(--font-sans);}
+.welcome-audio button:disabled{opacity:.3;cursor:default;}
+.welcome-audio .wa-skip{width:34px;height:34px;border-radius:50%;}
+.welcome-audio .wa-skip:hover:not(:disabled){color:#fff;background:rgba(148,163,184,.12);}
+.welcome-audio .wa-skip svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak{width:44px;height:44px;border-radius:50%;background:#F4F7FA;color:#0B1220;transition:transform .12s;}
+#welcome-speak:hover{transform:scale(1.06);}
+#welcome-speak svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak[data-state="playing"] svg.i-play,#welcome-speak[data-state="playing"] svg.i-again{display:none;}
+#welcome-speak:not([data-state="playing"]) svg.i-pause{display:none;}
+#welcome-speak[data-state="done"] svg.i-play{display:none;}
+#welcome-speak:not([data-state="done"]) svg.i-again{display:none;}
+.welcome-seg{display:flex;gap:4px;margin-left:4px;}
+.welcome-seg i{display:block;width:14px;height:3px;border-radius:2px;background:rgba(148,163,184,.25);}
+.welcome-seg i.on{background:#34d399;}
+.welcome-seg i.cur{background:#F4F7FA;}
+.welcome-progress{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+@media (prefers-reduced-motion: reduce){.welcome-card{animation:none;}}
+html[data-theme="light"] #welcome-overlay, body.light-theme #welcome-overlay{background:radial-gradient(ellipse at center,rgba(241,245,249,.94) 0%,rgba(241,245,249,.86) 55%,rgba(241,245,249,.72) 100%);}
+html[data-theme="light"] .welcome-card, body.light-theme .welcome-card{background:transparent;color:#0F172A;box-shadow:none;}
+html[data-theme="light"] .welcome-hero, body.light-theme .welcome-hero{background:transparent;}
+html[data-theme="light"] .welcome-blurb,html[data-theme="light"] .wm-desc,html[data-theme="light"] .welcome-listen, body.light-theme .welcome-blurb,body.light-theme .wm-desc,body.light-theme .welcome-listen{color:#475569;}
+html[data-theme="light"] .welcome-listen b, body.light-theme .welcome-listen b{color:#0F172A;}
+html[data-theme="light"] .welcome-kicker, body.light-theme .welcome-kicker{color:#475569;}
+html[data-theme="light"] .welcome-mode, body.light-theme .welcome-mode{color:#0F172A;background:rgba(255,255,255,.55);border-color:rgba(15,23,42,.12);}
+html[data-theme="light"] .wm-tag, body.light-theme .wm-tag{color:#047857;background:rgba(16,185,129,.14);}
+html[data-theme="light"] .wm-go, body.light-theme .wm-go{color:#475569;}
+html[data-theme="light"] .welcome-mode:hover, body.light-theme .welcome-mode:hover{background:rgba(15,23,42,.07);}
+html[data-theme="light"] .welcome-audio button, body.light-theme .welcome-audio button{color:#334155;}
+html[data-theme="light"] #welcome-speak, body.light-theme #welcome-speak{background:#0F172A;color:#fff;}
+html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur{background:#0F172A;}
+
+/* ===== Card voiceover (controls guide + guided inquiry) ===== */
+/* Two-row layout: a "Listen" narration row (transport + Auto) above the
+   card-navigation row, separated by a hairline — audio is secondary, the
+   Next progression stays the anchor action. */
+.cg-nav{flex-direction:column;align-items:stretch;gap:7px;}
+.cg-nav-row{display:flex;align-items:center;gap:8px;}
+.cg-row-nav{border-top:1px solid rgba(139,92,246,.28);padding-top:7px;}
+html[data-theme="light"] .cg-row-nav, body.light-theme .cg-row-nav{border-top-color:rgba(124,58,237,.22);}
+.cg-flex{flex:1;}
+.cg-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a7;margin-right:2px;}
+html[data-theme="light"] .cg-listen-lab, body.light-theme .cg-listen-lab{color:#64748b;}
+.cg-nav .cg-voice{width:26px;height:26px;min-width:26px;padding:0;border:none !important;background:transparent;
+  border-radius:50%;display:grid;place-items:center;color:#a78bfa;}
+.cg-nav .cg-voice:hover:not(:disabled){background:rgba(139,92,246,.22);color:#e2e8f0;}
+.cg-nav .cg-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+.cg-nav #cg-voice-play{width:30px;height:30px;min-width:30px;border:1px solid #8b5cf6 !important;}
+.cg-nav #cg-voice-play[data-vstate="playing"]{background:#8b5cf6;color:#fff;}
+.cg-nav #cg-voice-play svg{width:13px;height:13px;}
+.cg-nav .cg-sep{width:1px;height:20px;background:rgba(139,92,246,.4);margin:0 4px;flex-shrink:0;}
+html[data-theme="light"] .cg-nav .cg-voice, body.light-theme .cg-nav .cg-voice{color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-voice-play, body.light-theme .cg-nav #cg-voice-play{border-color:#7c3aed !important;}
+html[data-theme="light"] .cg-nav #cg-voice-play[data-vstate="playing"], body.light-theme .cg-nav #cg-voice-play[data-vstate="playing"]{background:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav .cg-sep, body.light-theme .cg-nav .cg-sep{background:rgba(124,58,237,.35);}
+.cg-nav #cg-auto{height:22px;min-width:0;padding:0 9px;border-radius:999px;font-size:0.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(139,146,167,.45);color:#8b93a7;display:inline-flex;align-items:center;transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+.cg-nav #cg-auto:hover:not(.active){border-color:#8b5cf6;color:#a78bfa;}
+.cg-nav #cg-auto.active{background:#8b5cf6;border-color:#8b5cf6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.55);}
+html[data-theme="light"] .cg-nav #cg-auto, body.light-theme .cg-nav #cg-auto{border-color:rgba(100,116,139,.5);color:#64748b;}
+html[data-theme="light"] .cg-nav #cg-auto:hover:not(.active), body.light-theme .cg-nav #cg-auto:hover:not(.active){border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-auto.active, body.light-theme .cg-nav #cg-auto.active{background:#7c3aed;border-color:#7c3aed;color:#fff;box-shadow:0 0 10px rgba(124,58,237,.4);}
+#inq-auto{height:27px;max-height:27px;min-width:0;padding:0 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;box-sizing:border-box;
+  border-color:var(--ctrl-border);color:var(--ink-mute);transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+#inq-auto:hover:not(.active){border-color:var(--accent-soft);color:var(--accent);}
+#inq-auto.active{background:var(--accent) !important;border-color:var(--accent) !important;color:#06231c !important;box-shadow:0 0 10px rgba(59,155,143,.45);}
+body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{color:#fff !important;}
+.inq-listen{display:flex;align-items:center;gap:8px;margin:10px 0 0;}
+.inq-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-right:2px;}
+#inq-voice{width:27px;height:27px;min-width:27px;max-height:27px;padding:0;border-radius:50%;justify-content:center;display:inline-flex;align-items:center;box-sizing:border-box;}
+#inq-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+[data-vstate] svg.i-play,[data-vstate] svg.i-pause,[data-vstate] svg.i-again{display:none;}
+[data-vstate="idle"] svg.i-play{display:block;}
+[data-vstate="playing"] svg.i-pause{display:block;}
+[data-vstate="done"] svg.i-again{display:block;}
+</style>
 </head>
 <body>
 <div id="shell" class="hide-formal">
@@ -423,13 +615,15 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div class="shell-group">
       <button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button>
       <button id="shell-theme" class="shell-btn" title="Toggle light / dark theme">☾</button>
+      <button id="btn-gi" class="shell-btn active" title="Show or hide the guided inquiry"><span aria-hidden="true">🧭</span><span class="btn-lbl">Guided Inquiry</span></button>
+      <button id="btn-cg" class="shell-btn" title="Show or hide the controls guide"><span aria-hidden="true">🎛</span><span class="btn-lbl">Controls Guide</span></button>
       <button id="shell-lecture" class="shell-btn" title="Lecture display mode — hide the guided inquiry, show the full simulation">🎓 Lecture</button>
     </div>
     <div class="shell-controls">
       <div class="shell-group">
         <button id="shell-maximize" class="shell-btn">⛶ Maximize</button>
         <button id="toggle-formal" class="shell-btn">∑ Formal</button>
-        <label style="font-size:11px;">Speed</label>
+        <label style="font-size:11px;" id="lbl-speed">Speed</label>
         <select id="shell-speed" class="shell-select">
           <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
           <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
@@ -442,6 +636,54 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       </div>
     </div>
   </header>
+
+  <div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title">
+    <div class="welcome-card">
+      <div class="welcome-hero">
+        <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
+        <span class="hero-label">A light cone at 45°, an event outside it, and the S′ lines of constant time sweeping past.</span>
+      </div>
+      <div class="welcome-body">
+        <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Tachyon causality violation</span></h2>
+        <p class="welcome-blurb">A faster-than-light signal crosses a spacelike gap, and some observers see it arrive before it was sent.</p>
+        <p class="welcome-ask">How would you like to begin?</p>
+        <div class="welcome-modes">
+          <button type="button" class="welcome-mode" data-mode="inquiry">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.9 4.6-4.6 1.9 1.9-4.6z"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Guided inquiry <span class="wm-tag">Recommended</span></span>
+            <span class="wm-desc">Uncover the simulation in steps and see the physics emerge.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+          <button type="button" class="welcome-mode" data-mode="controls">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Controls guide</span>
+            <span class="wm-desc">Learn each control, one at a time.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+          <button type="button" class="welcome-mode" data-mode="free">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 20l5-5M4 20v-4M4 20h4M20 4l-5 5M20 4v4M20 4h-4"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Free exploration</span>
+            <span class="wm-desc">Everything open. Experiment on your own.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+        </div>
+        <div class="welcome-foot">
+          <div class="welcome-listen"><b>Listen to the intro</b></div>
+          <div class="welcome-audio" aria-label="Read aloud controls">
+            <button type="button" class="wa-skip" id="welcome-prev" title="Previous line" aria-label="Previous line"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>
+            <button type="button" id="welcome-speak" data-state="idle" title="Play" aria-label="Play" aria-pressed="false">
+              <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>
+              <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+              <svg class="i-again" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+            </button>
+            <button type="button" class="wa-skip" id="welcome-next" title="Next line" aria-label="Next line"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+            <span class="welcome-seg" id="welcome-seg" aria-hidden="true"></span>
+            <span id="welcome-progress" class="welcome-progress"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <main class="shell-hero">
     <div class="plot-box" style="flex:1;min-height:0;display:flex;flex-direction:column;">
@@ -460,47 +702,85 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
       <div id="inq-dots" class="inq-dots"></div>
       <div id="inq-cards" class="aside-zone-body">
 
+      <!-- ===================================================================
+           USER VERSION — the deck is rebuilt to the SME card grammar.
+           FRAME (the two events and the boost, symbolically) → Q1 naive
+           baseline (a timelike pair: is its order a point of view?) → Q2
+           mechanism (what the spacelike sign change does to Δct′) → Q3
+           scaling (how the reversing boost depends on the separation) →
+           Q4 consequence (the reply leg, and what closes the loop) →
+           TELL (the antitelephone).
+           Card COUNT changes 5 → 6, so applyStepDefaults() and
+           updateStepHL()'s index maps are re-derived in the layer block at
+           the foot of the sim script.
+           SIGN CONVENTION is this sim's own, determined from its Readings
+           panel and its ∑ Formal panel and confirmed on the live readouts:
+           Δs² = Δct² − Δx², i.e. TIMELIKE POSITIVE, spacelike negative.
+           data-hold names the staged anti-lookup reveals a card needs. The
+           ∑ Formal panel states the order-reversal criterion and the loop
+           condition in words, so those two equation rows are withheld while
+           the card they answer is active, gated and uncommitted. The hold is
+           read from the live DOM, operates no control, and moves nothing the
+           student can see.
+           =================================================================== -->
+
+      <div class="inq-step">
+        <h4>1 · Two events, two frames</h4>
+        <p>Event <b style="color:#60a5fa;">A</b> at (x, ct) = (0.00, 0.00) sends a signal received at event <b style="color:#fb7185;">B</b> at (3.21, 4.70). Their separation is Δs² = Δct² − Δx², positive when B lies inside A's light cone and negative when it lies outside. A second observer S′ moves at v/c relative to S and, for the same two events, measures Δct′ = γ(Δct − (v/c)·Δx).</p>
+      </div>
+
       <div class="inq-step" data-gate>
-        <h4>1 · Causal baseline — inside the cone</h4>
-        <p>Event <b style="color:#60a5fa;">A ("A sends")</b> fires a signal received at event <b style="color:#fb7185;">B ("B receives")</b>. Drag <b>B</b> (it moves freely in x <i>and</i> ct now) until it sits <b>inside A's light cone</b> — the dashed 45° lines through A — so the Readings panel shows Δs² &gt; 0 (<b>timelike</b>).</p>
-        <p><b>A friend says:</b> "Order in time is just a matter of perspective — boost hard enough and B can happen before A even here."</p>
-        <button class="choice" data-c="a" data-correct="0" data-fb="&lt;b&gt;No — inside the light cone the order is absolute.&lt;/b&gt; For a timelike pair |Δct| &gt; |Δx|, so Δct′ = γ(Δct − (v/c)·Δx) keeps its sign for every |v/c| &lt; 1. Sweep the v/c slider and watch: Δct′ never crosses zero while B stays inside the cone.">1 — Yes. Boost hard enough and any time-order can flip.</button>
-        <button class="choice" data-c="b" data-correct="0" data-fb="&lt;b&gt;Closer, but the reason is geometric, not practical.&lt;/b&gt; It's not that we &quot;can't reach&quot; the required boost — no boost with |v/c| &lt; 1 can flip a timelike pair, because |Δct| &gt; |Δx| makes γ(Δct − (v/c)·Δx) keep its sign. The light cone is an absolute causal boundary, not an engineering limit.">2 — The order only holds because real rockets can't go fast enough.</button>
-        <button class="choice" data-c="c" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; A timelike pair has |Δct| &gt; |Δx|, so Δct′ = γ(Δct − (v/c)·Δx) never changes sign for |v/c| &lt; 1. Everything A can cause sits inside its light cone, and every frame agrees on the order — causality is safe at sub-light speeds.">3 — No. For a timelike pair no boost with |v/c| &lt; 1 can reverse the order.</button>
+        <h4>2 · Order inside the cone</h4>
+        <p>B lies inside A's light cone: Δs² = +11.79, and the A→B signal travels at 0.68 c. Taking every frame with |v/c| &lt; 1, what becomes of the order of A and B?</p>
+        <button class="choice" data-c="a" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; Here |Δct| = 4.70 exceeds |Δx| = 3.21, so (v/c)·Δx stays below Δct for every |v/c| &lt; 1 and γ(Δct − (v/c)·Δx) never reaches zero. Timelike order is absolute.">(a) A is first in every frame</button>
+        <button class="choice" data-c="b" data-correct="0" data-fb="That is the relativity of simultaneity stretched too far: it reorders spacelike pairs only. With |Δct| greater than |Δx| the product (v/c)·Δx never overtakes Δct, so &lt;span class=&quot;answer&quot;&gt;A is first in every frame&lt;/span&gt;.">(b) Some boost puts B first — order is a viewpoint</button>
+        <button class="choice" data-c="c" data-correct="0" data-fb="A geometric limit, not an engineering one. Even as |v/c| → 1 the product (v/c)·Δx only approaches 3.21, still short of Δct = 4.70, so &lt;span class=&quot;answer&quot;&gt;A is first in every frame&lt;/span&gt; — reachable or not.">(c) A is first only because no frame is fast enough</button>
         <div class="predict-eval"></div>
       </div>
 
-      <div class="inq-step" data-gate>
-        <h4>2 · Go superluminal — outside the cone</h4>
-        <p>Now drag <b>B</b> <i>outside</i> A's light cone: Δs² &lt; 0 (<b>spacelike</b>). The A→B signal turns into a <b>superluminal signal</b> — check its speed readout: v = |Δx/Δct| &gt; 1 (i.e. &gt; c).</p>
-        <p><b>The friend shrugs:</b> "So the signal is fast. What's the problem?"</p>
-        <button class="choice" data-c="a" data-correct="0" data-fb="&lt;b&gt;This is exactly the misconception worth dismantling.&lt;/b&gt; A v &gt; c signal connects &lt;b&gt;spacelike-separated&lt;/b&gt; events — and for those, the time-order is &lt;i&gt;frame-dependent&lt;/i&gt;. In the next step you'll find a boost where B (the reception) happens &lt;b&gt;before&lt;/b&gt; A (the emission). &quot;Fast mail&quot; that arrives before it is sent is not mail — it's a broken causal order.">1 — No problem. A fast enough signal just arrives sooner; causality is untouched.</button>
-        <button class="choice" data-c="b" data-correct="0" data-fb="&lt;b&gt;You can draw it — that's the point.&lt;/b&gt; Nothing stops us drawing a v &gt; c segment on the diagram; the question is what physics it implies. Because it joins spacelike-separated events, a boost can reverse the order of A and B — which is where causality breaks. The diagram is the tool for seeing exactly that.">2 — It's meaningless — you can't even draw faster-than-light motion on a spacetime diagram.</button>
-        <button class="choice" data-c="c" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; With Δs² &lt; 0, A and B are spacelike-separated: |Δx| &gt; |Δct|, so there exist boosts (v/c between c·Δct/Δx and 1) where Δct′ changes sign. The next card makes you find one.">3 — Big trouble — a spacelike pair's time-order is frame-dependent, and this signal now connects one.</button>
+      <div class="inq-step" data-gate data-hold="flip">
+        <h4>3 · Outside the cone</h4>
+        <p>B now sits outside A's light cone at (5.00, 2.00): Δs² = −21.00, and the A→B signal travels at 2.50 c. In Δct′ = γ(Δct − (v/c)·Δx), what has that changed?</p>
+        <button class="choice" data-c="a" data-correct="0" data-fb="γ = 1/√(1−(v/c)²) is positive for every frame, so it scales Δct′ but can never reverse it. &lt;span class=&quot;answer&quot;&gt;The sign is settled by (v/c)·Δx against Δct&lt;/span&gt;, and Δx = 5.00 now exceeds Δct = 2.00.">(a) γ can now outgrow Δct and flip the sign</button>
+        <button class="choice" data-c="b" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; With Δx = 5.00 larger than Δct = 2.00, the product (v/c)·Δx passes Δct while |v/c| is still below 1, and Δct′ changes sign. Spacelike order is frame-dependent.">(b) (v/c)·Δx can now exceed Δct, so Δct′ can change sign</button>
+        <button class="choice" data-c="c" data-correct="0" data-fb="The transformation acts on events, not on whatever travels between them — A and B are still two points of spacetime. &lt;span class=&quot;answer&quot;&gt;(v/c)·Δx can now exceed Δct&lt;/span&gt;, so Δct′ changes sign for some frames.">(c) Nothing — a v &gt; c signal is outside the transformation</button>
         <div class="predict-eval"></div>
       </div>
 
-      <div class="inq-step" data-gate>
-        <h4>3 · Boost flips the order</h4>
-        <p>Keep B <b>outside</b> the cone and sweep the <b>v/c slider</b> (highlighted). Watch the tilted S′ simultaneity lines through A and B, and the <b>Δct′</b> readout: at some v/c it passes through zero and <b>changes sign</b> — the corner badge flags <b>⚠ order flipped</b>. For that S′ observer, <b>B receives the signal before A sends it</b>.</p>
-        <p style="color:var(--text-muted)">This can only happen for a spacelike pair: Δct′ = γ(Δct − (v/c)·Δx) crosses zero at v/c = Δct/Δx, which needs |Δx| &gt; |Δct|. Try dragging B back inside the cone — no v/c flips it.</p>
+      <div class="inq-step" data-gate data-hold="flip">
+        <h4>4 · Moving B further out</h4>
+        <p>For this pair Δct′ passes through zero at v/c = 0.40. Drag B further from A along x, holding Δct at +2.00. What becomes of the boost at which the order reverses?</p>
+        <button class="choice" data-c="a" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; Δct′ = 0 at v/c = Δct/Δx, so growing Δx at fixed Δct lowers it: at Δx = 7.00 the order reverses by v/c = 0.29.">(a) It falls — a smaller boost is enough</button>
+        <button class="choice" data-c="b" data-correct="0" data-fb="The opposite. v/c = Δct/Δx falls as Δx grows, so the further out B lies the less boost is needed: &lt;span class=&quot;answer&quot;&gt;it falls&lt;/span&gt; — at Δx = 7.00 the order reverses by v/c = 0.29.">(b) It rises — a more distant reception needs more boost</button>
+        <button class="choice" data-c="c" data-correct="0" data-fb="Only one spacelike pair has been tried so far. The crossing sits at v/c = Δct/Δx, which belongs to the pair, not to spacelike separation in general: &lt;span class=&quot;answer&quot;&gt;it falls&lt;/span&gt; — at Δx = 7.00 it is v/c = 0.29.">(c) It is unchanged — every spacelike pair reverses at 0.40</button>
+        <div class="predict-eval"></div>
       </div>
 
-      <div class="inq-step" data-gate>
-        <h4>4 · Close the loop — acausality</h4>
-        <p>First <b>boost</b> (v/c slider) until the A,B order flips — Δct′ changes sign, so B now precedes A for S′. <i>Now</i> switch on the <b>Return signal</b> (highlighted): B replies at speed v₂ <b>in that frame</b>, back toward A's worldline, arriving at event <b>E₃</b>.</p>
-        <p>Push the boost further (or raise v₂) until <b>E₃ drops below A</b>: the Readings panel shows <b>⚠ LOOP: E₃ precedes A</b>. The reply reaches A <i>before</i> A sent — <b>effect before cause</b>, in A's own frame, on A's own worldline.</p>
-        <p style="color:var(--text-muted)">Note it's impossible without the boost: at rest in S (v/c = 0) the reply always arrives <i>after</i> A sends. The loop needs the relativity of simultaneity to reverse the order first.</p>
+      <div class="inq-step" data-gate data-hold="loop">
+        <h4>5 · The reply</h4>
+        <p>At v/c = 0.60 the order has reversed: in S′, B receives before A sends. B now answers at v₂ = 3.00 c in S′, meeting A's worldline at E₃ with ct₃ = 0.33 — still above A. What brings ct₃ below A?</p>
+        <button class="choice" data-c="a" data-correct="0" data-fb="Reversal in S′ is necessary but not sufficient — the order has already reversed here and ct₃ is still 0.33. &lt;span class=&quot;answer&quot;&gt;A larger boost, or a faster reply&lt;/span&gt;: at v/c = 0.80 the same reply gives ct₃ = −1.18.">(a) Nothing more — the reversed order is the whole effect</button>
+        <button class="choice" data-c="b" data-correct="1" data-fb="&lt;b&gt;Correct.&lt;/b&gt; At v/c = 0.80 with the same reply, ct₃ = −1.18; at v/c = 0.60 with v₂ = 5.00 c, ct₃ = −0.27. Either route lands the answer on A's worldline before A sent — the tachyonic antitelephone.">(b) A larger boost, or a faster reply</button>
+        <button class="choice" data-c="c" data-correct="0" data-fb="E₃ and A do share one worldline, so their order is the same in every frame — which is exactly what makes ct₃ &lt; ct_A a contradiction rather than a matter of viewpoint. &lt;span class=&quot;answer&quot;&gt;A larger boost, or a faster reply&lt;/span&gt;, reaches it: at v/c = 0.80, ct₃ = −1.18.">(c) Nothing can — E₃ sits on A's own worldline</button>
+        <div class="predict-eval"></div>
       </div>
 
       <div class="inq-step">
-        <h4>5 · Resolve — why c is a causal speed limit</h4>
-        <p>The chain is: <b>superluminal signal ⇒ spacelike separation ⇒ time-order relative ⇒ acausal loop</b>. The middle link is exactly the <b>relativity of simultaneity</b> — the tilted S′ axes and simultaneity lines of this diagram. Because different frames slice spacetime into "now" differently, any signal that outruns light crosses those slices in different orders for different observers. FTL signalling doesn't just look odd — it lets replies arrive before questions.</p>
-        <p>Meanwhile <b>Δs²</b> (highlighted) is identical in S and S′ — the invariant is what cleanly separates the safe (timelike) from the paradoxical (spacelike) region.</p>
-        <p>A particle that always moves at v &gt; c — a <b>tachyon</b> — would need, from E² = p²c² + m²c⁴, a mass with <b>m² &lt; 0</b>: an imaginary mass. None has ever been observed, and causality is why we're glad about that.</p>
-        <p>Hit <b>Finish</b> to explore freely.</p>
+        <h4>6 · The antitelephone</h4>
+        <p>A signal crossing a spacelike interval has no frame-independent direction in time — that is the content of Δs² &lt; 0, and the tilted S′ lines of constant time are where it shows. Add a reply and the round trip lands on the sender's own worldline before the sending event: the tachyonic antitelephone. The light cone bounds causal order, not merely speed.</p>
+        <p>A particle permanently above c — a <b>tachyon</b> — would need m² &lt; 0 in E² = p²c² + m²c⁴.</p>
       </div>
 
+
+      </div>
+      <div class="inq-listen">
+        <span class="inq-listen-lab">Listen</span>
+        <button id="inq-voice" class="shell-btn primary inq-pager-btn" data-vstate="idle" title="Read this card aloud" aria-label="Read this card aloud">
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          <svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+        </button>
+        <button id="inq-auto" class="shell-btn primary inq-pager-btn" title="Auto walkthrough — narrates each card and moves on; waits for your answers" aria-label="Auto walkthrough">Auto</button>
       </div>
       <div class="inq-nav">
         <div class="inq-pager">
@@ -514,7 +794,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <button id="aside-inquiry-restore" class="aside-restore" title="Revisit the guided inquiry">▸ Guided inquiry</button>
 
     <div id="aside-controls" class="aside-zone">
-      <div class="shell-panel">
+      <div class="shell-panel" id="panel-controls">
         <div class="shell-panel-head"><h3>Controls</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body">
           <div class="ctrl-box ctrl-box--slider" id="vcGroup">
@@ -539,7 +819,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               </div>
             </div>
           </div>
-          <div class="ctrl-box">
+          <div class="ctrl-box" id="layersBox">
             <div class="stat-row">
               <span class="stat-label">Display layers</span>
             </div>
@@ -553,7 +833,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
         </div>
       </div>
 
-      <div class="shell-panel collapsed">
+      <div class="shell-panel collapsed" id="panel-readings">
         <div class="shell-panel-head"><h3>Readings</h3><span class="shell-caret">▾</span></div>
         <div class="shell-panel-body" id="readingsPanel">
           <div class="readline"><span class="k">v/c &nbsp;(S′ rel. to S)</span><span class="v" id="r-vc">0.00</span></div>
@@ -693,7 +973,8 @@ const Shell = (function(){
   }
   function inqNext(){
     const cards=inqCards();
-    if(inqStep>=cards.length-1) setInquiryCollapsed(true);  // Finish = hide the inquiry
+    /* USER VERSION: the 🧭 Guided Inquiry button owns zone visibility. */
+    if(inqStep>=cards.length-1){ if(window.__giOff) window.__giOff(); else setInquiryCollapsed(true); }  // Finish = hide the inquiry
     else inqShow(inqStep+1);
   }
   // SIM may call this to satisfy a data-gate step's requirement (e.g. "watched").
@@ -798,7 +1079,9 @@ const Shell = (function(){
     get step(){return inqStep;}, get totalSteps(){return inqTotal;},
     // SIM calls this to satisfy a data-gate step (e.g. after the student has watched).
     stepReady,
-    setPlaying, refit, setLectureMode
+    setPlaying, refit, setLectureMode,
+    /* USER VERSION (additive): exposed for the two-button template. */
+    setInquiryCollapsed, inqShow
   };
 })();
 
@@ -1514,9 +1797,872 @@ document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
   }));
 });
 
+
+/* ==========================================================================
+   USER VERSION — additive layer block. Nothing above this line changes the
+   physics: render(), updatePanel(), the control wiring, the drag handling,
+   the animation loop and the KaTeX equations are the production sim's. What
+   changes here is inquiry-layer machinery only — the card index maps (the
+   deck went 5 → 6 cards), the staged anti-lookup holds, a guard on the
+   sim's action-gated stepReady calls, and the four template hooks.
+   ========================================================================= */
+
+/* ---- Staged anti-lookup reveals -----------------------------------------
+   A card declares what it needs held with data-hold. A hold is live only
+   while that card is ACTIVE, gated and NOT yet committed, and never while
+   the inquiry is off (free exploration / controls guide). It is derived
+   from the live DOM on every step and every commit — no latch — so Reset,
+   the pager and re-entry can never leave a hold stuck on or off.
+
+   "flip" — the ∑ Formal panel's "Order reversal" row states card 3's and
+            card 4's answers in words: sign(Δct′) ≠ sign(Δct) possible ⟺
+            |Δx| > |Δct|, flip at β = Δct/Δx. That single row is withheld
+            until the student commits.
+   "loop" — the ∑ Formal panel's "Return-signal arrival" row carries the
+            ct₃ formula and the ct₃ < ct_A ⇒ loop condition, which is
+            card 5's answer. Same treatment.
+   Nothing else is withheld: the Readings panel and the canvas tags report
+   the CURRENT state, never the answer to a pending question, and reading
+   the diagram is the observation the cards ask for. */
+let __eqFlip = null, __eqLoop = null;
+document.querySelectorAll('.shell-formal .eq-row').forEach(r => {
+  const l = r.querySelector('.lbl'), t = l ? l.textContent : '';
+  if(/Order reversal/i.test(t)) __eqFlip = r;
+  if(/Return-signal arrival/i.test(t)) __eqLoop = r;
+});
+function __giHold(kind){
+  if(document.documentElement.classList.contains('gi-off')) return false;
+  const card = document.querySelector('#inq-cards .inq-step.active');
+  if(!card || !card.hasAttribute('data-gate') || card.hasAttribute('data-answered')) return false;
+  return (card.getAttribute('data-hold') || '').split(/\s+/).indexOf(kind) >= 0;
+}
+function __giApplyHold(){
+  if(__eqFlip) __eqFlip.classList.toggle('gi-held', __giHold('flip'));
+  if(__eqLoop) __eqLoop.classList.toggle('gi-held', __giHold('loop'));
+}
+/* A commit lifts that card's hold immediately. */
+const __giCardsHost = document.getElementById('inq-cards');
+if(__giCardsHost){
+  new MutationObserver(() => __giApplyHold())
+    .observe(__giCardsHost, { subtree:true, attributes:true, attributeFilter:['data-answered','class'] });
+}
+
+/* ---- Gate integrity -----------------------------------------------------
+   The production sim unlocks two cards from sim ACTIONS rather than from a
+   committed choice: the v/c slider calls Shell.stepReady() on step 2 and
+   the Return-signal button calls it on step 3. Those indices now carry
+   choice-gated questions, so moving a control would hand the student a free
+   gate. The shell's own delegated .choice handler uses its INTERNAL
+   stepReady, so guarding the public one blocks only the action unlocks. */
+const __shellStepReady = Shell.stepReady;
+Shell.stepReady = function(){
+  const card = document.querySelectorAll('#inq-cards .inq-step')[Shell.step];
+  if(card && card.querySelector('.choice') && !card.hasAttribute('data-answered')) return;
+  return __shellStepReady.apply(this, arguments);
+};
+
+/* ---- The card index map, re-derived for the 6-card deck -----------------
+   0 FRAME  the two events           timelike pair (3.21, 4.70), v/c = 0
+   1 Q1  order inside the cone       same pair — nothing changes vs the frame
+   2 Q2  outside the cone            the ONE change: B → (5.00, 2.00), spacelike
+   3 Q3  moving B further out        the ONE change: the student drags B / sweeps v/c
+   4 Q4  the reply                   the ONE change: the return signal, at v/c = 0.60
+   5 TELL the antitelephone          v/c = 0.80 — the loop is closed on screen
+   Every card is paused: Play sweeps v/c on its own and would walk the
+   pinned boost away from the value each card states.                     */
+applyStepDefaults = function(i){
+  state.A = { x:0, ct:0 };
+  if(i <= 1){                       // FRAME + Q1 — the timelike pair, unboosted
+    state.B = { x:3.21, ct:4.70 }; state.vc = 0;    state.returnOn = false;
+  } else if(i <= 3){                // Q2 + Q3 — the spacelike pair, unboosted
+    state.B = { x:5.00, ct:2.00 };  state.vc = 0;    state.returnOn = false;
+  } else if(i === 4){               // Q4 — order already reversed, reply on, loop still open
+    state.B = { x:5.00, ct:2.00 };  state.vc = 0.60; state.returnOn = true;
+  } else {                          // TELL — the loop closed
+    state.B = { x:5.00, ct:2.00 };  state.vc = 0.80; state.returnOn = true;
+  }
+  state.v2 = DEF.v2;
+  state.showSGrid = true; state.showSpGrid = true; state.showCone = true;
+  state.drag = null;
+  vcS.value = String(state.vc); syncVc();
+  v2S.value = String(state.v2);
+  syncToggles();
+  Shell.setPlaying(false);
+  __giApplyHold();
+};
+
+/* ---- Which control the card is about (re-mapped for the 6-card deck) ---- */
+updateStepHL = function(){
+  const vcG  = document.getElementById('vcGroup');
+  const retC = document.getElementById('returnCtrl');
+  const rp   = document.getElementById('readingsPanel');
+  if(vcG)  vcG.classList.toggle('hl',  Shell.step === 3);
+  if(retC) retC.classList.toggle('hl', Shell.step === 4);
+  if(rp)   rp.classList.toggle('hl',   Shell.step === 1 || Shell.step === 2);
+  __giApplyHold();
+};
+
+/* ---- Template hooks ------------------------------------------------------ */
+/* Free exploration = the post-completion state: every hold lifted, every
+   display layer on, the reply leg available, both panels open, paused.
+   Pure assignment, so repeated calls are idempotent. */
+window.__freeExplore = function(){
+  state.showSGrid = true; state.showSpGrid = true; state.showCone = true; state.showReadouts = true;
+  state.returnOn = true;
+  state.drag = null;
+  vcS.value = String(state.vc); syncVc();
+  v2S.value = String(state.v2);
+  syncToggles();
+  document.querySelectorAll('.shell-aside .shell-panel').forEach(p => p.classList.remove('collapsed'));
+  Shell.setPlaying(false);
+  prevInqStep = null;               // never snapshot the free-exploration state onto a card
+  __giApplyHold();
+  render();
+};
+/* Entering the Controls Guide needs every guided target on screen: the
+   Readings panel ships collapsed, and the reply slider is disabled while
+   the return signal is off. __freeExplore already puts all of them there. */
+window.__cgPrepare = function(){ window.__freeExplore(); };
+/* __freeExplore has lifted every staged reveal this sim has. */
+window.__cgReveals = function(){ __giApplyHold(); };
+/* Re-entering the inquiry re-applies the current card's own scene and holds —
+   never a free-exploration snapshot, which is why the snapshot for this card
+   is dropped first. */
+window.__giResume = function(){
+  const i = (typeof Shell !== 'undefined' && Shell.step) || 0;
+  delete stepSnapshots[i];
+  prevInqStep = i;
+  applyStepDefaults(i);
+  updateStepHL();
+  render();
+};
+
 Shell.init({ onFrame, onReset, onResize, onStep });
-Shell.setLectureMode(true);
+/* USER VERSION: the boot-into-Lecture-mode call is retired — the page opens on
+   the Welcome overlay and the 🧭 Guided Inquiry button owns the zone. */
 
 </script>
+<script>
+/* ===== Card voiceover engine (speech synthesis) =====
+   Shared by the Controls Guide transport and the Guided Inquiry play button.
+   Semantics per card: play = read from the top; pause keeps the (line, char)
+   position; resume continues from it; finishing flips the button to the
+   replay state and the next press reads the same card from the beginning.
+   A card CHANGE re-syncs: playing → the new card starts speaking; idle →
+   the position just resets so the next play starts at the new card's top. */
+(function(){
+  const synth = window.speechSynthesis;
+  // Physics-notation → speakable text (textContent flattens the card markup).
+  // Longest tokens first: Δct′ before Δct before Δ; ct₃ before ct.
+  const norm = s => s
+    .replace(/Δs²/g,'delta s squared').replace(/Δct′/g,'delta c t prime').replace(/Δct/g,'delta c t')
+    .replace(/Δx′/g,'delta x prime').replace(/Δx/g,'delta x').replace(/Δt/g,'delta t').replace(/Δ/g,'delta ')
+    .replace(/ct′/g,'c t prime').replace(/ct₃/g,'c t three').replace(/ct_A/g,'c t at A').replace(/\bct\b/g,'c t')
+    .replace(/v₂/g,'v two').replace(/E₃/g,'E three').replace(/m²/g,'m squared').replace(/p²c²/g,'p squared c squared')
+    .replace(/γ/g,'gamma').replace(/β/g,'beta').replace(/τ/g,'tau')
+    .replace(/v\/c/g,'v over c').replace(/′/g,' prime')
+    .replace(/₀/g,' zero').replace(/₁/g,' one').replace(/₂/g,' two').replace(/₃/g,' three').replace(/₄/g,' four')
+    .replace(/⁴/g,' to the fourth').replace(/²/g,' squared')
+    .replace(/√/g,' square root of ').replace(/45°/g,'forty-five degrees').replace(/°/g,' degrees')
+    .replace(/≈/g,' approximately ').replace(/−/g,' minus ').replace(/×/g,' times ').replace(/⇒/g,' implies ')
+    .replace(/≤/g,' at most ').replace(/≥/g,' at least ').replace(/</g,' less than ').replace(/>/g,' greater than ')
+    .replace(/[▶⏸⛶∑ⓘ☾↻⤢✕▾↩⚠✓⟺]/g,'').replace(/[🧭🎛🎓]/g,'')
+    .replace(/·/g,' ').replace(/—/g,', ')
+    .replace(/\s+/g,' ').trim();
+  // Quality-ranked: Chrome's remote Google voices sound natural; macOS's local
+  // compact voices (Samantha/Daniel/Fred…) are the mechanical ones — last resort.
+  // Remote voices can silently hang (no start/end/error events); when the
+  // watchdog catches that, preferLocal flips and the session falls back.
+  let preferLocal = false;
+  let engineDead = false;   // set when even the local-voice fallback won't start — stop retry storms
+  // Cancelling an idle engine is what wedges Chrome's TTS service — guard it.
+  function safeCancel(){ if(synth && (synth.speaking || synth.pending)) synth.cancel(); }
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    const remote = [en.find(v => v.name === 'Google US English'),
+                    en.find(v => v.name === 'Google UK English Female'),
+                    en.find(v => v.name === 'Google UK English Male')].filter(Boolean);
+    const local  = [en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name) && v.localService),
+                    en.find(v => v.name === 'Samantha'),
+                    en.find(v => v.localService && /US|GB/i.test(v.lang))].filter(Boolean);
+    const order = preferLocal ? local.concat(remote) : remote.concat(local);
+    return order[0] || en[0] || null;
+  }
+  // btn: the play/pause button (uses data-vstate idle|playing|done).
+  // getLines: () => array of raw strings for the CURRENT card.
+  // opts.onCardDone: called when a card's narration completes (drives Auto mode).
+  function makeCardVoice(btn, getLines, opts){
+    let lines = [], idx = 0, charAt = 0, playing = false, current = null, done = false, lineRetries = 0;
+    function state(){
+      btn.dataset.vstate = playing ? 'playing' : (done ? 'done' : 'idle');
+      btn.title = playing ? 'Pause' : (done ? 'Play again' : (idx === 0 && charAt === 0 ? 'Read this card aloud' : 'Resume'));
+      btn.setAttribute('aria-label', btn.title);
+    }
+    function speak(){
+      if(!synth) return;
+      const text = lines[idx].slice(charAt);
+      const u = new SpeechSynthesisUtterance(text);
+      const v = pickVoice(); if(v) u.voice = v;
+      u.rate = 1.0; u.pitch = 1;
+      const base = charAt, my = idx;
+      let started = false;
+      u.onstart = () => { started = true; };
+      u.onboundary = e => { if(current === u && typeof e.charIndex === 'number'){ charAt = base + e.charIndex; lineRetries = 0; } };
+      u.onerror = () => {   // cold-start hiccup on remote voices: retry the line once or twice
+        if(current === u && playing && lineRetries < 2){
+          lineRetries++;
+          setTimeout(() => { if(current === u && playing) speak(); }, 250);
+        }
+      };
+      u.onend = () => {
+        if(current !== u || !playing) return;
+        if(my < lines.length - 1){ idx = my + 1; charAt = 0; lineRetries = 0; speak(); }
+        else {
+          playing = false; done = true; idx = 0; charAt = 0; lineRetries = 0; current = null; state();
+          if(opts && opts.onCardDone) opts.onCardDone();
+        }
+      };
+      current = u; done = false;
+      // Chrome swallows a speak() issued in the same tick as cancel() — defer it;
+      // resume() unsticks the engine when cancel() left it internally paused.
+      safeCancel();
+      setTimeout(() => { if(current === u && playing){ synth.speak(u); if(synth.paused) synth.resume(); } }, 60);
+      // Watchdog: a remote voice can hang with NO events at all. Retry once,
+      // then flip the whole session to a local voice and retry again.
+      setTimeout(() => {
+        if(current !== u || !playing || started) return;
+        safeCancel();
+        if(lineRetries < 1){ lineRetries++; speak(); }
+        else if(!preferLocal){ preferLocal = true; lineRetries = 0; speak(); }
+        else {   // even local voices won't start: the browser's TTS service is hung
+          engineDead = true; playing = false; current = null; state();
+          btn.title = 'Voice unavailable — restart the browser to re-enable narration';
+          btn.setAttribute('aria-label', btn.title);
+        }
+      }, 1500);
+      state();
+    }
+    function play(){
+      if(!synth || engineDead) return;
+      if(done || !lines.length){ lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; }
+      if(!lines.length) return;
+      playing = true; lineRetries = 0; speak();
+    }
+    function pause(){
+      playing = false;
+      safeCancel();                  // stop now; idx/charAt keep the resume position
+      current = null; state();
+    }
+    function stop(){                  // hard reset (zone hidden, guide closed, Reset)
+      playing = false; done = false; lines = []; idx = 0; charAt = 0;
+      safeCancel();
+      current = null; state();
+    }
+    function sync(){                  // the current card changed
+      const was = playing;
+      playing = false;
+      safeCancel();
+      current = null;
+      lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; done = false;
+      if(was && lines.length){ playing = true; speak(); } else state();
+    }
+    function restart(){               // read the current card again from the top
+      idx = 0; charAt = 0; done = false;
+      if(playing) speak(); else state();
+    }
+    function playLines(arr){          // one-off narration (e.g. a just-revealed feedback box)
+      lines = arr.map(norm).filter(Boolean);
+      if(!lines.length) return;
+      idx = 0; charAt = 0; done = false; playing = true; lineRetries = 0; speak();
+    }
+    btn.addEventListener('click', () => playing ? pause() : play());
+    if(!synth) btn.disabled = true;
+    state();
+    return { sync, stop, restart, play, playLines, atStart: () => idx === 0 && charAt === 0 && !playing };
+  }
+  window.__makeCardVoice = makeCardVoice;
+
+  /* ---- Guided Inquiry voice: play/pause + Auto in the pager row ----
+     Auto walks the whole inquiry hands-free BUT never answers for the student:
+     at a gated predict card it reads the question and waits; when the student
+     commits, it reads the feedback aloud, then moves on. */
+  const giBtn = document.getElementById('inq-voice');
+  if(giBtn){
+    const activeCard = () => document.querySelector('#inq-cards .inq-step.active');
+    const giAutoBtn = document.getElementById('inq-auto');
+    let giAuto = false;
+    function setGiAuto(on){
+      giAuto = on;
+      if(giAutoBtn) giAutoBtn.classList.toggle('active', on);
+      if(on) giVoice.play();
+    }
+    const giVoice = makeCardVoice(giBtn, () => {
+      const card = activeCard();
+      if(!card) return [];
+      const out = [];
+      const h = card.querySelector('h4'); if(h) out.push(h.textContent.trim());
+      card.querySelectorAll('p, button.choice, .predict-eval').forEach(el => {
+        if(getComputedStyle(el).display === 'none') return;   // staged reveals stay silent until committed
+        const t = el.textContent.trim(); if(t) out.push(t);
+      });
+      return out;
+    }, { onCardDone: () => {
+      if(!giAuto) return;
+      const card = activeCard();
+      if(!card) return;
+      if(card.hasAttribute('data-gate') && !card.hasAttribute('data-answered')) return;  // wait for the student
+      const next = document.getElementById('inq-next');
+      if(!next || next.textContent === 'Finish'){ setGiAuto(false); return; }            // tour ends on the last card
+      const tryAdvance = () => {
+        if(!giAuto) return;
+        if(next.disabled){ setTimeout(tryAdvance, 300); return; }   // Next unlocks shortly after feedback
+        next.click();
+        setTimeout(() => { if(giAuto) giVoice.play(); }, 300);
+      };
+      setTimeout(tryAdvance, 900);
+    }});
+    if(giAutoBtn) giAutoBtn.addEventListener('click', () => setGiAuto(!giAuto));
+    window.__giVoiceStop = () => { setGiAuto(false); giVoice.stop(); };
+    const cardsEl = document.getElementById('inq-cards') || document.body;
+    // Card changes (pager, Next, gates, Reset) re-sync the narration.
+    let lastCard = activeCard();
+    new MutationObserver(() => {
+      const cur = activeCard();
+      if(cur !== lastCard){
+        lastCard = cur;
+        if(document.documentElement.classList.contains('gi-off')){ setGiAuto(false); giVoice.stop(); }
+        else giVoice.sync();
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    // In Auto, an answered gate = read the feedback aloud, then onCardDone advances.
+    new MutationObserver(muts => {
+      if(!giAuto) return;
+      for(const m of muts){
+        if(m.attributeName === 'data-answered' && m.target.hasAttribute('data-answered')){
+          const ev = m.target.querySelector('.predict-eval');
+          const t = ev && ev.textContent.trim();
+          setTimeout(() => { if(giAuto){ if(t) giVoice.playLines([t]); else giVoice.play(); } }, 600);
+          return;
+        }
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['data-answered'] });
+  }
+})();
+</script>
+
+<script>
+/* ===== Committed feedback must land on screen =====
+   A long .predict-eval can open below the fold of the sidebar's scroll well.
+   Scroll the WELL (the inquiry card box if it scrolls, otherwise the sidebar),
+   never the page. */
+(function(){
+  const cards = document.getElementById('inq-cards');
+  if(!cards) return;
+  new MutationObserver(muts => {
+    for(const m of muts){
+      if(m.attributeName !== 'data-answered' || !m.target.hasAttribute('data-answered')) continue;
+      const ev = m.target.querySelector('.predict-eval');
+      if(!ev) return;
+      requestAnimationFrame(() => {
+        const well = (cards.scrollHeight > cards.clientHeight + 2) ? cards : document.querySelector('.shell-aside');
+        if(!well) return;
+        const wr = well.getBoundingClientRect(), er = ev.getBoundingClientRect();
+        const over = er.bottom - wr.bottom;
+        if(over > 0) well.scrollTop += over + 14;
+      });
+      return;
+    }
+  }).observe(cards, { subtree:true, attributes:true, attributeFilter:['data-answered'] });
+})();
+</script>
+
+<script>
+/* ===== Two-button template + overlay controls guide ===== */
+(function(){
+  // Concise steps: what the control is + what it controls (≤15 words each).
+  // mode: 'veil' = top bar (invisible, slot kept — no toolbar reflow);
+  //       'hide' = sidebar (collapses until introduced);
+  //       'show' = never hidden (the hero diagram — hiding it would blank the
+  //                simulation the guide is describing).
+  // Skipped with reason: #shell-info + #shell-theme (meta-UI: about dialog /
+  // theme toggle); #shell-lecture (retired in the user version, never shown);
+  // #btn-gi + #btn-cg (the guide's own mode buttons); #shell-exit-max (exists
+  // only while maximized). Events A and B are dragged on the canvas and are
+  // covered by the diagram step.
+  const steps = [
+    { sel:'.mink-wrap',     mode:'show', title:'The spacetime diagram', text:'x across, ct up, light fixed at 45°. Drag either event.' },
+    { sel:'#shell-play',    mode:'veil', title:'Play / Pause',  text:'Sweeps v/c back and forth between its limits, or stops it.' },
+    { sel:'#shell-speed',   mode:'veil', also:['#lbl-speed'], title:'Speed', text:'How fast that v/c sweep runs.' },
+    { sel:'#shell-reset',   mode:'veil', title:'Reset',        text:'Restores the first-load state — defaults, guided inquiry at card 1.' },
+    { sel:'#shell-maximize',mode:'veil', title:'Maximize',     text:'Expands the diagram; the sidebar and formal panel hide.' },
+    { sel:'#toggle-formal', mode:'veil', title:'Formal',       text:'Shows the Lorentz, interval, order-reversal and tachyon-mass equations.' },
+    { sel:'#vcGroup',       mode:'hide', also:['#panel-controls'], title:'v / c', text:'Speed of frame S′ relative to S — it tilts the primed axes.' },
+    { sel:'#returnCtrl',    mode:'hide', title:'Return signal', text:'Adds B’s reply and sets its speed v₂, measured in S′.' },
+    { sel:'#layersBox',     mode:'hide', title:'Display layers', text:'Turns the S grid, ct′ readouts, S′ grid and light cone on or off.' },
+    { sel:'#panel-readings',mode:'hide', title:'Readings',      text:'Every number in both frames: Δx, Δct, Δs², signal speed, Δct′, E₃.' },
+    { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
+  ];
+  const giBtn = document.getElementById('btn-gi');
+  const cgBtn = document.getElementById('btn-cg');
+  const root  = document.documentElement;
+  let cgOn = false, cgStep = 0, cgMax = 0;
+  let callout = null, nav = null, cgVoice = null, cgAuto = false;
+  function setCgAuto(on){
+    cgAuto = on;
+    if(nav) nav.querySelector('#cg-auto').classList.toggle('active', on);
+    if(on && cgVoice) cgVoice.play();
+  }
+
+  const el = sel => sel ? document.querySelector(sel) : null;
+  const dimmables = () => steps.filter(st => st.sel).map(st => el(st.sel)).filter(Boolean);
+
+  function ensureUi(){
+    if(callout) return;
+    callout = document.createElement('div');
+    callout.className = 'cg-callout';
+    callout.innerHTML = '<div class="cg-arrow"></div><h5></h5><p></p>';
+    nav = document.createElement('div');
+    nav.className = 'cg-nav';
+    nav.innerHTML = '<div class="cg-nav-row cg-row-voice">'+
+                      '<span class="cg-listen-lab">Listen</span>'+
+                      '<button id="cg-rew" class="cg-voice" title="Restart narration" aria-label="Restart narration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>'+
+                      '<button id="cg-voice-play" class="cg-voice" data-vstate="idle" title="Read this step aloud" aria-label="Read this step aloud">'+
+                        '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'+
+                        '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'+
+                        '<svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>'+
+                      '</button>'+
+                      '<button id="cg-fwd" class="cg-voice" title="Next step" aria-label="Next step"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-auto" title="Auto walkthrough — narrates every step in sequence" aria-label="Auto walkthrough">Auto</button>'+
+                    '</div>'+
+                    '<div class="cg-nav-row cg-row-nav">'+
+                      '<button id="cg-prev" aria-label="Previous">‹</button>'+
+                      '<button id="cg-pgnext" aria-label="Next">›</button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-next">Next →</button>'+
+                    '</div>';
+    document.body.appendChild(callout);
+    document.body.appendChild(nav);
+    // Voiceover: reads the current step's title + text; forward/rewind stay
+    // card-synced (rewind restarts this step's narration, or steps back from its top).
+    // Auto = hands-free tour: each step is narrated, then the guide advances itself.
+    if(window.__makeCardVoice){
+      cgVoice = window.__makeCardVoice(nav.querySelector('#cg-voice-play'),
+        () => [steps[cgStep].title, steps[cgStep].text],
+        { onCardDone: () => {
+            if(!cgAuto) return;
+            if(cgStep >= steps.length-1){ setCgAuto(false); return; }   // tour ends on the closing card
+            setTimeout(() => {
+              if(!cgAuto) return;
+              show(cgStep+1);
+              setTimeout(() => { if(cgAuto && cgVoice) cgVoice.play(); }, 200);
+            }, 700);
+        }});
+    }
+    nav.querySelector('#cg-auto').addEventListener('click', ()=> setCgAuto(!cgAuto));
+    nav.querySelector('#cg-rew').addEventListener('click', ()=>{
+      if(cgVoice && !cgVoice.atStart()) cgVoice.restart();
+      else show(cgStep-1);
+    });
+    nav.querySelector('#cg-fwd').addEventListener('click', ()=>show(cgStep+1));
+    nav.querySelector('#cg-prev').addEventListener('click', ()=>show(cgStep-1));
+    nav.querySelector('#cg-pgnext').addEventListener('click', ()=>show(cgStep+1));
+    nav.querySelector('#cg-next').addEventListener('click', ()=>{
+      if(cgStep >= steps.length-1) setCg(false);
+      else show(cgStep+1);
+    });
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+  }
+  function position(){
+    if(!cgOn || !callout) return;
+    const st = steps[cgStep];
+    const t = el(st.sel);
+    const arrow = callout.querySelector('.cg-arrow');
+    callout.classList.remove('arrow-top','arrow-bottom','arrow-left','arrow-right','no-arrow');
+    const cw = callout.offsetWidth || 260, ch = callout.offsetHeight || 110;
+    let x = innerWidth/2 - cw/2, y = innerHeight/2 - ch/2;   // centered (done card)
+    if(!t){ callout.classList.add('no-arrow'); }
+    else {
+      if(t.scrollIntoView) t.scrollIntoView({ block:'nearest', inline:'nearest' });   // short viewports: bring the target on screen first
+      const r = t.getBoundingClientRect();
+      // The skill's rule is "right-SIDEBAR targets left, top-bar/canvas targets
+      // below". A pure-x test sends the top bar's own right-hand cluster (Play,
+      // Reset, Maximize…) down the sidebar branch, where the callout is centred
+      // on a 36px-tall button, clamps to y=8 and slides across the header —
+      // over the guide's own mode buttons. Exclude the top bar explicitly.
+      const inTopBar = r.bottom < innerHeight * 0.18;
+      if(!inTopBar && r.left > innerWidth * 0.66){
+        // Sidebar target: sit to its LEFT, arrow on the right edge
+        x = r.left - cw - 14; y = r.top + r.height/2 - ch/2;
+        callout.classList.add('arrow-right');
+      } else if(r.height > innerHeight * 0.6){
+        // Full-height region (the hero diagram): "below" would fall off the
+        // bottom and the reference flip-above then clamps the callout onto the
+        // top bar, where it swallows clicks on the guide's own buttons. Sit
+        // just inside the region's top edge instead.
+        x = r.left + r.width/2 - cw/2; y = r.top + 16;
+        callout.classList.add('arrow-top');
+      } else {
+        // Topbar/canvas target: sit BELOW (flip above when cramped)
+        x = r.left + r.width/2 - cw/2; y = r.bottom + 12;
+        if(y + ch > innerHeight - 8){ y = r.top - ch - 12; callout.classList.add('arrow-bottom'); }
+        else callout.classList.add('arrow-top');
+      }
+      x = Math.max(8, Math.min(x, innerWidth - cw - 8));
+      y = Math.max(8, Math.min(y, innerHeight - ch - 8));
+      // Aim the arrow at the target's centre even after clamping
+      if(arrow){
+        if(callout.classList.contains('arrow-right') || callout.classList.contains('arrow-left')){
+          arrow.style.left = ''; arrow.style.top = Math.max(10, Math.min(r.top + r.height/2 - y - 6, ch - 22)) + 'px';
+        } else {
+          arrow.style.top = ''; arrow.style.left = Math.max(12, Math.min(r.left + r.width/2 - x - 6, cw - 24)) + 'px';
+        }
+      }
+    }
+    callout.style.left = Math.max(8, Math.min(x, innerWidth - cw - 8)) + 'px';
+    callout.style.top  = Math.max(8, Math.min(y, innerHeight - ch - 8)) + 'px';
+  }
+  function show(n){
+    cgStep = Math.max(0, Math.min(n, steps.length-1));
+    cgMax = Math.max(cgMax, cgStep);
+    const introduced = new Set(steps.slice(0, cgMax+1).map(st=>st.sel));
+    dimmables().forEach(t => t.classList.remove('cg-glow'));
+    steps.forEach(st => {
+      if(!st.sel) return;
+      if(st.mode === 'show'){   // always visible; only the glow moves
+        [st.sel].concat(st.also || []).forEach(sl => {
+          const t = el(sl); if(t) t.classList.remove('cg-hidden','cg-veiled');
+        });
+        return;
+      }
+      const off = !introduced.has(st.sel);
+      const cls = st.mode === 'hide' ? 'cg-hidden' : 'cg-veiled';
+      [st.sel].concat(st.also || []).forEach(sl => {
+        const t = el(sl); if(t){ t.classList.toggle(cls, off); t.classList.remove(off ? 'cg-glow' : cls === 'cg-hidden' ? 'cg-veiled' : 'cg-hidden'); }
+      });
+    });
+    const cur = el(steps[cgStep].sel);
+    if(cur) cur.classList.add('cg-glow');
+    callout.querySelector('h5').textContent = steps[cgStep].title;
+    callout.querySelector('p').textContent  = steps[cgStep].text;
+    nav.querySelector('#cg-prev').disabled   = cgStep <= 0;
+    nav.querySelector('#cg-pgnext').disabled = cgStep >= steps.length-1;
+    nav.querySelector('#cg-fwd').disabled    = cgStep >= steps.length-1;
+    nav.querySelector('#cg-next').textContent = (cgStep >= steps.length-1) ? 'Done' : 'Next →';
+    if(cgVoice) cgVoice.sync();   // narration follows the card: keeps speaking on change, else re-arms
+    position();
+  }
+  function setGi(on){
+    root.classList.toggle('gi-off', !on);
+    giBtn.classList.toggle('active', on);
+    if(on){
+      if(cgOn) setCg(false, true);
+      // Show the cards directly — clear any lingering collapsed state
+      if(typeof Shell !== 'undefined' && Shell.setInquiryCollapsed) Shell.setInquiryCollapsed(false);
+      // Restore the inquiry's own step state (staged reveals, pinned scene)
+      if(window.__giResume) window.__giResume();
+    } else {
+      if(window.__giVoiceStop) window.__giVoiceStop();
+      // Turning the inquiry off = free exploration: the completed state,
+      // never a mid-inquiry snapshot.
+      if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  function setCg(on, keepGiState){
+    cgOn = on;
+    cgBtn.classList.toggle('active', on);
+    if(on){
+      if(!keepGiState) setGi(false);           // mutual exclusion
+      ensureUi();
+      // Controls guide needs everything visible: lift inquiry-step reveals
+      if(window.__cgReveals) window.__cgReveals(99);
+      if(window.__cgPrepare) window.__cgPrepare();   // sims with scene/mode-dependent controls
+      callout.style.display = 'block'; nav.style.display = 'flex';
+      show(cgStep);
+    } else {
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      if(callout){ callout.style.display = 'none'; nav.style.display = 'none'; }
+      steps.forEach(st => [st.sel].concat(st.also || []).forEach(sl => {
+        const t = el(sl); if(t) t.classList.remove('cg-hidden','cg-veiled','cg-glow');
+      }));
+      // Hand over: to the inquiry's step state if GI takes over, otherwise
+      // to free exploration (both-off, or guide completed/toggled off).
+      if(keepGiState){ /* setGi(true) runs __giResume right after */ }
+      else if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  window.__giOff = ()=> setGi(false);   // shell's Finish routes here
+  window.__setMode = mode => {           // welcome overlay entry points
+    if(mode === 'controls') setCg(true);
+    else if(mode === 'free') { if(cgOn) setCg(false); setGi(false); }
+    else setGi(true);
+  };
+  // Reset = the state of a fresh page load: every committed answer cleared and
+  // every gate re-armed, Guided Inquiry on at card 1, Controls Guide off with
+  // its session progress cleared. Runs AFTER the shell's own reset listener
+  // (setTimeout 0) so sim defaults land first.
+  window.__giClearAnswers = function(){
+    document.querySelectorAll('#inq-cards .inq-step').forEach(c => {
+      c.removeAttribute('data-answered'); c.removeAttribute('data-ready');
+      delete c.dataset.answered;
+      c.querySelectorAll('.choice').forEach(btn => {
+        btn.disabled = false; btn.classList.remove('sel','correct','wrong','dim');
+      });
+      const ev = c.querySelector('.predict-eval');
+      if(ev){ ev.innerHTML = ''; ev.classList.remove('show','correct','wrong'); }
+    });
+  };
+  window.__fullReset = ()=>{
+    if(cgAuto) setCgAuto(false);
+    if(cgVoice) cgVoice.stop();
+    if(window.__giVoiceStop) window.__giVoiceStop();
+    if(cgOn) setCg(false, true);        // silent CG off (GI takes over next)
+    cgStep = 0; cgMax = 0;              // guide progress like a fresh load
+    window.__giClearAnswers();          // clear BEFORE inqShow so gates re-lock
+    setGi(true);
+    if(typeof Shell !== 'undefined' && Shell.inqShow) Shell.inqShow(0);
+  };
+  giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
+  cgBtn.addEventListener('click', ()=> setCg(!cgOn));
+  const resetBtn = document.getElementById('shell-reset');
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+})();
+</script>
+
+<script>
+/* ===== Welcome overlay + read-aloud transport (browser speech synthesis) ===== */
+(function(){
+  const ov = document.getElementById('welcome-overlay');
+  if(!ov) return;
+  const $ = id => document.getElementById(id);
+  // Product decision: the welcome overlay shows on EVERY load, not just the
+  // first. Students arrive at these sims repeatedly and the overlay is how they
+  // choose Guided Inquiry / Controls / Free exploration, so suppressing it after
+  // one visit strands returning students in whichever mode they last picked.
+  // Leave this false. (With it false the localStorage key is never read OR
+  // written, so keys left over from earlier builds are inert.)
+  const WELCOME_ONCE = false;
+  const WELCOME_KEY = 'welcome:' + (document.title || location.pathname);
+  try { if(WELCOME_ONCE && localStorage.getItem(WELCOME_KEY)) { ov.classList.add('hidden'); return; } } catch(e){}
+  const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
+  const script = [
+    'Welcome to tachyon causality violation.',
+    'Two events sit on a spacetime diagram, and a signal runs from the first to the second. When the second lies outside the light cone of the first, no signal slower than light can join them, and the order in which the two happen depends on who is looking. Boost hard enough and the reception comes before the emission. Add a faster-than-light reply, and the answer can reach the sender before the message was ever sent.',
+    'Choose how you would like to begin.',
+    'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
+    'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
+    'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
+  ];
+  /* Hero: this sim's apparatus, drawn ONCE, large and centred — event A at the
+     apex of its light cone, event B out beyond the cone, and the A→B signal
+     between them. Both events wear a grab handle, because in THIS build the
+     student constructs the pair by dragging the two events.
+     45-DEGREE HONESTY: the drawn region is square (as tall as the band) and uses
+     equal pixels per unit on x and ct, so a light ray is a true 1:1 diagonal.
+     The rest of the 10:1 letterbox is deliberately left empty rather than tiled.
+     NO SPOILERS: there is no boost, no S′ axis, no tilted line of constant time,
+     no reply leg, no closed loop and no number anywhere — so the hero cannot
+     answer a gated card. The deck asks whether a timelike pair's order is
+     absolute (Q1), what Δs² < 0 changes inside Δct′ = γ(Δct − (v/c)·Δx) (Q2),
+     how the reversing boost β = Δct/Δx scales as Δx grows (Q3) and what pushes
+     the reply's arrival below ct = 0 (Q4). The hero shows only the construction
+     those questions are asked ABOUT.
+     Sign convention is the sim's own: Δs² = Δct² − Δx² (timelike POSITIVE), so
+     B drawn outside the cone is the spacelike, Δs² < 0 case the sim is named for.
+     Static: drawHero is re-run by animationend, a 700 ms timer, resize and two
+     MutationObservers, and each run clears the canvas — nothing is accumulated
+     across frames, so no redraw can catch a half-finished picture. */
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    /* The backing store ships hard-coded at 1280x240 while the element is laid
+       out 100vw x 140px, so the buffer would be stretched across and squashed
+       down: a 45-degree line would no longer render at 45 degrees. Size the
+       buffer to the element's real box before drawing. This canvas is
+       layer-owned (the welcome hero) — no simulation surface is touched. */
+    { const hr = c.getBoundingClientRect();
+      const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
+      if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
+    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    ctx.clearRect(0,0,W,H);                        // transparent: the overlay dim is the background
+    ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    const COLC = LIGHT ? '#a16207' : '#facc15';    // light cone        (sim COL.cone)
+    const COLA = LIGHT ? '#1d4ed8' : '#60a5fa';    // event A           (sim COL.A)
+    const COLB = LIGHT ? '#be123c' : '#fb7185';    // event B           (sim COL.B)
+    const COLF = LIGHT ? '#b91c1c' : '#f87171';    // the A→B signal    (sim COL.sigFTL)
+    const COLX = '#64748b';                        // the x axis of S — mid slate, reads on either ground
+    const RIM  = LIGHT ? 'rgba(255,255,255,.92)' : 'rgba(8,10,14,.88)';
+    const S    = H/140;                            // the band is 140px by design; scale if it ever is not
+
+    // --- geometry ------------------------------------------------------------
+    const ppu  = Math.max(14, Math.round(H*0.30)); // EQUAL px per unit on x and ct → the cone is exactly 45°
+    const ay   = Math.round(H*0.84);               // A sits low, so the future cone fills the band
+    const rise = Math.round(H*0.78);               // rays climb `rise` and therefore spread `rise` each way
+    const BX = 2.5, BCT = 1.0;                     // B beyond the cone: |Δx| > |Δct|, i.e. Δs² < 0
+    const bdx = Math.round(BX*ppu), bdy = Math.round(BCT*ppu);
+    const extL = rise + Math.round(24*S), extR = Math.max(rise, bdx + Math.round(20*S)) + Math.round(24*S);
+    const ax   = Math.round(W/2 + (extL - extR)/2);// A's x, chosen so the whole figure centres in the band
+    const bx   = ax + bdx, by = ay - bdy;
+
+    // --- the x axis of S through A, ticked at one unit --------------------------
+    ctx.globalAlpha = .85; ctx.strokeStyle = COLX; ctx.lineWidth = Math.max(1.4, 1.8*S);
+    ctx.beginPath(); ctx.moveTo(ax - extL, ay + .5); ctx.lineTo(ax + extR, ay + .5); ctx.stroke();
+    for(let k = -3; k <= 3; k++){
+      if(!k) continue;
+      const tx = ax + k*ppu;
+      if(tx < ax - extL || tx > ax + extR) continue;
+      ctx.beginPath(); ctx.moveTo(tx, ay + 2*S); ctx.lineTo(tx, ay + 7*S); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // --- A's future light cone: the 45° boundary, with its interior shaded -------
+    const top = ay - rise;
+    /* the shading fades out before the band ends, so the cone opens out of the
+       top rather than being chopped off flat by the letterbox */
+    const g = ctx.createLinearGradient(0, ay, 0, top);
+    g.addColorStop(0,    LIGHT ? 'rgba(161,98,7,.30)' : 'rgba(250,204,21,.26)');
+    g.addColorStop(0.62, LIGHT ? 'rgba(161,98,7,.17)' : 'rgba(250,204,21,.15)');
+    g.addColorStop(1,    LIGHT ? 'rgba(161,98,7,0)'   : 'rgba(250,204,21,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - rise, top); ctx.lineTo(ax + rise, top); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = COLC; ctx.lineWidth = 4*S; ctx.setLineDash([10*S, 6*S]);
+    ctx.beginPath(); ctx.moveTo(ax - rise, top); ctx.lineTo(ax, ay); ctx.lineTo(ax + rise, top); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // --- the A→B signal: shallower than 45°, so it leaves the cone sideways ------
+    const RH = 13*S;                                // handle radius — the leg stops at B's handle
+    const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax)/len, uy = (by - ay)/len;
+    const tipX = bx - ux*RH, tipY = by - uy*RH;
+    ctx.strokeStyle = COLF; ctx.lineWidth = 5.5*S;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tipX, tipY); ctx.stroke();
+    { const an = Math.atan2(uy, ux), L = 15*S;      // arrowhead: A sends, B receives
+      ctx.fillStyle = COLF; ctx.beginPath(); ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - L*Math.cos(an - 0.44), tipY - L*Math.sin(an - 0.44));
+      ctx.lineTo(tipX - L*Math.cos(an + 0.44), tipY - L*Math.sin(an + 0.44));
+      ctx.closePath(); ctx.fill(); }
+
+    // --- the two events, as the grab handles the student actually drags ---------
+    function handle(x, y, col){
+      ctx.beginPath(); ctx.arc(x, y, RH, 0, 7);
+      ctx.globalAlpha = .20; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 3.2*S; ctx.strokeStyle = col; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4.4*S, 0, 7);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 1.4*S; ctx.strokeStyle = RIM; ctx.stroke();
+    }
+    handle(ax, ay, COLA);                           // A — the sender, at the apex of its own cone
+    handle(bx, by, COLB);                           // B — the reception, outside it
+  }
+  drawHero();
+  // The card's entrance animation applies scale(.985) to an ANCESTOR, so a
+  // getBoundingClientRect() taken while it runs reports a box ~1.5% small and
+  // the backing store is sized to that. Re-measure and redraw when the entrance
+  // finishes (and on any viewport change) so the buffer matches the element
+  // exactly. Under prefers-reduced-motion there is no animation and the first
+  // draw is already exact.
+  const wcard = ov.querySelector('.welcome-card');
+  if(wcard) wcard.addEventListener('animationend', drawHero, { once:true });
+  setTimeout(drawHero, 700);            // fallback if the animation never fires
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+  // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  const synth = window.speechSynthesis;
+  // Transport state: current line, char offset inside it (from boundary events), playing flag.
+  let idx = 0, charAt = 0, playing = false, current = null, finished = false;
+
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    return en.find(v => v.name === 'Google US English')
+        || en.find(v => v.name === 'Google UK English Female')
+        || en.find(v => v.name === 'Google UK English Male')
+        || en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name))
+        || en.find(v => v.name === 'Samantha')
+        || en[0] || null;
+  }
+  function render(){
+    playBtn.dataset.state = playing ? 'playing' : (finished ? 'done' : 'idle');
+    playBtn.title = playing ? 'Pause' : (finished ? 'Play again' : (idx===0 && charAt===0 ? 'Play' : 'Resume'));
+    playBtn.setAttribute('aria-label', playBtn.title);
+    playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    prog.textContent = (Math.min(idx, script.length-1)+1) + ' / ' + script.length;
+    const seg = $('welcome-seg');
+    if(seg){ if(!seg.children.length) script.forEach(()=>seg.appendChild(document.createElement('i')));
+      [...seg.children].forEach((el,i)=>{ el.className = i < idx || finished ? 'on' : (i===idx ? 'cur' : ''); }); }
+    prevBtn.disabled = idx===0 && charAt===0 && !playing;
+    nextBtn.disabled = idx>=script.length-1;
+  }
+  // Speak line `idx` starting at `charAt`; chain to the next line on end.
+  function speakCurrent(){
+    if(!synth) return;
+    synth.cancel();
+    const text = script[idx].slice(charAt);
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if(v) u.voice = v;
+    u.rate = 0.98; u.pitch = 1;
+    const base = charAt, myIdx = idx;
+    u.onboundary = e => { if(current === u && typeof e.charIndex === 'number') charAt = base + e.charIndex; };
+    u.onend = () => {
+      if(current !== u || !playing) return;
+      if(myIdx < script.length-1){ idx = myIdx+1; charAt = 0; speakCurrent(); }
+      else { playing = false; finished = true; idx = script.length-1; charAt = 0; render(); }
+    };
+    current = u; finished = false;
+    synth.speak(u);
+    render();
+  }
+  function play(){
+    if(!synth) return;
+    if(finished){ idx = 0; charAt = 0; }
+    playing = true;
+    speakCurrent();                 // resumes from the recorded char offset of the current line
+  }
+  function pause(){
+    if(!synth) return;
+    playing = false;
+    synth.cancel();                 // stop now; idx/charAt keep the position for resume
+    current = null;
+    render();
+  }
+  function jump(delta){
+    idx = Math.max(0, Math.min(script.length-1, idx + delta));
+    charAt = 0; finished = false;
+    if(playing) speakCurrent(); else { synth && synth.cancel(); current = null; render(); }
+  }
+  playBtn.addEventListener('click', () => playing ? pause() : play());
+  prevBtn.addEventListener('click', () => {
+    // Rewind: restart the current line if we're inside it, else go to the previous line
+    if(charAt > 0){ charAt = 0; if(playing) speakCurrent(); else render(); }
+    else jump(-1);
+  });
+  nextBtn.addEventListener('click', () => jump(+1));
+  // No auto-start: narration begins only when the student presses play. The old
+  // auto-attempt fired reliably inside the platform's same-origin iframe, where
+  // the sim inherits the card-click's user activation.
+  if(!synth){ playBtn.disabled = true; prevBtn.disabled = true; nextBtn.disabled = true; prog.textContent = ''; }
+  // Chrome keeps a removed iframe's speech playing (speechSynthesis outlives the
+  // document); cancel everything — welcome player AND card voiceover — on teardown.
+  addEventListener('pagehide', () => { try { speechSynthesis.cancel(); } catch(e){} });
+  render();
+  // Canvas-distortion guard: let the sim re-measure its own rendering buffers
+  // once the overlay has been laid out.
+  addEventListener('load', () => requestAnimationFrame(() => requestAnimationFrame(
+    () => window.dispatchEvent(new Event('resize')))));
+  ov.querySelectorAll('.welcome-mode').forEach(b => b.addEventListener('click', () => {
+    pause();
+    ov.classList.add('hidden');
+    try { if(WELCOME_ONCE) localStorage.setItem(WELCOME_KEY, '1'); } catch(e){}
+    if(window.__setMode) window.__setMode(b.dataset.mode);
+  }));
+})();
+</script>
+
 </body>
 </html>

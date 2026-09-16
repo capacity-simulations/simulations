@@ -284,23 +284,337 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 <style>
 .hidden{display:none!important}.plot-box{flex-direction:column}.canvas-wrap{position:relative;flex:1;min-height:360px}#canvas{touch-action:none;cursor:crosshair}.canvas-hint{position:absolute;left:14px;bottom:12px;padding:5px 8px;border-radius:5px;background:rgba(6,14,17,.76);color:var(--ink-mute);font-size:11px;pointer-events:none}.control-stack{display:flex;flex-direction:column;gap:7px}.control-stack .shell-btn{justify-content:flex-start}.toggle-row{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:600}.toggle-row input{accent-color:var(--accent)}.detail-row{display:grid;grid-template-columns:1fr;gap:5px;margin-top:8px}.preset-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px}.detail-row .shell-btn{width:100%;min-width:0;justify-content:flex-start;padding:7px 9px;white-space:normal}.preset-row .shell-btn{min-width:0;justify-content:center;padding:6px 4px}.readings{display:grid;gap:2px}.reading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border)}.reading:last-child{border-bottom:0}.reading-label{color:var(--muted);font-size:13px}.reading-value{font-family:var(--font-nums);font-variant-numeric:tabular-nums;font-size:15px;color:var(--text);white-space:nowrap}.badge{display:inline-flex;padding:4px 9px;border:1px solid var(--accent-soft);border-radius:999px;background:rgba(59,155,143,.12);color:var(--accent);font:600 12px var(--font-sans);text-transform:uppercase;letter-spacing:.05em}.reading.hl,.ctrl-box.hl{outline:2px solid rgba(45,212,191,.72);outline-offset:2px;border-radius:6px}.inq-step h4{margin:0 0 8px;color:var(--text);font-size:14px}.inq-step p{margin:0 0 9px;color:var(--muted);line-height:1.55}.feedback{min-height:18px;color:var(--ink-mid);font-size:12px}.inq-pager{display:flex;gap:6px;margin-right:auto}.formal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.eq-row{border:1px solid var(--border);border-radius:7px;padding:10px;color:var(--muted);font-size:13px}.eq-row b{color:var(--text)}body.light-theme .canvas-hint{background:rgba(248,250,252,.88)}@media(max-width:1000px){.formal-grid{grid-template-columns:1fr}.canvas-wrap{min-height:420px}}@media(max-width:560px){.canvas-hint{display:none}.shell-title span{display:block}.preset-row{grid-template-columns:1fr}}
 </style>
+<style>
+/* ============================================================================
+   USER-VERSION LAYERS (append-only) — welcome overlay, guided-inquiry chrome,
+   controls-guide overlay, card voiceover. Nothing here restyles the simulation:
+   every selector below targets an element this layer introduced, or an inquiry
+   element the layer owns.
+   ========================================================================== */
+
+/* Lecture mode is retired in the user versions: the two top-bar buttons own
+   zone visibility. The legacy button and restore strip stay in the DOM
+   (production ids are never removed) but are never shown. */
+#shell-lecture{display:none !important;}
+#aside-inquiry-restore{display:none !important;}
+
+/* The 🧭 button owns the inquiry zone's visibility. */
+.gi-off #aside-inquiry{display:none !important;}
+
+/* An unanswered card's feedback box would ship as an empty bordered rectangle;
+   collapse it until it carries text. Inquiry-layer only. */
+.inq-step .predict-eval:empty{display:none;}
+
+/* Staged anti-lookup reveals, layer-side only.
+   (a) .gi-after — a card's post-commit statement stays hidden until the
+       student has committed.
+   (b) html.gi-mask-dct — on the "equal heights" question the cΔt value would
+       read the answer out loud, so the NUMBER (never the row, never the
+       layout) is masked until the commit. No sim control is operated and
+       nothing on the canvas moves. */
+.inq-step .gi-after{display:none;}
+.inq-step[data-answered] .gi-after{display:block;margin:10px 0 0;padding:8px 10px;
+  border-left:3px solid var(--accent-soft);background:rgba(59,155,143,.10);border-radius:0 6px 6px 0;
+  font-size:12.5px;line-height:1.5;color:var(--ink-mid);}
+html.gi-mask-dct #read-dct .reading-value{visibility:hidden;}
+
+/* The sim's per-step focus ring belongs to the inquiry; with the inquiry off
+   (free exploration / controls guide) it must not linger. */
+html.gi-off .reading.hl,html.gi-off .ctrl-box.hl{outline:none !important;}
+
+/* The two template buttons drop to icon-only on narrow viewports so the cream
+   top bar does not grow. Scoped to the layer's own buttons. */
+@media (max-width:1280px){ #btn-gi .btn-lbl, #btn-cg .btn-lbl{display:none;} }
+
+/* ===== Controls Guide overlay ===== */
+.cg-hidden{display:none !important;}
+.cg-veiled{visibility:hidden !important;pointer-events:none;}
+.cg-glow{outline:1px solid #10b981;border-radius:8px;
+  box-shadow:0 0 0 1px #10b981,0 0 14px rgba(16,185,129,.55);
+  animation:cgPulse 1.6s ease-in-out infinite;}
+@keyframes cgPulse{0%,100%{box-shadow:0 0 0 1px #10b981,0 0 10px rgba(16,185,129,.4);}
+  50%{box-shadow:0 0 0 2px #10b981,0 0 20px rgba(16,185,129,.7);}}
+.cg-callout{position:fixed;z-index:4000;max-width:260px;background:#0d1522;color:#e2e8f0;
+  border:1.5px solid #8b5cf6;border-radius:10px;padding:10px 12px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-callout h5{margin:0 0 4px;font-size:0.8rem;font-weight:700;color:#a78bfa;}
+.cg-callout p{margin:0;font-size:0.78rem;line-height:1.45;}
+.cg-arrow{position:absolute;width:12px;height:12px;background:#0d1522;transform:rotate(45deg);}
+.cg-callout.arrow-top .cg-arrow{top:-7px;border-top:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.arrow-bottom .cg-arrow{bottom:-7px;border-bottom:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-right .cg-arrow{right:-7px;border-top:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-left .cg-arrow{left:-7px;border-bottom:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.no-arrow .cg-arrow{display:none;}
+html[data-theme="light"] .cg-callout, body.light-theme .cg-callout{background:#fff;color:#0f172a;border-color:#7c3aed;}
+html[data-theme="light"] .cg-callout h5, body.light-theme .cg-callout h5{color:#7c3aed;}
+html[data-theme="light"] .cg-arrow, body.light-theme .cg-arrow{background:#fff;border-color:#7c3aed !important;}
+/* Nav bar matches the purple callout. Width = sidebar (320px) minus equal
+   18px side margins, so the nav sits centred on the sidebar column. */
+.cg-nav{position:fixed;z-index:4000;right:18px;bottom:16px;width:284px;max-width:calc(100vw - 36px);display:flex;gap:8px;align-items:center;
+  background:#0d1522;border:1.5px solid #8b5cf6;border-radius:10px;padding:8px 10px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-sans);}
+.cg-nav button{height:30px;padding:0 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;
+  background:transparent;border:1px solid #8b5cf6;color:#a78bfa;font-family:var(--font-sans);transition:background .15s,color .15s;}
+.cg-nav button:hover:not(:disabled){background:rgba(139,92,246,.18);color:#e2e8f0;}
+.cg-nav button:disabled{opacity:.35;cursor:default;}
+.cg-nav #cg-next{background:#8b5cf6;border-color:#8b5cf6;color:#fff;min-width:76px;}
+.cg-nav #cg-next:hover:not(:disabled){background:#7c3aed;border-color:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav, body.light-theme .cg-nav{background:#fff;border-color:#7c3aed;}
+html[data-theme="light"] .cg-nav button, body.light-theme .cg-nav button{border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav button:hover:not(:disabled), body.light-theme .cg-nav button:hover:not(:disabled){background:rgba(124,58,237,.12);color:#5b21b6;}
+html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{background:#7c3aed;color:#fff;}
+
+/* ===== Welcome overlay (first landing) ===== */
+#welcome-overlay{position:fixed;inset:0;z-index:5000;background:radial-gradient(ellipse at center,rgba(2,6,12,.94) 0%,rgba(2,6,12,.86) 55%,rgba(2,6,12,.7) 100%);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);}
+#welcome-overlay.hidden{display:none;}
+.welcome-card{position:relative;width:min(760px,92vw);margin:0 auto;background:transparent;color:#E6EDF5;border-radius:0;overflow:visible;
+  box-shadow:none;animation:wcIn .55s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes wcIn{from{opacity:0;transform:translateY(14px) scale(.985);}to{opacity:1;transform:none;}}
+.welcome-hero{position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:140px;background:transparent;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);opacity:.9;}
+.welcome-hero canvas{display:block;width:100%;height:100%;}
+.welcome-hero::after{content:none;}
+.welcome-hero .hero-label{display:none;}
+.welcome-body{padding:156px 0 0;}
+.welcome-card h2{margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;}
+.welcome-kicker{font-size:.95rem;font-weight:500;letter-spacing:.02em;color:#AAB6C6;}
+.welcome-name{font-size:2.3rem;line-height:1.08;letter-spacing:-.02em;font-weight:700;max-width:22ch;}
+.welcome-blurb{margin:0 auto 26px;font-size:1rem;line-height:1.55;color:#AAB6C6;max-width:44ch;text-align:center;}
+.welcome-ask{margin:0 0 8px;font-size:.82rem;font-weight:600;color:#E6EDF5;text-align:center;}
+html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F172A;}
+.welcome-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0;}
+.welcome-mode{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;
+  padding:18px 16px 16px;border-radius:14px;cursor:pointer;color:#E6EDF5;font-family:var(--font-sans);
+  background:rgba(255,255,255,.045);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(148,163,184,.18);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transition:transform .16s,border-color .16s,background .16s,box-shadow .16s;}
+.welcome-mode:hover,.welcome-mode:focus-visible{transform:translateY(-3px);background:rgba(255,255,255,.075);outline:none;box-shadow:0 14px 34px rgba(0,0,0,.35);}
+.welcome-mode[data-mode="inquiry"]:hover,.welcome-mode[data-mode="inquiry"]:focus-visible{border-color:rgba(52,211,153,.7);}
+.welcome-mode[data-mode="controls"]:hover,.welcome-mode[data-mode="controls"]:focus-visible{border-color:rgba(167,139,250,.7);}
+.welcome-mode[data-mode="free"]:hover,.welcome-mode[data-mode="free"]:focus-visible{border-color:rgba(251,191,36,.7);}
+.wm-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;}
+.wm-icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode[data-mode="inquiry"] .wm-icon{background:rgba(16,185,129,.16);color:#34d399;}
+.welcome-mode[data-mode="controls"] .wm-icon{background:rgba(139,92,246,.18);color:#a78bfa;}
+.welcome-mode[data-mode="free"] .wm-icon{background:rgba(245,158,11,.16);color:#fbbf24;}
+.wm-text{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.wm-title{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;font-weight:600;font-size:.95rem;white-space:nowrap;}
+.wm-tag{font-size:.6rem;font-weight:600;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,.16);color:#6ee7b7;letter-spacing:.01em;}
+.wm-desc{display:block;font-size:.8rem;line-height:1.45;color:#AAB6C6;}
+.wm-go{margin-top:auto;padding-top:6px;display:flex;align-items:center;gap:4px;font-size:.78rem;font-weight:600;color:#94A3B8;}
+.wm-go svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode:hover .wm-go{color:#E6EDF5;}
+@media (max-width:760px){.welcome-modes{grid-template-columns:1fr;}}
+.welcome-foot{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:22px;padding-top:0;border-top:none;}
+.welcome-listen{font-size:.8rem;color:#AAB6C6;line-height:1.35;}
+.welcome-listen b{display:block;color:#E6EDF5;font-weight:600;font-size:.84rem;}
+.welcome-audio{display:flex;align-items:center;gap:10px;}
+.welcome-audio button{display:grid;place-items:center;border:none;cursor:pointer;background:transparent;color:#C7D2E0;padding:0;font-family:var(--font-sans);}
+.welcome-audio button:disabled{opacity:.3;cursor:default;}
+.welcome-audio .wa-skip{width:34px;height:34px;border-radius:50%;}
+.welcome-audio .wa-skip:hover:not(:disabled){color:#fff;background:rgba(148,163,184,.12);}
+.welcome-audio .wa-skip svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak{width:44px;height:44px;border-radius:50%;background:#F4F7FA;color:#0B1220;transition:transform .12s;}
+#welcome-speak:hover{transform:scale(1.06);}
+#welcome-speak svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak[data-state="playing"] svg.i-play,#welcome-speak[data-state="playing"] svg.i-again{display:none;}
+#welcome-speak:not([data-state="playing"]) svg.i-pause{display:none;}
+#welcome-speak[data-state="done"] svg.i-play{display:none;}
+#welcome-speak:not([data-state="done"]) svg.i-again{display:none;}
+.welcome-seg{display:flex;gap:4px;margin-left:4px;}
+.welcome-seg i{display:block;width:14px;height:3px;border-radius:2px;background:rgba(148,163,184,.25);}
+.welcome-seg i.on{background:#34d399;}
+.welcome-seg i.cur{background:#F4F7FA;}
+.welcome-progress{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+@media (prefers-reduced-motion: reduce){.welcome-card{animation:none;}}
+html[data-theme="light"] #welcome-overlay, body.light-theme #welcome-overlay{background:radial-gradient(ellipse at center,rgba(241,245,249,.94) 0%,rgba(241,245,249,.86) 55%,rgba(241,245,249,.72) 100%);}
+html[data-theme="light"] .welcome-card, body.light-theme .welcome-card{background:transparent;color:#0F172A;box-shadow:none;}
+html[data-theme="light"] .welcome-hero, body.light-theme .welcome-hero{background:transparent;}
+html[data-theme="light"] .welcome-blurb,html[data-theme="light"] .wm-desc,html[data-theme="light"] .welcome-listen, body.light-theme .welcome-blurb,body.light-theme .wm-desc,body.light-theme .welcome-listen{color:#475569;}
+html[data-theme="light"] .welcome-listen b, body.light-theme .welcome-listen b{color:#0F172A;}
+html[data-theme="light"] .welcome-mode, body.light-theme .welcome-mode{color:#0F172A;background:rgba(255,255,255,.55);border-color:rgba(15,23,42,.12);}
+html[data-theme="light"] .wm-tag, body.light-theme .wm-tag{color:#047857;background:rgba(16,185,129,.14);}
+html[data-theme="light"] .wm-go, body.light-theme .wm-go{color:#475569;}
+html[data-theme="light"] .welcome-mode:hover, body.light-theme .welcome-mode:hover{background:rgba(15,23,42,.07);}
+html[data-theme="light"] .welcome-audio button, body.light-theme .welcome-audio button{color:#334155;}
+html[data-theme="light"] #welcome-speak, body.light-theme #welcome-speak{background:#0F172A;color:#fff;}
+html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur{background:#0F172A;}
+
+/* ===== Card voiceover (controls guide + guided inquiry) ===== */
+/* Two-row layout: a "Listen" narration row (transport + Auto) above the
+   card-navigation row, separated by a hairline — audio is secondary, the
+   Next progression stays the anchor action. */
+.cg-nav{flex-direction:column;align-items:stretch;gap:7px;}
+.cg-nav-row{display:flex;align-items:center;gap:8px;}
+.cg-row-nav{border-top:1px solid rgba(139,92,246,.28);padding-top:7px;}
+html[data-theme="light"] .cg-row-nav, body.light-theme .cg-row-nav{border-top-color:rgba(124,58,237,.22);}
+.cg-flex{flex:1;}
+.cg-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a7;margin-right:2px;}
+html[data-theme="light"] .cg-listen-lab, body.light-theme .cg-listen-lab{color:#64748b;}
+.cg-nav .cg-voice{width:26px;height:26px;min-width:26px;padding:0;border:none !important;background:transparent;
+  border-radius:50%;display:grid;place-items:center;color:#a78bfa;}
+.cg-nav .cg-voice:hover:not(:disabled){background:rgba(139,92,246,.22);color:#e2e8f0;}
+.cg-nav .cg-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+.cg-nav #cg-voice-play{width:30px;height:30px;min-width:30px;border:1px solid #8b5cf6 !important;}
+.cg-nav #cg-voice-play[data-vstate="playing"]{background:#8b5cf6;color:#fff;}
+.cg-nav #cg-voice-play svg{width:13px;height:13px;}
+.cg-nav .cg-sep{width:1px;height:20px;background:rgba(139,92,246,.4);margin:0 4px;flex-shrink:0;}
+html[data-theme="light"] .cg-nav .cg-voice, body.light-theme .cg-nav .cg-voice{color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-voice-play, body.light-theme .cg-nav #cg-voice-play{border-color:#7c3aed !important;}
+html[data-theme="light"] .cg-nav #cg-voice-play[data-vstate="playing"], body.light-theme .cg-nav #cg-voice-play[data-vstate="playing"]{background:#7c3aed;color:#fff;}
+html[data-theme="light"] .cg-nav .cg-sep, body.light-theme .cg-nav .cg-sep{background:rgba(124,58,237,.35);}
+.cg-nav #cg-auto{height:22px;min-width:0;padding:0 9px;border-radius:999px;font-size:0.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(139,146,167,.45);color:#8b93a7;display:inline-flex;align-items:center;transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+.cg-nav #cg-auto:hover:not(.active){border-color:#8b5cf6;color:#a78bfa;}
+.cg-nav #cg-auto.active{background:#8b5cf6;border-color:#8b5cf6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.55);}
+html[data-theme="light"] .cg-nav #cg-auto, body.light-theme .cg-nav #cg-auto{border-color:rgba(100,116,139,.5);color:#64748b;}
+html[data-theme="light"] .cg-nav #cg-auto:hover:not(.active), body.light-theme .cg-nav #cg-auto:hover:not(.active){border-color:#7c3aed;color:#7c3aed;}
+html[data-theme="light"] .cg-nav #cg-auto.active, body.light-theme .cg-nav #cg-auto.active{background:#7c3aed;border-color:#7c3aed;color:#fff;box-shadow:0 0 10px rgba(124,58,237,.4);}
+/* The Listen row's two buttons are sized to the sim's own pager buttons
+   (.shell-btn at 13px/6px 11px + 1px border measures 31px) so the sidebar
+   row never grows. */
+#inq-auto{height:31px;max-height:31px;min-width:0;padding:0 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;box-sizing:border-box;
+  border-color:var(--ctrl-border);color:var(--ink-mute);transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+#inq-auto:hover:not(.active){border-color:var(--accent-soft);color:var(--accent);}
+#inq-auto.active{background:var(--accent) !important;border-color:var(--accent) !important;color:#06231c !important;box-shadow:0 0 10px rgba(59,155,143,.45);}
+body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{color:#fff !important;}
+.inq-listen{display:flex;align-items:center;gap:8px;margin:10px 0 0;flex-shrink:0;}
+.inq-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-right:2px;}
+#inq-voice{width:31px;height:31px;min-width:31px;max-height:31px;padding:0;border-radius:50%;justify-content:center;display:inline-flex;align-items:center;box-sizing:border-box;}
+#inq-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+[data-vstate] svg.i-play,[data-vstate] svg.i-pause,[data-vstate] svg.i-again{display:none;}
+[data-vstate="idle"] svg.i-play{display:block;}
+[data-vstate="playing"] svg.i-pause{display:block;}
+[data-vstate="done"] svg.i-again{display:block;}
+</style>
 </head><body data-lecture="L05">
 
 <div id="shell" class="hide-formal">
   <div id="shell-info-modal" class="shell-modal-backdrop"><div class="shell-modal" role="dialog" aria-modal="true" aria-label="About this simulation"><div class="shell-modal-head"><h2 id="info-title"></h2><button id="shell-info-close" class="shell-btn shell-modal-close" title="Close">✕</button></div><div class="shell-modal-body" id="info-body"></div></div></div>
   <header class="shell-header">
     <div class="shell-title" id="visible-title"></div>
-    <div class="shell-group"><button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button><button id="shell-theme" class="shell-btn" title="Toggle light or dark theme">☾</button><button id="shell-lecture" class="shell-btn" title="Lecture display mode">🎓 Lecture</button></div>
-    <div class="shell-controls"><div class="shell-group"><button id="shell-maximize" class="shell-btn">⛶ Maximize</button><button id="toggle-formal" class="shell-btn">∑ Formal</button><label style="font-size:11px">Speed</label><select id="shell-speed" class="shell-select"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><div class="shell-sep"></div><div class="shell-group"><button id="shell-reset" class="shell-btn">↻ Reset</button><button id="shell-play" class="shell-btn">⏸ Pause</button></div></div>
+    <div class="shell-group"><button id="shell-info" class="shell-btn" title="About this simulation">ⓘ Info</button><button id="shell-theme" class="shell-btn" title="Toggle light or dark theme">☾</button><button id="shell-lecture" class="shell-btn" title="Lecture display mode">🎓 Lecture</button><button id="btn-gi" class="shell-btn active" title="Show or hide the guided inquiry"><span aria-hidden="true">🧭</span><span class="btn-lbl">Guided Inquiry</span></button><button id="btn-cg" class="shell-btn" title="Show or hide the controls guide"><span aria-hidden="true">🎛</span><span class="btn-lbl">Controls Guide</span></button></div>
+    <div class="shell-controls"><div class="shell-group"><button id="shell-maximize" class="shell-btn">⛶ Maximize</button><button id="toggle-formal" class="shell-btn">∑ Formal</button><label style="font-size:11px" id="lbl-speed">Speed</label><select id="shell-speed" class="shell-select"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div><div class="shell-sep"></div><div class="shell-group"><button id="shell-reset" class="shell-btn">↻ Reset</button><button id="shell-play" class="shell-btn">⏸ Pause</button></div></div>
   </header>
+  <div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title">
+    <div class="welcome-card">
+      <div class="welcome-hero">
+        <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
+        <span class="hero-label">A diagram of ct against x, with the two 45 degree light lines and a scatter of events.</span>
+      </div>
+      <div class="welcome-body">
+        <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The spacetime diagram</span></h2>
+        <p class="welcome-blurb">Place events on a diagram of ct against x, join them into worldlines, and read what the 45&deg; light lines allow.</p>
+        <p class="welcome-ask">How would you like to begin?</p>
+        <div class="welcome-modes">
+          <button type="button" class="welcome-mode" data-mode="inquiry">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.9 4.6-4.6 1.9 1.9-4.6z"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Guided inquiry <span class="wm-tag">Recommended</span></span>
+              <span class="wm-desc">Uncover the simulation in steps and see the physics emerge.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+          <button type="button" class="welcome-mode" data-mode="controls">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Controls guide</span>
+              <span class="wm-desc">Learn each control, one at a time.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+          <button type="button" class="welcome-mode" data-mode="free">
+            <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 20l5-5M4 20v-4M4 20h4M20 4l-5 5M20 4v4M20 4h-4"/></svg></span>
+            <span class="wm-text"><span class="wm-title">Free exploration</span>
+              <span class="wm-desc">Everything open. Experiment on your own.</span></span>
+            <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+          </button>
+        </div>
+        <div class="welcome-foot">
+          <div class="welcome-listen"><b>Listen to the intro</b></div>
+          <div class="welcome-audio" aria-label="Read aloud controls">
+            <button type="button" class="wa-skip" id="welcome-prev" title="Previous line" aria-label="Previous line"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>
+            <button type="button" id="welcome-speak" data-state="idle" title="Play" aria-label="Play" aria-pressed="false">
+              <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>
+              <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+              <svg class="i-again" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+            </button>
+            <button type="button" class="wa-skip" id="welcome-next" title="Next line" aria-label="Next line"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+            <span class="welcome-seg" id="welcome-seg" aria-hidden="true"></span>
+            <span id="welcome-progress" class="welcome-progress"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <main class="shell-hero"><div class="plot-box"><div class="canvas-wrap"><canvas id="canvas" aria-label="Interactive spacetime diagram"></canvas><div class="canvas-hint">Drag E1 or E2. Frame S axes remain fixed.</div></div></div></main>
   <aside class="shell-aside">
-    <div id="aside-inquiry" class="aside-zone"><div class="aside-zone-head"><h3>Guided Inquiry</h3></div><div id="inq-dots" class="inq-dots"></div><div id="inq-cards" class="aside-zone-body"></div><div class="inq-nav"><div class="inq-pager"><button id="inq-prev" class="shell-btn primary" title="Previous step" disabled>&lt;</button><button id="inq-pager-next" class="shell-btn primary" title="Next step">&gt;</button></div><button id="inq-next" class="shell-btn primary">Next →</button></div></div>
+    <div id="aside-inquiry" class="aside-zone"><div class="aside-zone-head"><h3>Guided Inquiry</h3></div><div id="inq-dots" class="inq-dots"></div><div id="inq-cards" class="aside-zone-body">
+
+      <!-- ===================================================================
+           USER VERSION — the deck is authored to the SME card grammar:
+           FRAME -> Q1 (naive baseline: what a worldline looks like)
+                 -> Q2 (representation reading: equal ct = simultaneous)
+                 -> Q3 (generalisation: the 45 degree speed limit)
+                 -> Q4 (application: a null separation is a light path).
+           The deck replaces the lecture deck held in CONFIGS.L05.cards; the
+           generator below is guarded so this markup wins.
+           ==================================================================== -->
+
+      <div class="inq-step">
+        <h4>1 &middot; Reading a spacetime diagram</h4>
+        <p>This diagram plots time upward as <b>ct</b> and space sideways as <b>x</b>, and c = 1 in these units, so a light ray draws a line at exactly <b>45&deg;</b> &mdash; the dashed yellow diagonals. A single point is an <b>event</b>: one place at one moment. A continuous line is a <b>worldline</b>: the whole history of one object.</p>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>2 &middot; Two histories</h4>
+        <p>A marble sits at rest at x = 0 while an hour passes. A second marble travels steadily to the right. How do their two worldlines look on this diagram?</p>
+        <button class="choice" data-correct="0" data-fb="Even at rest the marble goes on existing, and that history is a whole line, not a point. A point is a single event &mdash; one instant of the marble's life. <span class=&quot;answer&quot;>At rest the worldline is vertical; motion tilts it.</span>">A &mdash; At rest: a point. Moving: a tilted line</button>
+        <button class="choice" data-correct="0" data-fb="A horizontal line would be one instant spread over many places. The vertical direction is ct, so <span class=&quot;answer&quot;>an object at rest draws a vertical line</span>, and giving it a speed tilts that line away from vertical.">B &mdash; At rest: horizontal. Moving: tilted</button>
+        <button class="choice" data-correct="1" data-fb="Correct. At rest still means advancing through time, so the worldline runs straight up the ct direction. Give the marble a speed and x advances as ct advances, which leans the line away from vertical.">C &mdash; At rest: vertical. Moving: tilted from vertical</button>
+        <div class="predict-eval"></div>
+        <p class="gi-after">Both worldlines are now drawn: the vertical one is at rest, the leaning one carries v/c = +0.50.</p>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>3 &middot; Equal heights</h4>
+        <p>Events <b>E1</b> and <b>E2</b> sit at the same height above the x axis, at different x. What does equal height imply about the two events?</p>
+        <button class="choice" data-correct="1" data-fb="Correct. Height on this diagram is the ct coordinate, so equal height means equal ct: in frame S the two events happen at the same moment, four units of x apart.">A &mdash; They are simultaneous</button>
+        <button class="choice" data-correct="0" data-fb="Same place means same x, which would stack the two events one directly above the other on a single vertical line. Equal height is equal ct, so <span class=&quot;answer&quot;>these two are simultaneous</span>.">B &mdash; They are at the same place</button>
+        <button class="choice" data-correct="0" data-fb="Nearness is a separation in x, and these two are four units apart &mdash; not near at all. Equal height is equal ct, so <span class=&quot;answer&quot;>they are simultaneous in S</span>.">C &mdash; They are close together</button>
+        <div class="predict-eval"></div>
+        <p class="gi-after">Frame S reads c&Delta;t = +0.00 and &Delta;x = +4.00 for this pair.</p>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>4 &middot; How far can a worldline lean?</h4>
+        <p>Draw worldlines at several different tilts. Each one is labelled with its <b>v/c</b>. What is the significance of that label?</p>
+        <button class="choice" data-correct="0" data-fb="The diagram will let you draw any slope, but physics will not. Past 45&deg; the label passes v/c = 1, and <span class=&quot;answer&quot;>nothing carries a particle or a signal faster than light</span>.">A &mdash; Worldlines may take any slope</button>
+        <button class="choice" data-correct="1" data-fb="Correct. v/c is the speed that worldline represents, in units of c. A line leaning past the 45&deg; diagonals carries v/c &gt; 1 &mdash; faster than light &mdash; so no particle has such a worldline.">B &mdash; Values v/c &gt; 1 are not allowed</button>
+        <button class="choice" data-correct="0" data-fb="v/c &lt; 1 is the ordinary case: every massive particle is slower than light. It is <span class=&quot;answer&quot;>v/c &gt; 1, past the 45&deg; diagonals, that is excluded</span>.">C &mdash; Values v/c &lt; 1 are not allowed</button>
+        <div class="predict-eval"></div>
+        <p class="gi-after">The steeper a worldline stands, the slower the object; the 45&deg; diagonals are light itself.</p>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>5 &middot; A 45&deg; separation</h4>
+        <p>Drag <b>E2</b> until the straight line joining E1 to E2 runs parallel to a dashed 45&deg; diagonal. Which statement about the two events is then true?</p>
+        <button class="choice" data-correct="0" data-fb="Simultaneous in some frame means the separation is spacelike &mdash; a joining line leaning flatter than 45&deg;. On the light line itself <span class=&quot;answer&quot;>the interval is zero and light from E1 reaches E2</span>.">A &mdash; Some frame sees them as simultaneous</button>
+        <button class="choice" data-correct="0" data-fb="&Delta;s&sup2; is the one quantity every inertial frame agrees on. Here it is zero, which is exactly the statement that <span class=&quot;answer&quot;>a light ray connects the two events</span>.">B &mdash; Their interval depends on the observer</button>
+        <button class="choice" data-correct="1" data-fb="Correct. A 45&deg; separation is a light path, so the interval &Delta;s&sup2; = (c&Delta;t)&sup2; &minus; (&Delta;x)&sup2; vanishes. Frame S reads &Delta;s&sup2; = +0.00, and so does every other inertial frame.">C &mdash; Light leaving E1 arrives at E2</button>
+        <div class="predict-eval"></div>
+        <p class="gi-after">Lean the joining line inside 45&deg; and &Delta;s&sup2; turns positive; lean it outside and &Delta;s&sup2; turns negative.</p>
+      </div>
+
+      </div>
+      <div class="inq-listen">
+        <span class="inq-listen-lab">Listen</span>
+        <button id="inq-voice" class="shell-btn primary" data-vstate="idle" title="Read this card aloud" aria-label="Read this card aloud">
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          <svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+        </button>
+        <button id="inq-auto" class="shell-btn primary" title="Auto walkthrough — narrates each card and moves on; waits for your answers" aria-label="Auto walkthrough">Auto</button>
+      </div><div class="inq-nav"><div class="inq-pager"><button id="inq-prev" class="shell-btn primary" title="Previous step" disabled>&lt;</button><button id="inq-pager-next" class="shell-btn primary" title="Next step">&gt;</button></div><button id="inq-next" class="shell-btn primary">Next →</button></div></div>
     <button id="aside-inquiry-restore" class="aside-restore" title="Revisit the guided inquiry">▸ Guided inquiry</button>
     <div id="aside-controls" class="aside-zone">
-      <div class="shell-panel"><div class="shell-panel-head"><h3>Controls</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body"><div class="ctrl-box control-stack"><label class="toggle-row"><input id="show-s-grid" type="checkbox" checked> S grid</label></div><div id="lecture-controls"></div></div></div>
-      <div class="shell-panel"><div class="shell-panel-head"><h3 id="readings-s-title">Frame S</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body"><div id="readings-s" class="readings"></div></div></div>
-      <div class="shell-panel collapsed"><div class="shell-panel-head"><h3>Legend and notes</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body" id="notes"></div></div>
+      <div class="shell-panel" id="panel-controls"><div class="shell-panel-head"><h3>Controls</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body"><div class="ctrl-box control-stack" id="box-sgrid"><label class="toggle-row"><input id="show-s-grid" type="checkbox" checked> S grid</label></div><div id="lecture-controls"></div></div></div>
+      <div class="shell-panel" id="panel-readings"><div class="shell-panel-head"><h3 id="readings-s-title">Frame S</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body"><div id="readings-s" class="readings"></div></div></div>
+      <div class="shell-panel collapsed" id="panel-notes"><div class="shell-panel-head"><h3>Legend and notes</h3><span class="shell-caret">▾</span></div><div class="shell-panel-body" id="notes"></div></div>
     </div>
   </aside>
   <section class="shell-formal"><div class="formal-grid" id="formal-content"></div></section>
@@ -319,11 +633,15 @@ const Shell=(function(){
  function wire(){
   document.getElementById('shell-play').onclick=()=>setPlaying(!playing);document.getElementById('shell-reset').onclick=()=>{onReset();last=performance.now()};document.getElementById('shell-speed').onchange=e=>speed=parseFloat(e.target.value)||1;document.getElementById('shell-maximize').onclick=()=>setMaximized(!root.classList.contains('shell-max'));
   const modal=document.getElementById('shell-info-modal');document.getElementById('shell-info').onclick=()=>modal.classList.add('open');document.getElementById('shell-info-close').onclick=()=>modal.classList.remove('open');modal.onclick=e=>{if(e.target===modal)modal.classList.remove('open')};document.getElementById('shell-theme').onclick=e=>{const light=document.body.classList.toggle('light-theme');e.currentTarget.textContent=light?'☀':'☾';requestAnimationFrame(refit)};document.getElementById('shell-lecture').onclick=()=>setLectureMode(!root.classList.contains('lecture-mode'));
-  document.getElementById('aside-inquiry-restore').onclick=()=>setLectureMode(false);document.getElementById('inq-prev').onclick=()=>showStep(inqStep-1);document.getElementById('inq-pager-next').onclick=()=>showStep(inqStep+1);document.getElementById('inq-next').onclick=()=>inqStep===cards().length-1?setInquiryCollapsed(true):showStep(inqStep+1);
-  document.getElementById('inq-cards').onclick=e=>{const choice=e.target.closest('.choice');if(!choice)return;const card=choice.closest('.inq-step');card.querySelectorAll('.choice').forEach(b=>b.classList.remove('correct','wrong','dim'));choice.classList.add(choice.dataset.correct==='1'?'correct':'wrong');card.querySelector('.feedback').textContent=choice.dataset.feedback;card.setAttribute('data-ready','');document.getElementById('inq-next').disabled=false};
+  document.getElementById('aside-inquiry-restore').onclick=()=>setLectureMode(false);document.getElementById('inq-prev').onclick=()=>showStep(inqStep-1);document.getElementById('inq-pager-next').onclick=()=>showStep(inqStep+1);document.getElementById('inq-next').onclick=()=>inqStep===cards().length-1?(window.__giOff?window.__giOff():setInquiryCollapsed(true)):showStep(inqStep+1);/* USER VERSION: Finish hands over to the 🧭 button's free-exploration state. */
+  /* USER VERSION: the choice handler moved to the additive block at the end of
+     the body — it must mark the correct option, disable the row and render HTML
+     feedback into .predict-eval, which the one-line shell handler could not. */
   document.getElementById('toggle-formal').onclick=e=>{const hidden=root.classList.toggle('hide-formal');e.currentTarget.classList.toggle('active',!hidden);requestAnimationFrame(refit)};root.querySelectorAll('.shell-panel-head').forEach(h=>h.onclick=()=>{h.parentElement.classList.toggle('collapsed');requestAnimationFrame(refit)});window.addEventListener('resize',refit);window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(modal.classList.contains('open'))modal.classList.remove('open');else if(root.classList.contains('shell-max'))setMaximized(false)})
  }
- return{init(o){onFrame=o.onFrame||onFrame;onReset=o.onReset||onReset;onResize=o.onResize||onResize;onStep=o.onStep||onStep;wire();const dots=document.getElementById('inq-dots');cards().forEach(()=>{const d=document.createElement('span');d.className='inq-dot';dots.appendChild(d)});showStep(0);onResize();onReset();if(!started){started=true;requestAnimationFrame(loop)}},get playing(){return playing},setPlaying,setLectureMode,refit};
+ return{init(o){onFrame=o.onFrame||onFrame;onReset=o.onReset||onReset;onResize=o.onResize||onResize;onStep=o.onStep||onStep;wire();const dots=document.getElementById('inq-dots');cards().forEach(()=>{const d=document.createElement('span');d.className='inq-dot';dots.appendChild(d)});showStep(0);onResize();onReset();if(!started){started=true;requestAnimationFrame(loop)}},get playing(){return playing},setPlaying,setLectureMode,refit,
+  /* USER VERSION (additive): the two-button template drives the zone through these. */
+  get step(){return inqStep},get totalSteps(){return cards().length},setInquiryCollapsed,inqShow:showStep};
 })();
 
 (()=>{'use strict';
@@ -333,7 +651,7 @@ const CONFIGS={
   ['2: Test co-location','Drag E2 until it shares E1’s x coordinate. Use the Δx reading to confirm co-location.'],
   ['3: Build a worldline','Choose Add worldline, then select two canvas points. Compare its slope and v/c label with the 45° light references.'],
   ['4: Inspect separation','Select Detail 3. Read Δx on the horizontal leg, cΔt on the vertical leg, and the signed Δs² value in Frame S.'],
-  ['5: Explore','Turn on the now ct sweep if useful, move both events, and compare the triangle labels with the Frame S values.']],focus:['read-dct','read-dx','worldline','detail-controls','show-now'],notes:'E1 and E2 are events in frame S. Detail 2 adds projections. Detail 3 adds a separation triangle. Worldlines are labeled by v/c.',formal:['<b>Event:</b> P = (ct, x).','<b>Separations:</b> cΔt = ct₂ − ct₁, Δx = x₂ − x₁.','<b>Invariant interval:</b> Δs² = (cΔt)² − (Δx)².']},
+  ['5: Explore','Turn on the now ct sweep if useful, move both events, and compare the triangle labels with the Frame S values.']],focus:['','','','',''],/* USER VERSION: the per-step focus ring is retired — on this deck every card it used to ring either points at a masked readout or at an element the ring does not style. */notes:'E1 and E2 are events in frame S. Detail 2 adds projections. Detail 3 adds a separation triangle. Worldlines are labeled by v/c.',formal:['<b>Event:</b> P = (ct, x).','<b>Separations:</b> cΔt = ct₂ − ct₁, Δx = x₂ − x₁.','<b>Invariant interval:</b> Δs² = (cΔt)² − (Δx)².']},
  L08:{title:'Spacetime Diagram Explorer',sub:'Lecture 8: light cone, interval, and reception',events:[{x:-1,ct:1},{x:3,ct:1}],cards:[
   ['1: Predict reception','The events begin at equal ct but unequal distances from x = 0. Which flash reaches that observer later?',['The farther flash|1|Correct. Reception occurs at ct + |x|, so the farther event is received later.','They arrive together|0|Equal event times do not cancel unequal light-travel distances.','Each arrives at its event time|0|That is true only for an event on the observer worldline.']],
   ['2: Follow the cone','Drag E2 inside, onto, and outside the E1 light cone. The cone remains anchored to E1.'],
@@ -377,9 +695,780 @@ function point(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.le
 canvas.onpointerdown=e=>{const p=point(e),hit=S.events.find(ev=>Math.hypot(p.x-X(ev.x),p.y-Y(ev.ct))<17);if(hit){drag=hit;canvas.setPointerCapture(e.pointerId);return}if(lecture==='L05'&&S.worldlineMode){const w=world(p);if(!pendingWorldline)pendingWorldline=w;else{S.worldlines.push({x1:pendingWorldline.x,ct1:pendingWorldline.ct,x2:w.x,ct2:w.ct,color:['#2dd4bf','#60a5fa','#34d399'][S.worldlines.length%3]});pendingWorldline=null;S.worldlineMode=false;$('worldline').classList.remove('active')}draw()}};canvas.onpointermove=e=>{if(!drag)return;const w=world(point(e));drag.x=clamp(w.x,-5.5,5.5);drag.ct=clamp(w.ct,-5.5,5.5);draw()};canvas.onpointerup=canvas.onpointercancel=()=>drag=null;
 $('show-s-grid').onchange=e=>{S.showSGrid=e.target.checked;draw()};
 if($('show-now'))$('show-now').onchange=e=>{S.showNow=e.target.checked;draw()};if($('signals'))$('signals').onchange=e=>{S.signals=e.target.checked;draw()};if($('worldline'))$('worldline').onclick=()=>{S.worldlineMode=!S.worldlineMode;pendingWorldline=null;$('worldline').classList.toggle('active',S.worldlineMode)};document.querySelectorAll('.detail').forEach(b=>b.onclick=()=>{S.detail=+b.dataset.detail;document.querySelectorAll('.detail').forEach(x=>x.classList.toggle('active',x===b));draw()});document.querySelectorAll('.preset').forEach(b=>b.onclick=()=>{Object.assign(S.events[1],{timelike:{x:1,ct:3},spacelike:{x:3,ct:1},null:{x:2.5,ct:2.5}}[b.dataset.preset]);draw()});
-$('inq-cards').innerHTML=C.cards.map((card,i)=>'<div class="inq-step"'+(card[2]?' data-gate':'')+'><h4>'+card[0]+'</h4><p>'+card[1]+'</p>'+(card[2]?card[2].map(s=>{const [text,correct,feedback]=s.split('|');return '<button class="choice" data-correct="'+correct+'" data-feedback="'+feedback+'">'+text+'</button>'}).join(''):'')+'<div class="feedback"></div></div>').join('');
-Shell.init({onFrame(dt){S.pulse=(S.pulse+dt*.45)%1;if(S.showNow){S.nowCt+=dt*1.2;if(S.nowCt>5.5)S.nowCt=-5.5}if(S.signals||S.showNow)draw()},onReset:reset,onResize:resize,onStep(i){step=i;applyFocus()}});
-Shell.setLectureMode(true);
+/* USER VERSION: the deck now ships as markup in the body (SME card grammar), so
+   the lecture-deck generator only runs if that markup is absent. */
+if(!$('inq-cards').querySelector('.inq-step'))$('inq-cards').innerHTML=C.cards.map((card,i)=>'<div class="inq-step"'+(card[2]?' data-gate':'')+'><h4>'+card[0]+'</h4><p>'+card[1]+'</p>'+(card[2]?card[2].map(s=>{const [text,correct,feedback]=s.split('|');return '<button class="choice" data-correct="'+correct+'" data-feedback="'+feedback+'">'+text+'</button>'}).join(''):'')+'<div class="feedback"></div></div>').join('');
+/* ==========================================================================
+   USER VERSION — additive inquiry layer. Nothing above this line changes the
+   physics, the drawing code, the controls, the readouts or the layout; the
+   only edits made to the original script are the card-generator guard, the
+   retired focus ring, and the onStep hook on the next Shell.init line.
+   ========================================================================= */
+const giCards=()=>[...document.querySelectorAll('#inq-cards .inq-step')];
+const giAnswered=i=>{const c=giCards()[i];return !!(c&&c.hasAttribute('data-answered'))};
+/* Derived layer state — a pure function of the live DOM, so the pager,
+   re-entry, Reset and the Controls Guide can never leave it stuck.
+   (a) the cΔt VALUE is masked while card 3's question is open, because that
+       number reads the pending answer out loud. No control is operated and
+       nothing on the canvas moves — the row and the layout stay put.
+   (b) the two demonstration worldlines appear once card 2 is committed: the
+       sim's own drawing, used as that question's strongest feedback. */
+function giApply(){
+  const cards=giCards(),cur=cards.findIndex(c=>c.classList.contains('active')),
+        off=document.documentElement.classList.contains('gi-off');
+  document.documentElement.classList.toggle('gi-mask-dct',!off&&cur===2&&!giAnswered(2));
+  if(!S)return;
+  const want=giAnswered(1),has=S.worldlines.some(w=>w.demo);
+  if(want&&!has)S.worldlines.push({x1:0,ct1:-4,x2:0,ct2:4,color:'#2dd4bf',demo:1},{x1:-2,ct1:-4,x2:2,ct2:4,color:'#60a5fa',demo:1});
+  else if(!want&&has)S.worldlines=S.worldlines.filter(w=>!w.demo);
+  draw();
+}
+/* State pinning: the two cards that name a starting configuration set it, and
+   only while their own question is still open, so exploration done after a
+   commit is never yanked back. */
+function giStep(i){
+  if(S&&(i===2||i===4)&&!giAnswered(i)){
+    Object.assign(S.events[0],{x:-2,ct:2});Object.assign(S.events[1],{x:2,ct:2});
+  }
+  giApply();
+}
+Shell.init({onFrame(dt){S.pulse=(S.pulse+dt*.45)%1;if(S.showNow){S.nowCt+=dt*1.2;if(S.nowCt>5.5)S.nowCt=-5.5}if(S.signals||S.showNow)draw()},onReset:reset,onResize:resize,onStep(i){step=i;giStep(i);applyFocus()}});
+/* Prediction wiring: exactly one option is marked correct however the student
+   answers, the row locks, and the feedback renders as markup in .predict-eval. */
+giCards().forEach(card=>{
+  const evalBox=card.querySelector('.predict-eval'),choices=[...card.querySelectorAll('.choice')];
+  choices.forEach(ch=>ch.addEventListener('click',()=>{
+    if(card.hasAttribute('data-answered'))return;
+    card.setAttribute('data-answered','1');card.setAttribute('data-ready','');
+    const correct=ch.dataset.correct==='1';
+    choices.forEach(c=>{c.disabled=true;
+      if(c.dataset.correct==='1')c.classList.add('correct');
+      else if(c===ch)c.classList.add('wrong');
+      else c.classList.add('dim');});
+    if(evalBox){evalBox.innerHTML=ch.dataset.fb||'';evalBox.classList.add('show',correct?'correct':'wrong');}
+    const nx=$('inq-next');if(nx)nx.disabled=false;
+    giApply();
+  }));
+});
+/* The Controls Guide needs every readout legible: lift the staged mask. */
+window.__cgReveals=function(){document.documentElement.classList.remove('gi-mask-dct');draw()};
+/* Free exploration = the post-completion state, every staged mask lifted.
+   Pure assignment, so repeated calls are idempotent: opening and closing the
+   Controls Guide neither advances the deck nor lifts a reveal permanently. */
+window.__freeExplore=function(){document.documentElement.classList.remove('gi-mask-dct');draw()};
+/* Re-entering the inquiry re-derives the current card's own scene. */
+window.__giResume=function(){giApply()};
+})();
+</script>
+
+<script>
+/* ===== Card voiceover engine (speech synthesis) =====
+   Shared by the Controls Guide transport and the Guided Inquiry play button.
+   Semantics per card: play = read from the top; pause keeps the (line, char)
+   position; resume continues from it; finishing flips the button to the
+   replay state and the next press reads the same card from the beginning.
+   A card CHANGE re-syncs: playing → the new card starts speaking; idle →
+   the position just resets so the next play starts at the new card's top. */
+(function(){
+  const synth = window.speechSynthesis;
+  // Physics-notation → speakable text (textContent flattens the card markup).
+  const norm = s => s
+    .replace(/Δs²/g,'delta s squared').replace(/cΔt/g,'c delta t')
+    .replace(/Δ/g,'delta ').replace(/²/g,' squared')
+    .replace(/v\/c/g,'v over c').replace(/\bct\b/g,'c t')
+    .replace(/S′/g,'S prime').replace(/x′/g,'x prime').replace(/t′/g,'t prime')
+    .replace(/′/g,' prime').replace(/γ/g,'gamma')
+    .replace(/₀/g,' zero').replace(/₁/g,' one').replace(/₂/g,' two')
+    .replace(/≈/g,' approximately ').replace(/−/g,' minus ')
+    .replace(/×/g,' times ').replace(/→/g,' approaches ')
+    .replace(/±/g,' plus or minus ').replace(/°/g,' degrees')
+    .replace(/[▶⏸✓＋✕⏱⛶∑ⓘ☾⤴✎]/g,'')
+    .replace(/[🧭🎛🎓↻]/g,'')
+    .replace(/·/g,' ').replace(/—/g,', ')
+    .replace(/\s+/g,' ').trim();
+  // Quality-ranked: Chrome's remote Google voices sound natural; macOS's local
+  // compact voices are the mechanical ones — last resort. Remote voices can
+  // silently hang (no start/end/error events); when the watchdog catches that,
+  // preferLocal flips and the session falls back.
+  let preferLocal = false;
+  let engineDead = false;   // even the local-voice fallback won't start — stop retry storms
+  // Cancelling an idle engine is what wedges Chrome's TTS service — guard it.
+  function safeCancel(){ if(synth && (synth.speaking || synth.pending)) synth.cancel(); }
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    const remote = [en.find(v => v.name === 'Google US English'),
+                    en.find(v => v.name === 'Google UK English Female'),
+                    en.find(v => v.name === 'Google UK English Male')].filter(Boolean);
+    const local  = [en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name) && v.localService),
+                    en.find(v => v.name === 'Samantha'),
+                    en.find(v => v.localService && /US|GB/i.test(v.lang))].filter(Boolean);
+    const order = preferLocal ? local.concat(remote) : remote.concat(local);
+    return order[0] || en[0] || null;
+  }
+  // btn: the play/pause button (uses data-vstate idle|playing|done).
+  // getLines: () => array of raw strings for the CURRENT card.
+  // opts.onCardDone: called when a card's narration completes (drives Auto mode).
+  function makeCardVoice(btn, getLines, opts){
+    let lines = [], idx = 0, charAt = 0, playing = false, current = null, done = false, lineRetries = 0;
+    function state(){
+      btn.dataset.vstate = playing ? 'playing' : (done ? 'done' : 'idle');
+      btn.title = playing ? 'Pause' : (done ? 'Play again' : (idx === 0 && charAt === 0 ? 'Read this card aloud' : 'Resume'));
+      btn.setAttribute('aria-label', btn.title);
+    }
+    function speak(){
+      if(!synth) return;
+      const text = lines[idx].slice(charAt);
+      const u = new SpeechSynthesisUtterance(text);
+      const v = pickVoice(); if(v) u.voice = v;
+      u.rate = 1.0; u.pitch = 1;
+      const base = charAt, my = idx;
+      let started = false;
+      u.onstart = () => { started = true; };
+      u.onboundary = e => { if(current === u && typeof e.charIndex === 'number'){ charAt = base + e.charIndex; lineRetries = 0; } };
+      u.onerror = () => {   // cold-start hiccup on remote voices: retry the line once or twice
+        if(current === u && playing && lineRetries < 2){
+          lineRetries++;
+          setTimeout(() => { if(current === u && playing) speak(); }, 250);
+        }
+      };
+      u.onend = () => {
+        if(current !== u || !playing) return;
+        if(my < lines.length - 1){ idx = my + 1; charAt = 0; lineRetries = 0; speak(); }
+        else {
+          playing = false; done = true; idx = 0; charAt = 0; lineRetries = 0; current = null; state();
+          if(opts && opts.onCardDone) opts.onCardDone();
+        }
+      };
+      current = u; done = false;
+      // Chrome swallows a speak() issued in the same tick as cancel() — defer it;
+      // resume() unsticks the engine when cancel() left it internally paused.
+      safeCancel();
+      setTimeout(() => { if(current === u && playing){ synth.speak(u); if(synth.paused) synth.resume(); } }, 60);
+      // Watchdog: a remote voice can hang with NO events at all. Retry once,
+      // then flip the whole session to a local voice and retry again.
+      setTimeout(() => {
+        if(current !== u || !playing || started) return;
+        safeCancel();
+        if(lineRetries < 1){ lineRetries++; speak(); }
+        else if(!preferLocal){ preferLocal = true; lineRetries = 0; speak(); }
+        else {   // even local voices won't start: the browser's TTS service is hung
+          engineDead = true; playing = false; current = null; state();
+          btn.title = 'Voice unavailable — restart the browser to re-enable narration';
+          btn.setAttribute('aria-label', btn.title);
+        }
+      }, 1500);
+      state();
+    }
+    function play(){
+      if(!synth || engineDead) return;
+      if(done || !lines.length){ lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; }
+      if(!lines.length) return;
+      playing = true; lineRetries = 0; speak();
+    }
+    function pause(){
+      playing = false;
+      safeCancel();                  // stop now; idx/charAt keep the resume position
+      current = null; state();
+    }
+    function stop(){                  // hard reset (zone hidden, guide closed, Reset)
+      playing = false; done = false; lines = []; idx = 0; charAt = 0;
+      safeCancel();
+      current = null; state();
+    }
+    function sync(){                  // the current card changed
+      const was = playing;
+      playing = false;
+      safeCancel();
+      current = null;
+      lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; done = false;
+      if(was && lines.length){ playing = true; speak(); } else state();
+    }
+    function restart(){               // read the current card again from the top
+      idx = 0; charAt = 0; done = false;
+      if(playing) speak(); else state();
+    }
+    function playLines(arr){          // one-off narration (e.g. a just-revealed feedback box)
+      lines = arr.map(norm).filter(Boolean);
+      if(!lines.length) return;
+      idx = 0; charAt = 0; done = false; playing = true; lineRetries = 0; speak();
+    }
+    btn.addEventListener('click', () => playing ? pause() : play());
+    if(!synth) btn.disabled = true;
+    state();
+    return { sync, stop, restart, play, playLines, atStart: () => idx === 0 && charAt === 0 && !playing };
+  }
+  window.__makeCardVoice = makeCardVoice;
+
+  /* ---- Guided Inquiry voice: play/pause + Auto in the Listen row ----
+     Auto walks the whole inquiry hands-free BUT never answers for the student:
+     at a gated predict card it reads the question and waits; when the student
+     commits, it reads the feedback aloud, then moves on. */
+  const giBtn = document.getElementById('inq-voice');
+  if(giBtn){
+    const activeCard = () => document.querySelector('#inq-cards .inq-step.active');
+    const giAutoBtn = document.getElementById('inq-auto');
+    let giAuto = false;
+    function setGiAuto(on){
+      giAuto = on;
+      if(giAutoBtn) giAutoBtn.classList.toggle('active', on);
+      if(on) giVoice.play();
+    }
+    const giVoice = makeCardVoice(giBtn, () => {
+      const card = activeCard();
+      if(!card) return [];
+      const out = [];
+      const h = card.querySelector('h4'); if(h) out.push(h.textContent.trim());
+      card.querySelectorAll('p, button.choice, .predict-eval').forEach(el => {
+        if(getComputedStyle(el).display === 'none') return;   // staged reveals stay silent until committed
+        const t = el.textContent.trim(); if(t) out.push(t);
+      });
+      return out;
+    }, { onCardDone: () => {
+      if(!giAuto) return;
+      const card = activeCard();
+      if(!card) return;
+      if(card.hasAttribute('data-gate') && !card.hasAttribute('data-answered')) return;  // wait for the student
+      const next = document.getElementById('inq-next');
+      if(!next || next.textContent === 'Finish'){ setGiAuto(false); return; }            // tour ends on the last card
+      const tryAdvance = () => {
+        if(!giAuto) return;
+        if(next.disabled){ setTimeout(tryAdvance, 300); return; }   // Next unlocks shortly after feedback
+        next.click();
+        setTimeout(() => { if(giAuto) giVoice.play(); }, 300);
+      };
+      setTimeout(tryAdvance, 900);
+    }});
+    if(giAutoBtn) giAutoBtn.addEventListener('click', () => setGiAuto(!giAuto));
+    window.__giVoiceStop = () => { setGiAuto(false); giVoice.stop(); };
+    const cardsEl = document.getElementById('inq-cards') || document.body;
+    // Card changes (pager, Next, gates, Reset) re-sync the narration.
+    let lastCard = activeCard();
+    new MutationObserver(() => {
+      const cur = activeCard();
+      if(cur !== lastCard){
+        lastCard = cur;
+        if(document.documentElement.classList.contains('gi-off')){ setGiAuto(false); giVoice.stop(); }
+        else giVoice.sync();
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    // In Auto, an answered gate = read the feedback aloud, then onCardDone advances.
+    new MutationObserver(muts => {
+      if(!giAuto) return;
+      for(const m of muts){
+        if(m.attributeName === 'data-answered' && m.target.hasAttribute('data-answered')){
+          const ev = m.target.querySelector('.predict-eval');
+          const t = ev && ev.textContent.trim();
+          setTimeout(() => { if(giAuto){ if(t) giVoice.playLines([t]); else giVoice.play(); } }, 600);
+          return;
+        }
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['data-answered'] });
+  }
+})();
+</script>
+
+<script>
+/* ===== Committed feedback must land on screen =====
+   A long .predict-eval can open below the fold of the sidebar's scroll well.
+   Scroll the WELL (the inquiry card box if it scrolls, otherwise the sidebar),
+   never the page. */
+(function(){
+  const cards = document.getElementById('inq-cards');
+  if(!cards) return;
+  new MutationObserver(muts => {
+    for(const m of muts){
+      if(m.attributeName !== 'data-answered' || !m.target.hasAttribute('data-answered')) continue;
+      const ev = m.target.querySelector('.predict-eval');
+      if(!ev) return;
+      requestAnimationFrame(() => {
+        const well = (cards.scrollHeight > cards.clientHeight + 2) ? cards : document.querySelector('.shell-aside');
+        if(!well) return;
+        const wr = well.getBoundingClientRect(), er = ev.getBoundingClientRect();
+        const over = er.bottom - wr.bottom;
+        if(over > 0) well.scrollTop += over + 14;
+      });
+      return;
+    }
+  }).observe(cards, { subtree:true, attributes:true, attributeFilter:['data-answered'] });
+})();
+</script>
+
+<script>
+/* ===== Two-button template + overlay controls guide ===== */
+(function(){
+  // Concise steps: what the control is + what it controls (≤15 words each).
+  // mode: 'veil' = top bar (invisible, slot kept — no toolbar reflow);
+  //       'hide' = sidebar (collapses until introduced);
+  //       'show' = never hidden (the hero canvas — hiding it would blank the
+  //                simulation the guide is describing).
+  // Skipped with reason: #shell-info + #shell-theme (meta-UI: about box / theme
+  // toggle); #shell-lecture (retired in the user version, never shown);
+  // #btn-gi + #btn-cg (the guide's own mode buttons). The axis ticks, event
+  // tags and v/c labels are drawn INTO the diagram and are covered by step 1.
+  const steps = [
+    { sel:'#canvas',        mode:'show', title:'The diagram',  text:'ct runs up, x runs across. Drag E1 or E2 to move an event.' },
+    { sel:'#shell-play',    mode:'veil', title:'Play / Pause', text:'Runs or freezes the animated layers, such as the now sweep.' },
+    { sel:'#shell-speed',   mode:'veil', also:['#lbl-speed'], title:'Speed', text:'Sets how fast the now line sweeps up the diagram.' },
+    { sel:'#shell-reset',   mode:'veil', title:'Reset',        text:'Restores the first-load state — defaults, guided inquiry at card 1.' },
+    { sel:'#shell-maximize',mode:'veil', title:'Maximize',     text:'Expands the diagram; the sidebar and the formal strip hide.' },
+    { sel:'#toggle-formal', mode:'veil', title:'Formal',       text:'Shows the event, separation and invariant-interval definitions.' },
+    { sel:'#box-sgrid',     mode:'hide', also:['#panel-controls'], title:'S grid', text:'Draws frame S’s unit grid behind the diagram.' },
+    { sel:'#detail-controls', mode:'hide', title:'Detail', text:'Adds the axis projections, then the separation triangle between the events.' },
+    { sel:'#lecture-controls .ctrl-box.control-stack', mode:'hide', title:'Now ct sweep', text:'Sweeps a line of constant ct up the diagram, one instant at a time.' },
+    { sel:'#worldline',     mode:'hide', title:'Add worldline', text:'Then click two points on the diagram to draw a worldline, labelled v/c.' },
+    { sel:'#panel-readings',mode:'hide', title:'Frame S readings', text:'Δx, cΔt and the invariant Δs² for the E1-to-E2 separation.' },
+    { sel:'#panel-notes',   mode:'hide', title:'Legend and notes', text:'What each drawn layer on the diagram means.' },
+    { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }  ];
+  const giBtn = document.getElementById('btn-gi');
+  const cgBtn = document.getElementById('btn-cg');
+  const root  = document.documentElement;
+  let cgOn = false, cgStep = 0, cgMax = 0;
+  let callout = null, nav = null, cgVoice = null, cgAuto = false;
+  function setCgAuto(on){
+    cgAuto = on;
+    if(nav) nav.querySelector('#cg-auto').classList.toggle('active', on);
+    if(on && cgVoice) cgVoice.play();
+  }
+
+  const el = sel => sel ? document.querySelector(sel) : null;
+  const dimmables = () => steps.filter(st => st.sel).map(st => el(st.sel)).filter(Boolean);
+
+  function ensureUi(){
+    if(callout) return;
+    callout = document.createElement('div');
+    callout.className = 'cg-callout';
+    callout.innerHTML = '<div class="cg-arrow"></div><h5></h5><p></p>';
+    nav = document.createElement('div');
+    nav.className = 'cg-nav';
+    nav.innerHTML = '<div class="cg-nav-row cg-row-voice">'+
+                      '<span class="cg-listen-lab">Listen</span>'+
+                      '<button id="cg-rew" class="cg-voice" title="Restart narration" aria-label="Restart narration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>'+
+                      '<button id="cg-voice-play" class="cg-voice" data-vstate="idle" title="Read this step aloud" aria-label="Read this step aloud">'+
+                        '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'+
+                        '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'+
+                        '<svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>'+
+                      '</button>'+
+                      '<button id="cg-fwd" class="cg-voice" title="Next step" aria-label="Next step"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-auto" title="Auto walkthrough — narrates every step in sequence" aria-label="Auto walkthrough">Auto</button>'+
+                    '</div>'+
+                    '<div class="cg-nav-row cg-row-nav">'+
+                      '<button id="cg-prev" aria-label="Previous">‹</button>'+
+                      '<button id="cg-pgnext" aria-label="Next">›</button>'+
+                      '<span class="cg-flex"></span>'+
+                      '<button id="cg-next">Next →</button>'+
+                    '</div>';
+    document.body.appendChild(callout);
+    document.body.appendChild(nav);
+    // Voiceover: reads the current step's title + text; forward/rewind stay
+    // card-synced. Auto = hands-free tour: each step is narrated, then the
+    // guide advances itself.
+    if(window.__makeCardVoice){
+      cgVoice = window.__makeCardVoice(nav.querySelector('#cg-voice-play'),
+        () => [steps[cgStep].title, steps[cgStep].text],
+        { onCardDone: () => {
+            if(!cgAuto) return;
+            if(cgStep >= steps.length-1){ setCgAuto(false); return; }   // tour ends on the closing card
+            setTimeout(() => {
+              if(!cgAuto) return;
+              show(cgStep+1);
+              setTimeout(() => { if(cgAuto && cgVoice) cgVoice.play(); }, 200);
+            }, 700);
+        }});
+    }
+    nav.querySelector('#cg-auto').addEventListener('click', ()=> setCgAuto(!cgAuto));
+    nav.querySelector('#cg-rew').addEventListener('click', ()=>{
+      if(cgVoice && !cgVoice.atStart()) cgVoice.restart();
+      else show(cgStep-1);
+    });
+    nav.querySelector('#cg-fwd').addEventListener('click', ()=>show(cgStep+1));
+    nav.querySelector('#cg-prev').addEventListener('click', ()=>show(cgStep-1));
+    nav.querySelector('#cg-pgnext').addEventListener('click', ()=>show(cgStep+1));
+    nav.querySelector('#cg-next').addEventListener('click', ()=>{
+      if(cgStep >= steps.length-1) setCg(false);
+      else show(cgStep+1);
+    });
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+  }
+  function position(){
+    if(!cgOn || !callout) return;
+    const st = steps[cgStep];
+    const t = el(st.sel);
+    const arrow = callout.querySelector('.cg-arrow');
+    callout.classList.remove('arrow-top','arrow-bottom','arrow-left','arrow-right','no-arrow');
+    const cw = callout.offsetWidth || 260, ch = callout.offsetHeight || 110;
+    let x = innerWidth/2 - cw/2, y = innerHeight/2 - ch/2;   // centered (done card)
+    if(!t){ callout.classList.add('no-arrow'); }
+    else {
+      if(t.scrollIntoView) t.scrollIntoView({ block:'nearest', inline:'nearest' });   // short viewports: bring the target on screen first
+      const r = t.getBoundingClientRect();
+      // The skill's rule is "right-SIDEBAR targets left, top-bar/canvas targets
+      // below". A pure-x test sends the top bar's own right-hand cluster down the
+      // sidebar branch, where the callout centres on a 36px button, clamps to y=8
+      // and slides across the header — over the guide's own mode buttons.
+      const inTopBar = r.bottom < innerHeight * 0.18;
+      if(!inTopBar && r.left > innerWidth * 0.66){
+        // Sidebar target: sit to its LEFT, arrow on the right edge
+        x = r.left - cw - 14; y = r.top + r.height/2 - ch/2;
+        callout.classList.add('arrow-right');
+      } else if(r.height > innerHeight * 0.6){
+        // Full-height region (the main diagram): "below" falls off the bottom and
+        // the flip-above then clamps the callout onto the top bar, where it
+        // swallows clicks on the guide's own mode buttons. Sit just inside the
+        // region's top edge instead.
+        x = r.left + r.width/2 - cw/2; y = r.top + 16;
+        callout.classList.add('arrow-top');
+      } else {
+        // Topbar/canvas target: sit BELOW (flip above when cramped)
+        x = r.left + r.width/2 - cw/2; y = r.bottom + 12;
+        if(y + ch > innerHeight - 8){ y = r.top - ch - 12; callout.classList.add('arrow-bottom'); }
+        else callout.classList.add('arrow-top');
+      }
+      x = Math.max(8, Math.min(x, innerWidth - cw - 8));
+      y = Math.max(8, Math.min(y, innerHeight - ch - 8));
+      // Aim the arrow at the target's centre even after clamping
+      if(arrow){
+        if(callout.classList.contains('arrow-right') || callout.classList.contains('arrow-left')){
+          arrow.style.left = ''; arrow.style.top = Math.max(10, Math.min(r.top + r.height/2 - y - 6, ch - 22)) + 'px';
+        } else {
+          arrow.style.top = ''; arrow.style.left = Math.max(12, Math.min(r.left + r.width/2 - x - 6, cw - 24)) + 'px';
+        }
+      }
+    }
+    callout.style.left = Math.max(8, Math.min(x, innerWidth - cw - 8)) + 'px';
+    callout.style.top  = Math.max(8, Math.min(y, innerHeight - ch - 8)) + 'px';
+  }
+  function show(n){
+    cgStep = Math.max(0, Math.min(n, steps.length-1));
+    cgMax = Math.max(cgMax, cgStep);
+    const introduced = new Set(steps.slice(0, cgMax+1).map(st=>st.sel));
+    dimmables().forEach(t => t.classList.remove('cg-glow'));
+    steps.forEach(st => {
+      if(!st.sel) return;
+      if(st.mode === 'show'){   // always visible; only the glow moves
+        [st.sel].concat(st.also || []).forEach(sl => {
+          const t = el(sl); if(t) t.classList.remove('cg-hidden','cg-veiled');
+        });
+        return;
+      }
+      const off = !introduced.has(st.sel);
+      const cls = st.mode === 'hide' ? 'cg-hidden' : 'cg-veiled';
+      [st.sel].concat(st.also || []).forEach(sl => {
+        const t = el(sl); if(t){ t.classList.toggle(cls, off); t.classList.remove(off ? 'cg-glow' : cls === 'cg-hidden' ? 'cg-veiled' : 'cg-hidden'); }
+      });
+    });
+    const cur = el(steps[cgStep].sel);
+    if(cur) cur.classList.add('cg-glow');
+    callout.querySelector('h5').textContent = steps[cgStep].title;
+    callout.querySelector('p').textContent  = steps[cgStep].text;
+    nav.querySelector('#cg-prev').disabled   = cgStep <= 0;
+    nav.querySelector('#cg-pgnext').disabled = cgStep >= steps.length-1;
+    nav.querySelector('#cg-fwd').disabled    = cgStep >= steps.length-1;
+    nav.querySelector('#cg-next').textContent = (cgStep >= steps.length-1) ? 'Done' : 'Next →';
+    if(cgVoice) cgVoice.sync();   // narration follows the card
+    position();
+  }
+  function setGi(on){
+    root.classList.toggle('gi-off', !on);
+    giBtn.classList.toggle('active', on);
+    if(on){
+      if(cgOn) setCg(false, true);
+      // Show the cards directly — clear any lingering collapsed state
+      if(typeof Shell !== 'undefined' && Shell.setInquiryCollapsed) Shell.setInquiryCollapsed(false);
+      // Restore the inquiry's own step state (pinned scene, staged reveals)
+      if(window.__giResume) window.__giResume();
+    } else {
+      if(window.__giVoiceStop) window.__giVoiceStop();
+      // Turning the inquiry off = free exploration: the completed state,
+      // never a mid-inquiry snapshot.
+      if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  function setCg(on, keepGiState){
+    cgOn = on;
+    cgBtn.classList.toggle('active', on);
+    if(on){
+      if(!keepGiState) setGi(false);           // mutual exclusion
+      ensureUi();
+      // Controls guide needs everything visible: lift inquiry-step reveals
+      if(window.__cgReveals) window.__cgReveals(99);
+      if(window.__cgPrepare) window.__cgPrepare();   // sims with scene/mode-dependent controls
+      callout.style.display = 'block'; nav.style.display = 'flex';
+      show(cgStep);
+    } else {
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      if(callout){ callout.style.display = 'none'; nav.style.display = 'none'; }
+      steps.forEach(st => [st.sel].concat(st.also || []).forEach(sl => {
+        const t = el(sl); if(t) t.classList.remove('cg-hidden','cg-veiled','cg-glow');
+      }));
+      // Hand over: to the inquiry's step state if GI takes over, otherwise
+      // to free exploration (both-off, or guide completed/toggled off).
+      if(keepGiState){ /* setGi(true) runs __giResume right after */ }
+      else if(window.__freeExplore) window.__freeExplore();
+    }
+  }
+  window.__giOff = ()=> setGi(false);   // shell's Finish routes here
+  window.__setMode = mode => {           // welcome overlay entry points
+    if(mode === 'controls') setCg(true);
+    else if(mode === 'free') { if(cgOn) setCg(false); setGi(false); }
+    else setGi(true);
+  };
+  // Reset = the state of a fresh page load: every committed answer cleared and
+  // every gate re-armed, Guided Inquiry on at card 1, Controls Guide off with
+  // its session progress cleared. Runs AFTER the shell's own reset listener
+  // (setTimeout 0) so sim defaults land first.
+  window.__giClearAnswers = function(){
+    document.querySelectorAll('#inq-cards .inq-step').forEach(c => {
+      c.removeAttribute('data-answered'); c.removeAttribute('data-ready');
+      delete c.dataset.answered;
+      c.querySelectorAll('.choice').forEach(btn => {
+        btn.disabled = false; btn.classList.remove('correct','wrong','dim');
+      });
+      const ev = c.querySelector('.predict-eval');
+      if(ev){ ev.innerHTML = ''; ev.classList.remove('show','correct','wrong'); }
+    });
+  };
+  window.__fullReset = ()=>{
+    if(cgAuto) setCgAuto(false);
+    if(cgVoice) cgVoice.stop();
+    if(window.__giVoiceStop) window.__giVoiceStop();
+    if(cgOn) setCg(false, true);        // silent CG off (GI takes over next)
+    cgStep = 0; cgMax = 0;              // guide progress like a fresh load
+    window.__giClearAnswers();          // clear BEFORE inqShow so gates re-lock
+    setGi(true);
+    if(typeof Shell !== 'undefined' && Shell.inqShow) Shell.inqShow(0);
+  };
+  giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
+  cgBtn.addEventListener('click', ()=> setCg(!cgOn));
+  const resetBtn = document.getElementById('shell-reset');
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+})();
+</script>
+
+<script>
+/* ===== Welcome overlay + read-aloud transport (browser speech synthesis) ===== */
+(function(){
+  const ov = document.getElementById('welcome-overlay');
+  if(!ov) return;
+  const $ = id => document.getElementById(id);
+  // Product decision: the welcome overlay shows on EVERY load, not just the
+  // first. Students arrive at these sims repeatedly and the overlay is how they
+  // choose Guided Inquiry / Controls / Free exploration, so suppressing it after
+  // one visit strands returning students in whichever mode they last picked.
+  // Leave this false. (With it false the localStorage key is never read OR
+  // written, so keys left over from earlier builds are inert.)
+  const WELCOME_ONCE = false;
+  const WELCOME_KEY = 'welcome:' + (document.title || location.pathname);
+  try { if(WELCOME_ONCE && localStorage.getItem(WELCOME_KEY)) { ov.classList.add('hidden'); return; } } catch(e){}
+  const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
+  const script = [
+    'Welcome to the spacetime diagram.',
+    'A spacetime diagram plots time upward as c t and space sideways as x. A single point on it is an event: one place at one moment. Because c equals one in these units, a light ray always runs at exactly forty five degrees.',
+    'Choose how you would like to begin.',
+    'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
+    'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
+    'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
+  ];
+  /* Hero: ONE light cone, large and centred — the single image this whole sim is
+     about. The 45° light lines through the origin bound a future and a past
+     wedge; one event sits INSIDE the future wedge (timelike from the origin,
+     Δs² > 0 on this file's ds2 = (cΔt)² − (Δx)² convention, signature (+,−)) and
+     one sits OUTSIDE it (spacelike, Δs² < 0), so the cone reads as the boundary
+     between them. Deliberately sparse: no unit grid, no repeating field of dots
+     and no labels — the transparent .welcome-body stacks straight on top of this
+     140px band, and anything busy turns to mud behind it.
+     It carries NO worldlines, NO v/c labels, NO coordinate tags and no Δs²
+     values, so it cannot answer any card in the deck.
+     GEOMETRY NOTE: the band is only ~140px tall, so the cone is built inside a
+     square-ish region whose half-height R equals its half-width R. The light
+     lines run from the origin to (±R, ∓R) in PIXELS — |dx| = |dy| = R, i.e. an
+     exact 1:1 pixel slope, a true 45°. The angle is never flattened to fit the
+     letterbox; the drawn region is shrunk instead and the rest of the band is
+     left quiet. */
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    /* The backing store ships hard-coded at 1280x240 while the element is laid
+       out 100vw x 140px, so the buffer would be stretched across and squashed
+       down — every ctx.arc() circle would render as an ellipse and the 45°
+       light lines would not be at 45°. Size the buffer to the element's real
+       box before drawing. This canvas is layer-owned (the welcome hero) — no
+       simulation surface is touched. */
+    { const hr = c.getBoundingClientRect();
+      const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
+      if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
+    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
+    ctx.setLineDash([]); ctx.lineCap = 'butt';
+    /* Drawn in one synchronous pass, deliberately. drawHero() is re-run by the
+       entrance animation, the resize listener and two MutationObservers, and any
+       staggered reveal loses its pending frames to the next clearRect() — the
+       previous build's events could vanish for exactly that reason. */
+    const ox = Math.round(W*0.5), oy = Math.round(H*0.5);
+    const R = Math.max(24, Math.round(H*0.5) - 12);   // cone half-extent, clear of both edges
+    const ppu = R/2;                                  // 2 units of ct fill the half-band
+    const X = u => ox + u*ppu, Y = u => oy - u*ppu;   // ct up, x right
+    const AMB  = LIGHT ? '180,120,8'   : '250,204,21'; // light lines
+    const TIME = LIGHT ? '13,148,136'  : '45,212,191'; // timelike event (inside)
+    const SPACE= LIGHT ? '190,24,93'   : '251,113,133';// spacelike event (outside)
+    const AXIS = LIGHT ? '30,41,59'    : '203,213,225';
+    // the two cone interiors: future above, past below. Each is faded out along
+    // ct so the wedge opens away from the apex instead of ending on a hard line
+    // where the band runs out.
+    function wedge(sgn, a0){
+      const g = ctx.createLinearGradient(0, oy, 0, oy - sgn*R);
+      g.addColorStop(0, 'rgba(' + AMB + ',' + a0 + ')');
+      g.addColorStop(.55, 'rgba(' + AMB + ',' + (a0*0.72).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(' + AMB + ',0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(ox,oy);
+      ctx.lineTo(ox-R, oy-sgn*R); ctx.lineTo(ox+R, oy-sgn*R);
+      ctx.closePath(); ctx.fill();
+    }
+    wedge( 1, .30);                                   // future
+    wedge(-1, .19);                                   // past
+    // the quiet x axis — one thin line, the only thing reaching outside the cone,
+    // tapered to nothing at both ends so it settles into the band
+    const ax = Math.min(Math.round(W*0.16), 250);
+    { const g = ctx.createLinearGradient(ox-ax,0,ox+ax,0);
+      g.addColorStop(0,'rgba(' + AXIS + ',0)'); g.addColorStop(.28,'rgba(' + AXIS + ',.30)');
+      g.addColorStop(.72,'rgba(' + AXIS + ',.30)'); g.addColorStop(1,'rgba(' + AXIS + ',0)');
+      ctx.lineWidth = 1.5; ctx.strokeStyle = g;
+      ctx.beginPath(); ctx.moveTo(ox-ax,oy); ctx.lineTo(ox+ax,oy); ctx.stroke(); }
+    // the ct axis through the origin (the stationary observer's worldline)
+    ctx.lineWidth = 1.8; ctx.strokeStyle = 'rgba(' + AXIS + ',.34)';
+    ctx.beginPath(); ctx.moveTo(ox,oy-R-4); ctx.lineTo(ox,oy+R+4); ctx.stroke();
+    // the light cone itself: |dx| = |dy| = R px per arm, an exact 45°
+    ctx.lineCap = 'round'; ctx.lineWidth = Math.max(3.5, R*0.086);
+    ctx.strokeStyle = 'rgba(' + AMB + ',.92)';
+    ctx.beginPath(); ctx.moveTo(ox-R,oy+R); ctx.lineTo(ox+R,oy-R); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox-R,oy-R); ctx.lineTo(ox+R,oy+R); ctx.stroke();
+    // the apex: the origin event the two others are separated from
+    ctx.beginPath(); ctx.arc(ox,oy,Math.max(3.5,ppu*0.17),0,7);
+    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.85)' : 'rgba(248,250,252,.9)'; ctx.fill();
+    // one event inside the cone, one outside — nothing else
+    const evs = [
+      { x: .22, ct: 1.34, col: TIME  },  // |Δx| < |cΔt| : inside the future cone
+      { x:-1.72, ct: .34, col: SPACE }   // |Δx| > |cΔt| : outside it, spacelike
+    ];
+    function event(e){
+      const px = X(e.x), py = Y(e.ct), r = Math.max(6, ppu*0.36);
+      ctx.setLineDash([2,5]); ctx.lineWidth = 2;      // its separation from the origin
+      ctx.strokeStyle = 'rgba(' + e.col + ',.55)';
+      ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(px,py); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(px,py,r*1.55,0,7); ctx.fillStyle = 'rgba(' + e.col + ',.26)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(px,py,r,0,7); ctx.fillStyle = 'rgba(' + e.col + ',.98)'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(10,12,17,.85)';
+      ctx.stroke();
+    }
+    evs.forEach(event);
+  }
+  drawHero();
+  // The welcome card's entrance animation scales an ancestor to .985, so the
+  // first getBoundingClientRect() reports a box ~1.5% small and the backing
+  // store is sized to it. Redraw once the entrance has finished so the buffer
+  // matches the element exactly.
+  { const _hs = () => { if(!ov.classList.contains('hidden')) drawHero(); };
+    const _wc = ov.querySelector('.welcome-card');
+    if(_wc) _wc.addEventListener('animationend', _hs, { once:true });
+    setTimeout(_hs, 700); }
+  // The hero canvas is laid out at 100vw: re-measure it when the window changes.
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+  // Theme can change while the overlay is open: redraw the hero in the new colours
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  const synth = window.speechSynthesis;
+  // Transport state: current line, char offset inside it (from boundary events), playing flag.
+  let idx = 0, charAt = 0, playing = false, current = null, finished = false;
+
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    return en.find(v => v.name === 'Google US English')
+        || en.find(v => v.name === 'Google UK English Female')
+        || en.find(v => v.name === 'Google UK English Male')
+        || en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name))
+        || en.find(v => v.name === 'Samantha')
+        || en[0] || null;
+  }
+  function render(){
+    playBtn.dataset.state = playing ? 'playing' : (finished ? 'done' : 'idle');
+    playBtn.title = playing ? 'Pause' : (finished ? 'Play again' : (idx===0 && charAt===0 ? 'Play' : 'Resume'));
+    playBtn.setAttribute('aria-label', playBtn.title);
+    playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    prog.textContent = (Math.min(idx, script.length-1)+1) + ' / ' + script.length;
+    const seg = $('welcome-seg');
+    if(seg){ if(!seg.children.length) script.forEach(()=>seg.appendChild(document.createElement('i')));
+      [...seg.children].forEach((el,i)=>{ el.className = i < idx || finished ? 'on' : (i===idx ? 'cur' : ''); }); }
+    prevBtn.disabled = idx===0 && charAt===0 && !playing;
+    nextBtn.disabled = idx>=script.length-1;
+  }
+  // Speak line `idx` starting at `charAt`; chain to the next line on end.
+  function speakCurrent(){
+    if(!synth) return;
+    synth.cancel();
+    const text = script[idx].slice(charAt);
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if(v) u.voice = v;
+    u.rate = 0.98; u.pitch = 1;
+    const base = charAt, myIdx = idx;
+    u.onboundary = e => { if(current === u && typeof e.charIndex === 'number') charAt = base + e.charIndex; };
+    u.onend = () => {
+      if(current !== u || !playing) return;
+      if(myIdx < script.length-1){ idx = myIdx+1; charAt = 0; speakCurrent(); }
+      else { playing = false; finished = true; idx = script.length-1; charAt = 0; render(); }
+    };
+    current = u; finished = false;
+    synth.speak(u);
+    render();
+  }
+  function play(){
+    if(!synth) return;
+    if(finished){ idx = 0; charAt = 0; }
+    playing = true;
+    speakCurrent();                 // resumes from the recorded char offset of the current line
+  }
+  function pause(){
+    if(!synth) return;
+    playing = false;
+    synth.cancel();                 // stop now; idx/charAt keep the position for resume
+    current = null;
+    render();
+  }
+  function jump(delta){
+    idx = Math.max(0, Math.min(script.length-1, idx + delta));
+    charAt = 0; finished = false;
+    if(playing) speakCurrent(); else { synth && synth.cancel(); current = null; render(); }
+  }
+  playBtn.addEventListener('click', () => playing ? pause() : play());
+  prevBtn.addEventListener('click', () => {
+    // Rewind: restart the current line if we're inside it, else go to the previous line
+    if(charAt > 0){ charAt = 0; if(playing) speakCurrent(); else render(); }
+    else jump(-1);
+  });
+  nextBtn.addEventListener('click', () => jump(+1));
+  // No auto-start: narration begins only when the student presses play.
+  if(!synth){ playBtn.disabled = true; prevBtn.disabled = true; nextBtn.disabled = true; prog.textContent = ''; }
+  // Chrome keeps a removed iframe's speech playing (speechSynthesis outlives the
+  // document); cancel everything — welcome player AND card voiceover — on teardown.
+  addEventListener('pagehide', () => { try { speechSynthesis.cancel(); } catch(e){} });
+  render();
+  // Canvas-distortion guard: let the sim re-measure its own rendering buffer
+  // once the overlay has been laid out.
+  addEventListener('load', () => requestAnimationFrame(() => requestAnimationFrame(
+    () => window.dispatchEvent(new Event('resize')))));
+  ov.querySelectorAll('.welcome-mode').forEach(b => b.addEventListener('click', () => {
+    pause();
+    ov.classList.add('hidden');
+    try { if(WELCOME_ONCE) localStorage.setItem(WELCOME_KEY, '1'); } catch(e){}
+    if(window.__setMode) window.__setMode(b.dataset.mode);
+  }));
 })();
 </script>
 </body></html>
