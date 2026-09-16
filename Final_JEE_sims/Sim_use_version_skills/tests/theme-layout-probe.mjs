@@ -85,7 +85,7 @@ const REQ_DIR = rq >= 0 ? args.splice(rq, 2)[1] : import.meta.dirname + '/../nod
 
 let puppeteer;
 for (const dir of [REQ_DIR,
-  '/Users/admin/Desktop/simulations-1/Capacity_SR_sims_v2_engine/_review/']) {
+  '/Users/admin/Desktop/simulations-1/Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/']) {
   try { puppeteer = createRequire(dir)('puppeteer-core'); break; } catch (e) {}
 }
 if (!puppeteer) { console.error('puppeteer-core not found — pass --require-dir <dir with node_modules/puppeteer-core>'); process.exit(1); }

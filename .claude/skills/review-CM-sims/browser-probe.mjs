@@ -23,7 +23,7 @@ import { resolve, basename, dirname, join } from 'node:path';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const REQUIRE_BASES = [
   join(REPO_ROOT, '_review/'),
-  join(REPO_ROOT, 'Capacity_SR_sims_v2_engine/_review/'),
+  join(REPO_ROOT, 'Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/'),
   join(REPO_ROOT, '/'),
 ];
 const CHROME_CANDIDATES = [

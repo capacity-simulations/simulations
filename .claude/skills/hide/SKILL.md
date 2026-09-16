@@ -49,7 +49,7 @@ Front-end to the registration workflow. **Canonical mechanism spec:
    first registration. Format:
    `- [canvas|dom] "<visible text or code anchor>" — <function/element>, ~L<line>`
 5. **Verify in a real browser** (same puppeteer pattern as the review skill —
-   `createRequire('<repo>/Capacity_SR_sims_v2_engine/_review/')`, system Chrome,
+   `createRequire('<repo>/Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/')`, system Chrome,
    `page.goto(file://…)`):
    - checkbox **checked** → every registered item absent (screenshot), **and no orphaned
      remnants**: no lone swatches, empty pills/chips, or dangling separators where the

@@ -40,7 +40,7 @@ Output paths (write `feedback.md` here — overwrite each run):
 ```
 PP  Fermi_Particle_physics_sims/Sims_v2_lecture_versions/review and feedback/feedback.md
 QM  Capacity_Quantum_simulations/Sims_user_versions/feedback.md
-SR  Capacity_SR_sims_v2_engine/shell-versions/feedback.md
+SR  Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/feedback.md
 CM  Capacity_CM_simulations/feedback.md
 ```
 

@@ -122,7 +122,7 @@ Apply the ones that fit the sim; verify sign, factor, units, and limits for each
 ## Browser probe (bundled)
 - Script: `browser-probe.mjs` in this skill dir (`<repo>/.claude/skills/review-CM-sims/`).
   Runs system Chrome via puppeteer-core. Both are resolved at runtime, no hard-coded repo path:
-  - **puppeteer-core** — first hit among `<repo>/_review/`, `<repo>/Capacity_SR_sims_v2_engine/_review/`
+  - **puppeteer-core** — first hit among `<repo>/_review/`, `<repo>/Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/`
     (the current install), `<repo>/`. Exits with an install hint if none has it.
   - **Chrome** — `$CHROME_PATH`, else system Google Chrome, else Chromium. Exits with a hint if none.
   - The run prints which Chrome and which `node_modules` base it used.

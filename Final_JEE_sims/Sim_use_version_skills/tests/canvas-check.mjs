@@ -21,7 +21,7 @@
 
 import {createRequire} from 'module';
 import {readdirSync} from 'fs';
-const require = createRequire('/Users/admin/Desktop/simulations-1/Capacity_SR_sims_v2_engine/_review/');
+const require = createRequire('/Users/admin/Desktop/simulations-1/Fermi_SR_simulations/Capacity_SR_sims_v2_engine/_review/');
 const puppeteer = require('puppeteer-core');
 const R='/Users/admin/Desktop/simulations-1/Capacity_Quantum_simulations/Sims_user_versions/';
 const files=readdirSync(R+'sim-use-builds').filter(f=>f.endsWith('.html'));
