@@ -2699,9 +2699,19 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     "Controls Guide introduces each control one at a time, so you know what everything does before you experiment.",
     "Free Exploration opens everything from the start, so you can experiment entirely on your own."
 ];
-  /* Hero: the turntable itself. The launcher's rim position and the spoke it rides
-     are stamped at EQUAL TIME STEPS, so the picture IS the rotation rate omega.
-     No flight, no trail, no force - it cannot answer any card. */
+  /* Hero: ONE flight, TWO frames — the canonical Coriolis picture, drawn as an
+     oblique top view of the turntable so it fits the 140px letterbox.
+       • cyan equal-time stamps = the path in the GROUND frame. Force-free, so
+         they march in a dead-straight line at constant spacing.
+       • bold amber ribbon      = the SAME flight re-plotted by the co-rotating
+         camera:  r_rot(t) = R(−θ(t))·r_lab(t),  θ = Ωt   — the sim's own eq4.
+     Both start at the muzzle on the rim and both finish ON the rim (the rotation
+     is a rigid rotation, so |r_rot| = |r_lab| at every instant); the angular gap
+     between the two end points IS θ = Ω·t_flight, the table's turn during the
+     flight. Colours are the sim's legend (#22d3ee ground, #fbbf24 rotating).
+     Sign: Ω > 0 = ↺ CCW seen from above (the sim's default and the arc arrow on
+     the rim), for which −2mΩ×v points to the RIGHT of the motion — so the amber
+     path peels off to the right of the cyan one, matching the sim exactly. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2716,33 +2726,95 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     const LIGHT = document.body.classList.contains('light-theme')
                || document.documentElement.getAttribute('data-theme') === 'light';
     ctx.clearRect(0,0,W,H);
-    const cx = W*0.5, cy = H*0.55, R = W*0.20, YS = 0.36;
-    const pt = th => ({ x: cx + R*Math.cos(th), y: cy - R*YS*Math.sin(th) });
-    // table rim + hub
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(cx,cy,R,R*YS,0,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.12)' : 'rgba(148,163,184,.12)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.ellipse(cx,cy,R*0.55,R*0.55*YS,0,0,Math.PI*2); ctx.stroke();
-    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.45)' : 'rgba(226,232,240,.6)';
-    ctx.beginPath(); ctx.ellipse(cx,cy,4,4*YS,0,0,Math.PI*2); ctx.fill();
+
+    /* palette — both members clear the "strong ink" bar on their own ground */
+    const NEU = LIGHT ? '100,116,139' : '203,213,225';   // table / rotation arrow
+    const CY  = LIGHT ? '8,145,178'   : '34,211,238';    // legend: ground frame
+    const AM  = LIGHT ? '180,83,9'    : '251,191,36';    // legend: rotating frame
+
+    /* oblique projection of the table plane (table radius = 1) */
+    const cx = W*0.50, cy = H*0.50, SX = W*0.170, SY = H*0.320;
+    const P = p => ({ x: cx + SX*p[0], y: cy - SY*p[1] });
+    const rim = f => ({ x: cx + SX*Math.cos(f), y: cy - SY*Math.sin(f) });
+
+    /* the flight, from the sim's own numbers: launcher bolted at r = 0.88 R
+       aiming along +x, muzzle carrying the rim speed Ω×r. Ω = +0.8 rad/s is
+       inside the sim's ±2 slider — chosen only so the deflection reads at
+       banner scale; the SIGN is the sim's default. */
+    const OM = 0.8, VA = 2, PL = 0.88;
+    const r0 = [-PL, 0], v0 = [VA, OM*(-PL)];            // v_lab = v_aim + Ω×r0
+    const A = v0[0]*v0[0] + v0[1]*v0[1], B = 2*r0[0]*v0[0], C = r0[0]*r0[0] - 1;
+    const tEnd = (-B + Math.sqrt(B*B - 4*A*C)) / (2*A);  // straight flight meets the rim
+    const lab = t => [ r0[0] + v0[0]*t, r0[1] + v0[1]*t ];
+    const rot = t => { const q = lab(t), a = -OM*t, k = Math.cos(a), s = Math.sin(a);
+                       return [ k*q[0] - s*q[1], s*q[0] + k*q[1] ]; };
+    const MUZ = P(r0), LABEND = P(lab(tEnd)), ROTEND = P(rot(tEnd));
+
+    /* ---- table: rim, hub, and a bold arc arrow giving the rotation sense ---- */
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba('+NEU+',.34)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, SX, SY, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = 'rgba('+NEU+',.50)';      // the axle the table turns about
+    ctx.beginPath(); ctx.arc(cx, cy, 2.8, 0, 7); ctx.fill();
+    // ↺ : φ increasing runs right → top → left on screen, i.e. counter-clockwise
+    const f0 = 0.60, f1 = 2.60;
+    ctx.strokeStyle = 'rgba('+NEU+',.82)'; ctx.lineWidth = 3.6;
+    ctx.beginPath();
+    for(let i = 0; i <= 40; i++){ const p = rim(f0 + (f1-f0)*i/40);
+      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+    ctx.stroke();
+    { const tip = rim(f1), pre = rim(f1 - 0.10);
+      let dx = tip.x - pre.x, dy = tip.y - pre.y, m = Math.hypot(dx,dy) || 1;
+      dx /= m; dy /= m;
+      ctx.fillStyle = 'rgba('+NEU+',.90)';
+      ctx.beginPath();
+      ctx.moveTo(tip.x + dx*8, tip.y + dy*8);
+      ctx.lineTo(tip.x - dx*6 - dy*5.5, tip.y - dy*6 + dx*5.5);
+      ctx.lineTo(tip.x - dx*6 + dy*5.5, tip.y - dy*6 - dx*5.5);
+      ctx.closePath(); ctx.fill(); }
+
+    /* ---- the straight ground-frame ray, laid in faintly as a guide ---- */
+    ctx.strokeStyle = 'rgba('+CY+',.26)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(MUZ.x, MUZ.y); ctx.lineTo(LABEND.x, LABEND.y); ctx.stroke();
+
+    /* ---- the launcher on the rim: both paths leave from here ---- */
+    ctx.beginPath(); ctx.arc(MUZ.x, MUZ.y, 9.5, 0, 7);
+    ctx.fillStyle = 'rgba('+NEU+',.30)'; ctx.fill();
+    ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba('+NEU+',.92)'; ctx.stroke();
+
+    /* ---------------------------------------------------------------------
+       DELIBERATELY ABSENT: the amber rotating-frame path.
+       Inquiry card 3 ("The path on the table") asks the student to predict
+       which way the flight bends once the turntable's own camera records it —
+       the sim's feedback reads "...the Coriolis term −2mΩ×v points to the
+       right of the motion, so the path bends right". Drawing that curve here
+       would hand over the answer before the question is asked, which is the
+       same anti-lookup rule the readouts and formal panels follow everywhere
+       else in this fleet.
+       So the banner shows only what is safe to give away up front: the
+       apparatus, the rotation SENSE, and the straight force-free track the
+       ground frame records. The bend stays for the student to predict.
+       Do not "restore" the amber ribbon — its absence is the point.
+       --------------------------------------------------------------------- */
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 24, sweep = 1.6*Math.PI;   // equal time steps of the turning table
+    const N = 24;                       // ≈400 ms at one step per frame
     let k = 0;
     function batch(){
       const per = reduce ? N : 1;
-      for(let s=0; s<per && k<N; s++, k++){
-        const th = Math.PI + k*(sweep/(N-1));
-        const p = pt(th);
-        const f = 0.22 + 0.78*(k/(N-1));
-        ctx.strokeStyle = LIGHT ? 'rgba(2,132,199,'+(0.10+0.30*f)+')' : 'rgba(125,211,252,'+(0.10+0.30*f)+')';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(p.x,p.y); ctx.stroke();
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,'+f+')' : 'rgba(110,231,183,'+f+')';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3.1, 0, 7); ctx.fill();
+      for(let s = 0; s < per && k < N; s++, k++){
+        // cyan stamps: equal time steps along the straight ground-frame path.
+        // Every step now (not every other) — with the ribbon gone these carry
+        // the composition, and equal spacing is itself the physics claim:
+        // nothing pushes the ball while it is in flight.
+        const g = P(lab(((k+1)/N)*tEnd));
+        ctx.fillStyle = 'rgba('+CY+',.95)';
+        ctx.beginPath(); ctx.arc(g.x, g.y, 4.3, 0, 7); ctx.fill();
       }
-      if(k < N) requestAnimationFrame(batch);
+      if(k < N){ requestAnimationFrame(batch); return; }
+      // the ball where the ground frame says it is at the end of the flight
+      ctx.beginPath(); ctx.arc(LABEND.x, LABEND.y, 12.5, 0, 7);
+      ctx.fillStyle = 'rgba('+CY+',.26)'; ctx.fill();
+      ctx.lineWidth = 3.2; ctx.strokeStyle = 'rgba('+CY+',.98)'; ctx.stroke();
     }
     batch();
   }

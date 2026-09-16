@@ -2847,71 +2847,151 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own round trip, marked at EQUAL TIME STEPS. The outbound
-     lane (wind behind) and the return lane (wind ahead) are sampled from the
-     sim's own leg times d/(v+w) and d/(v−w), so the spacing of the marks is
-     the ground speed, honestly drawn. It carries NO numbers — no time, no
-     ground speed, no total — so it cannot answer any card in the deck. */
+  /* Hero: the APPARATUS, never the result. A bold plan view of the aircraft
+     sitting on the A–B track inside a pocket of still air, while the whole body
+     of air streams past it as tapered darts — the one idea the deck never gates
+     (card 1 states the airports, the 400 km, the 100 km/h airspeed and the fact
+     that wind moves the whole air mass).
+     Deliberately ABSENT, because each would answer a gated card:
+       · no clock, no tick marks, no equal-time sampling and no second leg
+         (card 2 — the along-route round trip is 12.50 h, not 8.00 h);
+       · no crosswind, no crab angle, no resolved velocity triangle
+         (card 3 — crabbing leaves 80 km/h, so that trip is 10.00 h);
+       · no two routes side by side and nothing that ranks one against the other
+         (card 4 — they never tie for w > 0).
+     The wind here is drawn collinear with the track and only one heading is
+     shown, so no leg can be compared with another. No text, no digits — the
+     embedded DMSansUser subset mis-maps U+2225 and cannot be trusted for
+     symbols anyway. Galilean throughout: no gamma, no light cone.
+     STATIC by construction: drawHero is re-run by animationend, a 700 ms timer,
+     two MutationObservers and resize, each clearing the canvas, so an animated
+     build would visibly restart on every one of them. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so the buffer would be stretched across and squashed
        down. Size the buffer to the element's real box before drawing. This
        canvas is layer-owned (the welcome hero) — no simulation surface is
-       touched. */
+       touched. Checked: this build carries NO anisotropic pre-compensation
+       (no `SY = SX*k`, no `ctx.scale(1/AR,1)`), and none is wanted — sizing the
+       buffer to the real box already makes the device pixels square, so any
+       such term would now re-introduce the very distortion it once cancelled. */
     { const hr = c.getBoundingClientRect();
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ROUTE = LIGHT ? 'rgba(15,23,42,.30)'   : 'rgba(150,178,214,.32)';
-    const PORT  = LIGHT ? 'rgba(15,90,80,.92)'   : 'rgba(59,155,143,.95)';
-    const OUT   = LIGHT ? 'rgba(180,83,9,.92)'   : 'rgba(245,158,11,.92)';
-    const BACK  = LIGHT ? 'rgba(2,132,199,.90)'  : 'rgba(125,211,252,.90)';
-    const WIND  = LIGHT ? 'rgba(30,90,160,.30)'  : 'rgba(96,165,250,.30)';
-    const x0 = Math.round(W*0.15), x1 = Math.round(W*0.85), L = x1 - x0;
-    const yR = Math.round(H*0.52);
-    // wind streaks, blowing from A towards B
-    ctx.strokeStyle = WIND; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
-    for(let k=0;k<5;k++){
-      const wy = Math.round(H*0.14 + k*H*0.18);
-      const wx = x0 - 20 + ((k*37) % 60);
-      for(let s=0;s<4;s++){
-        const sx = wx + s*Math.round(L/4);
-        ctx.beginPath(); ctx.moveTo(sx, wy); ctx.lineTo(sx + 26, wy); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(sx + 20, wy - 3.5); ctx.lineTo(sx + 26, wy); ctx.lineTo(sx + 20, wy + 3.5); ctx.stroke();
+    /* Light theme sits on a near-white card, so its ink is genuinely dark —
+       sky-800 / orange-900 / teal-900 — not a mid-tone wash that would read as
+       haze behind the title. */
+    const AIR   = LIGHT ? '7,89,133'   : '125,211,252';
+    const TRACK = LIGHT ? '15,23,42'   : '148,163,184';
+    const PORT  = LIGHT ? '13,88,78'   : '45,212,191';
+    const BODY  = LIGHT ? '124,45,18'  : '251,191,36';
+    const RIM   = LIGHT ? '32,12,4'    : '255,248,224';
+
+    const cx = W * 0.5, cy = H * 0.5;
+    const xA = Math.round(W * 0.255), xB = Math.round(W * 0.745);
+    const L0 = W * 0.18, L1 = W * 0.82, SPAN = L1 - L0;
+
+    /* ---- the body of air, streaming past ---------------------------------
+       Amplitude is windowed to zero at L0/L1 so the ink lands where the CSS
+       mask (transparent outside the middle 56%) actually shows it, instead of
+       being thrown away at the faded ends. */
+    const win = x => Math.pow(Math.max(0, Math.sin(Math.PI * (x - L0) / SPAN)), 0.55);
+    function dart(x, y, len, th, a){
+      if(a <= 0.03 || th <= 0.25 || len <= 2) return;
+      ctx.fillStyle = 'rgba(' + AIR + ',' + a.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      // heavier toward the leading (right) end, pointed at both — reads as flow
+      ctx.bezierCurveTo(x + len * 0.50, y - th, x + len * 0.76, y - th, x + len, y);
+      ctx.bezierCurveTo(x + len * 0.76, y + th, x + len * 0.50, y + th, x, y);
+      ctx.fill();
+    }
+    const rows  = [0.115, 0.255, 0.395, 0.605, 0.745, 0.885];
+    const phase = [0.02,  0.38,  0.70,  0.18,  0.54,  0.86];
+    for(let r = 0; r < rows.length; r++){
+      const y = Math.round(H * rows[r]);
+      for(let s = 0; s < 3; s++){
+        const u   = (phase[r] + s / 3) % 1;
+        const len = SPAN * 0.205;
+        const x   = L0 + u * (SPAN - len);
+        const wv  = win(x + len * 0.5);
+        dart(x, y, len * (0.52 + 0.48 * wv), 5.6 * wv, 0.36 + 0.38 * wv);
       }
     }
-    // the route itself, and the two airports at its ends
-    ctx.strokeStyle = ROUTE; ctx.lineWidth = 1.4; ctx.setLineDash([6,6]);
-    ctx.beginPath(); ctx.moveTo(x0, yR); ctx.lineTo(x1, yR); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = PORT;
-    [x0, x1].forEach(px => { ctx.beginPath(); ctx.arc(px, yR, 5.5, 0, 7); ctx.fill(); });
-    // Equal-time marks. v = 100, w = 60, d = 400 (the sim's own constants), so
-    // the outbound leg is d/(v+w) and the return leg d/(v−w); sampling both at
-    // one fixed Δt puts far more marks on the slow leg.
-    const V = 100, WD = 60, D = 400;
-    const tOut = D/(V+WD), tRet = D/(V-WD), tTot = tOut + tRet;
-    const N = 132, dt = tTot/N;
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const token = (drawHero.token = (drawHero.token || 0) + 1);
-    let k = 0;
-    function batch(){
-      if(token !== drawHero.token) return;            // a redraw superseded this run
-      const per = reduce ? N : 3;
-      for(let s=0; s<per && k<=N; s++, k++){
-        const t = k*dt;
-        let px, py, col;
-        if(t <= tOut){ px = x0 + (t/tOut)*L; py = yR - 15; col = OUT; }
-        else          { px = x1 - ((t-tOut)/tRet)*L; py = yR + 15; col = BACK; }
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.arc(px, py, 2.6, 0, 7); ctx.fill();
-      }
-      if(k <= N) requestAnimationFrame(batch);
-    }
-    batch();
+
+    /* ---- a pocket of undisturbed air around the aircraft ------------------
+       destination-out so the silhouette is never read through a dart. */
+    const RP = Math.max(56, Math.min(80, W * 0.053));
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.translate(cx, cy); ctx.scale(1, 0.66);
+    { const g = ctx.createRadialGradient(0, 0, RP * 0.74, 0, 0, RP);
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, RP, 0, 7); ctx.fill(); }
+    ctx.restore();
+
+    /* ---- the track and its two airports ----------------------------------
+       Apparatus only: the route is one line, travelled once, with no duplicate
+       lane to set beside it. */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(' + TRACK + ',' + (LIGHT ? 0.42 : 0.46) + ')';
+    ctx.lineWidth = 2.4; ctx.setLineDash([10, 9]);
+    ctx.beginPath(); ctx.moveTo(xA, cy); ctx.lineTo(xB, cy); ctx.stroke();
+    ctx.restore();
+    [xA, xB].forEach(px => {
+      ctx.beginPath(); ctx.arc(px, cy, 11.5, 0, 7);
+      ctx.fillStyle = 'rgba(' + PORT + ',' + (LIGHT ? 0.20 : 0.22) + ')'; ctx.fill();
+      ctx.lineWidth = 3.4; ctx.strokeStyle = 'rgba(' + PORT + ',.95)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, cy, 4.4, 0, 7);
+      ctx.fillStyle = 'rgba(' + PORT + ',.95)'; ctx.fill();
+    });
+
+    /* ---- the aircraft, plan view, nose squarely along the track -----------
+       Zero heading offset on purpose: a crabbed nose is card 3's answer. */
+    const PL = Math.max(74, Math.min(96, W * 0.064));
+    /* Half-outline in units of PL, nose first, running aft down ONE side; the
+       other side is the same list replayed in reverse with y negated, so the
+       silhouette is exactly symmetric about the track and the outline stroke
+       never crosses the centreline. The nose and tail cones are pre-sampled
+       quadratics — plain points, so the mirror stays a trivial reversal. */
+    const HULL = [
+      [ 0.500, 0.000], [ 0.490, 0.022], [ 0.458, 0.040],                     // nose cone
+      [ 0.406, 0.053], [ 0.334, 0.061], [ 0.240, 0.064],
+      [ 0.110, 0.064],                                                       // wing root, leading edge
+      [-0.125, 0.432], [-0.174, 0.440], [-0.176, 0.406],                     // swept wing, tip
+      [-0.040, 0.082],                                                       // wing root, trailing edge
+      [-0.210, 0.072], [-0.310, 0.058],                                      // rear fuselage, tapering
+      [-0.418, 0.190], [-0.462, 0.196], [-0.468, 0.170], [-0.424, 0.050],    // tailplane
+      [-0.464, 0.042], [-0.490, 0.024], [-0.500, 0.000]                      // tail cone
+    ];
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.moveTo(HULL[0][0] * PL, HULL[0][1] * PL);
+    for(let i = 1; i < HULL.length; i++) ctx.lineTo(HULL[i][0] * PL, HULL[i][1] * PL);
+    for(let i = HULL.length - 2; i >= 1; i--) ctx.lineTo(HULL[i][0] * PL, -HULL[i][1] * PL);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(' + BODY + ',.95)'; ctx.fill();
+    ctx.lineWidth = 1.7; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(' + RIM + ',' + (LIGHT ? 0.55 : 0.70) + ')'; ctx.stroke();
+    ctx.restore();
+
+    /* ---- feather the letterbox's top and bottom --------------------------
+       so no stroke reads as sliced off by the 140 px band. */
+    const FE = Math.max(5, Math.round(H * 0.055));
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    let fg = ctx.createLinearGradient(0, 0, 0, FE);
+    fg.addColorStop(0, 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0, 0, W, FE);
+    fg = ctx.createLinearGradient(0, H - FE, 0, H);
+    fg.addColorStop(0, 'rgba(0,0,0,0)'); fg.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = fg; ctx.fillRect(0, H - FE, W, FE);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

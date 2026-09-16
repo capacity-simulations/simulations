@@ -2095,12 +2095,24 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own picture — a Cartesian grid carrying several pairs of
-     points, each with its two dashed coordinate steps and the straight segment
-     joining them, accumulating left to right. The pairs deliberately have
-     DIFFERENT shapes and lengths and carry no numbers: card 2 asks how the
-     straight segment compares with the grid path and card 3 asks whether
-     position matters, and the hero must answer neither. */
+  /* Hero: ONE separation, measured in TWO frames whose axes are turned against
+     each other, sitting on the circle of constant distance — the Euclidean
+     invariant curve. Rotating the axes changes the coordinates and leaves the
+     length alone, and that is the whole subject of this sim.
+
+     Deliberately absent, because the gated cards must stay unanswered:
+       · card 2 (straight segment vs the grid path |Δx|+|Δy|) — so NO dashed
+         coordinate legs, no right-angle staircase, no right triangle anywhere;
+         the components are never drawn, only the frames that would read them.
+       · card 3 (does moving the pair change Δs?) — so the segment appears ONCE
+         and is never translated or duplicated elsewhere in the band.
+       · card 4 (when is Δs zero?) — so no degenerate, coincident or cancelling
+         pair; one honest non-zero separation, drawn on a circle of fixed radius.
+       · card 6 (the flipped sign, and null separations) — so nothing Minkowski:
+         no light cone, no 45° null lines, no hyperbola. Rotations here preserve
+         x² + y², and the closed circle says exactly that.
+     Static: drawHero is re-run by animationend, a timer, resize and two
+     MutationObservers, each run clearing the canvas, so nothing is deferred. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -2114,49 +2126,86 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const COL = { grid: LIGHT ? 'rgba(15,23,42,.13)' : 'rgba(148,163,184,.16)',
-                  leg:  LIGHT ? 'rgba(71,85,105,.65)' : 'rgba(148,163,184,.60)',
-                  seg:  LIGHT ? '#2563eb' : '#60a5fa',
-                  p1:   LIGHT ? '#0891b2' : '#06b6d4',
-                  p2:   LIGHT ? '#d97706' : '#f59e0b' };
-    const g = Math.max(18, Math.round(H/6));      // grid pitch in px
-    ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for(let x = (W/2) % g; x < W; x += g){ ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, H); }
-    for(let y = (H/2) % g; y < H; y += g){ ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(W, Math.round(y)+.5); }
+    const COL = LIGHT
+      ? { axA:'rgba(30,41,59,.92)',  axB:'rgba(109,40,217,.95)', ring:'rgba(37,99,235,.55)',
+          disc:'rgba(37,99,235,.13)', seg:'#1d4ed8', p1:'#0891b2', p2:'#d97706' }
+      : { axA:'rgba(241,245,249,.92)', axB:'rgba(196,181,253,.88)', ring:'rgba(96,165,250,.60)',
+          disc:'rgba(96,165,250,.14)', seg:'#60a5fa', p1:'#22d3ee', p2:'#fbbf24' };
+
+    // Everything lives inside a box centred in the band, with real margin top
+    // and bottom — the 140px letterbox cuts anything that reaches its edge.
+    const cx = Math.round(W/2), cy = Math.round(H/2);
+    const HH = Math.max(28, H/2 - 14);                 // half-height available
+    const halfW = Math.min(2.8*HH, W*0.13);            // half-width used
+    // The circle is kept clear of the box edge so every axis escapes the ring
+    // and reads as an axis rather than a spoke.
+    const R  = Math.min(47, HH - 9);                   // the invariant radius
+    // Around 30° is the smallest turn that still separates the two frames'
+    // near-vertical arms in a band this short; below ~25° they collapse into mud.
+    const TILT = 32 * Math.PI/180;                     // angle between the frames
+    // The separation is aimed mid-way between the two frames' nearest axes, so
+    // it is never mistaken for one of them.
+    const SEG  = 61 * Math.PI/180;
+    const PX = a => cx + R*Math.cos(a), PY = a => cy - R*Math.sin(a);
+
+    // the disc of everything nearer than R, and the circle of everything at R
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7);
+    ctx.fillStyle = COL.disc; ctx.fill();
+    ctx.lineWidth = 3.8; ctx.strokeStyle = COL.ring; ctx.stroke();
+
+    // A frame = four rays from a small clearing at the origin, each running out
+    // until it meets the box. Heads mark the two positive directions.
+    function frame(a0, col, lw){
+      ctx.strokeStyle = col; ctx.fillStyle = col;
+      ctx.lineWidth = lw; ctx.lineCap = 'round';
+      for(let k = 0; k < 4; k++){
+        const a = a0 + k*Math.PI/2, ux = Math.cos(a), uy = -Math.sin(a);
+        const L = Math.min(halfW/Math.max(Math.abs(ux), 1e-6), HH/Math.max(Math.abs(uy), 1e-6));
+        const x0 = cx + ux*12, y0 = cy + uy*12, x1 = cx + ux*L, y1 = cy + uy*L;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        if(k > 1) continue;                            // arrowheads: +x and +y only
+        const s = 8;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 - s*Math.cos(a - 0.42), y1 + s*Math.sin(a - 0.42));
+        ctx.lineTo(x1 - s*Math.cos(a + 0.42), y1 + s*Math.sin(a + 0.42));
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.lineCap = 'butt';
+    }
+    frame(0,    COL.axA, 3.8);                         // the frame you start in
+    frame(TILT, COL.axB, 3.6);                         // the same plane, axes turned
+
+    // the turn itself: a short swept arc from one x-axis to the other
+    { const ra = R + 16;
+      ctx.strokeStyle = COL.axB; ctx.fillStyle = COL.axB; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(cx, cy, ra, -TILT, 0); ctx.stroke();
+      const hx = cx + ra*Math.cos(TILT), hy = cy - ra*Math.sin(TILT), s = 8;
+      const t = TILT + Math.PI/2;                      // tangent, pointing round the sweep
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx - s*Math.cos(t - 0.45), hy + s*Math.sin(t - 0.45));
+      ctx.lineTo(hx - s*Math.cos(t + 0.45), hy + s*Math.sin(t + 0.45));
+      ctx.closePath(); ctx.fill();
+    }
+
+    // the one separation: bold, reaching the circle, so its length is the radius
+    // no matter which set of axes you choose to read it in. It leaves a crowded
+    // origin, so it is cased in the backdrop colour to sit clearly in front.
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(PX(SEG), PY(SEG));
+    ctx.lineWidth = 11.5; ctx.strokeStyle = LIGHT ? 'rgba(248,250,252,.8)' : 'rgba(10,12,17,.85)';
     ctx.stroke();
-    // Four separations, all different: (dx,dy) in grid cells, anchored at (fx,fy).
-    const pairs = [ {fx:.10, fy:.74, dx: 3, dy:-2},
-                    {fx:.33, fy:.28, dx: 2, dy: 3},
-                    {fx:.58, fy:.76, dx: 4, dy:-1},
-                    {fx:.80, fy:.34, dx: 1, dy: 3} ];
-    const ops = [];
-    pairs.forEach(pr => {
-      const ax = Math.round(pr.fx*W/g)*g, ay = Math.round(pr.fy*H/g)*g;
-      const bx = ax + pr.dx*g,            by = ay + pr.dy*g;
-      ops.push(() => {                                  // the two coordinate steps
-        ctx.save(); ctx.setLineDash([5,4]); ctx.strokeStyle = COL.leg; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,ay); ctx.lineTo(bx,by); ctx.stroke();
-        ctx.restore();
-      });
-      const N = 9;
-      for(let k=0;k<=N;k++) ops.push(() => {            // the straight segment, dot by dot
-        const t = k/N;
-        ctx.fillStyle = COL.seg;
-        ctx.beginPath(); ctx.arc(ax+(bx-ax)*t, ay+(by-ay)*t, 2.6, 0, 7); ctx.fill();
-      });
-      ops.push(() => {
-        ctx.fillStyle = COL.p1; ctx.beginPath(); ctx.arc(ax,ay,5,0,7); ctx.fill();
-        ctx.fillStyle = COL.p2; ctx.beginPath(); ctx.arc(bx,by,5,0,7); ctx.fill();
-      });
-    });
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let i = 0;
-    (function batch(){
-      const per = reduce ? ops.length : 1;
-      for(let s=0; s<per && i<ops.length; s++, i++) ops[i]();
-      if(i < ops.length) requestAnimationFrame(batch);
-    })();
+    ctx.lineWidth = 7.5; ctx.strokeStyle = COL.seg; ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // its two ends
+    function dot(x, y, r, col){
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = LIGHT ? 'rgba(248,250,252,.9)' : 'rgba(10,12,17,.9)'; ctx.stroke();
+    }
+    dot(cx, cy, 7, COL.p1);
+    dot(PX(SEG), PY(SEG), 9.5, COL.p2);
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

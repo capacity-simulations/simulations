@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spherical Harmonics Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+if(typeof THREE==='undefined'){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';document.head.appendChild(s);}
+</script>
+<style>
+@font-face {
+  font-family: 'DMSansUser';
+  src: url('DMSans-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrainsMonoNums';
+  src: url('JetBrainsMono-SemiBold_numbers.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --font-sans: 'DMSansUser', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-nums: 'JetBrainsMonoNums', 'JetBrains Mono', ui-monospace, monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#060E11;font-family:var(--font-sans);overflow:hidden;color:#e2e8f0;}
+.top-bar{position:fixed;top:0;left:0;right:0;height:62px;min-height:62px;box-sizing:border-box;background:#FAF8F4;border-bottom:1px solid rgba(19,49,49,0.25);display:flex;align-items:center;padding:0 24px;z-index:200;}
+.top-bar-left{display:flex;align-items:center;gap:12px;}
+.top-bar-spacer{flex:1;min-width:0;}
+.sim-playback-btn-group{display:flex;align-items:center;gap:8px;width:96px;height:36px;flex-shrink:0}
+.sim-playback-btn-group .top-bar-reset{flex:1 1 0;min-width:0;height:36px;padding:0 8px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:16px;font-weight:400}
+.sim-playback-btn-group #btnResetDefault{background:#faf8f4;border:1px solid #b6820c;color:#b6820c;font-family:var(--font-sans)}
+.sim-playback-btn-group #btnResetDefault:hover{background:#f5eac4;border-color:#b6820c;color:#b6820c}
+.top-bar-reset{padding:4.5px 24px;border-radius:6px;font-size:16px;font-weight:400;font-family:var(--font-sans);cursor:pointer;transition:background .2s,border-color .2s,color .2s;background:#faf8f4;color:#b6820c;border:1px solid #b6820c;flex-shrink:0;}
+.top-bar-reset:hover{background:#f5eac4;border-color:#b6820c;color:#b6820c;}
+.top-title{font-size:18px;font-weight:600;color:#0f172a;letter-spacing:0.5px;margin:0;line-height:1.2;font-family:var(--font-sans);}
+.info-wrapper{position:relative;display:inline-flex;align-items:center;}
+.info-icon{width:22px;height:22px;border-radius:50%;border:1px solid rgba(15,23,42,0.18);display:flex;align-items:center;justify-content:center;font-size:13px;font-style:italic;font-family:Georgia,serif;color:#64748b;cursor:pointer;transition:border-color 0.2s,color 0.2s,background 0.2s;user-select:none;background:transparent;}
+.info-icon:hover{border-color:rgba(37,99,235,0.35);color:#2563eb;background:rgba(37,99,235,0.06);}
+.info-tooltip{display:none;position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-30px);width:380px;background:#060E11;border:1px solid rgba(19,49,49,0.5);border-radius:10px;padding:18px 20px;z-index:1000;box-shadow:0 12px 40px rgba(0,0,0,0.5);}
+.info-tooltip::before{content:'';position:absolute;top:-6px;left:30px;width:12px;height:12px;background:#060E11;border-left:1px solid rgba(19,49,49,0.5);border-top:1px solid rgba(19,49,49,0.5);transform:rotate(45deg);}
+.info-wrapper:hover .info-tooltip{display:block;}
+.info-tooltip h3{font-size:14px;font-weight:600;color:#3b9b8f;margin-bottom:10px;font-family:var(--font-sans);}
+.info-tooltip p{font-size:13px;line-height:1.6;color:#94a3b8;margin-bottom:8px;font-family:var(--font-sans);}
+.info-tooltip p:last-child{margin-bottom:0;}
+#canvas-container{position:fixed;top:62px;left:0;right:280px;bottom:0;}
+.rotate-drag-hint-wrap{position:absolute;left:14px;bottom:14px;z-index:40;pointer-events:none;padding:5px 7px;border-radius:8px;background:#060E11;border:1px solid rgba(19,49,49,0.35);color:#e2e8f0;}
+.rotate-icon-svg{display:block;width:40px;height:40px;}
+.sidebar{position:fixed;top:62px;right:0;width:280px;height:calc(100vh - 62px);background:#060E11;border-left:1px solid rgba(148,163,184,0.35);overflow-y:auto;z-index:100;display:flex;flex-direction:column;}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.2);border-radius:2px;}
+.sidebar-controls-label{padding:16px 18px 12px;border-bottom:1px solid rgba(19,49,49,0.28);font-size:14px;font-weight:600;color:#cbd5e1;letter-spacing:0.14em;text-transform:uppercase;font-family:var(--font-sans);}
+.panel{padding:14px 18px;border-bottom:1px solid rgba(19,49,49,0.22);}
+.panel-title{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#b6c2d6;margin-bottom:10px;font-weight:600;font-family:var(--font-sans);}
+.control-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.control-row label{font-size:13px;color:#cbd5e1;min-width:30px;font-family:var(--font-sans);}
+.control-row .val{font-size:14px;color:#3b9b8f;font-weight:600;font-variant-numeric:tabular-nums;min-width:28px;text-align:right;font-family:var(--font-nums);}
+.ctrl-box{background:rgba(30,77,58,0.15);border:1px solid #1e4d3a;border-radius:5px;padding:12px 16px;margin-bottom:10px;}
+.ctrl-box:last-child{margin-bottom:0;}
+.ctrl-box .control-row{margin-bottom:0;}
+.ctrl-box .control-row:not(:last-child){margin-bottom:8px;}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;background:transparent;border-radius:3px;outline:none;margin:6px 0;cursor:pointer;}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:rgba(30,77,58,0.35);border-radius:2px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;background:#3b9b8f;border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 0 2px #060E11;transition:transform 0.15s;}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+input[type=range]::-moz-range-track{height:4px;background:rgba(30,77,58,0.35);border-radius:2px;}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;background:#3b9b8f;border-radius:50%;cursor:pointer;border:none;box-shadow:0 0 0 2px #060E11;}
+.toggle-group{display:flex;gap:2px;background:rgba(30,77,58,0.15);border-radius:6px;padding:2px;border:1px solid rgba(19,49,49,0.35);}
+.toggle-btn{flex:1;padding:6px 0;text-align:center;font-size:12px;font-weight:600;border:none;background:transparent;color:#cbd5e1;cursor:pointer;border-radius:4px;transition:all 0.2s;font-family:var(--font-sans);}
+.toggle-btn.active{background:#2a8a6e;color:#fff;}
+.mode-group{display:flex;flex-direction:column;gap:3px;}
+.mode-btn{padding:7px 10px;text-align:left;font-size:12px;font-weight:600;border:1px solid rgba(19,49,49,0.35);background:rgba(30,77,58,0.12);color:#cbd5e1;cursor:pointer;border-radius:5px;transition:all 0.2s;display:flex;align-items:center;gap:8px;font-family:var(--font-sans);}
+.mode-btn.active{background:rgba(42,138,110,0.22);border-color:rgba(35,128,96,0.55);color:#5ec4b8;}
+.mode-btn:hover:not(.active){background:rgba(59,155,143,0.12);}
+.mode-icon{font-size:14px;}
+.formula-display{background:rgba(30,77,58,0.12);border:1px solid rgba(19,49,49,0.3);border-radius:6px;padding:10px 12px;text-align:center;margin-top:6px;}
+.formula-display .ql{font-size:22px;font-style:italic;color:#3b9b8f;font-weight:300;font-family:var(--font-sans);}
+.formula-display .ql sub,.formula-display .ql sup{font-size:14px;font-family:var(--font-nums);}
+.formula-display .type-label{font-size:11px;color:#b6c2d6;margin-top:2px;font-family:var(--font-sans);}
+.dynamic-info-wrap{margin-top:2px;}
+.dynamic-info-note{background:rgba(30,77,58,0.1);border:1px solid rgba(19,49,49,0.35);border-radius:8px;padding:10px 10px;font-size:12px;line-height:1.45;color:#a8b3c7;font-family:var(--font-sans);}
+.dynamic-info-note a{color:#3b9b8f;text-decoration:none;font-weight:600;pointer-events:auto;}
+.dynamic-info-note a:hover{text-decoration:underline;color:#5ec4b8;}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.stat-box{background:rgba(30,77,58,0.15);border:1px solid #1e4d3a;border-radius:5px;padding:8px 10px;}
+.stat-box .stat-label{font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:#b6c2d6;font-family:var(--font-sans);}
+.stat-box .stat-value{font-size:15px;font-weight:600;color:#3b9b8f;font-variant-numeric:tabular-nums;margin-top:2px;font-family:var(--font-nums);}
+.stat-box.full-width{grid-column:1 / -1;}
+.point-count-footer{text-align:center;font-size:13px;color:#94a3b8;font-family:var(--font-sans);}
+.point-count-footer #pointCountVal{color:#3b9b8f;font-weight:600;font-family:var(--font-nums);}
+#legend-overlay{position:absolute;top:20px;right:20px;z-index:50;pointer-events:none;}
+.legend-box{background:#060E11;border:1px solid rgba(19,49,49,0.4);border-radius:8px;padding:10px 14px 8px;min-width:220px;}
+.legend-header{font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:7px;letter-spacing:0.2px;font-family:var(--font-sans);}
+.legend-header sub,.legend-header sup{font-size:9px;}
+.legend-bar-wrap{position:relative;}
+.legend-bar-label{font-size:9px;color:#94a3b8;margin-bottom:3px;font-weight:500;letter-spacing:0.3px;font-family:var(--font-sans);}
+.legend-box canvas{display:block;border-radius:3px;border:1px solid rgba(19,49,49,0.35);}
+.legend-real-canvas{width:200px;height:14px;}
+.legend-phase-canvas{width:200px;height:14px;}
+.legend-mag-canvas{width:200px;height:10px;}
+.legend-ticks{display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-top:2px;padding:0 1px;font-variant-numeric:tabular-nums;font-family:var(--font-nums);}
+.legend-note{font-size:9px;color:#64748b;margin-top:7px;line-height:1.5;border-top:1px solid rgba(148,163,184,0.08);padding-top:6px;font-family:var(--font-sans);}
+/* Projection + Real: match reference legend panel (rounded bar, two-line footer) */
+.legend-projection-real.legend-box{background:#060E11;border:1px solid rgba(19,49,49,0.4);border-radius:10px;padding:12px 16px 10px;min-width:232px;}
+.legend-projection-real .legend-header{font-size:11px;font-weight:600;color:#f1f5f9;margin-bottom:8px;}
+.legend-projection-real .legend-bar-label{color:#94a3b8;margin-bottom:4px;}
+.legend-projection-real .legend-real-canvas{border-radius:7px;border:1px solid rgba(19,49,49,0.35);}
+.legend-projection-real .legend-ticks{color:#94a3b8;margin-top:3px;}
+.legend-note.legend-note-projection{border-top:1px solid rgba(148,163,184,0.12);padding-top:8px;margin-top:8px;color:#64748b;}
+.legend-proj-line{font-size:9px;line-height:1.55;margin:0;}
+.legend-proj-line+.legend-proj-line{margin-top:4px;}
+.legend-proj-key{color:#e2e8f0;font-weight:650;}
+.legend-proj-val{color:#94a3b8;font-weight:500;}
+.legend-spacer{height:8px;}
+@media(max-width:700px){.top-bar{height:62px;min-height:62px;padding:0 14px;}.top-title{font-size:16px;}.sidebar{width:100%;height:auto;max-height:40vh;bottom:0;top:auto;border-left:none;border-top:1px solid rgba(19,49,49,0.35);}#canvas-container{right:0;bottom:40vh;top:62px;}.rotate-drag-hint-wrap{left:10px;bottom:10px;padding:4px 6px;}.rotate-icon-svg{width:34px;height:34px;}.info-tooltip{width:280px;left:50%;transform:translateX(-50%);}#legend-overlay{top:10px;right:10px;}.legend-box{min-width:180px;padding:8px 10px 6px;}.legend-real-canvas,.legend-phase-canvas{width:170px;}.legend-mag-canvas{width:170px;}.legend-header{font-size:10px;}.legend-ticks{font-size:8px;}.legend-note{font-size:8px;}.legend-bar-label{font-size:8px;}}
+</style>
+</head>
+<body>
+<div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title">
+  <div class="welcome-card">
+    <div class="welcome-hero">
+      <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
+      <span class="hero-label">Sampled clouds of Y<sub>ℓ</sub><sup>0</sup> for ℓ = 0, 1, 2, 3 — each step in ℓ adds one nodal line</span>
+    </div>
+    <div class="welcome-body">
+      <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Spherical Harmonics</span></h2>
+      <p class="welcome-blurb">The angular shapes orbital angular momentum allows, and the nodes that count them.</p>
+      <p class="welcome-ask">How would you like to begin?</p>
+      <div class="welcome-modes">
+        <button type="button" class="welcome-mode" data-mode="inquiry">
+          <span class="wm-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-1.9 4.6-4.6 1.9 1.9-4.6z"/></svg></span>
+          <span class="wm-text"><span class="wm-title">Guided inquiry <span class="wm-tag">Recommended</span></span>
+            <span class="wm-desc">Uncover the simulation in steps and see the physics emerge.</span></span>
+          <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+        </button>
+        <button type="button" class="welcome-mode" data-mode="controls">
+          <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>
+          <span class="wm-text"><span class="wm-title">Controls guide</span>
+            <span class="wm-desc">Learn each control, one at a time.</span></span>
+          <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+        </button>
+        <button type="button" class="welcome-mode" data-mode="free">
+          <span class="wm-icon"><svg viewBox="0 0 24 24"><path d="M4 20l5-5M4 20v-4M4 20h4M20 4l-5 5M20 4v4M20 4h-4"/></svg></span>
+          <span class="wm-text"><span class="wm-title">Free exploration</span>
+            <span class="wm-desc">Everything open. Experiment on your own.</span></span>
+          <span class="wm-go">Start <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+        </button>
+      </div>
+      <div class="welcome-foot">
+        <div class="welcome-listen"><b>Listen to the intro</b></div>
+        <div class="welcome-audio" aria-label="Read aloud controls">
+          <button type="button" class="wa-skip" id="welcome-prev" title="Previous line" aria-label="Previous line"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>
+          <button type="button" id="welcome-speak" data-state="idle" title="Play" aria-label="Play" aria-pressed="false">
+            <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>
+            <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+            <svg class="i-again" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+          </button>
+          <button type="button" class="wa-skip" id="welcome-next" title="Next line" aria-label="Next line"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+          <span class="welcome-seg" id="welcome-seg" aria-hidden="true"></span>
+          <span id="welcome-progress" class="welcome-progress"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="top-bar">
+  <div class="top-bar-left">
+    <h1 class="top-title">Spherical Harmonics Explorer</h1>
+    <div class="info-wrapper">
+      <div class="info-icon">i</div>
+      <div class="info-tooltip">
+        <h3>About This Simulation</h3>
+        <p><b style="color:#3b9b8f">Physics.</b> Spherical harmonics <span style="font-style:italic;color:#e2e8f0">Y</span><sub>ℓ</sub><sup>m</sup>(θ, φ) are the angular eigenfunctions of orbital angular momentum in quantum mechanics. The integer <b style="color:#e2e8f0">ℓ</b> sets the overall nodal complexity, while <b style="color:#e2e8f0">m</b> sets the azimuthal structure around the z-axis.</p>
+        <p><b style="color:#3b9b8f">Axes.</b> The white <b style="color:#e2e8f0">z-axis</b> (vertical) is the polar/quantization axis from which θ is measured. This matches the standard QM convention where <b style="color:#e2e8f0">L<sub>z</sub></b> eigenstates have definite <b style="color:#e2e8f0">m</b>.</p>
+        <p><b style="color:#3b9b8f">Visuals.</b> In <b style="color:#e2e8f0">Polar Surface</b>, the radius is proportional to <b style="color:#e2e8f0">|Y|</b>. In <b style="color:#e2e8f0">Projection</b>, the surface is a fixed sphere colored by <b style="color:#e2e8f0">Y</b> (real: sign + magnitude emphasis; complex: hue and brightness from phase and <b style="color:#e2e8f0">|Y|</b>). In <b style="color:#e2e8f0">Point Cloud</b>, angular acceptance is proportional to <b style="color:#e2e8f0">|Y|²</b> while radius is mapped as <b style="color:#e2e8f0">r ∝ |Y|</b>. Color encodes the field: <b style="color:#e2e8f0">Real</b> uses a red↔blue sign/magnitude scale, while <b style="color:#e2e8f0">Complex</b> uses hue for phase <b style="color:#e2e8f0">arg(Y)</b> and brightness for <b style="color:#e2e8f0">|Y|</b>.</p>
+        <p style="font-size:11px;color:#a8b3c7;margin-top:4px;"><b style="color:#e2e8f0">Controls:</b> Left-drag rotate · Scroll/pinch zoom · Right-drag (or two-finger drag) pan</p>
+      </div>
+    </div>
+  </div>
+  <div class="guide-actions">
+    <button type="button" class="top-bar-reset btn-guide active" id="btn-gi" title="Show or hide the guided inquiry">Guided Inquiry</button>
+    <button type="button" class="top-bar-reset btn-guide" id="btn-cg" title="Show or hide the controls guide">Controls Guide</button>
+  </div>
+  <div class="top-bar-spacer" aria-hidden="true"></div>
+  <div class="sim-playback-btn-group">
+  <button type="button" class="top-bar-reset" id="btnResetDefault" title="Reset to default view" aria-label="Reset simulation to default view">Reset</button>
+  </div>
+</div>
+<div id="canvas-container">
+  <div id="legend-overlay">
+    <div id="legend-real" class="legend-box">
+      <div class="legend-header">Real Y<sub>ℓ</sub><sup>m</sup>(θ, φ)</div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Sign &amp; Magnitude</div>
+        <canvas id="legendRealCanvas" class="legend-real-canvas" width="400" height="28"></canvas>
+        <div class="legend-ticks"><span>− (negative)</span><span>0</span><span>+ (positive)</span></div>
+      </div>
+      <div class="legend-note" id="legendRealNote"></div>
+    </div>
+    <div id="legend-complex" class="legend-box" style="display:none;">
+      <div class="legend-header">Complex Y<sub>ℓ</sub><sup>m</sup>(θ, φ)</div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Phase (arg Y)</div>
+        <canvas id="legendPhaseCanvas" class="legend-phase-canvas" width="400" height="28"></canvas>
+        <div class="legend-ticks"><span>0</span><span>π</span><span>2π</span></div>
+      </div>
+      <div class="legend-spacer"></div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar-label">Magnitude |Y|</div>
+        <canvas id="legendMagCanvas" class="legend-mag-canvas" width="400" height="20"></canvas>
+        <div class="legend-ticks"><span>0</span><span>max</span></div>
+      </div>
+      <div class="legend-note" id="legendComplexNote"></div>
+    </div>
+  </div>
+  <div class="rotate-drag-hint-wrap" aria-hidden="true" title="Drag to rotate">
+    <svg class="rotate-icon-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">
+      <path d="M511.197,243.923c-0.73-5.474-5.764-9.319-11.234-8.589c-5.475,0.73-9.32,5.76-8.59,11.235C491.789,249.687,492,252.86,492,256c0,33.646-23.794,65.716-66.998,90.304C380.022,371.902,320.003,386,256,386c-40.443,0-79.29-5.635-113.762-16.238C131.635,335.29,126,296.443,126,256c0-64.002,14.098-124.022,39.696-169.002C190.284,43.793,222.354,20,256,20c28.234,0,50.716,16.282,66.904,34.183h-10.242c-5.522,0-10,4.477-10,10s4.478,10,10,10h31.025c5.522,0,10-4.477,10-10V33.157c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v3.369C310.495,12.798,283.585,0,256,0c-41.146,0-79.389,27.383-107.687,77.105C121.027,125.052,106,188.584,106,256c0,37.042,4.546,72.904,13.16,105.659c-11.384-4.531-22.148-9.656-32.162-15.356C43.794,321.716,20,289.646,20,256c0-28.401,16.474-50.985,34.5-67.195v10.19c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-31.026c0-5.523-4.478-10-10-10H33.475c-5.522,0-10,4.477-10,10s4.478,10,10,10h3.408C12.928,201.24,0,228.278,0,256c0,41.145,27.383,79.389,77.105,107.686c15.014,8.544,31.556,15.886,49.267,21.941c6.055,17.711,13.397,34.254,21.941,49.267C176.611,484.617,214.854,512,256,512c23.589,0,47.014-9.379,67.741-27.124c4.195-3.592,4.686-9.904,1.094-14.1c-3.591-4.195-9.904-4.685-14.1-1.094C293.437,484.492,275.021,492,256,492c-33.646,0-65.716-23.793-90.304-66.998c-5.699-10.015-10.825-20.779-15.355-32.162C183.096,401.454,218.958,406,256,406c67.416,0,130.948-15.027,178.895-42.314C484.617,335.389,512,297.145,512,256C512,251.978,511.729,247.915,511.197,243.923z"/>
+      <path d="M498.905,208.119c-0.01-0.017-0.026-0.048-0.042-0.076c-2.654-4.793-8.682-6.56-13.51-3.946c-4.856,2.63-6.661,8.699-4.03,13.555c0.014,0.026,0.067,0.122,0.082,0.148c1.824,3.299,5.238,5.161,8.759,5.161c1.638,0,3.298-0.403,4.832-1.251C499.828,219.037,501.579,212.952,498.905,208.119z"/>
+      <path d="M349.398,439.813c-4.486-3.213-10.768-2.123-13.988,2.352c-0.017,0.024-0.034,0.047-0.051,0.071c-3.182,4.503-2.165,10.799,2.332,13.991c1.739,1.234,3.744,1.825,5.735,1.825c3.157,0,6.278-1.485,8.242-4.238C354.87,449.325,353.881,443.025,349.398,439.813z"/>
+      <path d="M326.516,227.193c-0.17-14.063-11.712-25.504-25.729-25.504h-35.271v-26.376c0-3.102,2.523-5.625,5.625-5.625h28.995c5.522,0,10-4.477,10-10s-4.478-10-10-10h-28.995c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.646c14.017,0,25.559-11.441,25.729-25.504c0.001-0.041,0.001-0.081,0.001-0.121v-28.728C326.517,227.273,326.517,227.233,326.516,227.193z M306.515,255.966c-0.063,3.147-2.623,5.7-5.729,5.7H271.14c-3.102,0-5.625-2.523-5.625-5.625v-34.353h35.271v0.001c3.106,0,5.667,2.553,5.729,5.7V255.966z"/>
+      <path d="M392.891,149.688h-29.75c-14.13,0-25.625,11.495-25.625,25.625v80.729c0,14.13,11.495,25.625,25.625,25.625h29.75c14.13,0,25.625-11.495,25.625-25.625v-80.729C418.516,161.183,407.021,149.688,392.891,149.688z M398.516,256.042c0,3.102-2.523,5.625-5.625,5.625h-29.75c-3.102,0-5.625-2.523-5.625-5.625v-80.729c0-3.102,2.523-5.625,5.625-5.625h29.75c3.102,0,5.625,2.523,5.625,5.625V256.042z"/>
+      <path d="M208.875,149.688h-25.531c-14.13,0-25.625,11.495-25.625,25.625v0.353c0,5.523,4.478,10,10,10c5.522,0,10-4.477,10-10v-0.353c0-3.102,2.523-5.625,5.625-5.625h25.531c3.102,0,5.625,2.523,5.625,5.625v30.365h-25.65c-5.522,0-10,4.477-10,10s4.478,10,10,10h25.65v30.364c0,3.102-2.523,5.625-5.625,5.625h-25.531c-3.102,0-5.625-2.523-5.625-5.625v-1.384c0-5.523-4.478-10-10-10c-5.522,0-10,4.477-10,10v1.384c0,14.13,11.495,25.625,25.625,25.625h25.531c14.13,0,25.625-11.495,25.625-25.625v-80.729C234.5,161.183,223.005,149.688,208.875,149.688z"/>
+      <path d="M458.949,133.163c-14.626,0-26.525,11.899-26.525,26.525s11.899,26.525,26.525,26.525c14.626,0,26.525-11.899,26.525-26.525S473.575,133.163,458.949,133.163z M458.949,166.212c-3.597,0-6.525-2.927-6.525-6.525c0-3.598,2.928-6.525,6.525-6.525c3.598,0,6.525,2.927,6.525,6.525C465.474,163.285,462.546,166.212,458.949,166.212z"/>
+    </svg>
+  </div>
+</div>
+<div class="sidebar">
+  <div class="inq-zone" id="inq-zone">
+    <div class="aside-zone-head"><h3>Guided Inquiry</h3></div>
+    <div id="inq-dots" class="inq-dots"></div>
+    <div id="inq-cards" class="aside-zone-body">
+
+      <div class="inq-step active">
+        <h4>1 &middot; The angular functions</h4>
+        <p>The spherical harmonics <b>Y<sub>&#8467;</sub><sup>m</sup>(&theta;, &phi;)</b> are the angular eigenfunctions of orbital angular momentum: <b>&#8467;</b> fixes its magnitude and <b>m</b> its projection on the white z axis. The surface has radius <b>|Y|</b> in each direction, blue where Y is positive and red where it is negative. Where Y vanishes the surface pinches to the origin &mdash; here, on the equatorial plane.</p>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>2 &middot; Zero angular momentum</h4>
+        <p>A state with <b>&#8467; = 0</b> carries no orbital angular momentum. Predict the shape of <b>Y<sub>0</sub><sup>0</sup></b>.</p>
+        <button class="choice">A sphere of uniform radius</button>
+        <button class="choice">A single lobe along +z</button>
+        <button class="choice">A thin ring in the xy-plane</button>
+        <div class="predict-eval" style="display:none"></div>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>3 &middot; Counting the nodes</h4>
+        <p>Nodal lines are the directions where Y vanishes and the surface pinches in. Keep <b>m = 0</b> and try several values of <b>&#8467;</b>. How many nodal lines does <b>Y<sub>&#8467;</sub><sup>0</sup></b> have?</p>
+        <button class="choice">&#8467;</button>
+        <button class="choice">2&#8467; &minus; 1</button>
+        <button class="choice">&#8467;&sup2;</button>
+        <div class="predict-eval" style="display:none"></div>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>4 &middot; Around the equator</h4>
+        <p>Now set <b>m = 2</b> at <b>&#8467; = 2</b>. Follow the equator once around. How many times does the surface change between blue and red?</p>
+        <button class="choice">Twice</button>
+        <button class="choice">Four times</button>
+        <button class="choice">Never &mdash; |Y| does not depend on &phi;</button>
+        <div class="predict-eval" style="display:none"></div>
+      </div>
+
+      <div class="inq-step" data-gate>
+        <h4>5 &middot; The reach of m</h4>
+        <p>Raise <b>m</b> while <b>&#8467;</b> stays 2. How large can <b>|m|</b> become?</p>
+        <button class="choice">Up to 2</button>
+        <button class="choice">Up to 4</button>
+        <button class="choice">Any integer &mdash; m is unbounded</button>
+        <div class="predict-eval" style="display:none"></div>
+      </div>
+
+    </div>
+    <div class="inq-listen">
+      <span class="inq-listen-lab">Listen</span>
+      <button id="inq-voice" class="btn-topbar inq-pager-btn" data-vstate="idle" title="Read this card aloud" aria-label="Read this card aloud">
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        <svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>
+      </button>
+      <button id="inq-auto" class="btn-topbar inq-pager-btn" title="Auto walkthrough &mdash; narrates each card and moves on; waits for your answers" aria-label="Auto walkthrough">Auto</button>
+    </div>
+    <div class="inq-nav">
+      <div class="inq-pager">
+        <button id="inq-prev" class="btn-topbar inq-pager-btn" title="Previous step" aria-label="Previous step" disabled>&lt;</button>
+        <button id="inq-pgnext" class="btn-topbar inq-pager-btn" title="Next step" aria-label="Next step">&gt;</button>
+      </div>
+      <button id="inq-next" class="btn-topbar">Next &rarr;</button>
+    </div>
+  </div>
+  <div class="sidebar-controls-label">controls</div>
+  <div class="panel">
+    <div class="panel-title">Quantum Numbers</div>
+    <div class="formula-display" id="formulaBox">
+      <div class="ql">Y<sub id="fmtL">2</sub><sup id="fmtM">0</sup>(θ, φ)</div>
+      <div class="type-label" id="typeLabel">Real Spherical Harmonic</div>
+    </div>
+    <div class="ctrl-box" id="lmBox" style="margin-top:12px">
+      <div class="control-row"><label>ℓ</label><input type="range" id="lSlider" min="0" max="6" value="2" step="1" style="flex:1;margin:0 10px;"><span class="val" id="lVal">2</span></div>
+      <div class="control-row"><label>m</label><input type="range" id="mSlider" min="-2" max="2" value="0" step="1" style="flex:1;margin:0 10px;"><span class="val" id="mVal">0</span></div>
+    </div>
+  </div>
+  <div class="panel" id="harmonicTypePanel">
+    <div class="panel-title">Harmonic Type</div>
+    <div class="toggle-group" id="harmonicToggleGroup">
+      <button class="toggle-btn active" id="btnReal">Real</button>
+      <button class="toggle-btn" id="btnComplex">Complex</button>
+    </div>
+  </div>
+  <div class="panel" id="dynamicInfoPanel">
+    <div class="dynamic-info-wrap">
+      <div class="dynamic-info-note" id="dynamicInfoNote"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Visualization Mode</div>
+    <div class="mode-group" id="modeGroup">
+      <button class="mode-btn" id="modeCloud"><span class="mode-icon">◌</span> Point Cloud</button>
+      <button class="mode-btn active" id="modeSurface"><span class="mode-icon">◎</span> Polar Surface</button>
+      <button class="mode-btn" id="modeProjection"><span class="mode-icon">◉</span> Projection</button>
+    </div>
+  </div>
+  <div class="panel" id="pointCountPanel" style="display:none;">
+    <div class="panel-title">Point Count</div>
+    <div class="ctrl-box" id="pointCountBox">
+      <div class="control-row"><label style="min-width:0">Few</label><input type="range" id="pointCountSlider" min="2000" max="60000" value="15000" step="1000" style="flex:1;margin:0 8px;"><label style="min-width:0">Many</label></div>
+      <div class="point-count-footer" style="margin-top:8px;"><span id="pointCountVal">15,000</span> points</div>
+    </div>
+  </div>
+  <div class="panel" id="thresholdPanel">
+    <div class="panel-title">Surface Cutoff</div>
+    <div class="ctrl-box" id="threshBox">
+      <div class="control-row"><label style="min-width:0">Low</label><input type="range" id="threshSlider" min="0.05" max="0.90" value="0.10" step="0.05" style="flex:1;margin:0 8px;"><label style="min-width:0">High</label></div>
+    </div>
+    <span id="threshVal" style="display:none;">0.10</span>
+  </div>
+  <div class="panel" id="nodalStructurePanel">
+    <div class="panel-title">Nodal Structure</div>
+    <div class="stats-grid" id="nodalGrid">
+      <div class="stat-box"><div class="stat-label">Angular Nodes (ℓ)</div><div class="stat-value" id="statAngularNodes">2</div></div>
+      <div class="stat-box"><div class="stat-label" id="statLongLabel">Nodal planes (|m|)</div><div class="stat-value" id="statLongNodes">0</div></div>
+      <div class="stat-box"><div class="stat-label" id="statLatLabel">Latitudinal (ℓ−|m|)</div><div class="stat-value" id="statLatNodes">2</div></div>
+      <div class="stat-box" id="statPointsBox"><div class="stat-label">Points</div><div class="stat-value" id="statPoints">—</div></div>
+    </div>
+  </div>
+</div>
+<script>
+function initApp(){
+  if(typeof THREE==='undefined'){setTimeout(initApp,50);return;}
+
+  // ===== MATH =====
+  const facCache=[1,1];
+  function factorial(n){if(n<0)return 1;if(facCache[n]!==undefined)return facCache[n];let r=facCache[facCache.length-1];for(let i=facCache.length;i<=n;i++){r*=i;facCache[i]=r;}return r;}
+
+  function assocLegendre(l,m,x){
+    if(Math.abs(m)>l)return 0;
+    if(m<0)return assocLegendre(l,-m,x)*Math.pow(-1,-m)*factorial(l+m)/factorial(l-m);
+    let pmm=1;
+    if(m>0){const s=Math.sqrt(Math.max(0,(1-x)*(1+x)));let f=1;for(let i=1;i<=m;i++){pmm*=-f*s;f+=2;}}
+    if(l===m)return pmm;
+    let pmmp1=x*(2*m+1)*pmm;
+    if(l===m+1)return pmmp1;
+    let pll=0;
+    for(let ll=m+2;ll<=l;ll++){pll=(x*(2*ll-1)*pmmp1-(ll+m-1)*pmm)/(ll-m);pmm=pmmp1;pmmp1=pll;}
+    return pll;
+  }
+
+  function normFactor(l,m){const am=Math.abs(m);return Math.sqrt((2*l+1)/(4*Math.PI)*factorial(l-am)/factorial(l+am));}
+
+  function computeRealY(l,m,theta,phi){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    const N=normFactor(l,m);
+    if(m>0)return Math.SQRT2*N*P*Math.cos(m*phi);
+    if(m<0)return Math.SQRT2*N*P*Math.sin(am*phi);
+    return N*P;
+  }
+
+  function computeComplexYMagSq(l,m,theta){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    const N=normFactor(l,m);
+    return N*N*P*P;
+  }
+
+  // Phase of complex Y_l^m:
+  // For m>=0: Y_l^m = N * P_l^m(cos θ) * e^{imφ}, so arg(Y) = mφ + π when P<0.
+  // For m<0:  Y_l^{-|m|} = (-1)^|m| [Y_l^|m|]*, introducing an extra factor of
+  //           (-1)^|m| that shifts the phase by π when |m| is odd.
+  function computeComplexYPhase(l,m,theta,phi){
+    const am=Math.abs(m);
+    const ct=Math.cos(theta);
+    const P=assocLegendre(l,am,ct);
+    let phase=m*phi+(P<0?Math.PI:0);
+    if(m<0&&am%2===1) phase+=Math.PI;
+    return phase;
+  }
+
+  // ===== STATE =====
+  let state={l:2,m:0,isReal:true,mode:'surface',threshold:0.1,showAxes:true,pointCount:15000};
+  let vertexCount=0,maxYSq=0;
+  let needsRender=true; // render-on-demand flag
+
+  // ===== THREE.JS SETUP =====
+  const container=document.getElementById('canvas-container');
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x060e11);
+  const camera=new THREE.PerspectiveCamera(52,1,0.01,100);
+  // Default camera: farther than before so axes + labels stay in comfortable view (all modes)
+  let camSph={r:5.6,theta:Math.PI/3,phi:Math.PI/4};
+  let panOffset={x:0,y:0,z:0};
+  function updateCamera(){
+    camera.position.set(
+      camSph.r*Math.sin(camSph.theta)*Math.sin(camSph.phi)+panOffset.x,
+      camSph.r*Math.cos(camSph.theta)+panOffset.y,
+      camSph.r*Math.sin(camSph.theta)*Math.cos(camSph.phi)+panOffset.z
+    );
+    camera.lookAt(panOffset.x,panOffset.y,panOffset.z);
+    needsRender=true;
+  }
+  updateCamera();
+
+  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  container.appendChild(renderer.domElement);
+
+  const ambLight=new THREE.AmbientLight(0x8899bb,0.5);
+  scene.add(ambLight);
+  const dirLight1=new THREE.DirectionalLight(0xffffff,0.8);dirLight1.position.set(3,5,4);scene.add(dirLight1);
+  const dirLight2=new THREE.DirectionalLight(0x6688cc,0.4);dirLight2.position.set(-3,-2,-4);scene.add(dirLight2);
+  const hemiLight=new THREE.HemisphereLight(0x4466aa,0x223344,0.3);scene.add(hemiLight);
+
+  // Axes — right-handed coordinate system with z (polar axis) along Three.js Y (up)
+  const axesGroup=new THREE.Group();
+  function makeAxis(dir,color){
+    // Use cylinder for thicker axes (WebGL linewidth is limited to 1 in most browsers)
+    const len=2.0;
+    const radius=0.012;
+    const geom=new THREE.CylinderGeometry(radius,radius,len,8);
+    geom.translate(0,len/2,0);
+    geom.rotateX(Math.PI/2);
+    const mat=new THREE.MeshBasicMaterial({color:color,transparent:true,opacity:0.5});
+    const mesh=new THREE.Mesh(geom,mat);
+    // Rotate cylinder to align with direction
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),dir.clone().normalize());
+    return mesh;
+  }
+  axesGroup.add(makeAxis(new THREE.Vector3(0,0,1),0xffffff));
+  axesGroup.add(makeAxis(new THREE.Vector3(1,0,0),0xffffff));
+  axesGroup.add(makeAxis(new THREE.Vector3(0,1,0),0xffffff));
+
+  function makeAxisLabel(text, position, hexColor){
+    const canvas=document.createElement('canvas');
+    const size=128;
+    canvas.width=size;canvas.height=size;
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,size,size);
+    ctx.font='600 80px "DMSansUser", "DM Sans", ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    const r=(hexColor>>16)&255,g=(hexColor>>8)&255,b=hexColor&255;
+    ctx.fillStyle='rgb('+r+','+g+','+b+')';
+    ctx.fillText(text,size/2,size/2);
+    const texture=new THREE.CanvasTexture(canvas);
+    texture.needsUpdate=true;
+    const material=new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false});
+    const sprite=new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(0.38,0.38,1);
+    return sprite;
+  }
+  axesGroup.add(makeAxisLabel('x',new THREE.Vector3(0,0,2.05),0xffffff));
+  axesGroup.add(makeAxisLabel('y',new THREE.Vector3(2.05,0,0),0xffffff));
+  axesGroup.add(makeAxisLabel('z',new THREE.Vector3(0,2.05,0),0xffffff));
+
+  scene.add(axesGroup);
+
+  let meshGroup=new THREE.Group();
+  scene.add(meshGroup);
+
+  // ===== MOUSE CONTROLS =====
+  let isDragging=false,isPanning=false,prevMouse={x:0,y:0};
+
+  renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();});
+
+  renderer.domElement.addEventListener('mousedown',e=>{
+    if(e.button===2){
+      isPanning=true;
+      prevMouse={x:e.clientX,y:e.clientY};
+    } else if(e.button===0){
+      isDragging=true;
+      prevMouse={x:e.clientX,y:e.clientY};
+    }
+  });
+  window.addEventListener('mouseup',e=>{
+    if(e.button===2) isPanning=false;
+    if(e.button===0) isDragging=false;
+  });
+  window.addEventListener('mousemove',e=>{
+    const dx=e.clientX-prevMouse.x,dy=e.clientY-prevMouse.y;
+    if(isDragging){
+      camSph.phi-=dx*0.008;
+      camSph.theta=Math.max(0.05,Math.min(Math.PI-0.05,camSph.theta+dy*0.008));
+      updateCamera();
+    }
+    if(isPanning){
+      const panSpeed=0.004*camSph.r;
+      const camDir=new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      const worldUp=new THREE.Vector3(0,1,0);
+      const camRight=new THREE.Vector3();
+      camRight.crossVectors(camDir,worldUp);
+      if(camRight.lengthSq()<1e-10){camRight.crossVectors(camDir,new THREE.Vector3(1,0,0));}
+      camRight.normalize();
+      const camUp=new THREE.Vector3();
+      camUp.crossVectors(camRight,camDir).normalize();
+      // Pan so the *diagram follows the cursor*:
+      // - Drag right  => objects move right on screen (camera translates left)
+      // - Drag down   => objects move down on screen (camera translates up)
+      panOffset.x+=(-dx*camRight.x+dy*camUp.x)*panSpeed;
+      panOffset.y+=(-dx*camRight.y+dy*camUp.y)*panSpeed;
+      panOffset.z+=(-dx*camRight.z+dy*camUp.z)*panSpeed;
+      updateCamera();
+    }
+    prevMouse={x:e.clientX,y:e.clientY};
+  });
+  renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camSph.r=Math.max(2.6,Math.min(12,camSph.r+e.deltaY*0.005));updateCamera();},{passive:false});
+
+  // Touch controls (1-finger rotate, 2-finger pinch-zoom + pan)
+  let lastTouchDist=null;
+  let lastTouchCenter=null;
+  renderer.domElement.addEventListener('touchstart',e=>{
+    if(e.touches.length===1){
+      isDragging=true;
+      prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    } else if(e.touches.length===2){
+      isDragging=false;
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      lastTouchDist=Math.sqrt(dx*dx+dy*dy);
+      lastTouchCenter={x:(e.touches[0].clientX+e.touches[1].clientX)/2,y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+    }
+  },{passive:false});
+  renderer.domElement.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(e.touches.length===1&&isDragging){
+      const t=e.touches[0];
+      const dx=t.clientX-prevMouse.x,dy=t.clientY-prevMouse.y;
+      camSph.phi-=dx*0.008;
+      camSph.theta=Math.max(0.05,Math.min(Math.PI-0.05,camSph.theta+dy*0.008));
+      prevMouse={x:t.clientX,y:t.clientY};
+      updateCamera();
+    } else if(e.touches.length===2&&lastTouchDist!==null&&lastTouchCenter!==null){
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const delta=lastTouchDist-dist;
+      camSph.r=Math.max(2.6,Math.min(12,camSph.r+delta*0.01));
+      lastTouchDist=dist;
+      // Two-finger pan: track centroid movement
+      const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+      const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+      const panDx=cx-lastTouchCenter.x;
+      const panDy=cy-lastTouchCenter.y;
+      const panSpeed=0.004*camSph.r;
+      const camDir=new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      const worldUp=new THREE.Vector3(0,1,0);
+      const camRight=new THREE.Vector3();
+      camRight.crossVectors(camDir,worldUp);
+      if(camRight.lengthSq()<1e-10){camRight.crossVectors(camDir,new THREE.Vector3(1,0,0));}
+      camRight.normalize();
+      const camUp=new THREE.Vector3();
+      camUp.crossVectors(camRight,camDir).normalize();
+      panOffset.x+=(-panDx*camRight.x+panDy*camUp.x)*panSpeed;
+      panOffset.y+=(-panDx*camRight.y+panDy*camUp.y)*panSpeed;
+      panOffset.z+=(-panDx*camRight.z+panDy*camUp.z)*panSpeed;
+      lastTouchCenter={x:cx,y:cy};
+      updateCamera();
+    }
+  },{passive:false});
+  renderer.domElement.addEventListener('touchend',e=>{
+    if(e.touches.length===1){
+      isDragging=true;
+      prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    } else {
+      isDragging=false;
+    }
+    if(e.touches.length!==2){lastTouchDist=null;lastTouchCenter=null;}
+  });
+  renderer.domElement.addEventListener('touchcancel',e=>{
+    isDragging=false;
+    lastTouchDist=null;
+    lastTouchCenter=null;
+  });
+
+  // ===== COLOR FUNCTIONS =====
+  const LEGEND_PHASE_FOR_MAG=3.8;
+  function hslToRgb(h,s,l){let r,g,b;if(s===0){r=g=b=l;}else{const hue2rgb=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};const q=l<0.5?l*(1+s):l+s-l*s;const p=2*l-q;r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3);}return[r,g,b];}
+  function divergingColor(t){
+    const pos=[0.15,0.45,1.0],neg=[0.95,0.22,0.27],mid=[0.92,0.92,0.94];
+    if(t>=0){return[mid[0]+(pos[0]-mid[0])*t,mid[1]+(pos[1]-mid[1])*t,mid[2]+(pos[2]-mid[2])*t];}
+    else{const s=-t;return[mid[0]+(neg[0]-mid[0])*s,mid[1]+(neg[1]-mid[1])*s,mid[2]+(neg[2]-mid[2])*s];}}
+  function phaseColor(phase,mag){
+    const h=((phase%(2*Math.PI))+(2*Math.PI))%(2*Math.PI)/(2*Math.PI);
+    // Fade saturation and lightness toward dark gray at zero magnitude (phase undefined at nodes)
+    const sat=0.1+0.75*mag;
+    const light=0.08+0.52*mag;
+    const c=hslToRgb(h,sat,light);return c;}
+  function magColor(v){const c1=[0.08,0.1,0.18],c2=[0.23,0.51,0.96],c3=[0.38,0.83,0.62],c4=[0.98,0.95,0.85];if(v<0.33){const t=v/0.33;return[c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];}else if(v<0.66){const t=(v-0.33)/0.33;return[c2[0]+(c3[0]-c2[0])*t,c2[1]+(c3[1]-c2[1])*t,c2[2]+(c3[2]-c2[2])*t];}else{const t=(v-0.66)/0.34;return[c3[0]+(c4[0]-c3[0])*t,c3[1]+(c4[1]-c3[1])*t,c3[2]+(c4[2]-c3[2])*t];}}
+
+  // ===== GRID RESOLUTION =====
+  function getRes(l,m){const am=Math.abs(m);const nT=Math.max(64,32+12*l);const nP=Math.max(128,64+16*am);return{nT,nP};}
+
+  // Shared max values so both plot modes use the same scale and strictly follow the legends.
+  const REF_NT=256,REF_NP=256;
+  const MAX_ABS_ENVELOPE=1.001;
+  const maxCache={real:{},complex:{}};
+  function getMaxRealY(l,m){
+    const key=l+'_'+m;
+    if(maxCache.real[key]!==undefined)return maxCache.real[key];
+    let mx=0;
+    for(let i=0;i<=REF_NT;i++){const th=Math.PI*i/REF_NT;for(let j=0;j<=REF_NP;j++){const ph=2*Math.PI*j/REF_NP;const yv=computeRealY(l,m,th,ph);const av=Math.abs(yv);if(av>mx)mx=av;}}
+    const result=mx<1e-15?1:mx*MAX_ABS_ENVELOPE;
+    maxCache.real[key]=result;
+    return result;
+  }
+  function getMaxComplexMag(l,m){
+    const key=l+'_'+m;
+    if(maxCache.complex[key]!==undefined)return maxCache.complex[key];
+    let mx=0;
+    for(let i=0;i<=REF_NT;i++){const th=Math.PI*i/REF_NT;const magSq=computeComplexYMagSq(l,m,th);const mag=Math.sqrt(magSq);if(mag>mx)mx=mag;}
+    const result=mx<1e-15?1:mx*MAX_ABS_ENVELOPE;
+    maxCache.complex[key]=result;
+    return result;
+  }
+
+  // ===== DISPOSE =====
+  function clearGroup(){meshGroup.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material){if(Array.isArray(c.material))c.material.forEach(m=>m.dispose());else c.material.dispose();}});scene.remove(meshGroup);meshGroup=new THREE.Group();scene.add(meshGroup);}
+
+  // ===== POINT CLOUD =====
+  function buildPointCloud(){
+    const {l,m,isReal,pointCount}=state;
+    const numTarget=pointCount;
+    const maxAbs=isReal?getMaxRealY(l,m):getMaxComplexMag(l,m);
+    const mx=maxAbs*maxAbs;
+    maxYSq=mx;
+    const positions=[],colors=[];
+    let count=0,attempts=0;
+    const maxAttempts=numTarget*15;
+    while(count<numTarget&&attempts<maxAttempts){
+      attempts++;
+      const u=Math.random(),v=Math.random();
+      const th=Math.acos(1-2*u);
+      const ph=2*Math.PI*v;
+      let y2;
+      if(isReal){const yv=computeRealY(l,m,th,ph);y2=yv*yv;}else{y2=computeComplexYMagSq(l,m,th);}
+      if(Math.random()<y2/mx){
+        const r=Math.sqrt(y2/mx)*1.2;
+        const jitter=0.97+Math.random()*0.06;
+        const rr=r*jitter;
+        const px=rr*Math.sin(th)*Math.sin(ph);
+        const py=rr*Math.cos(th);
+        const pz=rr*Math.sin(th)*Math.cos(ph);
+        positions.push(px,py,pz);
+        if(isReal){
+          // Real: color = sign & magnitude, same scale as legend [-1,+1]
+          const yv=computeRealY(l,m,th,ph);
+          const c=divergingColor(yv/maxAbs);
+          colors.push(c[0],c[1],c[2]);
+        }else{
+          // Complex: hue = phase arg(Y), brightness = |Y|/max|Y|, same as legend
+          const phase=computeComplexYPhase(l,m,th,ph);
+          const c=phaseColor(phase,Math.sqrt(y2)/maxAbs);
+          colors.push(c[0],c[1],c[2]);
+        }
+        count++;
+      }
+    }
+    vertexCount=count;
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geom.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    const mat=new THREE.PointsMaterial({size:0.012,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.85});
+    const pts=new THREE.Points(geom,mat);
+    meshGroup.add(pts);
+  }
+
+  // ===== POLAR SURFACE =====
+  function buildPolarSurface(){
+    const {l,m,isReal,threshold}=state;
+    const {nT,nP}=getRes(l,m);
+    const maxAbs=isReal?getMaxRealY(l,m):getMaxComplexMag(l,m);
+    maxYSq=maxAbs*maxAbs;
+    // For real harmonics, store the signed Y value.
+    // For complex harmonics, store the signed N*P value (sign needed for correct phase).
+    const vals=[];
+    for(let i=0;i<=nT;i++){const row=[];const th=Math.PI*i/nT;for(let j=0;j<=nP;j++){const ph=2*Math.PI*j/nP;let v;if(isReal){v=computeRealY(l,m,th,ph);}else{// Store signed N*P so we can recover the phase from the sign
+          const am=Math.abs(m);
+          const ct=Math.cos(th);
+          const P=assocLegendre(l,am,ct);
+          const N=normFactor(l,m);
+          v=N*P; // signed: |v| = |Y|, sign(v) = sign(P)
+        }row.push(v);}vals.push(row);}
+    const positions=new Float32Array((nT+1)*(nP+1)*3);
+    const colorsArr=new Float32Array((nT+1)*(nP+1)*3);
+    const alphaArr=new Float32Array((nT+1)*(nP+1));
+    let vi=0;
+    const cutoff=Math.max(threshold,1e-6);
+    for(let i=0;i<=nT;i++){const th=Math.PI*i/nT;for(let j=0;j<=nP;j++){const ph=2*Math.PI*j/nP;const v=vals[i][j];const av=Math.abs(v);
+      // Keep geometry physically linear: r ∝ |Y|
+      const r=av/maxAbs;
+      const scale=1.2;
+      const rr=r*scale;
+      positions[vi*3]=rr*Math.sin(th)*Math.sin(ph);
+      positions[vi*3+1]=rr*Math.cos(th);
+      positions[vi*3+2]=rr*Math.sin(th)*Math.cos(ph);
+      // Apply cutoff visually via alpha, not geometry
+      const alpha=r<cutoff?Math.max(0,(r/cutoff)*(r/cutoff)):1.0;
+      alphaArr[vi]=alpha;
+      let c;
+      if(isReal){
+        // Real: same scale as legend — signed value in [-1,+1]
+        c=divergingColor(v/maxAbs);
+      }else{
+        // Complex: hue = phase arg(Y), brightness = |Y|/max|Y|, same as legend
+        const phase=computeComplexYPhase(l,m,th,ph);
+        c=phaseColor(phase,av/maxAbs);
+      }
+      // Blend color toward background for low-alpha regions
+      const bg=[0.059,0.09,0.165];
+      colorsArr[vi*3]=c[0]*alpha+bg[0]*(1-alpha);
+      colorsArr[vi*3+1]=c[1]*alpha+bg[1]*(1-alpha);
+      colorsArr[vi*3+2]=c[2]*alpha+bg[2]*(1-alpha);
+      vi++;
+    }}
+    const indices=[];
+    for(let i=0;i<nT;i++){for(let j=0;j<nP;j++){const a=i*(nP+1)+j;const b=a+nP+1;indices.push(a,b,a+1);indices.push(b,b+1,a+1);}}
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geom.setAttribute('color',new THREE.Float32BufferAttribute(colorsArr,3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+    vertexCount=(nT+1)*(nP+1);
+    const mat=new THREE.MeshPhongMaterial({vertexColors:true,side:THREE.DoubleSide,shininess:40,specular:0x222244,transparent:false});
+    const mesh=new THREE.Mesh(geom,mat);
+    meshGroup.add(mesh);
+    const wmat=new THREE.MeshBasicMaterial({color:0x000000,wireframe:true,transparent:true,opacity:0.04});
+    const wireGeom=geom.clone();
+    const wmesh=new THREE.Mesh(wireGeom,wmat);
+    meshGroup.add(wmesh);
+  }
+
+  function buildProjectionSurface(){
+    const { l, m, isReal } = state;
+    const maxAbs = isReal ? getMaxRealY(l, m) : getMaxComplexMag(l, m);
+    maxYSq = maxAbs * maxAbs;
+    const projR = 1.5;
+    const geom = new THREE.SphereGeometry(projR, 96, 96);
+    const pos = geom.attributes.position.array;
+    const colors = new Float32Array(pos.length);
+    for (let i = 0, j = 0; i < pos.length; i += 3, j += 3) {
+      const x = pos[i], y = pos[i+1], z = pos[i+2];
+      const r = Math.sqrt(x*x + y*y + z*z) || projR;
+      const theta = Math.acos(THREE.MathUtils.clamp(y / r, -1, 1));
+      const phi = Math.abs(Math.sin(theta)) < 1e-10 ? 0 : Math.atan2(x, z);
+      pos[i]   = projR * Math.sin(theta) * Math.sin(phi);
+      pos[i+1] = projR * Math.cos(theta);
+      pos[i+2] = projR * Math.sin(theta) * Math.cos(phi);
+      let c;
+      if (isReal) {
+        const yv = computeRealY(l, m, theta, phi);
+        c = divergingColor(yv / maxAbs);
+      } else {
+        const phase = computeComplexYPhase(l, m, theta, phi);
+        const mag = Math.sqrt(computeComplexYMagSq(l, m, theta));
+        c = phaseColor(phase, mag / maxAbs);
+      }
+      colors[j] = c[0]; colors[j+1] = c[1]; colors[j+2] = c[2];
+    }
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geom.attributes.position.needsUpdate = true;
+    geom.computeVertexNormals();
+    vertexCount = pos.length / 3;
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95
+    });
+    meshGroup.add(new THREE.Mesh(geom, mat));
+  }
+
+  // ===== LEGEND DRAWING =====
+  function drawLegends(){
+    const legendReal=document.getElementById('legend-real');
+    const legendComplex=document.getElementById('legend-complex');
+
+    if(state.isReal){
+      legendReal.style.display='block';
+      legendComplex.style.display='none';
+
+      const isProjReal=state.mode==='projection';
+      legendReal.classList.toggle('legend-projection-real',isProjReal);
+
+      // Draw diverging color bar for real harmonics
+      const canvas=document.getElementById('legendRealCanvas');
+      const ctx=canvas.getContext('2d');
+      const w=canvas.width,h=canvas.height;
+      function legendRealRoundedPath(){
+        const rr=Math.min(h*0.5,10);
+        ctx.beginPath();
+        ctx.moveTo(rr,0); ctx.lineTo(w-rr,0);
+        ctx.quadraticCurveTo(w,0,w,rr); ctx.lineTo(w,h-rr);
+        ctx.quadraticCurveTo(w,h,w-rr,h); ctx.lineTo(rr,h);
+        ctx.quadraticCurveTo(0,h,0,h-rr); ctx.lineTo(0,rr);
+        ctx.quadraticCurveTo(0,0,rr,0);
+        ctx.closePath();
+      }
+      ctx.clearRect(0,0,w,h);
+      if(isProjReal){
+        ctx.save();
+        legendRealRoundedPath();
+        ctx.clip();
+      }
+      for(let x=0;x<w;x++){
+        const t=(x/(w-1))*2-1; // -1 to +1
+        const c=divergingColor(t);
+        ctx.fillStyle='rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+        ctx.fillRect(x,0,1,h);
+      }
+      if(isProjReal){ctx.restore();}
+      ctx.strokeStyle='rgba(148,163,184,0.25)';
+      ctx.lineWidth=1;
+      if(isProjReal){
+        legendRealRoundedPath();
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(0.5,0.5,w-1,h-1);
+      }
+
+      var note=document.getElementById('legendRealNote');
+      note.classList.toggle('legend-note-projection',isProjReal);
+      if(state.mode==='projection'){
+        note.innerHTML='<div class="legend-proj-line"><b class="legend-proj-key">Color</b><span class="legend-proj-val"> encodes sign &amp; magnitude of Y</span></div>';
+      } else if(state.mode==='cloud'){
+        note.innerHTML='<b style="color:#94a3b8">Color</b> encodes sign &amp; magnitude of Y<br><b style="color:#94a3b8">Angular acceptance</b> \u221d |Y|\u00b2, <b style="color:#94a3b8">radius</b> \u221d |Y|';
+      } else if(state.mode==='surface'){
+        note.innerHTML='<b style="color:#94a3b8">Radial distance</b> encodes |Y|<br><b style="color:#94a3b8">Color</b> encodes sign &amp; magnitude';
+      }
+    } else {
+      legendReal.classList.remove('legend-projection-real');
+      const lrNote=document.getElementById('legendRealNote');
+      if(lrNote) lrNote.classList.remove('legend-note-projection');
+      legendReal.style.display='none';
+      legendComplex.style.display='block';
+
+      // Draw phase color bar
+      var phaseCanvas=document.getElementById('legendPhaseCanvas');
+      var pctx=phaseCanvas.getContext('2d');
+      var pw=phaseCanvas.width,ph2=phaseCanvas.height;
+      pctx.clearRect(0,0,pw,ph2);
+      for(var x=0;x<pw;x++){
+        var phase=(x/(pw-1))*2*Math.PI;
+        var c=phaseColor(phase,0.85);
+        pctx.fillStyle='rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+        pctx.fillRect(x,0,1,ph2);
+      }
+      pctx.strokeStyle='rgba(148,163,184,0.25)';
+      pctx.lineWidth=1;
+      pctx.strokeRect(0.5,0.5,pw-1,ph2-1);
+
+      // Draw magnitude bar
+      var magCanvas=document.getElementById('legendMagCanvas');
+      var mctx=magCanvas.getContext('2d');
+      var mw=magCanvas.width,mh=magCanvas.height;
+      mctx.clearRect(0,0,mw,mh);
+      // Show magnitude gradient at a representative hue (blue, phase~LEGEND_PHASE_FOR_MAG)
+      for(var x2=0;x2<mw;x2++){
+        var mag=x2/(mw-1);
+        var c2=phaseColor(LEGEND_PHASE_FOR_MAG,mag);
+        mctx.fillStyle='rgb('+Math.round(c2[0]*255)+','+Math.round(c2[1]*255)+','+Math.round(c2[2]*255)+')';
+        mctx.fillRect(x2,0,1,mh);
+      }
+      mctx.strokeStyle='rgba(148,163,184,0.25)';
+      mctx.lineWidth=1;
+      mctx.strokeRect(0.5,0.5,mw-1,mh-1);
+
+      // Update note based on mode
+      var cnote=document.getElementById('legendComplexNote');
+      if(state.mode==='cloud'){
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> \u221d |Y|<br><b style="color:#94a3b8">Angular acceptance</b> \u221d |Y|\u00b2, <b style="color:#94a3b8">radius</b> \u221d |Y|';
+      } else if(state.mode==='surface'){
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> \u221d |Y|<br><b style="color:#94a3b8">Radial distance</b> encodes |Y|';
+      } else {
+        cnote.innerHTML='<b style="color:#94a3b8">Hue</b> encodes phase arg(Y)<br><b style="color:#94a3b8">Brightness</b> encodes |Y|';
+      }
+    }
+  }
+
+  // ===== UPDATE =====
+  function updateVisualization(){
+    clearGroup();
+    switch(state.mode){
+      case 'cloud':buildPointCloud();break;
+      case 'surface':buildPolarSurface();break;
+      case 'projection':buildProjectionSurface();break;
+    }
+    updateUI();
+    drawLegends();
+    needsRender=true;
+  }
+
+  // ===== UI =====
+  const lSlider=document.getElementById('lSlider'),mSlider=document.getElementById('mSlider');
+  const lVal=document.getElementById('lVal'),mVal=document.getElementById('mVal');
+  const fmtL=document.getElementById('fmtL'),fmtM=document.getElementById('fmtM');
+  const typeLabel=document.getElementById('typeLabel');
+  const dynamicInfoNote=document.getElementById('dynamicInfoNote');
+  const threshSlider=document.getElementById('threshSlider'),threshVal=document.getElementById('threshVal');
+  const thresholdPanel=document.getElementById('thresholdPanel');
+  const pointCountPanel=document.getElementById('pointCountPanel');
+  const dynamicInfoPanel=document.getElementById('dynamicInfoPanel');
+  const nodalStructurePanel=document.getElementById('nodalStructurePanel');
+  const pointCountSlider=document.getElementById('pointCountSlider');
+  const pointCountValEl=document.getElementById('pointCountVal');
+
+  function lobesText(n){
+    if(n===1) return '1 lobe';
+    return n+' lobes';
+  }
+
+  function updateDynamicInfoNote(){
+    if(!dynamicInfoNote) return;
+    const am=Math.abs(state.m);
+    const lobesLongitudinal=2*am;
+    const lobesVisibleReal=lobesLongitudinal*Math.max(0,(state.l-am+1));
+    if(state.m===0){
+      dynamicInfoNote.innerHTML='When <b style="color:#e2e8f0">m = 0</b>, Real and Complex harmonics are identical — there is no <span style="font-style:italic;color:#e2e8f0">e</span><sup style="color:#e2e8f0">imφ</sup> phase factor. Try increasing <b style="color:#e2e8f0">|m|</b> to see how they differ.';
+      return;
+    }
+    if(state.isReal){
+      dynamicInfoNote.innerHTML='Real <span style="font-style:italic;color:#e2e8f0">Y</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">m</sup> ∝ <span style="font-style:italic;color:#e2e8f0">P</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">|m|</sup>(cosθ) · (cos(mφ) for m&gt;0, sin(|m|φ) for m&lt;0) — a standing wave from combining <span style="font-style:italic;color:#e2e8f0">Y</span><sup style="color:#e2e8f0">+m</sup> and <span style="font-style:italic;color:#e2e8f0">Y</span><sup style="color:#e2e8f0">−m</sup>. Sector/lobe layout yields <b style="color:#e2e8f0">'+lobesText(lobesVisibleReal)+'</b> <span style="color:#94a3b8">(illustrative; not the same as the <b style="color:#94a3b8">Nodal planes</b> count above)</span>. <a href="#" data-switch="complex">Switch to Complex</a> to see the rotating wave this is built from.';
+    }else{
+      dynamicInfoNote.innerHTML='Complex <span style="font-style:italic;color:#e2e8f0">Y</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">m</sup> ∝ <span style="font-style:italic;color:#e2e8f0">P</span><sub style="color:#e2e8f0">ℓ</sub><sup style="color:#e2e8f0">|m|</sup>(cosθ) · <span style="font-style:italic;color:#e2e8f0">e</span><sup style="color:#e2e8f0">imφ</sup> (with this code\u2019s Legendre sign convention, equivalent to a Condon–Shortley overall phase choice) — a pure <span style="font-style:italic;color:#e2e8f0">L</span><sub style="color:#e2e8f0">z</sub> eigenstate. The magnitude <span style="color:#e2e8f0">|Y|</span> is axially symmetric (no φ-dependence); the φ-structure lives in the phase (hue). <a href="#" data-switch="real">Switch to Real</a> to see the standing-wave analogue with <b style="color:#e2e8f0">'+lobesText(lobesVisibleReal)+'</b> <span style="color:#94a3b8">(illustrative lobe count)</span>.';
+    }
+  }
+
+  function updateUI(){
+    lVal.textContent=state.l;mVal.textContent=state.m;
+    fmtL.textContent=state.l;fmtM.textContent=state.m;
+    if(typeLabel){
+      typeLabel.textContent=(state.isReal?'Real':'Complex')+' Spherical Harmonic';
+      typeLabel.style.display='';
+    }
+    mSlider.min=-state.l;mSlider.max=state.l;
+    if(dynamicInfoPanel) dynamicInfoPanel.style.display='';
+    if(nodalStructurePanel) nodalStructurePanel.style.display='';
+    const harmonicTypePanel=document.getElementById('harmonicTypePanel');
+    if(harmonicTypePanel) harmonicTypePanel.style.display='';
+    thresholdPanel.style.display=state.mode==='surface'?'block':'none';
+    if(pointCountPanel){
+      pointCountPanel.style.display=state.mode==='cloud'?'block':'none';
+    }
+    const am=Math.abs(state.m);
+    document.getElementById('statAngularNodes').textContent=state.l;
+    const statLongLabel=document.getElementById('statLongLabel');
+    const statLatLabel=document.getElementById('statLatLabel');
+    const statLongNodes=document.getElementById('statLongNodes');
+    const statLatNodes=document.getElementById('statLatNodes');
+    if(state.isReal){
+      statLongLabel.textContent='Nodal planes (|m|)';
+      statLatLabel.textContent='Latitudinal (ℓ−|m|)';
+      statLongNodes.textContent=am;
+      statLatNodes.textContent=state.l-am;
+    } else {
+      statLongLabel.textContent='Phase winding (|m|)';
+      statLatLabel.textContent='Latitudinal zeros (ℓ−|m|)';
+      statLongNodes.textContent=am;
+      statLatNodes.textContent=state.l-am;
+    }
+    const statPointsBox=document.getElementById('statPointsBox');
+    const statPoints=document.getElementById('statPoints');
+    if(state.mode==='cloud'){
+      statPoints.textContent=vertexCount.toLocaleString();
+      // Point Count panel shows the total; hide duplicate in Nodal Structure grid.
+      statPointsBox.style.display='none';
+    } else {
+      statPointsBox.style.display='none';
+    }
+    updateDynamicInfoNote();
+  }
+
+  // Debounced update to coalesce rapid slider changes into one rebuild per frame
+  let pendingUpdate=false;
+  function scheduleUpdate(){
+    if(!pendingUpdate){
+      pendingUpdate=true;
+      requestAnimationFrame(()=>{pendingUpdate=false;updateVisualization();});
+    }
+  }
+
+  lSlider.addEventListener('input',function(){state.l=parseInt(this.value);mSlider.min=-state.l;mSlider.max=state.l;if(state.m>state.l){state.m=state.l;mSlider.value=state.l;}if(state.m<-state.l){state.m=-state.l;mSlider.value=-state.l;}mVal.textContent=state.m;lVal.textContent=state.l;scheduleUpdate();});
+  mSlider.addEventListener('input',function(){let v=parseInt(this.value);v=Math.max(-state.l,Math.min(state.l,v));state.m=v;this.value=v;mVal.textContent=state.m;scheduleUpdate();});
+  threshSlider.addEventListener('input',function(){state.threshold=parseFloat(this.value);threshVal.textContent=state.threshold.toFixed(2);scheduleUpdate();});
+  pointCountSlider.addEventListener('input',function(){state.pointCount=parseInt(this.value);pointCountValEl.textContent=state.pointCount.toLocaleString();scheduleUpdate();});
+
+  document.getElementById('btnReal').addEventListener('click',function(){state.isReal=true;this.classList.add('active');document.getElementById('btnComplex').classList.remove('active');updateVisualization();});
+  document.getElementById('btnComplex').addEventListener('click',function(){state.isReal=false;this.classList.add('active');document.getElementById('btnReal').classList.remove('active');updateVisualization();});
+
+  if(dynamicInfoNote){
+    dynamicInfoNote.addEventListener('click',function(e){
+      const a=e.target&&e.target.closest?e.target.closest('a[data-switch]'):null;
+      if(!a) return;
+      e.preventDefault();
+      const to=a.getAttribute('data-switch');
+      if(to==='complex') document.getElementById('btnComplex').click();
+      if(to==='real') document.getElementById('btnReal').click();
+    });
+  }
+
+  const modeButtons={cloud:document.getElementById('modeCloud'),surface:document.getElementById('modeSurface'),projection:document.getElementById('modeProjection')};
+  Object.keys(modeButtons).forEach(k=>{modeButtons[k].addEventListener('click',function(){state.mode=k;Object.values(modeButtons).forEach(b=>b.classList.remove('active'));this.classList.add('active');updateVisualization();});});
+
+  document.getElementById('btnResetDefault').addEventListener('click',function(){
+    state.l=2;
+    state.m=0;
+    state.isReal=true;
+    state.mode='surface';
+    state.threshold=0.1;
+    state.pointCount=15000;
+    state.showAxes=true;
+    camSph.r=5.6;
+    camSph.theta=Math.PI/3;
+    camSph.phi=Math.PI/4;
+    panOffset.x=0;
+    panOffset.y=0;
+    panOffset.z=0;
+    lSlider.value=String(state.l);
+    mSlider.min=-state.l;
+    mSlider.max=state.l;
+    mSlider.value=String(state.m);
+    threshSlider.value='0.10';
+    if(threshVal) threshVal.textContent='0.10';
+    pointCountSlider.value=String(state.pointCount);
+    if(pointCountValEl) pointCountValEl.textContent=state.pointCount.toLocaleString();
+    document.getElementById('btnReal').classList.add('active');
+    document.getElementById('btnComplex').classList.remove('active');
+    Object.values(modeButtons).forEach(function(b){b.classList.remove('active');});
+    modeButtons.surface.classList.add('active');
+    updateCamera();
+    updateVisualization();
+  });
+
+  // ===== RESIZE =====
+  function onResize(){
+    const w=container.clientWidth,h=container.clientHeight;
+    camera.aspect=w/h;camera.updateProjectionMatrix();
+    renderer.setSize(w,h);
+    needsRender=true;
+  }
+  window.addEventListener('resize',onResize);
+  onResize();
+
+  // ===== ANIMATION =====
+  function animate(){
+    requestAnimationFrame(animate);
+    if(needsRender){
+      renderer.render(scene,camera);
+      needsRender=false;
+    }
+  }
+
+  // ===== INIT =====
+  updateVisualization();
+  requestAnimationFrame(animate);
+}
+
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
+</script>
+
+<style>
+/* ===== template variable bridge — map the template's names onto this sim's ===== */
+:root{
+  --font-family: var(--font-sans);
+  --accent: #3b9b8f;
+  --accent-soft: rgba(59,155,143,.45);
+  --surface: #060E11;
+  --panel-bg: #060E11;
+  --panel-2: #0a151a;
+  --border-color: rgba(19,49,49,0.45);
+  --border: rgba(19,49,49,0.45);
+  --line: rgba(19,49,49,0.45);
+  --ctrl-border: rgba(148,163,184,.35);
+  --text-main: #e2e8f0;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --muted: #94a3b8;
+  --ink-mid: #94a3b8;
+  --ink-mute: #94a3b8;
+}
+
+/* TOP-BAR CONTRACT: Guided Inquiry + Controls Guide sit in the LEFT cluster,
+   immediately after the title/info cluster (this sim has no theme toggle);
+   Reset stays right-anchored in .sim-playback-btn-group. */
+.guide-actions{display:flex;gap:8px;align-items:center;margin-left:12px;flex-shrink:0;}
+.guide-actions .btn-guide{height:36px;padding:0 14px;font-size:14px;line-height:1;display:inline-flex;align-items:center;
+  background:#fff;color:#334155;border:1px solid rgba(15,23,42,.18);border-radius:6px;}
+.guide-actions .btn-guide:hover{background:#f1f5f9;color:#0f172a;border-color:rgba(15,23,42,.28);}
+.guide-actions .btn-guide.active{background:#065f46;color:#fff;border-color:#065f46;}
+.guide-actions .btn-guide.active:hover{background:#047857;color:#fff;border-color:#047857;}
+
+/* LAYOUT CONTRACT: the inquiry zone is the FIRST block in the right column,
+   directly below the top bar — before the CONTROLS header — matching the
+   JEE/CM/PP/SR reference layout (nothing between bar and zone, controls below). */
+.inq-zone{padding:14px 16px 12px;border-bottom:1px solid var(--border-color);}
+.sidebar > .inq-zone{padding:14px 18px 16px;border-bottom:1px solid rgba(148,163,184,.28);flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+.inq-zone h3{margin:0;font-size:0.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);font-family:var(--font-family);}
+.inq-dots{display:flex;gap:5px;}
+.inq-dot{flex:1;height:4px;border-radius:2px;background:rgba(148,163,184,.25);}
+.inq-dot.done{background:rgba(16,185,129,.5);}
+.inq-dot.active{background:#10b981;}
+.inq-step{display:none;}
+.inq-step.active{display:block;}
+.inq-step h4{margin:0 0 8px;font-size:0.85rem;font-family:var(--font-family);color:var(--text-main);}
+.inq-step p{margin:0 0 8px;font-size:0.78rem;line-height:1.5;color:var(--text-muted);font-family:var(--font-family);}
+.inq-step p:last-child{margin-bottom:0;}
+.inq-step b{color:var(--text-main);}
+.choice{display:block;width:100%;text-align:left;margin:6px 0;padding:8px 10px;border-radius:8px;
+  background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.3);color:var(--text-main);
+  font-size:0.78rem;cursor:pointer;font-family:var(--font-family);}
+.choice:hover{border-color:#10b981;}
+.choice:disabled{cursor:default;}
+.choice.correct{background:rgba(16,185,129,.18);border-color:#10b981;}
+.choice.wrong{background:rgba(244,63,94,.16);border-color:#f43f5e;}
+.choice.dim{opacity:.55;}
+.predict-eval{margin-top:10px;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.3);font-size:0.78rem;line-height:1.5;color:var(--text-main);font-family:var(--font-family);}
+.predict-eval.correct{background:rgba(16,185,129,.14);border-color:#10b981;}
+.predict-eval.wrong{background:rgba(244,63,94,.12);border-color:#f43f5e;}
+.predict-eval .answer{color:#10b981;font-weight:700;}
+.inq-zone .btn-topbar{height:30px;padding:0 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;
+  background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.35);color:var(--text-main);font-family:var(--font-family);}
+.inq-zone .btn-topbar:disabled{opacity:.35;cursor:default;}
+.inq-pager{display:flex;gap:8px;align-items:center;}
+.inq-nav{display:flex;gap:8px;margin-top:0;align-items:center;}
+#inq-next{margin-left:auto;background:#059669;border-color:#059669;color:#fff;min-width:82px;}
+.gi-off #inq-zone{display:none !important;}
+.hidden-until-step{display:none !important;}
+.inq-veiled{visibility:hidden !important;pointer-events:none;}
+.cg-hidden{display:none !important;}
+.cg-veiled{visibility:hidden !important;pointer-events:none;}
+.cg-glow{outline:1px solid #10b981;border-radius:8px;
+  box-shadow:0 0 0 1px #10b981,0 0 14px rgba(16,185,129,.55);
+  animation:cgPulse 1.6s ease-in-out infinite;}
+@keyframes cgPulse{0%,100%{box-shadow:0 0 0 1px #10b981,0 0 10px rgba(16,185,129,.4);}
+  50%{box-shadow:0 0 0 2px #10b981,0 0 20px rgba(16,185,129,.7);}}
+.cg-callout{position:fixed;z-index:4000;max-width:260px;background:#0d1522;color:#e2e8f0;
+  border:1.5px solid #8b5cf6;border-radius:10px;padding:10px 12px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-family);}
+.cg-callout h5{margin:0 0 4px;font-size:0.8rem;font-weight:700;color:#a78bfa;}
+.cg-callout p{margin:0;font-size:0.78rem;line-height:1.45;}
+.cg-arrow{position:absolute;width:12px;height:12px;background:#0d1522;transform:rotate(45deg);}
+.cg-callout.arrow-top .cg-arrow{top:-7px;border-top:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.arrow-bottom .cg-arrow{bottom:-7px;border-bottom:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-right .cg-arrow{right:-7px;border-top:1.5px solid #8b5cf6;border-right:1.5px solid #8b5cf6;}
+.cg-callout.arrow-left .cg-arrow{left:-7px;border-bottom:1.5px solid #8b5cf6;border-left:1.5px solid #8b5cf6;}
+.cg-callout.no-arrow .cg-arrow{display:none;}
+html[data-theme="light"] .cg-callout, body.light-theme .cg-callout{background:#fff;color:#0f172a;border-color:#7c3aed;}
+html[data-theme="light"] .cg-callout h5, body.light-theme .cg-callout h5{color:#7c3aed;}
+html[data-theme="light"] .cg-arrow, body.light-theme .cg-arrow{background:#fff;border-color:#7c3aed !important;}
+/* Nav bar matches the purple callout: same panel fill, purple border, purple buttons */
+.cg-nav{position:fixed;z-index:4000;right:18px;bottom:16px;display:flex;gap:8px;align-items:center;
+  background:#0d1522;border:1.5px solid #8b5cf6;border-radius:10px;padding:8px 10px;box-shadow:0 10px 26px rgba(0,0,0,.45);font-family:var(--font-family);}
+.cg-nav button{height:30px;padding:0 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;
+  background:transparent;border:1px solid #8b5cf6;color:#a78bfa;font-family:var(--font-family);transition:background .15s,color .15s;}
+.cg-nav button:hover:not(:disabled){background:rgba(139,92,246,.18);color:#e2e8f0;}
+.cg-nav button:disabled{opacity:.35;cursor:default;}
+.cg-nav #cg-next{background:#8b5cf6;border-color:#8b5cf6;color:#fff;min-width:76px;}
+.cg-nav #cg-next:hover:not(:disabled){background:#7c3aed;border-color:#7c3aed;color:#fff;}
+/* The guide nav docks at the bottom of the right column (reference bottom:16px)
+   and is CENTER-ALIGNED on the 280px sidebar: 280 - 36 = 244px with equal
+   18px side margins. The layout probe enforces this. */
+.cg-nav{right:18px;width:244px;box-sizing:border-box;}
+
+/* ===== Welcome overlay (first landing) ===== */
+#welcome-overlay{position:fixed;inset:0;z-index:5000;background:radial-gradient(ellipse at center,rgba(2,6,12,.94) 0%,rgba(2,6,12,.86) 55%,rgba(2,6,12,.7) 100%);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;font-family:var(--font-family);}
+#welcome-overlay.hidden{display:none;}
+.welcome-card{position:relative;width:min(760px,92vw);margin:0 auto;background:transparent;color:#E6EDF5;border-radius:0;overflow:visible;
+  box-shadow:none;
+  animation:wcIn .55s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes wcIn{from{opacity:0;transform:translateY(14px) scale(.985);}to{opacity:1;transform:none;}}
+.welcome-hero{position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:140px;background:transparent;pointer-events:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);opacity:.9;}
+.welcome-hero canvas{display:block;width:100%;height:100%;}
+.welcome-hero::after{content:none;}
+.welcome-hero .hero-label{display:none;}
+.welcome-body{padding:156px 0 0;}
+.welcome-card h2{margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;}
+.welcome-kicker{font-size:.95rem;font-weight:500;letter-spacing:.02em;color:#AAB6C6;}
+.welcome-name{font-size:2.3rem;line-height:1.08;letter-spacing:-.02em;font-weight:700;max-width:22ch;}
+.welcome-blurb{margin:0 auto 26px;font-size:1rem;line-height:1.55;color:#AAB6C6;max-width:44ch;text-align:center;}
+.welcome-ask{margin:0 0 8px;font-size:.82rem;font-weight:600;color:#E6EDF5;text-align:center;}
+html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F172A;}
+.welcome-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0;}
+.welcome-mode{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;
+  padding:18px 16px 16px;border-radius:14px;cursor:pointer;color:#E6EDF5;font-family:var(--font-family);
+  background:rgba(255,255,255,.045);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(148,163,184,.18);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transition:transform .16s,border-color .16s,background .16s,box-shadow .16s;}
+.welcome-mode:hover,.welcome-mode:focus-visible{transform:translateY(-3px);background:rgba(255,255,255,.075);outline:none;box-shadow:0 14px 34px rgba(0,0,0,.35);}
+.welcome-mode[data-mode="inquiry"]:hover,.welcome-mode[data-mode="inquiry"]:focus-visible{border-color:rgba(52,211,153,.7);}
+.welcome-mode[data-mode="controls"]:hover,.welcome-mode[data-mode="controls"]:focus-visible{border-color:rgba(167,139,250,.7);}
+.welcome-mode[data-mode="free"]:hover,.welcome-mode[data-mode="free"]:focus-visible{border-color:rgba(251,191,36,.7);}
+.wm-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;}
+.wm-icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode[data-mode="inquiry"] .wm-icon{background:rgba(16,185,129,.16);color:#34d399;}
+.welcome-mode[data-mode="controls"] .wm-icon{background:rgba(139,92,246,.18);color:#a78bfa;}
+.welcome-mode[data-mode="free"] .wm-icon{background:rgba(245,158,11,.16);color:#fbbf24;}
+.wm-text{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.wm-title{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;font-weight:600;font-size:.95rem;white-space:nowrap;}
+.wm-tag{font-size:.6rem;font-weight:600;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,.16);color:#6ee7b7;letter-spacing:.01em;}
+.wm-desc{display:block;font-size:.8rem;line-height:1.45;color:#AAB6C6;}
+.wm-go{margin-top:auto;padding-top:6px;display:flex;align-items:center;gap:4px;font-size:.78rem;font-weight:600;color:#94A3B8;}
+.wm-go svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.welcome-mode:hover .wm-go{color:#E6EDF5;}
+@media (max-width:760px){.welcome-modes{grid-template-columns:1fr;}}
+.welcome-foot{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:22px;padding-top:0;border-top:none;}
+.welcome-listen{font-size:.8rem;color:#AAB6C6;line-height:1.35;}
+.welcome-listen b{display:block;color:#E6EDF5;font-weight:600;font-size:.84rem;}
+.welcome-audio{display:flex;align-items:center;gap:10px;}
+.welcome-audio button{display:grid;place-items:center;border:none;cursor:pointer;background:transparent;color:#C7D2E0;padding:0;font-family:var(--font-family);}
+.welcome-audio button:disabled{opacity:.3;cursor:default;}
+.welcome-audio .wa-skip{width:34px;height:34px;border-radius:50%;}
+.welcome-audio .wa-skip:hover:not(:disabled){color:#fff;background:rgba(148,163,184,.12);}
+.welcome-audio .wa-skip svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak{width:44px;height:44px;border-radius:50%;background:#F4F7FA;color:#0B1220;transition:transform .12s;}
+#welcome-speak:hover{transform:scale(1.06);}
+#welcome-speak svg{width:20px;height:20px;fill:currentColor;}
+#welcome-speak[data-state="playing"] svg.i-play,#welcome-speak[data-state="playing"] svg.i-again{display:none;}
+#welcome-speak:not([data-state="playing"]) svg.i-pause{display:none;}
+#welcome-speak[data-state="done"] svg.i-play{display:none;}
+#welcome-speak:not([data-state="done"]) svg.i-again{display:none;}
+.welcome-seg{display:flex;gap:4px;margin-left:4px;}
+.welcome-seg i{display:block;width:14px;height:3px;border-radius:2px;background:rgba(148,163,184,.25);}
+.welcome-seg i.on{background:#34d399;}
+.welcome-seg i.cur{background:#F4F7FA;}
+.welcome-progress{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+@media (prefers-reduced-motion: reduce){.welcome-card{animation:none;}}
+
+/* Two-row guide nav: a "Listen" narration row (transport + Auto) above the
+   card-navigation row, separated by a hairline. */
+.cg-nav{flex-direction:column;align-items:stretch;gap:7px;}
+.cg-nav-row{display:flex;align-items:center;gap:8px;}
+.cg-row-nav{border-top:1px solid rgba(139,92,246,.28);padding-top:7px;}
+.cg-flex{flex:1;}
+.cg-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a7;margin-right:2px;}
+.cg-nav .cg-voice{width:26px;height:26px;min-width:26px;padding:0;border:none !important;background:transparent;
+  border-radius:50%;display:grid;place-items:center;color:#a78bfa;}
+.cg-nav .cg-voice:hover:not(:disabled){background:rgba(139,92,246,.22);color:#e2e8f0;}
+.cg-nav .cg-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+.cg-nav #cg-voice-play{width:30px;height:30px;min-width:30px;border:1px solid #8b5cf6 !important;}
+.cg-nav #cg-voice-play[data-vstate="playing"]{background:#8b5cf6;color:#fff;}
+.cg-nav #cg-voice-play svg{width:13px;height:13px;}
+.cg-nav .cg-sep{width:1px;height:20px;background:rgba(139,92,246,.4);margin:0 4px;flex-shrink:0;}
+.cg-nav #cg-auto{height:22px;min-width:0;padding:0 9px;border-radius:999px;font-size:0.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(139,146,167,.45);color:#8b93a7;display:inline-flex;align-items:center;transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+.cg-nav #cg-auto:hover:not(.active){border-color:#8b5cf6;color:#a78bfa;}
+.cg-nav #cg-auto.active{background:#8b5cf6;border-color:#8b5cf6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.55);}
+#inq-auto{height:27px;max-height:27px;min-width:0;padding:0 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;box-sizing:border-box;
+  border-color:var(--ctrl-border);color:var(--ink-mute);transition:background .15s,color .15s,border-color .15s,box-shadow .15s;}
+#inq-auto:hover:not(.active){border-color:var(--accent-soft);color:var(--accent);}
+#inq-auto.active{background:var(--accent) !important;border-color:var(--accent) !important;color:#06231c !important;box-shadow:0 0 10px rgba(59,155,143,.45);}
+.inq-listen{display:flex;align-items:center;gap:8px;margin:0;}
+.inq-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin-right:2px;}
+#inq-voice{width:27px;height:27px;min-width:27px;max-height:27px;padding:0;border-radius:50%;justify-content:center;display:inline-flex;align-items:center;box-sizing:border-box;}
+#inq-voice svg{width:12px;height:12px;fill:currentColor;stroke:none;}
+[data-vstate] svg.i-play,[data-vstate] svg.i-pause,[data-vstate] svg.i-again{display:none;}
+[data-vstate="idle"] svg.i-play{display:block;}
+[data-vstate="playing"] svg.i-pause{display:block;}
+[data-vstate="done"] svg.i-again{display:block;}
+</style>
+
+<script>
+/* ===== Card voiceover engine (speech synthesis) =====
+   Shared by the Controls Guide transport and the Guided Inquiry play button.
+   Semantics per card: play = read from the top; pause keeps the (line, char)
+   position; resume continues from it; finishing flips the button to the
+   replay state and the next press reads the same card from the beginning.
+   A card CHANGE re-syncs: playing → the new card starts speaking; idle →
+   the position just resets so the next play starts at the new card's top. */
+(function(){
+  const synth = window.speechSynthesis;
+  // Physics-notation → speakable text (textContent flattens <sub>ℓ</sub> into "Yℓm" etc.)
+  const norm = s => s
+    .replace(/Yℓm/g,'Y ell m').replace(/Yℓ0/g,'Y ell zero').replace(/Y00/g,'Y zero zero')
+    .replace(/Pℓ/g,'P ell')
+    .replace(/2\|m\|/g,'twice the magnitude of m')
+    .replace(/\|m\|/g,'the magnitude of m')
+    .replace(/\|Y\|²/g,'the magnitude of Y, squared').replace(/\|Y\|/g,'the magnitude of Y')
+    .replace(/ℓ/g,' ell ')
+    .replace(/≤/g,' is at most ').replace(/√/g,' square root of ')
+    .replace(/∝/g,' proportional to ').replace(/ħ/g,' h bar ')
+    .replace(/θ/g,' theta ').replace(/φ/g,' phi ').replace(/π/g,' pi ').replace(/ψ/g,' psi ')
+    .replace(/₀/g,' zero').replace(/₁/g,' one').replace(/₂/g,' two')
+    .replace(/²/g,' squared').replace(/³/g,' cubed').replace(/°/g,' degrees')
+    .replace(/−/g,' minus ').replace(/×/g,' times ').replace(/≈/g,' approximately ')
+    .replace(/·/g,' ').replace(/—/g,', ').replace(/’/g,"'")
+    .replace(/\s+/g,' ').trim();
+  // Quality-ranked: Chrome's remote Google voices sound natural; macOS's local
+  // compact voices (Samantha/Daniel/Fred…) are the mechanical ones — last resort.
+  // Remote voices can silently hang (no start/end/error events); when the
+  // watchdog catches that, preferLocal flips and the session falls back.
+  let preferLocal = false;
+  let engineDead = false;   // set when even the local-voice fallback won't start — stop retry storms
+  // Cancelling an idle engine is what wedges Chrome's TTS service — guard it.
+  function safeCancel(){ if(synth && (synth.speaking || synth.pending)) synth.cancel(); }
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    const en = vs.filter(v => /^en/i.test(v.lang));
+    const remote = [en.find(v => v.name === 'Google US English'),
+                    en.find(v => v.name === 'Google UK English Female'),
+                    en.find(v => v.name === 'Google UK English Male')].filter(Boolean);
+    const local  = [en.find(v => /Natural|Enhanced|Premium|Neural/i.test(v.name) && v.localService),
+                    en.find(v => v.name === 'Samantha'),
+                    en.find(v => v.localService && /US|GB/i.test(v.lang))].filter(Boolean);
+    const order = preferLocal ? local.concat(remote) : remote.concat(local);
+    return order[0] || en[0] || null;
+  }
+  // btn: the play/pause button (uses data-vstate idle|playing|done).
+  // getLines: () => array of raw strings for the CURRENT card.
+  // opts.onCardDone: called when a card's narration completes (drives Auto mode).
+  function makeCardVoice(btn, getLines, opts){
+    let lines = [], idx = 0, charAt = 0, playing = false, current = null, done = false, lineRetries = 0;
+    function state(){
+      btn.dataset.vstate = playing ? 'playing' : (done ? 'done' : 'idle');
+      btn.title = playing ? 'Pause' : (done ? 'Play again' : (idx === 0 && charAt === 0 ? 'Read this card aloud' : 'Resume'));
+      btn.setAttribute('aria-label', btn.title);
+    }
+    function speak(){
+      if(!synth) return;
+      const text = lines[idx].slice(charAt);
+      const u = new SpeechSynthesisUtterance(text);
+      const v = pickVoice(); if(v) u.voice = v;
+      u.rate = 1.0; u.pitch = 1;
+      const base = charAt, my = idx;
+      let started = false;
+      u.onstart = () => { started = true; };
+      u.onboundary = e => { if(current === u && typeof e.charIndex === 'number'){ charAt = base + e.charIndex; lineRetries = 0; } };
+      u.onerror = () => {   // cold-start hiccup on remote voices: retry the line once or twice
+        if(current === u && playing && lineRetries < 2){
+          lineRetries++;
+          setTimeout(() => { if(current === u && playing) speak(); }, 250);
+        }
+      };
+      u.onend = () => {
+        if(current !== u || !playing) return;
+        if(my < lines.length - 1){ idx = my + 1; charAt = 0; lineRetries = 0; speak(); }
+        else {
+          playing = false; done = true; idx = 0; charAt = 0; lineRetries = 0; current = null; state();
+          if(opts && opts.onCardDone) opts.onCardDone();
+        }
+      };
+      current = u; done = false;
+      // Chrome swallows a speak() issued in the same tick as cancel() — defer it;
+      // resume() unsticks the engine when cancel() left it internally paused.
+      safeCancel();
+      setTimeout(() => { if(current === u && playing){ synth.speak(u); if(synth.paused) synth.resume(); } }, 60);
+      // Watchdog: a remote voice can hang with NO events at all. Retry once,
+      // then flip the whole session to a local voice and retry again.
+      setTimeout(() => {
+        if(current !== u || !playing || started) return;
+        safeCancel();
+        if(lineRetries < 1){ lineRetries++; speak(); }
+        else if(!preferLocal){ preferLocal = true; lineRetries = 0; speak(); }
+        else {   // even local voices won't start: the browser's TTS service is hung
+          engineDead = true; playing = false; current = null; state();
+          btn.title = 'Voice unavailable — restart the browser to re-enable narration';
+          btn.setAttribute('aria-label', btn.title);
+        }
+      }, 1500);
+      state();
+    }
+    function play(){
+      if(!synth || engineDead) return;
+      if(done || !lines.length){ lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; }
+      if(!lines.length) return;
+      playing = true; lineRetries = 0; speak();
+    }
+    function pause(){
+      playing = false;
+      safeCancel();                  // stop now; idx/charAt keep the resume position
+      current = null; state();
+    }
+    function stop(){                  // hard reset (zone hidden, guide closed, Reset)
+      playing = false; done = false; lines = []; idx = 0; charAt = 0;
+      safeCancel();
+      current = null; state();
+    }
+    function sync(){                  // the current card changed
+      const was = playing;
+      playing = false;
+      safeCancel();
+      current = null;
+      lines = getLines().map(norm).filter(Boolean); idx = 0; charAt = 0; done = false;
+      if(was && lines.length){ playing = true; speak(); } else state();
+    }
+    function restart(){               // read the current card again from the top
+      idx = 0; charAt = 0; done = false;
+      if(playing) speak(); else state();
+    }
+    function playLines(arr){          // one-off narration (e.g. a just-revealed feedback box)
+      lines = arr.map(norm).filter(Boolean);
+      if(!lines.length) return;
+      idx = 0; charAt = 0; done = false; playing = true; lineRetries = 0; speak();
+    }
+    btn.addEventListener('click', () => playing ? pause() : play());
+    if(!synth) btn.disabled = true;
+    state();
+    return { sync, stop, restart, play, playLines, atStart: () => idx === 0 && charAt === 0 && !playing };
+  }
+  window.__makeCardVoice = makeCardVoice;
+
+  /* ---- Guided Inquiry voice: play/pause + Auto in the pager row ----
+     Auto walks the whole inquiry hands-free BUT never answers for the student:
+     at a gated predict card it reads the question and waits; when the student
+     commits, it reads the feedback aloud, then moves on. */
+  const giBtn = document.getElementById('inq-voice');
+  if(giBtn){
+    const activeCard = () => document.querySelector('#inq-cards .inq-step.active');
+    const giAutoBtn = document.getElementById('inq-auto');
+    let giAuto = false;
+    function setGiAuto(on){
+      giAuto = on;
+      if(giAutoBtn) giAutoBtn.classList.toggle('active', on);
+      if(on) giVoice.play();
+    }
+    const giVoice = makeCardVoice(giBtn, () => {
+      const card = activeCard();
+      if(!card) return [];
+      const out = [];
+      const h = card.querySelector('h4'); if(h) out.push(h.textContent);
+      card.querySelectorAll('p, button.choice, .predict-eval').forEach(el => {
+        if(el.classList.contains('predict-eval') && getComputedStyle(el).display === 'none') return;
+        const t = el.textContent.trim(); if(t) out.push(t);
+      });
+      return out;
+    }, { onCardDone: () => {
+      if(!giAuto) return;
+      const card = activeCard();
+      if(!card) return;
+      if(card.hasAttribute('data-gate') && !card.hasAttribute('data-answered')) return;  // wait for the student
+      const next = document.getElementById('inq-next');
+      if(!next || next.textContent === 'Finish'){ setGiAuto(false); return; }            // tour ends on the last card
+      const tryAdvance = () => {
+        if(!giAuto) return;
+        if(next.disabled){ setTimeout(tryAdvance, 300); return; }   // Next unlocks shortly after feedback
+        next.click();
+        setTimeout(() => { if(giAuto) giVoice.play(); }, 300);
+      };
+      setTimeout(tryAdvance, 900);
+    }});
+    if(giAutoBtn) giAutoBtn.addEventListener('click', () => setGiAuto(!giAuto));
+    window.__giVoiceStop = () => { setGiAuto(false); giVoice.stop(); };
+    const cardsEl = document.getElementById('inq-cards') || document.body;
+    // Card changes (pager, Next, gates, Reset) re-sync the narration.
+    let lastCard = activeCard();
+    new MutationObserver(() => {
+      const cur = activeCard();
+      if(cur !== lastCard){
+        lastCard = cur;
+        if(document.documentElement.classList.contains('gi-off')){ setGiAuto(false); giVoice.stop(); }
+        else giVoice.sync();
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    // In Auto, an answered gate = read the feedback aloud, then onCardDone advances.
+    new MutationObserver(muts => {
+      if(!giAuto) return;
+      for(const m of muts){
+        if(m.attributeName === 'data-answered' && m.target.hasAttribute('data-answered')){
+          const ev = m.target.querySelector('.predict-eval');
+          const t = ev && ev.textContent.trim();
+          setTimeout(() => { if(giAuto){ if(t) giVoice.playLines([t]); else giVoice.play(); } }, 600);
+          return;
+        }
+      }
+    }).observe(cardsEl, { subtree: true, attributes: true, attributeFilter: ['data-answered'] });
+  }
+})();
+</script>
+
+<script>
+/* ================= Guided Inquiry + Controls Guide template ================= */
+(function(){
+  const $ = id => document.getElementById(id);
+  const cards = () => document.querySelectorAll('#inq-cards .inq-step');
+  let inqStep = 0;
+
+  /* ---- the sim's own controls are the ONLY setters we touch ----
+     This host has no play control (a static 3D viewer), so there is no pause
+     helper: state pinning is the quantum numbers, the harmonic type and the
+     render mode. ℓ must be set BEFORE m — the ℓ handler re-ranges the m slider. */
+  function setL(k){
+    const s = $('lSlider'); if(!s) return;
+    if(parseInt(s.value,10) === k) return;
+    s.value = String(k); s.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function setM(k){
+    const s = $('mSlider'); if(!s) return;
+    if(parseInt(s.value,10) === k) return;
+    s.value = String(k); s.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function setReal(on){
+    const b = $(on ? 'btnReal' : 'btnComplex'); if(!b) return;
+    if(!b.classList.contains('active')) b.click();
+  }
+  function setMode(m){
+    const b = $(m === 'cloud' ? 'modeCloud' : m === 'projection' ? 'modeProjection' : 'modeSurface');
+    if(!b) return;
+    if(!b.classList.contains('active')) b.click();
+  }
+
+  /* ---- staged reveals (SME grammar: stage FACT answers only) ----
+     The Nodal Structure grid prints "Angular Nodes (ℓ)", "Nodal planes (|m|)"
+     and "Latitudinal (ℓ−|m|)" — literally the answers to cards 3 and 4 — and
+     the dynamic note prints a lobe count. Both stay hidden until card 4 is
+     ANSWERED, re-derived from data-answered so __giResume and the pager stay
+     pure functions of state. The sim rewrites these panels' inline display on
+     every rebuild, so the reveal rides on a class with !important. */
+  function applyStepReveals(i){
+    const q = cards()[3];
+    const hide = (i <= 3) && !(q && q.hasAttribute('data-answered'));
+    ['nodalStructurePanel','dynamicInfoPanel'].forEach(id => {
+      const el = $(id); if(el) el.classList.toggle('hidden-until-step', hide);
+    });
+  }
+  function onStep(i){
+    applyStepReveals(i);
+    const card = cards()[i];
+    const pending = !!(card && card.hasAttribute('data-gate') && !card.hasAttribute('data-answered'));
+    if(i === 0 || pending){ setReal(true); setMode('surface'); }
+    /* Cards 1–3 open on Y₁⁰ — two lobes, one nodal line. Its single node is
+       consistent with ℓ, 2ℓ−1 and ℓ², so the opening picture decides nothing. */
+    if(i === 0 || ((i === 1 || i === 2) && pending)){ setL(1); setM(0); }
+    if((i === 3 || i === 4) && pending){ setL(2); setM(0); }
+  }
+  window.__cgReveals   = applyStepReveals;
+  window.__freeExplore = function(){ applyStepReveals(99); };
+  window.__giResume    = function(){ onStep(inqStep); };
+
+  function inqShow(n){
+    const cs = cards();
+    inqStep = Math.max(0, Math.min(n, cs.length-1));
+    cs.forEach((c,i)=>c.classList.toggle('active', i===inqStep));
+    document.querySelectorAll('#inq-dots .inq-dot').forEach((d,i)=>{ d.classList.toggle('active', i===inqStep); d.classList.toggle('done', i<inqStep); });
+    const card = cs[inqStep];
+    $('inq-next').disabled = card.hasAttribute('data-gate') && !card.hasAttribute('data-ready');
+    $('inq-next').textContent = inqStep >= cs.length-1 ? 'Finish' : 'Next →';
+    $('inq-prev').disabled = inqStep<=0;
+    $('inq-pgnext').disabled = inqStep>=cs.length-1;
+    onStep(inqStep);
+  }
+  function stepReady(){ cards()[inqStep].setAttribute('data-ready',''); $('inq-next').disabled = false; }
+
+  function setupChoiceCard(card, correctIdx, feedback){
+    const choices = card.querySelectorAll('.choice'), evalBox = card.querySelector('.predict-eval');
+    choices.forEach((c, idx)=>{
+      c.addEventListener('click', ()=>{
+        if(card.hasAttribute('data-answered')) return;
+        card.setAttribute('data-answered','');          // the Auto observer keys on this
+        const ok = idx === correctIdx;
+        choices.forEach((cc,ii)=>{ cc.disabled = true;
+          if(ii===correctIdx) cc.classList.add('correct'); else if(ii===idx) cc.classList.add('wrong'); else cc.classList.add('dim'); });
+        evalBox.style.display='block'; evalBox.classList.add(ok?'correct':'wrong');
+        evalBox.innerHTML = ok ? feedback.correct : feedback.wrong[idx];
+        if(feedback.onCommit) feedback.onCommit();      // commitment and reveal are one act
+        setTimeout(stepReady, ok ? 250 : 900);
+      });
+    });
+  }
+  const cs = cards();
+  /* Q1 — baseline: what zero angular momentum can look like. Correct: A. */
+  setupChoiceCard(cs[1], 0, {
+    correct: 'A. With no angular momentum there is no axis to single out, so Y<sub>0</sub><sup>0</sup> is a constant — |Y| is the same in every direction and nothing vanishes anywhere.',
+    wrong: [null,
+      'A lobe along +z would single out one direction, and nothing here defines such an axis. Y<sub>0</sub><sup>0</sup> is a constant, so the surface is a sphere.',
+      'That is Bohr&rsquo;s flat circular orbit. A ring singles out the xy-plane; with zero angular momentum no plane is preferred, so the surface is a sphere.'],
+    onCommit: ()=>{ setL(0); setM(0); }
+  });
+  /* Q2 — generalization; ℓ, 2ℓ−1 and ℓ² all give 1 at the ℓ = 1 opening and
+     ℓ and ℓ² still agree at ℓ = 0, so only a larger ℓ separates them. Correct: A. */
+  setupChoiceCard(cs[2], 0, {
+    correct: 'A. Y<sub>&#8467;</sub><sup>0</sup> &prop; P<sub>&#8467;</sub>(cos&thinsp;&theta;), a polynomial with exactly &#8467; zeros, so the surface pinches &#8467; times. At &#8467; = 3 there are three pinches.',
+    wrong: [
+      null,
+      'It agrees at &#8467; = 1, but at &#8467; = 0 it predicts &minus;1 nodes and the sphere has none. P<sub>&#8467;</sub>(cos&thinsp;&theta;) has exactly &#8467; zeros.',
+      'It agrees at &#8467; = 0 and &#8467; = 1, so only a larger &#8467; separates it: &#8467; = 3 gives three pinches, not nine. The count is &#8467;.'],
+    onCommit: ()=>{ setL(3); setM(0); }
+  });
+  /* Q3 — the azimuthal family; distractor C is exactly the COMPLEX harmonic's
+     truth, so it is a live rival rather than filler. Correct: B. */
+  setupChoiceCard(cs[3], 1, {
+    correct: 'B. The real harmonic carries cos&thinsp;2&phi;, which changes sign four times in a full turn: 2|m| sign changes, from |m| = 2 nodal planes through the z axis.',
+    wrong: [
+      'One sign change per half turn would mean cos&thinsp;&phi;, i.e. |m| = 1. This state carries cos&thinsp;2&phi;: four sign changes, from two nodal planes.',
+      null,
+      'True of the complex harmonic, whose |Y| is axially symmetric and keeps its &phi; dependence in the phase. The real harmonic is a standing wave and does change sign.'],
+    onCommit: ()=>{ setL(2); setM(2); applyStepReveals(inqStep); }
+  });
+  /* Q4 — the boundary |m| ≤ ℓ; the m slider is re-ranged to ±ℓ by the sim, so
+     the apparatus itself decides it. Correct: A. */
+  setupChoiceCard(cs[4], 0, {
+    correct: 'A. m&#8463; is the z projection of an angular momentum of magnitude &radic;(&#8467;(&#8467;+1))&#8463;, and a projection cannot exceed the vector. The latitude count &#8467;&minus;|m| reaching zero says the same thing.',
+    wrong: [null,
+      'Four is the number of sign changes around the equator, 2|m|, not m itself. The projection stops at &#8467;, so here |m| &le; 2.',
+      'm is the quantized z projection of the angular momentum, not a free label: it cannot exceed the magnitude, so |m| &le; &#8467;.'],
+    onCommit: ()=>{ setL(2); setM(2); }
+  });
+
+  $('inq-prev').addEventListener('click', ()=> inqShow(inqStep-1));
+  $('inq-pgnext').addEventListener('click', ()=> inqShow(inqStep+1));
+  $('inq-next').addEventListener('click', ()=>{ if(inqStep >= cards().length-1){ if(window.__giOff) window.__giOff(); } else inqShow(inqStep+1); });
+  (function buildDots(){ const d=$('inq-dots'); for(let i=0;i<cards().length;i++){ const s=document.createElement('span'); s.className='inq-dot'; d.appendChild(s); } })();
+
+  /* ---------------- Two-button template ---------------- */
+  const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
+  let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
+  /* Two sidebar boxes exist only in one render mode each (Point Count in the
+     cloud, Surface Cutoff on the polar surface), so those steps carry a `pre`
+     that pins the mode their target lives in — otherwise the guide would glow
+     at a zero-size element. */
+  const cgSteps = [
+    { sel:'#btnResetDefault',        mode:'veil', title:'Reset',              text:'Returns every control and the camera to first load.' },
+    { sel:'.rotate-drag-hint-wrap',  mode:'veil', title:'Moving the view',    text:'Left-drag rotates, scroll zooms, right-drag pans.' },
+    { sel:'#legend-overlay',         mode:'veil', title:'Colour key',         text:'What the colours mean: sign and magnitude, or phase and magnitude.' },
+    { sel:'#formulaBox',             mode:'hide', title:'Current harmonic',   text:'The harmonic now plotted, and whether it is real or complex.' },
+    { sel:'#lmBox',                  mode:'hide', title:'Quantum numbers',    text:'ℓ sets the angular momentum; m its projection on z, limited to |m| ≤ ℓ.' },
+    { sel:'#harmonicToggleGroup',    mode:'hide', title:'Real or complex',    text:'Real standing-wave combinations, or complex states with a phase.' },
+    { sel:'#dynamicInfoPanel',       mode:'hide', title:'Note on this state', text:'A short note on the harmonic on screen, with a link to its counterpart.' },
+    { sel:'#modeGroup',              mode:'hide', title:'Visualisation mode', text:'Sampled points, radius ∝ |Y|, or colour painted on a fixed sphere.' },
+    { sel:'#pointCountBox',          mode:'hide', title:'Point count',        text:'How many sampled points the cloud draws.', pre:()=>setMode('cloud') },
+    { sel:'#threshBox',              mode:'hide', title:'Surface cutoff',     text:'Fades the surface below this fraction of its peak radius.', pre:()=>setMode('surface') },
+    { sel:'#nodalGrid',              mode:'hide', title:'Nodal structure',    text:'Node counts: ℓ in total, |m| of them planes through the z axis.' },
+    { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.', pre:()=>setMode('surface') }
+    /* Not stepped (meta-UI only): the title and its info tooltip. */
+  ];
+  const cel = sel => sel ? document.querySelector(sel) : null;
+
+  function ensureUi(){
+    if(callout) return;
+    callout = document.createElement('div'); callout.className='cg-callout';
+    callout.innerHTML = '<div class="cg-arrow"></div><h5></h5><p></p>';
+    nav = document.createElement('div'); nav.className='cg-nav';
+    nav.innerHTML = '<div class="cg-nav-row cg-row-voice">'+
+        '<span class="cg-listen-lab">Listen</span>'+
+        '<button id="cg-rew" class="cg-voice" title="Restart narration" aria-label="Restart narration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>'+
+        '<button id="cg-voice-play" class="cg-voice" data-vstate="idle" title="Read this step aloud" aria-label="Read this step aloud">'+
+          '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>'+
+          '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'+
+          '<svg class="i-again" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4h2.2A5 5 0 1 0 12 7v3l-4-4 4-4z"/></svg>'+
+        '</button>'+
+        '<button id="cg-fwd" class="cg-voice" title="Next step" aria-label="Next step"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>'+
+        '<span class="cg-flex"></span>'+
+        '<button id="cg-auto" title="Auto walkthrough — narrates every step in sequence" aria-label="Auto walkthrough">Auto</button>'+
+      '</div>'+
+      '<div class="cg-nav-row cg-row-nav">'+
+        '<button id="cg-prev" aria-label="Previous">‹</button>'+
+        '<button id="cg-pgnext" aria-label="Next">›</button>'+
+        '<span class="cg-flex"></span>'+
+        '<button id="cg-next">Next →</button>'+
+      '</div>';
+    document.body.appendChild(callout); document.body.appendChild(nav);
+    nav.querySelector('#cg-prev').addEventListener('click', ()=>cgShow(cgStep-1));
+    nav.querySelector('#cg-pgnext').addEventListener('click', ()=>cgShow(cgStep+1));
+    nav.querySelector('#cg-fwd').addEventListener('click', ()=>cgShow(cgStep+1));
+    nav.querySelector('#cg-next').addEventListener('click', ()=>{ cgStep >= cgSteps.length-1 ? setCg(false) : cgShow(cgStep+1); });
+    nav.querySelector('#cg-auto').addEventListener('click', ()=> setCgAuto(!cgAuto));
+    nav.querySelector('#cg-rew').addEventListener('click', ()=>{ if(cgVoice && !cgVoice.atStart()) cgVoice.restart(); else cgShow(cgStep-1); });
+    if(window.__makeCardVoice){
+      cgVoice = window.__makeCardVoice(nav.querySelector('#cg-voice-play'),
+        () => [cgSteps[cgStep].title, cgSteps[cgStep].text],
+        { onCardDone: () => {
+            if(!cgAuto) return;
+            if(cgStep >= cgSteps.length-1){ setCgAuto(false); return; }
+            setTimeout(() => { if(!cgAuto) return; cgShow(cgStep+1);
+              setTimeout(() => { if(cgAuto && cgVoice) cgVoice.play(); }, 200); }, 700);
+        }});
+    }
+    window.addEventListener('resize', positionCallout);
+    window.addEventListener('scroll', positionCallout, true);
+  }
+  function setCgAuto(on){
+    cgAuto = on;
+    if(nav) nav.querySelector('#cg-auto').classList.toggle('active', on);
+    if(on && cgVoice) cgVoice.play();
+  }
+  function positionCallout(){
+    if(!cgOn || !callout) return;
+    const st = cgSteps[cgStep], t = cel(st.sel), arrow = callout.querySelector('.cg-arrow');
+    callout.classList.remove('arrow-top','arrow-bottom','arrow-left','arrow-right','no-arrow');
+    const cw = callout.offsetWidth||260, ch = callout.offsetHeight||100;
+    let x = innerWidth/2-cw/2, y = innerHeight/2-ch/2;
+    if(!t){ callout.classList.add('no-arrow'); }
+    else{
+      if(t.scrollIntoView) t.scrollIntoView({ block:'nearest', inline:'nearest' });
+      const r = t.getBoundingClientRect();
+      if(r.left > innerWidth*0.66){ x = r.left-cw-14; y = r.top+r.height/2-ch/2; callout.classList.add('arrow-right'); }
+      else { x = r.left+r.width/2-cw/2; y = r.bottom+12;
+        if(y+ch > innerHeight-8){ y = r.top-ch-12; callout.classList.add('arrow-bottom'); } else callout.classList.add('arrow-top'); }
+      x = Math.max(8, Math.min(x, innerWidth-cw-8)); y = Math.max(8, Math.min(y, innerHeight-ch-8));
+      if(arrow){
+        if(callout.classList.contains('arrow-right')||callout.classList.contains('arrow-left')){ arrow.style.left=''; arrow.style.top = Math.max(10, Math.min(r.top+r.height/2-y-6, ch-22))+'px'; }
+        else { arrow.style.top=''; arrow.style.left = Math.max(12, Math.min(r.left+r.width/2-x-6, cw-24))+'px'; }
+      }
+    }
+    callout.style.left = Math.max(8, Math.min(x, innerWidth-cw-8))+'px';
+    callout.style.top  = Math.max(8, Math.min(y, innerHeight-ch-8))+'px';
+  }
+  function cgShow(n){
+    cgStep = Math.max(0, Math.min(n, cgSteps.length-1));
+    cgMax = Math.max(cgMax, cgStep);
+    if(cgSteps[cgStep].pre) cgSteps[cgStep].pre();     // pin the mode this target lives in
+    const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
+    cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
+      t.classList.remove('cg-glow');
+      t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
+    const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
+    callout.querySelector('h5').textContent = cgSteps[cgStep].title;
+    callout.querySelector('p').textContent  = cgSteps[cgStep].text;
+    nav.querySelector('#cg-prev').disabled   = cgStep <= 0;
+    nav.querySelector('#cg-pgnext').disabled = cgStep >= cgSteps.length-1;
+    nav.querySelector('#cg-fwd').disabled    = cgStep >= cgSteps.length-1;
+    nav.querySelector('#cg-next').textContent = (cgStep >= cgSteps.length-1) ? 'Done' : 'Next →';
+    if(cgVoice) cgVoice.sync();
+    positionCallout();
+  }
+  function setGi(on){
+    root.classList.toggle('gi-off', !on);
+    giBtn.classList.toggle('active', on);
+    if(on){ if(cgOn) setCg(false, true); if(window.__giResume) window.__giResume(); }
+    else { if(window.__giVoiceStop) window.__giVoiceStop(); if(window.__freeExplore) window.__freeExplore(); }
+  }
+  function setCg(on, keepGiState){
+    cgOn = on;
+    cgBtn.classList.toggle('active', on);
+    if(on){
+      if(!keepGiState) setGi(false);
+      ensureUi();
+      if(window.__cgReveals) window.__cgReveals(99);
+      if(window.__cgPrepare) window.__cgPrepare();
+      callout.style.display='block'; nav.style.display='flex';
+      cgShow(cgStep);
+    } else {
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      if(callout){ callout.style.display='none'; nav.style.display='none'; }
+      cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
+        t.classList.remove('cg-hidden','cg-veiled','cg-glow'); }); });
+      if(!keepGiState && window.__freeExplore) window.__freeExplore();
+    }
+  }
+  /* Mode-dependent targets: enter the guide on the polar surface, the sim's
+     own default, so the first sidebar steps all exist. */
+  window.__cgPrepare = function(){ setMode('surface'); };
+  window.__giOff = ()=> setGi(false);
+  window.__setMode = mode => {
+    if(mode === 'controls') setCg(true);
+    else if(mode === 'free'){ if(cgOn) setCg(false); setGi(false); }
+    else setGi(true);
+  };
+  window.__fullReset = ()=>{
+    if(cgAuto) setCgAuto(false);
+    if(cgVoice) cgVoice.stop();
+    if(window.__giVoiceStop) window.__giVoiceStop();
+    if(cgOn) setCg(false, true);
+    cgStep = 0; cgMax = 0;
+    cards().forEach(c=>{
+      c.removeAttribute('data-answered'); c.removeAttribute('data-ready');
+      const ev=c.querySelector('.predict-eval'); if(ev){ ev.style.display='none'; ev.className='predict-eval'; ev.innerHTML=''; }
+      c.querySelectorAll('.choice').forEach(ch=>{ ch.disabled=false; ch.classList.remove('correct','wrong','dim'); });
+    });
+    setGi(true);
+    inqShow(0);
+  };
+  giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
+  cgBtn.addEventListener('click', ()=> setCg(!cgOn));
+  $('btnResetDefault').addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+
+  /* Deferred-init host: the sim registers its control listeners inside initApp,
+     which waits for DOMContentLoaded (and for the Three.js CDN). Booting the
+     inquiry at parse time would drive sliders nobody is listening to yet. */
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=>inqShow(0));
+  else inqShow(0);
+})();
+</script>
+
+<script>
+/* ===== Welcome overlay + read-aloud transport (browser speech synthesis) ===== */
+(function(){
+  const ov = document.getElementById('welcome-overlay');
+  if(!ov) return;
+  const $ = id => document.getElementById(id);
+  // Show-once: keep false while the welcome is under review; true for production.
+  const WELCOME_ONCE = false;
+  const WELCOME_KEY = 'welcome:' + (document.title || location.pathname);
+  try { if(WELCOME_ONCE && localStorage.getItem(WELCOME_KEY)) { ov.classList.add('hidden'); return; } } catch(e){}
+  const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
+  const script = [
+    'Welcome to the spherical harmonics explorer.',
+    'These are the angular eigenfunctions of orbital angular momentum. The quantum number ell fixes how many nodal lines the pattern carries, and m fixes how many of those lines are planes through the z axis.',
+    'Choose how you would like to begin.',
+    'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
+    'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
+    'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
+  ];
+  /* Hero: this sim's own point cloud, in the x–z slice. For each ℓ = 0..3 the
+     real harmonic Yℓ0 ∝ N·Pℓ(cos θ) is sampled exactly as the Point Cloud mode
+     does — a direction is accepted with probability |Y|²/max², and the dot is
+     placed at radius |Y|/max — so the ℓ nodal lines stay visibly bare and the
+     blue/red colouring is the sign of Y. */
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
+    function legendreP(l, x){                     // P_l(x) by the standard recurrence
+      let p0 = 1, p1 = x;
+      if(l === 0) return p0;
+      if(l === 1) return p1;
+      let p = 0;
+      for(let k = 2; k <= l; k++){ p = ((2*k-1)*x*p1 - (k-1)*p0)/k; p0 = p1; p1 = p; }
+      return p;
+    }
+    const Y = (l, th) => Math.sqrt((2*l+1)/(4*Math.PI)) * legendreP(l, Math.cos(th));
+    const LS = [0,1,2,3];
+    const maxOf = l => { let mx = 0; for(let i=0;i<=512;i++){ const a = Math.abs(Y(l, Math.PI*i/512)); if(a>mx) mx=a; } return mx||1; };
+    const MAX = LS.map(maxOf);
+    const POS = LIGHT ? 'rgba(21,74,150,0.80)' : 'rgba(110,180,255,0.80)';
+    const NEG = LIGHT ? 'rgba(160,32,42,0.80)' : 'rgba(255,120,130,0.80)';
+    // Keep all four bands inside the hero's 22–78% soft mask so none is clipped.
+    const cx = l => W*(0.28 + 0.44*l/3), cy = H/2, R = Math.min(H*0.40, W*0.062);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const PER = 260, FRAMES = 40;
+    let frame = 0;
+    function batch(count){
+      for(const l of LS){
+        const mx = MAX[l], X0 = cx(l);
+        for(let k=0;k<count;k++){
+          const th = Math.acos(1 - 2*Math.random());      // uniform on the sphere
+          const yv = Y(l, th), a = Math.abs(yv)/mx;
+          if(Math.random() > a*a) continue;               // acceptance ∝ |Y|²
+          const rr = a*R*(0.97 + Math.random()*0.06);
+          ctx.fillStyle = yv >= 0 ? POS : NEG;
+          ctx.fillRect(X0 + rr*Math.sin(th), cy - rr*Math.cos(th), 1.8, 1.8);
+          ctx.fillRect(X0 - rr*Math.sin(th), cy - rr*Math.cos(th), 1.8, 1.8);
+        }
+      }
+    }
+    if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
+    (function step(){                             // accumulate once as the entrance; never loop
+      batch(PER); frame++;
+      if(frame < FRAMES) requestAnimationFrame(step);
+    })();
+  }
+  drawHero();
+  // Theme can change while the overlay is open: redraw the hero in the new colours
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  const synth = window.speechSynthesis;
+  // Transport state: current line, char offset inside it (from boundary events), playing flag.
+  let idx = 0, charAt = 0, playing = false, current = null, finished = false;
+
+  function pickVoice(){
+    const vs = synth ? synth.getVoices() : [];
+    return vs.find(v => /en[-_](US|GB)/i.test(v.lang) && /Google|Samantha|Daniel|Natural/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang)) || null;
+  }
+  function render(){
+    playBtn.dataset.state = playing ? 'playing' : (finished ? 'done' : 'idle');
+    playBtn.title = playing ? 'Pause' : (finished ? 'Play again' : (idx===0 && charAt===0 ? 'Play' : 'Resume'));
+    playBtn.setAttribute('aria-label', playBtn.title);
+    playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    prog.textContent = (Math.min(idx, script.length-1)+1) + ' / ' + script.length;
+    const seg = $('welcome-seg');
+    if(seg){ if(!seg.children.length) script.forEach(()=>seg.appendChild(document.createElement('i')));
+      [...seg.children].forEach((el,i)=>{ el.className = i < idx || finished ? 'on' : (i===idx ? 'cur' : ''); }); }
+    prevBtn.disabled = idx===0 && charAt===0 && !playing;
+    nextBtn.disabled = idx>=script.length-1;
+  }
+  // Speak line `idx` starting at `charAt`; chain to the next line on end.
+  function speakCurrent(){
+    if(!synth) return;
+    synth.cancel();
+    const text = script[idx].slice(charAt);
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if(v) u.voice = v;
+    u.rate = 0.98; u.pitch = 1;
+    const base = charAt, myIdx = idx;
+    u.onboundary = e => { if(current === u && typeof e.charIndex === 'number') charAt = base + e.charIndex; };
+    u.onend = () => {
+      if(current !== u || !playing) return;
+      if(myIdx < script.length-1){ idx = myIdx+1; charAt = 0; speakCurrent(); }
+      else { playing = false; finished = true; idx = script.length-1; charAt = 0; render(); }
+    };
+    current = u; finished = false;
+    synth.speak(u);
+    render();
+  }
+  function play(){
+    if(!synth) return;
+    if(finished){ idx = 0; charAt = 0; }
+    playing = true;
+    speakCurrent();                 // resumes from the recorded char offset of the current line
+  }
+  function pause(){
+    if(!synth) return;
+    playing = false;
+    synth.cancel();                 // stop now; idx/charAt keep the position for resume
+    current = null;
+    render();
+  }
+  function jump(delta){
+    idx = Math.max(0, Math.min(script.length-1, idx + delta));
+    charAt = 0; finished = false;
+    if(playing) speakCurrent(); else { synth && synth.cancel(); current = null; render(); }
+  }
+  playBtn.addEventListener('click', () => playing ? pause() : play());
+  prevBtn.addEventListener('click', () => {
+    // Rewind: restart the current line if we're inside it, else go to the previous line
+    if(charAt > 0){ charAt = 0; if(playing) speakCurrent(); else render(); }
+    else jump(-1);
+  });
+  nextBtn.addEventListener('click', () => jump(+1));
+  /* Auto read-aloud at load was REMOVED by design (2026-09-04): the platform's
+     same-origin iframe inherits click activation, so narration fired audibly on
+     every load. It now starts only from the play button. */
+  if(!synth){ playBtn.disabled = true; prevBtn.disabled = true; nextBtn.disabled = true; prog.textContent = ''; }
+  render();
+  ov.querySelectorAll('.welcome-mode').forEach(b => b.addEventListener('click', () => {
+    pause();
+    ov.classList.add('hidden');
+    try { if(WELCOME_ONCE) localStorage.setItem(WELCOME_KEY, '1'); } catch(e){}
+    if(window.__setMode) window.__setMode(b.dataset.mode);
+  }));
+})();
+</script>
+</body>
+</html>

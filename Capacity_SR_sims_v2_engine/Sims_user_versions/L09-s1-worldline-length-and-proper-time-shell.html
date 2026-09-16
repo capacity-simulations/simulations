@@ -2306,15 +2306,34 @@ window.__audit = {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry — pairs of worldlines joining the same two
-     events, drawn from the sim's own timelike constraint |Δx| < Δ(ct) with the
-     light cone dashed in at 45°. It carries NO τ values and no clock readings,
-     so it cannot answer card 1: the whole deck turns on how much time each
-     path records, and the hero shows only the paths. */
-  let heroGen = 0;
+  /* Hero: this sim's own apparatus, in ONE configuration — a single traveller's
+     worldline climbing from event E₁ to event E₂ inside E₁'s future light cone,
+     with the clock it carries ticking off EQUAL PROPER TIME along the way. That
+     is the title of the sim (worldline length IS proper time) and nothing more.
+
+     What is deliberately withheld, card by card — the deck gates all four:
+       1 · which of two reunited travellers ages more → only ONE worldline is
+           drawn, so there is nothing to rank, and no τ number appears anywhere;
+       2 · why the two travellers are not interchangeable → the single path is a
+           SMOOTH curve with no corner, and there is no second path beside it, so
+           the straight-versus-bent asymmetry is never shown;
+       3 · what a segment's Δτ does as its spatial step Δx grows → one
+           configuration only, and no second, wider one to compare it against;
+       4 · which quantities survive a boost → one frame, no primed axes, no
+           coordinate-time marks, nothing labelled invariant.
+     Signature is the sim's own (+,−): ds² = Δ(ct)² − Δx², as stated in the
+     Formal panel and computed in seg(), so a timelike worldline is STEEPER
+     than the light cone — which is how this one is drawn.
+
+     Scale: the drawn region is h tall and 2h wide with 1 px = 1 unit on BOTH x
+     and ct, so the light rays are a true 45°. The band is 10:1 but the ART is
+     not: flattening the cone to fill the width would be a physics lie.
+
+     One static pass. drawHero is re-run by animationend, a 700 ms timer, resize
+     and two MutationObservers, and every run clears the canvas, so nothing may
+     be deferred to a later frame. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer would be stretched across and
            squashed down: every ctx.arc() circle would render as an ellipse.
@@ -2326,54 +2345,69 @@ window.__audit = {
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ppu = 22;                               // equal pixels per unit on x and ct, so light is 45°
-    const yBot = H - 16, yTop = 16;
-    const span = (yBot - yTop)/ppu;               // ct separation of the two events, in units
-    const Y  = ct => yBot - ct*ppu;
-    // faint spacetime grid
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += ppu){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let ct = 0; ct <= span; ct += 1){ const py = Y(ct); ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLA = LIGHT ? '#1d4ed8' : '#60a5fa';
-    const COLB = LIGHT ? '#b45309' : '#f59e0b';
-    const COLC = LIGHT ? '#047857' : '#34d399';
-    const COLE = LIGHT ? '#6d28d9' : '#c4b5fd';
-    const pitch = 200, n = Math.ceil(W/pitch) + 1;
-    function bundle(k){
-      const cx = Math.round(k*pitch + pitch*0.5);
-      const X = x => cx + x*ppu;
-      // light cone from the lower event, dashed at 45°
-      ctx.save(); ctx.setLineDash([4,5]); ctx.lineWidth = 1.1;
-      ctx.strokeStyle = LIGHT ? 'rgba(146,109,10,.40)' : 'rgba(254,243,199,.34)';
-      const lc = span*0.62;   // kept inside the bundle's own pitch so cones don't collide
-      ctx.beginPath(); ctx.moveTo(X(-lc),Y(lc)); ctx.lineTo(X(0),Y(0)); ctx.lineTo(X(lc),Y(lc)); ctx.stroke();
-      ctx.restore();
-      const draw = (pts,col,w) => {
-        ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-        ctx.beginPath();
-        pts.forEach((p,i) => i ? ctx.lineTo(X(p[0]),Y(p[1])) : ctx.moveTo(X(p[0]),Y(p[1])));
-        ctx.stroke();
-      };
-      const s = (k % 2) ? -1 : 1;                 // alternate which way the detours swing
-      // two kinks (every other bundle), one kink, then the straight worldline on top
-      if(k % 2 === 0) draw([[0,0],[-0.8*s,1.4],[0.8*s,3.5],[0,span]], COLC, 1.8);
-      draw([[0,0],[1.6*s,span/2],[0,span]], COLB, 2.2);
-      draw([[0,0],[0,span]], COLA, 2.6);
-      // the two shared events
-      [[0,0],[0,span]].forEach(p => {
-        ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),4.5,0,7); ctx.fillStyle = COLE; ctx.fill();
-        ctx.lineWidth = 1.4; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.stroke();
-      });
+    // Everything lives inside the centre of the band, where the hero's CSS mask
+    // is fully opaque, and clear of the top and bottom edges by a dot's radius.
+    const yBot = H - 14, yTop = 14, h = yBot - yTop;   // E₁ at the apex, E₂ h above it
+    // The traveller swings out to XM and back, so the origin is set half of that
+    // to the left: the worldline — the bright subject — ends up dead centre in
+    // the band, where the hero's mask is fully opaque.
+    const XM = 0.61 * h / Math.PI;                     // peak speed 0.61c: safely timelike
+    const ox = Math.round(W / 2 - XM / 2);
+    const X = x => ox + x, Y = ct => yBot - ct;        // 1 px per unit, both axes
+    const GOLD  = LIGHT ? '#b45309' : '#fcd34d';                       // the light rays
+    const GOLDF = LIGHT ? '180,83,9' : '253,224,71';                   // the cone's interior
+    const PATH  = LIGHT ? '#475569' : '#eef2f8';                       // the worldline itself
+    const EVENT = LIGHT ? '#6d28d9' : '#c4b5fd';                       // E₁ and E₂ (sim's COL.event)
+    const HALO  = LIGHT ? 'rgba(241,245,249,.8)' : 'rgba(2,6,12,.62)'; // keeps the path off the wash
+    // the lab's x-axis through E₁ — a single faint line, no grid to turn to mud
+    ctx.lineWidth = 1.6; ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.26)';
+    ctx.beginPath(); ctx.moveTo(X(-2.1*h), Y(0) + .5); ctx.lineTo(X(2.1*h), Y(0) + .5); ctx.stroke();
+    // future light cone of E₁: a soft interior, then the two rays at exactly 45°
+    const wash = ctx.createLinearGradient(0, Y(0), 0, Y(h));
+    wash.addColorStop(0, 'rgba(' + GOLDF + ',.24)');
+    wash.addColorStop(1, 'rgba(' + GOLDF + ',.04)');
+    ctx.fillStyle = wash;
+    ctx.beginPath(); ctx.moveTo(X(0),Y(0)); ctx.lineTo(X(-h),Y(h)); ctx.lineTo(X(h),Y(h)); ctx.closePath(); ctx.fill();
+    // The rays stop a few px short of E₁ so the event dot and the departing
+    // worldline are not crowded; they are still drawn along x = ±ct exactly.
+    ctx.save(); ctx.setLineDash([8,6]); ctx.lineCap = 'butt'; ctx.lineWidth = 4.2; ctx.strokeStyle = GOLD;
+    const gap = 20;
+    ctx.beginPath(); ctx.moveTo(X(-gap),Y(gap)); ctx.lineTo(X(-h),Y(h));
+                     ctx.moveTo(X( gap),Y(gap)); ctx.lineTo(X( h),Y(h)); ctx.stroke();
+    ctx.restore();
+    // The worldline: x(ct) = (XM/2)·(1 − cos(2π·ct/h)), one smooth timelike
+    // curve. It leaves E₁ at rest and arrives at rest, and its speed peaks at
+    // |dx/d(ct)| = XMπ/h = 0.61 < 1, so every point of it lies strictly inside
+    // the cone — the curve never outruns the rays it is drawn against.
+    const N = 320, xAt = i => (XM/2) * (1 - Math.cos(2 * Math.PI * i / N));
+    const pts = [], tau = [0];
+    for(let i = 0; i <= N; i++){
+      const x = xAt(i);
+      pts.push([X(x), Y(h * i / N)]);
+      if(i){ const dct = h / N, dx = x - xAt(i-1);
+             tau.push(tau[i-1] + Math.sqrt(Math.max(0, dct*dct - dx*dx))); }   // (+,−): Δτ² = Δ(ct)² − Δx²
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) bundle(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 80);
-    })();
+    const trace = (w, col) => {
+      ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath(); pts.forEach((q,i) => i ? ctx.lineTo(q[0],q[1]) : ctx.moveTo(q[0],q[1])); ctx.stroke();
+    };
+    trace(10, HALO); trace(6.5, PATH);
+    // the carried clock: ticks at EQUAL PROPER TIME, i.e. length measured along
+    // the worldline itself — the one quantity this whole simulation is about
+    const nTick = 10; let j = 1;
+    ctx.lineWidth = 3.6; ctx.strokeStyle = PATH; ctx.lineCap = 'round';
+    for(let k = 1; k < nTick; k++){
+      const target = tau[N] * k / nTick;
+      while(j < N && tau[j] < target) j++;
+      const a = pts[j-1], b = pts[Math.min(N, j+1)], q = pts[j];
+      const ux = b[0]-a[0], uy = b[1]-a[1], L = Math.hypot(ux,uy) || 1, t = 8.5;
+      ctx.beginPath(); ctx.moveTo(q[0] + uy/L*t, q[1] - ux/L*t); ctx.lineTo(q[0] - uy/L*t, q[1] + ux/L*t); ctx.stroke();
+    }
+    // the two events the journey joins
+    [[0,0],[0,h]].forEach(e => {
+      ctx.beginPath(); ctx.arc(X(e[0]), Y(e[1]), 7.5, 0, 7); ctx.fillStyle = EVENT; ctx.fill();
+      ctx.lineWidth = 2.2; ctx.strokeStyle = LIGHT ? 'rgba(241,245,249,.92)' : 'rgba(2,6,12,.85)'; ctx.stroke();
+    });
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

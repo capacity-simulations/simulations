@@ -2929,59 +2929,197 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the train and the plane drawn from the sim's own ground-frame motion
-     x = v t at EQUAL steps of time. Equal spacing within a row is constant
-     velocity; the plane's marks are spaced twice as widely as the train's, and
-     the GAP between the two rows — which is what one measures for the other —
-     opens at a steady rate. The hero states the premise, never any frame's
-     answer: no velocity is labelled and no frame but Alice's is drawn. */
+  /* Hero: ONE INSTANT of the apparatus, drawn in Alice's ground frame only —
+     a train running East along the road, a plane flying East above it, Alice
+     watching from the roadside, and two dashed sight-lines that say only WHO is
+     looking at the plane. It states the premise; it answers nothing.
+
+     Deliberately absent, because the gated cards ask for exactly these:
+       · no strobed / equal-time positions of either object, and no trail whose
+         spacing could be compared between the two rows (the previous hero did
+         precisely that: plane marks pitched 2x the train's, so the gap between
+         the rows opened by one train-step per tick — a drawn u − V, i.e. card
+         2's answer);
+       · no velocity arrows, and nothing whose LENGTH is proportional to V or u,
+         so no difference of velocities can be measured off the picture;
+       · no periodic marks of any kind outside a single rigid body;
+       · nothing drawn in Bella's or the pilot's frame — no ground streaming
+         backwards, no train outrunning the plane, no cockpit view;
+       · no numbers, labels or units.
+     The sim is Galilean (step() transforms as v − W, no gamma anywhere), so no
+     light-cone, light-line or c-scale appears either. Static draw: drawHero is
+     re-entered by animationend, a timer, two MutationObservers and resize, each
+     of which clears the canvas, so nothing may be deferred to a later frame. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
-       out 100vw x 140px, so glyphs would render stretched. Size the buffer to
-       the element's real box before drawing. Layer-owned canvas — no simulation
-       surface is touched. */
+       out 100vw x 140px, so art would render stretched. Size the buffer to the
+       element's real box before drawing. Pixels are square afterwards — there is
+       no anisotropic pre-compensation anywhere below, and none is wanted.
+       Layer-owned canvas — no simulation surface is touched. */
     { const hr = c.getBoundingClientRect();
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                 // transparent: the overlay dim is the background
-    const groundY = Math.round(H*0.80);
-    const skyY    = Math.round(H*0.34);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.26)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(0, groundY+0.5); ctx.lineTo(W, groundY+0.5); ctx.stroke();
-    const N = 9, V = 100, u = 200, dt = 1;  // km/h, hours per mark
-    const x0 = W*0.05, span = W*0.90;
-    const scale = span / (u*dt*(N-1));      // px per km, set by the faster object
-    const tw = Math.max(14, Math.min(30, W*0.022));
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Alice: one fixed mark on the ground — the observer the speeds are measured against
-    ctx.fillStyle = LIGHT ? 'rgba(14,116,144,.85)' : 'rgba(6,182,212,.9)';
-    ctx.beginPath(); ctx.arc(x0, groundY - 7, 4, 0, 7); ctx.fill();
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0; s<per && k<N; s++, k++){
-        const a = 0.14 + 0.62*(k/(N-1));
-        // train — x = V t
-        const xt = x0 + V*(k*dt)*scale;
-        ctx.strokeStyle = LIGHT ? 'rgba(180,83,9,'+a+')' : 'rgba(245,158,11,'+a+')';
-        ctx.lineWidth = 1.6;
-        ctx.strokeRect(xt - tw/2, groundY - tw*0.62, tw, tw*0.56);
-        // plane — x = u t, same instants, twice the spacing
-        const xp = x0 + u*(k*dt)*scale;
-        ctx.strokeStyle = LIGHT ? 'rgba(161,98,7,'+a+')' : 'rgba(251,191,36,'+a+')';
-        ctx.beginPath();
-        ctx.moveTo(xp - tw*0.42, skyY + tw*0.22);
-        ctx.lineTo(xp + tw*0.48, skyY);
-        ctx.lineTo(xp - tw*0.42, skyY - tw*0.22);
-        ctx.closePath(); ctx.stroke();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    // Light theme paints DARK ink on the near-white card; dark theme paints a
+    // pale silhouette. Hues follow the sim's own key: Alice teal, Bella amber.
+    const C = LIGHT ? {
+      ink:'15,23,42', edge:'2,6,23', hull:'51,65,85', roof:'100,116,139',
+      glass:'147,197,253', amber:'180,83,9', plane:'124,45,18', wing:'154,52,18',
+      alice:'14,116,144', cloud:'71,85,105', lamp:'161,98,7'
+    } : {
+      ink:'203,213,225', edge:'248,250,252', hull:'148,163,184', roof:'226,232,240',
+      glass:'15,23,42', amber:'251,146,60', plane:'251,191,36', wing:'217,119,6',
+      alice:'34,211,238', cloud:'148,163,184', lamp:'254,243,199'
+    };
+    const rgba = (t,a) => 'rgba(' + t + ',' + a + ')';
+
+    const gy = Math.round(H*0.805);                       // the road
+    const S  = Math.max(0.74, Math.min(1.12, W/1400));    // uniform: never distorts
+    ctx.save();
+    ctx.translate(Math.round(W/2), gy);
+    ctx.scale(S, S);                                      // isotropic — circles stay round
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    const path = pts => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); };
+    const solid = (pts, fill, edge, lw) => { path(pts); ctx.fillStyle = fill; ctx.fill();
+      if(edge){ ctx.strokeStyle = edge; ctx.lineWidth = lw || 1.6; ctx.stroke(); } };
+    const rr = (x,y,w,h,r) => { ctx.beginPath();
+      ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath(); };
+
+    // ---- sky: two soft banks, placed only to give the plane some air --------
+    // one path, one fill: overlapping lobes filled separately would double their
+    // alpha and read as dark blotches rather than a bank of cloud.
+    const cloud = (x,y,s) => { ctx.fillStyle = rgba(C.cloud, LIGHT ? .17 : .16);
+      ctx.beginPath();
+      ctx.ellipse(x, y, 30*s, 8*s, 0, 0, 7);
+      ctx.ellipse(x-20*s, y+4*s, 18*s, 5.5*s, 0, 0, 7);
+      ctx.ellipse(x+21*s, y+4*s, 20*s, 5.5*s, 0, 0, 7);
+      ctx.ellipse(x+2*s, y+5*s, 30*s, 4.5*s, 0, 0, 7);
+      ctx.fill(); };
+    cloud(-276, -93, .95); cloud(196, -86, .78);
+
+    // ---- the road ----------------------------------------------------------
+    const gg = ctx.createLinearGradient(-352, 0, 352, 0);
+    gg.addColorStop(0,   rgba(C.ink, 0));
+    gg.addColorStop(.15, rgba(C.ink, LIGHT ? .66 : .55));
+    gg.addColorStop(.85, rgba(C.ink, LIGHT ? .66 : .55));
+    gg.addColorStop(1,   rgba(C.ink, 0));
+    ctx.strokeStyle = gg; ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(-352, 0); ctx.lineTo(352, 0); ctx.stroke();
+    const gh = ctx.createLinearGradient(0, 2, 0, 13);
+    gh.addColorStop(0, rgba(C.ink, .15)); gh.addColorStop(1, rgba(C.ink, 0));
+    ctx.fillStyle = gh; ctx.fillRect(-250, 2, 500, 13);
+
+    // ---- the train (Bella rides it) ----------------------------------------
+    const TX0 = -250, TX1 = 70, NOSE = 116, ROOF = -39, FLOOR = -12;
+    ctx.fillStyle = rgba(C.ink, LIGHT ? .22 : .38);                    // contact shadow
+    ctx.beginPath(); ctx.ellipse(-70, .8, 178, 3.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = rgba(LIGHT ? C.ink : '71,85,105', .92);            // underframe
+    ctx.fillRect(TX0+4, FLOOR, 336, 6);
+    ctx.fillStyle = rgba(LIGHT ? C.ink : '100,116,139', .95);          // wheels
+    [-218,-186,36,68].forEach(wx => { ctx.beginPath(); ctx.arc(wx, -6.4, 6.4, 0, 7); ctx.fill(); });
+    rr(TX0, ROOF, TX1-TX0, FLOOR-ROOF, 6);                             // carriage body
+    ctx.fillStyle = rgba(C.hull, LIGHT ? .95 : .74); ctx.fill();
+    ctx.strokeStyle = rgba(C.edge, LIGHT ? .9 : .85); ctx.lineWidth = 1.8; ctx.stroke();
+    solid([[TX1-6,ROOF],[104,-30],[NOSE,-23],[NOSE,FLOOR],[TX1-6,FLOOR]],  // cab + nose
+      rgba(C.hull, LIGHT ? .95 : .74), rgba(C.edge, LIGHT ? .9 : .85), 1.8);
+    ctx.fillStyle = rgba(C.roof, LIGHT ? .5 : .42);                    // roof ridge
+    rr(TX0+4, ROOF+1.5, TX1-TX0-8, 5, 2.5); ctx.fill();
+    ctx.fillStyle = rgba(C.amber, .95);                                // livery band
+    ctx.fillRect(TX0+2, -20, NOSE-TX0-8, 5);
+    const BELLA = -138;                                                // her window
+    for(let wx = -238; wx <= 14; wx += 50){                            // windows: one body
+      rr(wx, -34, 27, 11.5, 2.5);
+      ctx.fillStyle = rgba(C.glass, LIGHT ? .9 : .8); ctx.fill();
+      ctx.strokeStyle = rgba(C.edge, .45); ctx.lineWidth = 1; ctx.stroke();
     }
-    batch();
+    ctx.save();                                                        // Bella at the glass
+    rr(BELLA, -34, 27, 11.5, 2.5); ctx.clip();
+    ctx.fillStyle = rgba(C.amber, .98);
+    ctx.beginPath(); ctx.arc(BELLA+13, -27.5, 3.6, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(BELLA+13, -19, 8, 6, 0, 0, 7); ctx.fill();
+    ctx.restore();
+    solid([[79,-33],[101,-27],[108,-23.5],[79,-23.5]],                 // windshield
+      rgba(C.glass, LIGHT ? .9 : .8), rgba(C.edge, .5), 1);
+    ctx.fillStyle = rgba(C.lamp, .95);                                 // headlight
+    ctx.beginPath(); ctx.arc(112, -16, 2.8, 0, 7); ctx.fill();
+
+    // ---- the plane, flying East above the train ----------------------------
+    const PX = -60, PY = -75;
+    ctx.save(); ctx.translate(PX, PY);
+    solid([[8,-4],[-16,-17],[-1,-17],[22,-5]],                         // far wing
+      rgba(C.wing, LIGHT ? .75 : .5), rgba(C.edge, .45), 1.1);
+    solid([[-64,-5],[-78,-24],[-68,-24],[-48,-6]],                     // fin
+      rgba(C.plane, LIGHT ? .95 : .88), rgba(C.edge, .8), 1.4);
+    solid([[-62,-3],[-88,-7],[-88,-3],[-62,2]],                        // stabiliser
+      rgba(C.plane, LIGHT ? .95 : .88), rgba(C.edge, .8), 1.4);
+    ctx.beginPath();                                                   // fuselage
+    ctx.moveTo(-70,-3.5); ctx.lineTo(-30,-7);
+    ctx.quadraticCurveTo(30,-9.5, 55,-4.5);
+    ctx.quadraticCurveTo(66,0, 55,4.5);
+    ctx.quadraticCurveTo(10,9.5, -32,7);
+    ctx.lineTo(-70,3.5); ctx.closePath();
+    ctx.fillStyle = rgba(C.plane, LIGHT ? .95 : .9); ctx.fill();
+    ctx.strokeStyle = rgba(C.edge, .85); ctx.lineWidth = 1.6; ctx.stroke();
+    solid([[13,2],[-27,20],[-5,21],[29,3]],                            // near wing
+      rgba(C.wing, LIGHT ? .95 : .82), rgba(C.edge, .8), 1.5);
+    solid([[38,-5],[52,-3.6],[50,-.2],[37,-1.2]],                      // cockpit glass
+      rgba(C.glass, LIGHT ? .92 : .8), rgba(C.edge, .5), 1);
+    ctx.fillStyle = rgba(C.edge, .28);                                 // propeller disc
+    ctx.beginPath(); ctx.ellipse(67, 0, 2.8, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = rgba(C.plane, .95);
+    ctx.beginPath(); ctx.arc(64, 0, 3.2, 0, 7); ctx.fill();
+    ctx.restore();
+
+    // ---- Alice at the roadside ---------------------------------------------
+    const AX = 228;
+    ctx.fillStyle = rgba(C.ink, LIGHT ? .22 : .38);
+    ctx.beginPath(); ctx.ellipse(AX, .8, 12, 2.6, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = rgba(C.alice, .95); ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(AX-2.5,-12); ctx.lineTo(AX-5.5,-1.5);
+    ctx.moveTo(AX+2.5,-12); ctx.lineTo(AX+5.5,-1.5);
+    ctx.stroke();
+    ctx.beginPath();                                                   // arm, raised to watch
+    ctx.moveTo(AX-4,-25); ctx.lineTo(AX-14,-31); ctx.stroke();
+    ctx.fillStyle = rgba(C.alice, .96);
+    solid([[AX-6.2,-26.5],[AX+6.2,-26.5],[AX+8.6,-10.5],[AX-8.6,-10.5]],
+      rgba(C.alice, .96), rgba(C.edge, LIGHT ? .55 : .35), 1.2);
+    ctx.fillStyle = rgba(C.alice, .96);
+    ctx.beginPath(); ctx.arc(AX-1, -31.6, 5.2, 0, 7); ctx.fill();
+    ctx.strokeStyle = rgba(C.edge, LIGHT ? .55 : .35); ctx.lineWidth = 1.2; ctx.stroke();
+
+    // ---- who is watching whom: sight-lines only, no arrowheads, no lengths --
+    ctx.save();
+    ctx.setLineDash([5,5]); ctx.lineWidth = 2; ctx.lineCap = 'butt';
+    const look = (x1,y1,x2,y2,tint) => {
+      const g = ctx.createLinearGradient(x1,y1,x2,y2);
+      g.addColorStop(0, rgba(tint, 0)); g.addColorStop(.28, rgba(tint, LIGHT ? .55 : .5));
+      g.addColorStop(.82, rgba(tint, LIGHT ? .55 : .5)); g.addColorStop(1, rgba(tint, 0));
+      ctx.strokeStyle = g; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    };
+    look(AX-8, -36, PX+6, PY+6, C.alice);                              // Alice → plane
+    look(BELLA+16, -31, PX-46, PY+5, C.amber);                         // Bella  → plane
+    ctx.restore();
+    ctx.restore();
+
+    // ---- feather the letterbox so nothing reads as chopped -----------------
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    let fg = ctx.createLinearGradient(0, 0, 0, 12);
+    fg.addColorStop(0, 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0, 0, W, 12);
+    fg = ctx.createLinearGradient(0, H, 0, H-12);
+    fg.addColorStop(0, 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0, H-12, W, 12);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

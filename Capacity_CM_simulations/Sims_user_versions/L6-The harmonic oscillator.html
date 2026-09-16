@@ -2252,9 +2252,23 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own spring well V = ½kx² (k = 20 N/m) drawn as accumulating
-     dots, with two energy lines E = ½kA² meeting the curve at their turning
-     points x = ±A. Amplitude and energy only — the period is never shown. */
+  /* HERO — the static energy landscape of the spring well.
+     One bold parabola V ∝ x², its minimum marked, and the two release points the
+     opening narration describes ("two balls ... released from different distances")
+     shown as the levels E = ½kA² for A = 0.30 m and A = 0.60 m, each capped at its
+     own turning points x = ±A.
+
+     SPOILER GUARD — the three gated cards ask only about TIME:
+       card 2 → which ball completes a cycle first  (answer: dead heat)
+       card 4 → what moves the period               (answer: k or m, T = 2π√(m/k))
+       card 5 → four times the mass                 (answer: both double, stay equal)
+     So this picture carries NO time axis, NO clock, NO phase, NO paired positions
+     "in step", NO motion trail or direction arrow, NO mass and NO spring: from a
+     static V(x) with energy levels the period is simply not recoverable. It is also
+     k-free by construction — the plotted height is V/Vmax = x²/XV², in which k
+     cancels exactly — so no spring stiffness can be read off it either.
+     Amplitude → energy → turning points is card 1's setup and card 6's resolve,
+     both UNGATED, and it is what the welcome voiceover has already said aloud. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2267,51 +2281,85 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
+    /* No anisotropic pre-compensation here: the buffer above is sized to the
+       element's own box, so device pixels are already square and every ctx.arc()
+       is round. Reset the matrix outright so a re-entrant draw can never inherit
+       a stale ctx.scale() from anywhere else. */
+    ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const font = "600 20px 'DM Sans', Inter, system-ui, sans-serif";
-    const K = 20, XV = 0.72, VMAX = 0.5*K*XV*XV;
-    const cx = W*0.5, base = H - 20, top = 16;
-    const px = x => cx + (x/XV)*(W*0.255);   // whole well inside the hero's unmasked band
-    const py = V => base - (V/VMAX)*(base - top);
-    const V  = x => 0.5*K*x*x;
-    const amps = [
-      { A:0.30, col: LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(125,211,252,.95)' },
-      { A:0.60, col: LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(110,231,183,.95)' }
-    ];
-    // baseline x-axis
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(px(-XV), base+0.5); ctx.lineTo(px(XV), base+0.5); ctx.stroke();
-    // the two energy lines, each drawn only across its own allowed region
-    amps.forEach(a => {
-      const y = py(V(a.A));
-      ctx.save();
-      ctx.setLineDash([7,6]); ctx.strokeStyle = a.col; ctx.lineWidth = 1.6; ctx.globalAlpha = .75;
-      ctx.beginPath(); ctx.moveTo(px(-a.A), y); ctx.lineTo(px(a.A), y); ctx.stroke();
-      ctx.restore();
-      [-a.A, a.A].forEach(x => { ctx.strokeStyle = a.col; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(px(x), y, 5, 0, 7); ctx.stroke(); });
-    });
-    ctx.fillStyle = LIGHT ? 'rgba(4,120,87,.95)' : 'rgba(159,224,198,.9)';
-    ctx.font = font; ctx.textAlign = 'right';
-    ctx.fillText('V = ½kx²', px(-XV) - 14, top + 26);
-    ctx.textAlign = 'left';
-    // the well itself accumulates as dots from the vertex outwards
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0; s<per && k<N; s++, k++){
-        const x = (k/(N-1))*XV;
-        [-x, x].forEach(xx => {
-          ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(226,232,240,.62)';
-          ctx.beginPath(); ctx.arc(px(xx), py(V(xx)), 2.6, 0, 7); ctx.fill();
-        });
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    /* Single-pass and synchronous. drawHero is re-run by the card's animationend,
+       a 700 ms timer and two MutationObservers, each of which clears the canvas
+       first — an rAF accumulation would be wiped half-built, and stale chains
+       from earlier calls would keep painting into the cleared buffer. */
+    const S  = Math.max(0.78, Math.min(1.12, W/1400));
+    const XV = 0.72;                                  // half-width of the drawn well
+    const cx = W*0.5;
+    const base = Math.round(H - 26*S);                // the well's minimum, on the x-axis
+    const topY = Math.round(20*S);                    // where the arms stop, clear of the feather
+    const px = x => cx + (x/XV)*(W*0.255);            // whole well inside the mask's clear centre
+    const uOf = x => (x*x)/(XV*XV);                   // V/Vmax for V = ½kx² — k cancels
+    const py = u => base - u*(base - topY);
+
+    // Light theme sits on a near-white ground, so its ink has to be genuinely DARK
+    // to carry the weight the bright ink carries on the dark ground.
+    const cInk = LIGHT ? 'rgba(15,23,42,'  : 'rgba(226,232,240,';   // the well itself
+    const c1   = LIGHT ? 'rgba(21,94,117,' : 'rgba(103,232,249,';   // ball 1 (cyan, .b1)
+    const c2   = LIGHT ? 'rgba(146,64,14,' : 'rgba(252,211,77,';    // ball 2 (amber, .b2)
+    const A_MAIN = LIGHT ? '0.90)' : '0.85)';
+    const A_HALO = LIGHT ? '0.13)' : '0.15)';
+    const A_AXIS = LIGHT ? '0.28)' : '0.26)';
+
+    // the x-axis through the minimum
+    ctx.strokeStyle = cInk + A_AXIS; ctx.lineWidth = Math.max(1, 1.6*S);
+    ctx.beginPath(); ctx.moveTo(px(-XV), base + 0.5); ctx.lineTo(px(XV), base + 0.5); ctx.stroke();
+
+    // the well: one continuous curve, laid down twice — a soft halo, then bold ink
+    function well(){
+      ctx.beginPath();
+      const N = 96;
+      for(let i = 0; i <= N; i++){
+        const x = -XV + (2*XV)*(i/N);
+        const X = px(x), Y = py(uOf(x));
+        if(i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
       }
-      if(k < N) requestAnimationFrame(batch);
-      else amps.forEach(a => { const y = py(V(a.A));
-        ctx.fillStyle = a.col; ctx.beginPath(); ctx.arc(px(a.A), y, 7, 0, 7); ctx.fill(); });
+      ctx.stroke();
     }
-    batch();
+    ctx.strokeStyle = cInk + A_HALO; ctx.lineWidth = 11*S; well();
+    ctx.strokeStyle = cInk + A_MAIN; ctx.lineWidth = 4.4*S; well();
+
+    // the two energy levels, each drawn only across its own allowed region,
+    // the larger first so the smaller reads in front of it
+    [{ A:0.60, col:c2 }, { A:0.30, col:c1 }].forEach(a => {
+      const y = py(uOf(a.A));
+      ctx.strokeStyle = a.col + '0.90)'; ctx.lineWidth = 3.2*S;
+      ctx.beginPath(); ctx.moveTo(px(-a.A), y); ctx.lineTo(px(a.A), y); ctx.stroke();
+      [-a.A, a.A].forEach(x => {
+        // a light drop to the axis: this level's turning point, x = ±A
+        ctx.strokeStyle = a.col + '0.34)'; ctx.lineWidth = 1.6*S;
+        ctx.beginPath(); ctx.moveTo(px(x), y); ctx.lineTo(px(x), base); ctx.stroke();
+        // the release point itself, a bold disc where the level meets the wall
+        ctx.beginPath(); ctx.arc(px(x), y, 7.6*S, 0, 7);
+        ctx.fillStyle = a.col + '0.40)'; ctx.fill();
+        ctx.lineWidth = 3.2*S; ctx.strokeStyle = a.col + '0.95)'; ctx.stroke();
+      });
+    });
+
+    // the minimum of the well, marked
+    ctx.beginPath(); ctx.arc(cx, base, 5.2*S, 0, 7);
+    ctx.fillStyle = cInk + (LIGHT ? '0.72)' : '0.68)'); ctx.fill();
+
+    // feather the letterbox edges so the band dissolves into the card
+    const fh = Math.min(10, H*0.09);
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    let gr = ctx.createLinearGradient(0, 0, 0, fh);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, fh);
+    gr = ctx.createLinearGradient(0, H - fh, 0, H);
+    gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(1,'rgba(0,0,0,1)');
+    ctx.fillStyle = gr; ctx.fillRect(0, H - fh, W, fh);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

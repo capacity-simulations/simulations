@@ -2465,11 +2465,33 @@ else initSim();
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own rotating-sphere kinematics. A marker runs along each
-     latitude circle at the SAME angular rate, leaving a dot every equal time
-     step, so the dot spacing is proportional to cos(latitude) - the ground
-     speed of that circle. It shows the turning globe, never a deflected track,
-     so it answers none of the pending predictions. */
+  /* Hero — THE APPARATUS ONLY, in a 10:1 letterbox: the same globe drawn three
+     times, left to right, with one meridian marked in amber so the eye reads a
+     single sphere caught at three moments of its turn. The marked meridian
+     advances eastward (rightward across the near face), and a ring of travel
+     around the polar axis carries the same sense, so the band says exactly what
+     card 1 already tells the student out loud — "a globe spins about its axis,
+     west to east" — and nothing more.
+
+     DELIBERATELY ABSENT, because every one of them is a pending answer:
+       card 2 (NH bends right), card 3 (SH bends left), card 4 (equator barely
+       bends), card 5 (inflow winds anticlockwise round a low), card 6 (no
+       spiral on the equator).
+     So: no parcel, no track, no curved path over the surface, no velocity or
+     deflection arrow on the ground, no low-pressure marker, no spiral, no
+     equatorial dead band, and no glyph whose SIZE varies with latitude (that
+     would hand over f = 2ω sin φ, which is card 4's answer). The graticule is
+     uniform on purpose.
+
+     Rotation sense matches the sim: the scene camera sits at (0, 1.1, 3.2)
+     looking at the origin, so north is up and we look slightly down on the
+     globe; the animation advances earth.rotation.y (+y is the spin axis), which
+     carries the near face towards +x — to the RIGHT on screen. Confirmed in the
+     browser by watching the low-pressure marker, which is parented to `earth`,
+     track rightward across the near face frame to frame. The hero is drawn the
+     same way round: near face moving right, polar ring arrowed to the right on
+     its near (lower) side. Static — drawHero is re-run by animationend, a 700ms
+     timer, resize and two MutationObservers, each of which clears the canvas. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2483,52 +2505,116 @@ else initSim();
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);
-    // The 1280x240 strip renders at 100vw x 140px, so y is squashed ~2x
-    // relative to x; pre-compensate with separate axis scales.
-    const SX = Math.min(W*0.062, H*0.33), SY = SX*1.55;   // whole sphere inside the 240px strip
-    const cx = W*0.5, cy = H*0.5, tilt = 0.42;
-    const ct = Math.cos(tilt), st = Math.sin(tilt);
-    function proj(lat, lon){
-      // lon measured from the sub-camera meridian, so the sweep crosses the
-      // visible face left-to-right instead of hugging one limb
-      const x = Math.cos(lat)*Math.sin(lon), y = Math.sin(lat), z = Math.cos(lat)*Math.cos(lon);
-      const y2 = y*ct - z*st, z2 = y*st + z*ct;
-      return { sx: cx + SX*x, sy: cy - SY*y2, front: z2 > -0.02 };
+
+    /* The overlay card behind this canvas is transparent, so the art has to
+       carry its own contrast on BOTH a near-black and a near-white ground:
+       mid-saturation strokes (sky / amber) read on either, where near-black ink
+       would vanish on the dark theme and a pale wash would vanish on the light. */
+    const SEA  = LIGHT ? '2,132,199'  : '125,211,252';   // ocean wash + equator
+    const RIM  = LIGHT ? '3,105,161'  : '186,230,253';   // limb of the globe
+    const WARM = LIGHT ? '180,83,9'   : '253,186,116';   // marked meridian + spin ring
+    const GRID = LIGHT ? '51,65,85'   : '148,163,184';   // graticule + axis
+    const rgba = (col, a) => 'rgba(' + col + ',' + a + ')';
+
+    const tilt = 0.36, ct = Math.cos(tilt), st = Math.sin(tilt);  // camera raised ~20°, as in the sim
+    const cx = W*0.5, cy = H*0.52;
+    const R0 = Math.min(H*0.35, W*0.042);        // main globe: fits 140px with room for the axis
+    const Rs = R0*0.74;                          // the two flanking moments
+    const D  = Math.min(W*0.235, R0*6.8);        // spacing, kept inside the centre 760px
+
+    // Orthographic globe: +lon runs east, and east projects to +x, so an
+    // increasing phase slides surface features rightward across the near face.
+    function proj(lat, lon, x0, y0, R){
+      const X = Math.cos(lat)*Math.sin(lon), Y = Math.sin(lat), Z = Math.cos(lat)*Math.cos(lon);
+      const y2 = Y*ct - Z*st, z2 = Y*st + Z*ct;
+      return { x: x0 + R*X, y: y0 - R*y2, front: z2 > 0.015 };
     }
-    const LATS = [-70,-50,-30,-10,10,30,50,70].map(d => d*Math.PI/180);
-    const GRID = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.22)';
-    const AXIS = LIGHT ? 'rgba(180,120,10,.55)' : 'rgba(245,158,11,.50)';
-    // latitude circles
-    ctx.lineWidth = 1; ctx.strokeStyle = GRID;
-    LATS.concat([0]).forEach(lat => {
-      ctx.beginPath();
-      for(let i=0;i<=180;i++){ const p = proj(lat, 2*Math.PI*i/180); i ? ctx.lineTo(p.sx,p.sy) : ctx.moveTo(p.sx,p.sy); }
-      ctx.closePath(); ctx.stroke();
-    });
-    // spin axis
-    ctx.strokeStyle = AXIS; ctx.lineWidth = 1.6;
-    const top = proj(Math.PI/2, 0), bot = proj(-Math.PI/2, 0);
-    ctx.beginPath(); ctx.moveTo(bot.sx, bot.sy - SY*0.18); ctx.lineTo(top.sx, top.sy + SY*0.18); ctx.stroke();
-    // equal-time dots: same delta-longitude on every circle, so the on-screen
-    // spacing goes as cos(latitude)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 26, L0 = -1.25, DL = 2.50/N;   // few enough dots that the cos(lat) spacing reads
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s2=0;s2<per && k<N;s2++,k++){
-        LATS.forEach(lat => {
-          const p = proj(lat, L0 + k*DL);
-          if(!p.front) return;
-          const warm = Math.abs(lat) < 0.6;
-          ctx.fillStyle = LIGHT ? (warm ? 'rgba(180,83,9,.85)' : 'rgba(7,89,133,.80)')
-                                : (warm ? 'rgba(253,186,116,.90)' : 'rgba(125,211,252,.85)');
-          ctx.beginPath(); ctx.arc(p.sx, p.sy, 2.4, 0, 7); ctx.fill();
-        });
+    // stroke only the arcs on the hemisphere facing us; the far half is hidden
+    function frontStroke(pts){
+      ctx.beginPath(); let pen = false;
+      for(const p of pts){
+        if(!p.front){ pen = false; continue; }
+        if(pen) ctx.lineTo(p.x, p.y); else { ctx.moveTo(p.x, p.y); pen = true; }
       }
-      if(k < N) requestAnimationFrame(batch);
+      ctx.stroke();
     }
-    batch();
+    function parallel(lat, x0, y0, R){
+      const a = []; for(let i=0;i<=140;i++) a.push(proj(lat, -Math.PI + 2*Math.PI*i/140, x0, y0, R)); return a;
+    }
+    function meridian(lon, x0, y0, R){
+      const a = []; for(let i=0;i<=70;i++) a.push(proj(-Math.PI/2 + Math.PI*i/70, lon, x0, y0, R)); return a;
+    }
+
+    function globe(x0, y0, R, phase, main){
+      // spin axis, drawn first so the translucent body passes over it
+      ctx.lineWidth = main ? 2 : 1.5;
+      ctx.strokeStyle = rgba(GRID, main ? 0.55 : 0.4);
+      const ext = R*(main ? 0.24 : 0.18);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 - R*ct - ext); ctx.lineTo(x0, y0 + R*ct + ext); ctx.stroke();
+      // body
+      ctx.beginPath(); ctx.arc(x0, y0, R, 0, 7);
+      ctx.fillStyle = rgba(SEA, LIGHT ? 0.13 : 0.15); ctx.fill();
+      ctx.save(); ctx.clip();
+      // uniform graticule — every parallel and meridian identical, so nothing
+      // here suggests that latitude changes the strength of anything
+      ctx.lineWidth = main ? 1.4 : 1.1;
+      ctx.strokeStyle = rgba(GRID, LIGHT ? 0.5 : 0.48);
+      [-60,-30,30,60].forEach(d => frontStroke(parallel(d*Math.PI/180, x0, y0, R)));
+      for(let k=1;k<6;k++) frontStroke(meridian(phase + k*Math.PI/3, x0, y0, R));
+      // equator
+      ctx.lineWidth = main ? 3 : 2.2;
+      ctx.strokeStyle = rgba(SEA, 0.95);
+      frontStroke(parallel(0, x0, y0, R));
+      // the marked meridian: the one feature that moves between the three globes
+      ctx.lineWidth = main ? 3 : 2.2;
+      ctx.strokeStyle = rgba(WARM, 0.95);
+      frontStroke(meridian(phase, x0, y0, R));
+      ctx.restore();
+      // limb
+      ctx.lineWidth = main ? 3 : 2.2;
+      ctx.strokeStyle = rgba(RIM, LIGHT ? 0.85 : 0.9);
+      ctx.beginPath(); ctx.arc(x0, y0, R, 0, 7); ctx.stroke();
+    }
+
+    // --- starfield (the sim's own backdrop), confined to the unmasked centre
+    let seed = 20250915;
+    const rnd = () => (seed = (seed*1664525 + 1013904223) % 4294967296) / 4294967296;
+    const spheres = [[cx - D, cy, Rs], [cx, cy, R0], [cx + D, cy, Rs]];
+    ctx.fillStyle = rgba(GRID, LIGHT ? 0.42 : 0.5);
+    for(let i=0;i<90;i++){
+      const sx = W*0.23 + rnd()*W*0.54, sy = 7 + rnd()*(H-14), r = 0.8 + rnd()*1.1;
+      let clear = true;
+      for(const s of spheres) if(Math.hypot(sx-s[0], sy-s[1]) < s[2] + 7) { clear = false; break; }
+      if(!clear) continue;
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill();
+    }
+
+    // --- the three moments; phase grows left to right, i.e. the surface turns east
+    globe(cx - D, cy, Rs, -0.95, false);
+    globe(cx + D, cy, Rs,  0.95, false);
+    globe(cx,     cy, R0,  0.00, true);
+
+    // --- rotation sense: a ring of travel around the axis above the north pole.
+    // Its near side is the LOWER half of the projected ellipse, and that side
+    // runs east — to the right — so the arrowhead sits at the lower right.
+    const yN = cy - R0*ct, aX = R0*0.54, aY = Math.max(5, R0*0.54*st);
+    const ringY = yN - R0*0.12;
+    ctx.lineWidth = 1.4; ctx.strokeStyle = rgba(WARM, 0.35);
+    ctx.beginPath(); ctx.ellipse(cx, ringY, aX, aY, 0, 0, 7); ctx.stroke();
+    ctx.lineWidth = 2.8; ctx.strokeStyle = rgba(WARM, 0.95);
+    ctx.beginPath(); ctx.ellipse(cx, ringY, aX, aY, 0, 0.78*Math.PI, 0.22*Math.PI, true); ctx.stroke();
+    { const t = 0.22*Math.PI;
+      const hx = cx + aX*Math.cos(t), hy = ringY + aY*Math.sin(t);
+      // tangent in the direction of travel (t decreasing)
+      const tx = aX*Math.sin(t), ty = -aY*Math.cos(t), tl = Math.hypot(tx, ty);
+      const ux = tx/tl, uy = ty/tl, hs = 8;
+      ctx.fillStyle = rgba(WARM, 0.95);
+      ctx.beginPath();
+      ctx.moveTo(hx + ux*hs, hy + uy*hs);
+      ctx.lineTo(hx - ux*hs*0.35 - uy*hs*0.55, hy - uy*hs*0.35 + ux*hs*0.55);
+      ctx.lineTo(hx - ux*hs*0.35 + uy*hs*0.55, hy - uy*hs*0.35 - ux*hs*0.55);
+      ctx.closePath(); ctx.fill(); }
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

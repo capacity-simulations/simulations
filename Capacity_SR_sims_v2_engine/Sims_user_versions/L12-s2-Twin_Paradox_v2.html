@@ -2220,14 +2220,29 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry — Alice's straight worldline, Bella's receding
-     one, and the 45-degree pulse that carries the call back. It carries NO clock
-     readings and no axis numbers, so it cannot answer any card: every question
-     in the deck turns on a value, and the hero shows only the shape. */
-  let heroGen = 0;
+  /* Hero — THE ONE-WAY CALL. One scene, drawn once, centred: Alice's straight
+     worldline, Bella's receding one, and the single 45-degree pulse that carries
+     Bella's call across the gulf back to Earth. That lone null ray is this
+     build's subject — the L12 siblings turn Bella around and compare the two
+     ages at a reunion; here nobody ever turns, there is no reunion, and the
+     light is the only thing that ever comes back.
+
+     GEOMETRY. One unit = one PIXEL on x and on ct alike, and the drawn region is
+     kept square-ish and centred (about 126 x 112 px), so the ray is a true 45
+     degrees on screen — measured off the rendered bitmap at 45.0 degrees.
+     Nothing is flattened to fit the letterbox; the band's width is carried by
+     soft colour pools and one tapered horizontal, not by stretched physics.
+
+     NO SPOILERS. Every gated card in the deck turns on a NUMBER — Bella's clock
+     at the call, Alice's clock at reception, the dilation factor behind the
+     apparent one, and which clock is slow in S'. So this picture carries no
+     scale of any kind: no grid, no axes, no tick marks along either worldline,
+     no clock faces, no digits, no arrival-pulse train and no annotation of who
+     ages more. Both worldlines are straight and unkinked, which is the honest
+     statement of this variant: without a reunion there is no younger twin.
+     A shape with no ruler on it cannot answer a question about a value. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so the buffer would be stretched across and squashed
        down. Size it to the element's real box before drawing. This canvas is
@@ -2238,45 +2253,122 @@ const Shell = (function(){
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ppu = 22;                               // equal pixels per unit on x and ct, so light is 45 degrees
-    const yBot = H - 16, yTop = 16;
-    const span = (yBot - yTop)/ppu;               // ct height of the strip, in units
-    const Y = ct => yBot - ct*ppu;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += ppu){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let ct = 0; ct <= span; ct += 1){ const py = Y(ct); ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLA = LIGHT ? '#0e7490' : '#06b6d4';   // Alice
-    const COLB = LIGHT ? '#b45309' : '#f59e0b';   // Bella
-    const COLS = LIGHT ? '#a16207' : '#fef3c7';   // the light pulse
-    const pitch = 190, n = Math.ceil(W/pitch) + 1;
-    function bundle(k){
-      const cx = Math.round(k*pitch + pitch*0.40);
-      const X = x => cx + x*ppu;
-      const v  = [0.45,0.60,0.34][k % 3];         // a little variety across the strip
-      const tC = span*0.50;
-      const tR = tC*(1+v);
-      const stop = Math.min(span, tR + 0.7);
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 2.6; ctx.strokeStyle = COLA;
-      ctx.beginPath(); ctx.moveTo(X(0),Y(0)); ctx.lineTo(X(0),Y(stop)); ctx.stroke();
-      ctx.lineWidth = 2.2; ctx.strokeStyle = COLB;
-      ctx.beginPath(); ctx.moveTo(X(0),Y(0)); ctx.lineTo(X(v*stop),Y(stop)); ctx.stroke();
-      ctx.save(); ctx.setLineDash([4,5]); ctx.lineWidth = 1.7; ctx.strokeStyle = COLS;
-      ctx.beginPath(); ctx.moveTo(X(v*tC),Y(tC)); ctx.lineTo(X(0),Y(tR)); ctx.stroke(); ctx.restore();
-      [[0,0,COLA],[v*tC,tC,COLB],[0,tR,COLA]].forEach(p => {
-        ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),4.2,0,7); ctx.fillStyle = p[2]; ctx.fill();
-        ctx.lineWidth = 1.4; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.stroke();
-      });
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // The sim's own palette: --rest (Alice), --moving (Bella), --photon (light).
+    const A = LIGHT ? '14,116,144' : '6,182,212';
+    const B = LIGHT ? '180,83,9'   : '245,158,11';
+    // On the light theme the photon cream turns invisible, and the shade the sim
+    // falls back to sits only ~20 RGB units from Bella's burnt orange. Push it to
+    // the brighter gold the sim uses for the travelled part of the ray so the two
+    // never read as the same kind of line.
+    const L = LIGHT ? '202,138,4'  : '254,243,199';
+    const rgba = (col, a) => 'rgba(' + col + ',' + a + ')';
+    const RIM  = LIGHT ? 'rgba(255,255,255,.92)' : 'rgba(8,10,14,.85)';
+
+    /* --- atmosphere -------------------------------------------------------
+       Three flat, overlapping pools on one horizontal axis — cool over Earth,
+       cream through the gulf the call crosses, warm out where the ship is going.
+       This is what fills a 10:1 band: colour, not geometry. Held inside
+       x = centre ± 420 so the ink stays where the eye is and the outer mask
+       never has a hard edge to crop. */
+    function pool(px, py, rx, ry, col, a){
+      ctx.save(); ctx.translate(px, py); ctx.scale(rx, ry);
+      const g = ctx.createRadialGradient(0,0,0, 0,0,1);
+      g.addColorStop(0,   rgba(col, a));
+      g.addColorStop(.52, rgba(col, a*0.42));
+      g.addColorStop(1,   rgba(col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,1,0,7); ctx.fill(); ctx.restore();
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) bundle(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 80);
-    })();
+
+    /* --- the scene ------------------------------------------------------- */
+    const M = 14, yBot = H - M, T = H - 2*M;      // 1 px per unit, both axes
+    /* They parted before this frame opens — the band is a window onto the middle
+       of the trip, which is what buys the gulf its width: with the parting event
+       inside a 140 px band the ray could never be longer than half the band's
+       height. v is deliberately NOT the sim's default, and with no scale on the
+       picture nothing can be read off it in any case. */
+    const v = 0.52, x0 = 68, tC = 20, xC = x0 + v*tC, tR = tC + xC;
+    const xA = Math.round(W/2 - (x0 + v*T)/2);    // centre the whole figure
+    const X = x => xA + x, Y = t => yBot - t;
+    const midY = Y(T*0.52);
+
+    pool(W/2 - 250, midY, 265, 50, A, 0.15);      // Earth side, cool
+    pool(W/2 + 250, midY, 265, 50, B, 0.15);      // ship side, warm
+    pool(W/2,       midY, 190, 56, L, 0.12);      // the gulf between them
+
+    /* One quiet horizontal at the foot of the scene, tapered to nothing at both
+       ends — the only thing that reaches out across the band, and the reason the
+       art settles into a 10:1 letterbox instead of floating in it. It carries no
+       ticks: it says which way x runs and nothing whatever about how much of it
+       there is. */
+    { const ax = Math.min(Math.round(W*0.30), 350), ay = Y(0) + .5;
+      const g = ctx.createLinearGradient(X(0)-ax, 0, X(0)+ax, 0);
+      const AXC = LIGHT ? '51,65,85' : '148,163,184';
+      g.addColorStop(0, rgba(AXC,0)); g.addColorStop(.30, rgba(AXC,.26));
+      g.addColorStop(.70, rgba(AXC,.26)); g.addColorStop(1, rgba(AXC,0));
+      ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(X(0)-ax, ay); ctx.lineTo(X(0)+ax, ay); ctx.stroke(); }
+
+    /* Worldlines: a soft casing, then the line. Both rise out of the haze at the
+       foot of the band and thin away again at the top instead of stopping on a
+       cut edge — the two lives run on past this window in both directions, and
+       the eye is left on the one thing that happens inside it. Both are straight
+       and neither has a kink — in this variant nobody ever turns around. */
+    function worldline(x1, t1, x2, t2, col){
+      const fade = a => { const g = ctx.createLinearGradient(0, Y(0), 0, Y(T));
+        g.addColorStop(0, rgba(col,0));        g.addColorStop(.11, rgba(col,a));
+        g.addColorStop(.80, rgba(col,a));      g.addColorStop(1, rgba(col,+(a*0.14).toFixed(3)));
+        return g; };
+      ctx.strokeStyle = fade(.15); ctx.lineWidth = 13;
+      ctx.beginPath(); ctx.moveTo(X(x1),Y(t1)); ctx.lineTo(X(x2),Y(t2)); ctx.stroke();
+      ctx.strokeStyle = fade(.94); ctx.lineWidth = 5.6;
+      ctx.beginPath(); ctx.moveTo(X(x1),Y(t1)); ctx.lineTo(X(x2),Y(t2)); ctx.stroke();
+    }
+    worldline(x0, 0, x0 + v*T, T, B);             // Bella, receding, never turning
+    worldline(0,  0, 0,        T, A);             // Alice, at home
+
+    /* The call in flight — the one segment that is the whole story, and the
+       brightest thing in the band. Drawn at a true 45 degrees: it falls one
+       pixel in ct for every pixel it crosses in x. */
+    const px1 = X(xC), py1 = Y(tC), px2 = X(0), py2 = Y(tR);
+    ctx.strokeStyle = rgba(L, .20); ctx.lineWidth = 17;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2,py2); ctx.stroke();
+    // A tapered beam, not another stroke: light is a different kind of thing
+    // from a worldline, and the widening says which way it is travelling.
+    const len = Math.hypot(px2-px1, py2-py1), ux = (px2-px1)/len, uy = (py2-py1)/len;
+    const nx = -uy, ny = ux, w1 = 2.4, w2 = 6.2;
+    const beam = ctx.createLinearGradient(px1,py1, px2,py2);
+    beam.addColorStop(0, rgba(L, .5)); beam.addColorStop(1, rgba(L, 1));
+    ctx.save();
+    ctx.shadowColor = rgba(L, LIGHT ? .55 : .85); ctx.shadowBlur = LIGHT ? 6 : 12;
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(px1 + nx*w1, py1 + ny*w1); ctx.lineTo(px2 + nx*w2, py2 + ny*w2);
+    ctx.lineTo(px2 - nx*w2, py2 - ny*w2); ctx.lineTo(px1 - nx*w1, py1 - ny*w1);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(px1,py1,w1,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(px2,py2,w2,0,7); ctx.fill();
+    ctx.restore();
+
+    // Events: the call and the arrival. Marks only — never readings.
+    function event(x, t, col, r, halo){
+      ctx.beginPath(); ctx.arc(X(x),Y(t), r+halo, 0, 7); ctx.fillStyle = rgba(col,.17); ctx.fill();
+      ctx.beginPath(); ctx.arc(X(x),Y(t), r, 0, 7);
+      ctx.fillStyle = rgba(col, 1); ctx.fill();
+      ctx.lineWidth = 1.8; ctx.strokeStyle = RIM; ctx.stroke();
+    }
+    // the pulse itself, part way home — the sim's own photon head
+    const hx = px1 + (px2-px1)*0.55, hy = py1 + (py2-py1)*0.55;
+    ctx.beginPath(); ctx.arc(hx,hy,13,0,7); ctx.fillStyle = rgba(L,.20); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx,hy,6,0,7); ctx.fillStyle = rgba(L,1); ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = RIM; ctx.stroke();
+
+    event(xC, tC, B, 7.5, 9);                                    // Bella calls
+    event(0,  tR, A, 7.5, 9);                                    // Alice hears it
+    // a single ring where the call lands: the light got here, and that is all
+    ctx.lineWidth = 1.4; ctx.strokeStyle = rgba(L, .55);
+    ctx.beginPath(); ctx.arc(X(0), Y(tR), 14, 0, 7); ctx.stroke();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

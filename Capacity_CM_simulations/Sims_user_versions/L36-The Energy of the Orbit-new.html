@@ -2366,12 +2366,21 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three paths past the SAME Sun, sharing one closest approach, drawn
-     from this sim's own relation e = sqrt(1 + 2 E l^2) and the conic geometry
-     r = p/(1 + e cos th) with p = q(1+e). Dots sit at EQUAL TIME steps, from
-     r^2 dth/dt = l with l = sqrt(GM p) and GM = 1 — so their spacing is the
-     body's speed. Nothing is labelled: which energy makes which path is the
-     inquiry's question, not the hero's answer. */
+  /* Hero: THE CENTRAL ATTRACTION ITSELF — a luminous mass at the middle of the
+     band, the pull it exerts drawn as a staggered lattice of arrows every one
+     of which aims straight at that mass (boldest and longest close in, shorter
+     and fainter further out), and one body sitting in the field.
+     Deliberately withheld, because each one is a gated card's answer:
+       · no V_eff curve and no axis   (card 1 — where V_eff tends to zero)
+       · no orbit path of any kind    (cards 2 & 3 — ellipse vs. escape)
+       · no energy line, no marked intersections, no turning-point markers
+                                      (card 4 — what happens where E meets Veff)
+       · no equal-time dots, no speed or sweep cue anywhere on the path
+                                      (card 5 — where theta-dot is largest)
+     The arrows state only the premise the lecture starts from: the force is
+     central and points at the Sun. Drawn synchronously in one pass — every
+     redraw (animationend, 700 ms timer, resize, two MutationObservers) clears
+     the canvas first, so a deferred batch would be wiped. No text, no digits. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2385,72 +2394,78 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);
-    const q = 0.6;                       // shared perihelion distance
-    // eccentricity from this sim's own relation e = sqrt(1 + 2 E l^2), l = 1
-    const ECC = [-0.42, 0, 0.41].map(E => Math.sqrt(Math.max(0, 1 + 2*E)));
-    const DT = 0.15, KMAX = 46, RMAX = 7.5;
-    const S = 148, YS = 0.50;
-    const cx = W*0.50 + 0.40*S, cy = H*0.50;
-    const cols = LIGHT ? ['#2563eb','#b45309','#db2777'] : ['#60a5fa','#fbbf24','#f472b6'];
-    const P = (x,y) => [cx + x*S, cy - y*S*YS];
-    function build(e){
-      const p = q*(1+e), l = Math.sqrt(p);
-      const thMax = (e < 1) ? Math.PI : Math.acos(-1/e) - 0.02;
-      const N = 3000, dth = thMax/N;
-      const pts = [[q, 0]], line = [];
-      let th = 0, t = 0, k = 1;
-      for(let n = 0; n <= N; n++){
-        const r = p/(1 + e*Math.cos(th));
-        if(r <= RMAX) line.push([r*Math.cos(th), r*Math.sin(th)]);
-        if(r > RMAX) break;
-        t += r*r*dth/l;
-        th += dth;
-        const rr = p/(1 + e*Math.cos(th));
-        if(rr > RMAX) break;
-        while(t >= k*DT && k <= KMAX){
-          pts.push([rr*Math.cos(th), rr*Math.sin(th)]);
-          pts.push([rr*Math.cos(th), -rr*Math.sin(th)]);
-          k++;
-        }
-        if(k > KMAX) break;
-      }
-      return { pts, line };
-    }
-    const fam = ECC.map(build);
-    // faint outlines
-    ctx.lineWidth = 1;
-    fam.forEach((f, i) => {
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.20)';
+    const cx = W*0.50, cy = H*0.50;
+    // Mid-tone saturated inks: they read on the near-black overlay AND on the
+    // near-white one. Near-black ink would vanish in dark theme, near-white in light.
+    const ARR  = LIGHT ? '2,132,199'   : '125,211,252';   // the field arrows
+    const BODY = LIGHT ? '109,40,217'  : '196,181,253';   // the body in the field
+    const SUN  = LIGHT ? '217,119,6'   : '252,211,77';    // the attracting mass
+    const HALO = LIGHT ? '245,158,11'  : '255,196,60';
+
+    /* one arrow: tail at (x,y), head at the inner end, pointing at the mass */
+    function arrow(x, y, ux, uy, L, w, a, col){
+      const hx = x - ux*L, hy = y - uy*L;                 // head tip (mass-ward)
+      const hL = Math.min(9, L*0.42);
+      const bx = hx + ux*hL, by = hy + uy*hL;             // head base
+      ctx.strokeStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
+      ctx.lineWidth = w; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(bx, by); ctx.stroke();
+      const px = -uy, py = ux, hw = w*1.15 + 1.3;
+      ctx.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
       ctx.beginPath();
-      f.line.forEach((pt, j) => { const [X,Y] = P(pt[0], pt[1]); j ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y); });
-      ctx.stroke();
-      ctx.beginPath();
-      f.line.forEach((pt, j) => { const [X,Y] = P(pt[0], -pt[1]); j ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y); });
-      ctx.stroke();
-    });
-    // the Sun at the shared focus
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26);
-    g.addColorStop(0, 'rgba(255,224,130,1)'); g.addColorStop(.35, 'rgba(255,196,60,.9)'); g.addColorStop(1, 'rgba(255,196,60,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, 7); ctx.fill();
-    ctx.fillStyle = LIGHT ? '#d97706' : '#fcd34d';
-    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 7); ctx.fill();
-    // equal-time dots accumulate outward from the shared perihelion
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const total = Math.max.apply(null, fam.map(f => f.pts.length));
-    let k = 0;
-    function batch(){
-      const per = reduce ? total : 2;
-      for(let s = 0; s < per && k < total; s++, k++){
-        fam.forEach((f, i) => {
-          const pt = f.pts[k]; if(!pt) return;
-          const [X,Y] = P(pt[0], pt[1]);
-          ctx.fillStyle = cols[i];
-          ctx.beginPath(); ctx.arc(X, Y, 3.0, 0, 7); ctx.fill();
-        });
-      }
-      if(k < total) requestAnimationFrame(batch);
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(bx + px*hw, by + py*hw);
+      ctx.lineTo(bx - px*hw, by - py*hw);
+      ctx.closePath(); ctx.fill();
     }
-    batch();
+
+    /* the field: five staggered rows across the band, nothing near the edges */
+    const DY = 26, DX = 41;
+    const XMAX = Math.min(Math.round(W*0.285), 10*DX);    // stay inside the mask
+    const RIN = 42;                                       // clear of the mass
+    for(let ri = -2; ri <= 2; ri++){
+      const y = cy + ri*DY;
+      if(Math.abs(y - cy) > H*0.5 - 14) continue;
+      const off = ((ri + 4) % 2) ? DX*0.5 : 0;
+      for(let k = -10; k <= 10; k++){
+        const dx = off + k*DX;
+        if(Math.abs(dx) > XMAX) continue;
+        const x = cx + dx, dy = y - cy;
+        const r = Math.hypot(dx, dy);
+        if(r < RIN + 16) continue;
+        const ux = dx/r, uy = dy/r;
+        const t = Math.min(1, r/(XMAX + 40));
+        let L = 28 - 15*t;
+        if(r - L < RIN) L = r - RIN;                      // never overrun the mass
+        if(L < 11) continue;
+        const a = LIGHT ? 0.97 - 0.50*t : 0.97 - 0.64*t;
+        arrow(x, y, ux, uy, L, 3.7 - 1.7*t, a, ARR);
+      }
+    }
+
+    /* the attracting mass, dead centre */
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 46);
+    g.addColorStop(0,   'rgba(' + HALO + ',.95)');
+    g.addColorStop(.30, 'rgba(' + HALO + ',.45)');
+    g.addColorStop(.62, 'rgba(' + HALO + ',.13)');
+    g.addColorStop(1,   'rgba(' + HALO + ',0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 46, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(' + SUN + ',1)';
+    ctx.beginPath(); ctx.arc(cx, cy, 16, 0, 7); ctx.fill();
+    ctx.fillStyle = LIGHT ? 'rgba(254,215,170,.95)' : 'rgba(255,251,235,.95)';
+    ctx.beginPath(); ctx.arc(cx - 3.5, cy - 3.5, 7, 0, 7); ctx.fill();
+
+    /* one body sitting in the field — no path, no velocity, nothing labelled.
+       Punch a transparent gap around it so the lattice does not crowd it. */
+    const bx = cx + Math.round(Math.min(238, XMAX*0.60)), by = cy - 30, br = 9;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.arc(bx, by, br + 9, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(' + BODY + ',.22)';
+    ctx.beginPath(); ctx.arc(bx, by, br + 6, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(' + BODY + ',1)';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

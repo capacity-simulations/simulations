@@ -1982,12 +1982,25 @@ Shell.init({
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own scene — the top-down court with its scrolling ground
-     markings, A and B on the throw axis and the ball crossing between them,
-     each with the velocity arrow the sim draws. It carries NO numbers and only
-     ONE frame, so it cannot answer any card: the deck asks whether the
-     thrower's motion adds, what another frame measures, and whether the
-     closing rate is frame-independent — all of which need values. */
+  /* Hero: the scene itself, not its physics — a top-down slice of the dodgeball
+     court with the thrower having just released, the ball in flight across the
+     centre, and the target twisting out of the way.
+
+     SPOILER DISCIPLINE. Three cards are gated, and all three are answered by
+     NUMBERS or by a SECOND FRAME, so the banner carries neither:
+       card 2  "measured against the ground, how fast does the ball travel?"
+               -> v_A + v_ball,A.  Nothing here decomposes or sums velocities:
+                  there is not a single velocity arrow on the canvas, so the
+                  thrower's own motion is never shown adding to the throw.
+       card 3  "what does B measure for the same ball?"
+               -> a different value, set by B's own motion.  The banner draws
+                  ONE frame only; the throw is never drawn twice, never paired,
+                  never annotated with a second reading.
+       card 4  "is the closing rate frame-independent?"
+               -> yes, V_frame cancels.  Comparing rates needs two frames or two
+                  numbers; the banner shows a single instant in a single frame.
+     No digits, no arrows, no second panel: the art says "a ball was thrown
+     across a court", which is the premise every card starts from. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2001,47 +2014,129 @@ Shell.init({
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const cy = Math.round(H*0.50), ballY = cy + Math.round(H*0.16);
-    // ground markings: the sim's dashed 4 m court lines
-    const band = Math.max(42, Math.round(W/16));
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.16)' : 'rgba(226,232,240,.18)';
-    ctx.lineWidth = 1.4; ctx.setLineDash([7,7]);
-    for(let x = band/2; x < W; x += band){
-      ctx.beginPath(); ctx.moveTo(x, H*0.10); ctx.lineTo(x, H*0.93); ctx.stroke(); }
-    ctx.setLineDash([]);
-    // court boundary lines
-    ctx.strokeStyle = LIGHT ? 'rgba(168,118,48,.55)' : 'rgba(214,158,87,.50)'; ctx.lineWidth = 2.4;
-    [0.10, 0.93].forEach(f => { ctx.beginPath(); ctx.moveTo(0, H*f); ctx.lineTo(W, H*f); ctx.stroke(); });
-    const ink = LIGHT ? '#0F172A' : '#F8FAFC';
-    function arrow(x, y, len){
-      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x + len, y);
-      ctx.lineTo(x + len - 7, y - 4.5); ctx.lineTo(x + len - 7, y + 4.5);
-      ctx.closePath(); ctx.fill(); ctx.lineCap = 'butt';
+    const P = LIGHT
+      ? { line:[124,74,30], lineA:.52, edge:[146,64,14], edgeA:.88, band:[15,23,42], bandA:.055,
+          A:'#1D4ED8', Adk:'#1E3A8A', B:'#B91C1C', Bdk:'#7F1D1D', ball:'#EA580C', balldk:'#9A3412',
+          ring:'rgba(226,232,240,.92)', head:'#0F172A', shade:'rgba(15,23,42,.08)' }
+      : { line:[203,213,225], lineA:.38, edge:[214,158,87], edgeA:.72, band:[226,232,240], bandA:.05,
+          A:'#60A5FA', Adk:'#1D4ED8', B:'#F87171', Bdk:'#B91C1C', ball:'#FB923C', balldk:'#C2410C',
+          ring:'rgba(6,14,17,.85)', head:'#F8FAFC', shade:'rgba(0,0,0,.16)' };
+
+    /* Horizontal taper. The .welcome-hero mask already dissolves the outer 22%,
+       so anything drawn out there is wasted ink that drags the subject off
+       centre. Every ground marking is stroked through this gradient, which is
+       fully gone by 21%/79% — the court reads as a lit corridor around the
+       throw instead of a full-width grid. */
+    function tap(rgb, a){
+      const g = ctx.createLinearGradient(0,0,W,0);
+      const c0 = 'rgba('+rgb+',0)', c1 = 'rgba('+rgb+','+a+')';
+      g.addColorStop(0,c0); g.addColorStop(.215,c0);
+      g.addColorStop(.315,c1); g.addColorStop(.685,c1);
+      g.addColorStop(.785,c0); g.addColorStop(1,c0);
+      return g;
     }
-    function marker(x, y, r, fill){
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = fill; ctx.fill();
-      ctx.lineWidth = 1.8; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.85)'; ctx.stroke();
+    /* Side elevation, not the sim's plan view: at 140px a top-down player is an
+       unreadable blob, while a silhouette mid-throw reads instantly. */
+    const gy = Math.round(H*0.855), wallY = Math.round(H*0.135);
+
+    // --- the hall: a far-wall line, a floor line, and a low band of floor
+    ctx.fillStyle = tap(P.band.join(','), P.bandA);
+    ctx.fillRect(0, gy, W, H - gy);
+    ctx.strokeStyle = tap(P.line.join(','), P.lineA * 0.8); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(0, wallY); ctx.lineTo(W, wallY); ctx.stroke();
+    ctx.strokeStyle = tap(P.edge.join(','), P.edgeA); ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    // court markings receding along the floor
+    ctx.strokeStyle = tap(P.line.join(','), P.lineA); ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    const lane = Math.max(46, Math.round(W/15));
+    for(let i = 0, x = (W/2) - lane*5.5; i <= 11; i++, x += lane){
+      ctx.beginPath(); ctx.moveTo(x, gy + 5); ctx.lineTo(x + 13, gy + 5); ctx.stroke();
     }
-    const ax = Math.round(W*0.20), bx = Math.round(W*0.78);
-    marker(ax, cy, 10, '#3b82f6'); arrow(ax + 16, cy, 26);      // A, moving forward
-    marker(bx, cy, 10, '#ef4444'); arrow(bx + 16, cy, 38);      // B, moving forward faster
-    // the ball crosses from A to B, accumulating along the throw axis
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const n = 9, x0 = ax + 22, x1 = bx - 26;
-    let k = 0;
-    function batch(){
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++){
-        const px = x0 + (x1 - x0) * (k / (n - 1));
-        const a = 0.14 + 0.86 * (k / (n - 1));
-        ctx.globalAlpha = a; marker(px, ballY, 5.5, '#f97316'); ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+
+    // --- a player silhouette: head, torso, two arms, two legs. No velocity
+    //     arrow and no motion trail on either figure — they say who is on the
+    //     court and what they are doing, never how fast anything moves.
+    function bone(pts, col, w){
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(pts[0], pts[1]);
+      for(let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i+1]);
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    function player(x, body, dark, f, pose){
+      const hipY = gy - 44, shY = gy - 72;
+      ctx.fillStyle = P.shade;                                        // contact shadow
+      ctx.beginPath(); ctx.ellipse(x, gy + 2, 30, 4.5, 0, 0, 7); ctx.fill();
+      if(pose === 'throw'){
+        const shX = x + f*5;
+        bone([shX - f*3, shY + 6, x - f*13, hipY - 16, x - f*20, hipY - 30], dark, 6);      // trailing arm, low and back
+        bone([x - f*2, hipY, x - f*17, gy - 20, x - f*30, gy - 3], dark, 7.5);              // back leg driving through
+        bone([x + f*2, hipY, x + f*17, gy - 22, x + f*25, gy], dark, 7.5);                  // front leg planted
+        bone([x, hipY, shX, shY], body, 12);                                                // torso
+        bone([shX, shY + 3, x + f*22, shY - 13, x + f*33, shY - 17], body, 6.5);            // throwing arm, released
+        ctx.beginPath(); ctx.arc(x + f*9, shY - 11, 8, 0, 7);
+      } else {
+        const shX = x - f*17;                                                               // torso arched hard away from the ball
+        bone([x - f*2, hipY, x - f*20, gy - 26, x - f*31, gy - 1], dark, 7.5);              // rear leg taking the weight
+        bone([x + f*3, hipY, x + f*17, gy - 24, x + f*26, gy - 5], dark, 7.5);              // lead foot skipping clear
+        bone([shX + f*2, shY + 5, shX - f*13, shY + 3, shX - f*25, shY - 5], dark, 6);      // far arm flung back for balance
+        bone([x, hipY, shX, shY], body, 12);                                                // torso, leaning back
+        bone([shX, shY + 3, shX + f*15, shY - 14, shX + f*7, shY - 27], body, 6.5);         // near arm up across the face
+        ctx.beginPath(); ctx.arc(shX - f*6, shY - 11, 8, 0, 7);
       }
-      if(k >= n) arrow(x1 + 12, ballY, 54);                      // the ball's own velocity arrow
-      if(k < n) setTimeout(() => requestAnimationFrame(batch), 90);
+      ctx.fillStyle = body; ctx.fill();
+      ctx.lineWidth = 2.2; ctx.strokeStyle = P.ring; ctx.stroke();
     }
-    batch();
+
+    const ax = Math.round(W*0.355), bx = Math.round(W*0.665);
+    player(bx, P.B, P.Bdk, -1, 'dodge');                        // the target, arching clear
+    player(ax, P.A, P.Adk,  1, 'throw');                        // the thrower, just released
+
+    // --- the ball, mid-flight between them. The tail is a comet cue that the
+    //     ball is moving, not a measured interval: no ticks, no scale, and no
+    //     twin in a second frame for it to be compared against.
+    const hx = ax + 40, hy = gy - 89, bX = Math.round(W*0.515), bY = gy - 74;
+    function ballAt(x, y, r, a, solid){
+      ctx.globalAlpha = a;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = P.ball; ctx.fill();
+      if(solid){
+        ctx.lineWidth = 2; ctx.strokeStyle = P.ring; ctx.stroke();
+        ctx.lineWidth = 1.8; ctx.strokeStyle = P.balldk;          // dodgeball seams
+        ctx.beginPath(); ctx.ellipse(x, y, r*0.40, r*0.92, 0, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - r*0.92, y); ctx.lineTo(x + r*0.92, y); ctx.stroke();
+        ctx.globalAlpha = 0.55; ctx.lineWidth = 2.2;              // specular kick
+        ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.85)';
+        ctx.beginPath(); ctx.arc(x, y, r*0.66, -2.5, -1.5); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    for(let i = 0; i < 9; i++){
+      const t = 0.04 + 0.82 * Math.pow(i/8, 0.78);               // bunches into the ball: a comet, not a bead chain
+      const x = hx + (bX - hx) * t;
+      const y = hy + (bY - hy) * t - Math.sin(t * Math.PI) * 4;   // a shallow lift off the hand
+      ballAt(x, y, 2.0 + 6.2*t, 0.08 + 0.46*t, false);
+    }
+    ballAt(bX, bY, 9.5, 1, true);
+
+    // --- two spare balls on the floor: scene texture, inside the unmasked
+    //     centre, carrying no information at all
+    ctx.globalAlpha = LIGHT ? 0.5 : 0.42;
+    [[0.455, 6.5], [0.585, 5.4]].forEach(s => {
+      ctx.beginPath(); ctx.arc(Math.round(W*s[0]), gy - s[1] + 1, s[1], 0, 7);
+      ctx.fillStyle = P.ball; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = P.balldk; ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    // --- feather the letterbox edges so nothing reads as a hard crop
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    let fg = ctx.createLinearGradient(0,0,0,3);
+    fg.addColorStop(0,'rgba(0,0,0,1)'); fg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0,0,W,3);
+    fg = ctx.createLinearGradient(0,H-3,0,H);
+    fg.addColorStop(0,'rgba(0,0,0,0)'); fg.addColorStop(1,'rgba(0,0,0,1)');
+    ctx.fillStyle = fg; ctx.fillRect(0,H-3,W,3);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

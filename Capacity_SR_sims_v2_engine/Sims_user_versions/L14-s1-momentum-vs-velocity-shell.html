@@ -2029,17 +2029,26 @@ window.__audit = {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own relationship, drawn from its own physics — the
-     Newtonian straight line m0v dashed in grey, the relativistic gamma*m0*v
-     curve in blue, and the v = c boundary dashed in amber. It carries NO axis
-     numbers, NO readouts and only ONE mass, so it cannot answer any card in the
-     deck: the questions turn on what a steady force does to the speed, on why
-     gamma is forced, on how a SECOND mass rescales the curve, and on a numeric
-     growth factor — none of which an unlabelled single-mass sketch supplies. */
-  let heroGen = 0;
+  /* Hero: the APPARATUS, never the result. A steady push — four identical,
+     evenly spaced thrust chevrons, same weight and same opacity, so the force
+     reads as constant and unending — drives ONE body of rest mass m₀ along a
+     track, and far ahead stands the speed limit v = c with NOTHING plotted
+     against it.
+
+     Deliberately absent, because the gated cards turn on exactly these things:
+       • the p-vs-v curve itself — card 2 asks what gives way under an endless
+         push, and γm₀v flattening in v while diverging in p IS that answer, so
+         no curve of any kind is drawn;
+       • a second curve for a doubled m₀ (card 4) — there is one body only;
+       • any pair of marked points whose momenta could be compared (card 5) —
+         no markers, no trajectory, no dot spacing, no ratio to read off;
+       • any two-frame collision (card 3).
+     The band poses the setup and answers none of it. No text, no digits.
+     Static by construction: one synchronous pass, so the redraws fired by
+     animationend, the 700 ms fallback, resize and the two MutationObservers
+     each land a complete picture. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer would be stretched across and
            squashed down. Size the buffer to the element's real box before
@@ -2051,44 +2060,88 @@ window.__audit = {
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const yBot = H - 14, yTop = 12, PH = yBot - yTop;
-    // faint plot grid
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += 26){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let py = yBot; py >= yTop; py -= 26){ ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLR = LIGHT ? '#1d4ed8' : '#60a5fa';   // relativistic gamma*m0*v
-    const COLC = LIGHT ? '#64748b' : '#94a3b8';   // Newtonian m0*v
-    const COLL = LIGHT ? '#b45309' : '#f59e0b';   // v = c
-    const pitch = 210, n = Math.ceil(W/pitch) + 1;
-    const PMAX = 4;                               // vertical span, in the plot's own momentum units
-    function bundle(k){
-      const x0 = Math.round(k*pitch + 18), PW = pitch - 46;
-      const X = b => x0 + b*PW;
-      const Y = p => yBot - Math.min(p, PMAX)/PMAX*PH;
-      ctx.save(); ctx.setLineDash([5,4]); ctx.lineWidth = 1.2; ctx.strokeStyle = COLL;
-      ctx.beginPath(); ctx.moveTo(X(1), yTop); ctx.lineTo(X(1), yBot); ctx.stroke(); ctx.restore();
-      ctx.save(); ctx.setLineDash([6,5]); ctx.lineWidth = 1.6; ctx.strokeStyle = COLC;
-      ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(1), Y(1)); ctx.stroke(); ctx.restore();
-      ctx.save();
-      ctx.beginPath(); ctx.rect(x0 - 2, yTop, PW + 4, PH); ctx.clip();
-      ctx.lineWidth = 2.2; ctx.strokeStyle = COLR; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.beginPath();
-      for(let i = 0; i <= 240; i++){
-        const b = 0.999*i/240, p = b/Math.sqrt(1 - b*b);
-        const px = X(b), py = Y(p);
-        if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke(); ctx.restore();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // Two palettes, each a long luminance throw from the ground it sits on:
+    // saturated mid-darks on the near-white light overlay, bright pastels on
+    // the near-black dark one.
+    const BODY = LIGHT ? '29,78,216'  : '96,165,250';   // the pushed body
+    const PUSH = LIGHT ? '91,33,182'  : '196,181,253';  // the steady force
+    const LIM  = LIGHT ? '180,83,9'   : '245,158,11';   // the v = c limit
+    const RAIL = LIGHT ? '30,41,59'   : '148,163,184';
+    const rgba = (col, a) => 'rgba(' + col + ',' + a + ')';
+
+    /* Sized from the band height so the tableau keeps its proportions at any
+       viewport, and held inside the middle of the width — the CSS mask fades
+       the outer 22% on each side, and the card's type sits over the centre. */
+    const r     = Math.max(14, Math.round(H*0.245));    // body radius
+    const railY = Math.round(H*0.80);
+    const bodyX = Math.round(W*0.50);
+    const bodyY = railY - r - Math.round(H*0.03);
+    const xLim  = Math.round(W*0.675);                  // where v = c stands
+    const xRail = Math.round(W*0.295);
+    const yTop  = Math.round(H*0.12), yBot = Math.round(H*0.88);
+
+    /* The limit, drawn first so the soft-edge pass below can only ever eat into
+       its own glow: a wash bleeding off to the unreachable side, faded at both
+       ends so it reads as light rather than as a box. Nothing is plotted
+       against this line and nothing crosses it. */
+    const gW = r*2.3, gTop = yTop - H*0.06, gBot = yBot + H*0.06;
+    const lg = ctx.createLinearGradient(xLim, 0, xLim + gW, 0);
+    lg.addColorStop(0, rgba(LIM, .26)); lg.addColorStop(1, rgba(LIM, 0));
+    ctx.fillStyle = lg; ctx.fillRect(xLim, gTop, gW, gBot - gTop);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const fadeH = (gBot - gTop)*0.34;
+    const fT = ctx.createLinearGradient(0, gTop, 0, gTop + fadeH);
+    fT.addColorStop(0, 'rgba(0,0,0,1)'); fT.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fT; ctx.fillRect(xLim, gTop, gW, fadeH);
+    const fB = ctx.createLinearGradient(0, gBot, 0, gBot - fadeH);
+    fB.addColorStop(0, 'rgba(0,0,0,1)'); fB.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fB; ctx.fillRect(xLim, gBot - fadeH, gW, fadeH);
+    ctx.restore();
+    // wall hatching on the far side
+    ctx.strokeStyle = rgba(LIM, .58);
+    ctx.lineWidth = Math.max(2, r*0.085);
+    for(let y = yTop + r*0.32; y < yBot; y += r*0.52){
+      ctx.beginPath(); ctx.moveTo(xLim + 2, y); ctx.lineTo(xLim + r*0.54, y - r*0.46); ctx.stroke();
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) bundle(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 80);
-    })();
+    // the line itself, dashed in the sim's own idiom for v = c
+    ctx.save();
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([Math.round(H*0.105), Math.round(H*0.075)]);
+    ctx.lineWidth = Math.max(3, r*0.115); ctx.strokeStyle = rgba(LIM, .98);
+    ctx.beginPath(); ctx.moveTo(xLim + .5, yTop); ctx.lineTo(xLim + .5, yBot); ctx.stroke();
+    ctx.restore();
+
+    // the track the push acts along — it stops dead at the limit
+    ctx.strokeStyle = rgba(RAIL, .34);
+    ctx.lineWidth = Math.max(2, H*0.017);
+    ctx.beginPath(); ctx.moveTo(xRail, railY + .5); ctx.lineTo(xLim, railY + .5); ctx.stroke();
+
+    // the steady push: identical glyphs, identical spacing, identical opacity —
+    // a force that neither grows nor fades. Nothing here says what it achieves.
+    const cw = r*0.46, ch = r*0.66, gap = r*1.95, tail = r*0.62;
+    ctx.lineWidth = Math.max(3, r*0.23);
+    ctx.strokeStyle = rgba(PUSH, .92);
+    for(let i = 0; i < 4; i++){
+      const xt = bodyX - r - r*0.42 - i*gap;
+      ctx.beginPath();
+      ctx.moveTo(xt - cw - tail, bodyY); ctx.lineTo(xt, bodyY);   // shaft
+      ctx.moveTo(xt - cw, bodyY - ch);                            // head
+      ctx.lineTo(xt,      bodyY);
+      ctx.lineTo(xt - cw, bodyY + ch);
+      ctx.stroke();
+    }
+
+    // the body — one mass, sitting on the track, lit from the upper left
+    const hg = ctx.createRadialGradient(bodyX, bodyY, r, bodyX, bodyY, r*1.70);
+    hg.addColorStop(0, rgba(BODY, .24)); hg.addColorStop(1, rgba(BODY, 0));
+    ctx.beginPath(); ctx.arc(bodyX, bodyY, r*1.70, 0, 7); ctx.fillStyle = hg; ctx.fill();
+    const bg = ctx.createRadialGradient(bodyX - r*0.32, bodyY - r*0.36, r*0.10, bodyX, bodyY, r);
+    bg.addColorStop(0, rgba(BODY, .97)); bg.addColorStop(1, rgba(BODY, .58));
+    ctx.beginPath(); ctx.arc(bodyX, bodyY, r, 0, 7); ctx.fillStyle = bg; ctx.fill();
+    ctx.lineWidth = Math.max(2.5, r*0.11); ctx.strokeStyle = rgba(BODY, 1); ctx.stroke();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

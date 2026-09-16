@@ -2369,16 +2369,31 @@ window.__audit = {
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
 
-  /* Hero: this sim's own geometry — Alice's straight worldline and Bella's
-     bent one joining the SAME two events, drawn with the sim's own vertices
-     (Bella turns at x = v·T/2, t = T/2 with v = 0.60) on an equal x-ct grid so
-     the light cone is dashed in at a true 45°. It carries NO τ values and no
-     clock readings, so it cannot answer card 2: the whole deck turns on how
-     much time each path records, and the hero shows only the paths. */
-  let heroGen = 0;
+  /* Hero: this sim's own geometry as ONE large centred emblem — no tiled strip,
+     no full-field grid. The parting event E₁ sits on the centre line at the
+     bottom of the band and the reunion E₂ directly above it; the future light
+     cone of E₁ and the past light cone of E₂ cross at the same two side
+     vertices and enclose the causal diamond, the only patch of spacetime a
+     worldline joining those two events can occupy. Inside it: Alice's straight
+     segment and Bella's bent one, turning at the sim's own vertex x = v·T/2,
+     t = T/2 with v = 0.60, in the sim's own colours (colA/colB/colEvent).
+     x and ct share ONE pixel scale (S px per unit on both axes), so every cone
+     ray is a true 45° — no flattening to fit the letterbox; the drawn region is
+     simply kept to a centred ~2:1 patch the band can hold.
+
+     Withheld on purpose, because the deck gates on them: no proper times, clock
+     readings, ageing marks or path ranking (cards 2 and 3 turn on how much time
+     each path records); no dot, glow, angle arc or emphasis at the turnaround
+     (card 4 asks what makes the twins non-interchangeable); no second observer,
+     boosted axes or simultaneity line (card 5 asks what survives a boost). What
+     is left — two twins, two paths, the same two events — is exactly what the
+     ungated opening card states in words.
+
+     Static: one synchronous pass. drawHero is re-run by animationend, a 700 ms
+     timer, resize and two MutationObservers, each clearing the canvas first, so
+     nothing may be deferred to a later frame. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer would be stretched across and
            squashed down: every ctx.arc() circle would render as an ellipse.
@@ -2390,55 +2405,72 @@ window.__audit = {
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ppu = 22;                               // equal pixels per unit on x and ct, so light is 45°
-    const yBot = H - 16, yTop = 16;
-    const span = (yBot - yTop)/ppu;               // ct separation of the two shared events, in units
-    const Y  = ct => yBot - ct*ppu;
-    // faint spacetime grid
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += ppu){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let ct = 0; ct <= span; ct += 1){ const py = Y(ct); ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLA = LIGHT ? '#1d4ed8' : '#7eb8ff';   // Alice — the sim's own blue
-    const COLB = LIGHT ? '#b91c1c' : '#fc8a8a';   // Bella — the sim's own red
-    const COLE = LIGHT ? '#334155' : '#f1f3f5';   // the shared events
-    const pitch = 200, n = Math.ceil(W/pitch) + 1;
-    function bundle(k){
-      const cx = Math.round(k*pitch + pitch*0.5);
-      const X = x => cx + x*ppu;
-      const s = (k % 2) ? -1 : 1;                 // alternate which way the turnaround swings
-      const vb = 0.60;                            // the sim's default outbound/return speed
-      // light cone from the departure event, dashed at 45°
-      ctx.save(); ctx.setLineDash([4,5]); ctx.lineWidth = 1.1;
-      ctx.strokeStyle = LIGHT ? 'rgba(146,109,10,.40)' : 'rgba(254,243,199,.30)';
-      const lc = span*0.62;   // kept inside the bundle's own pitch so cones don't collide
-      ctx.beginPath(); ctx.moveTo(X(-lc),Y(lc)); ctx.lineTo(X(0),Y(0)); ctx.lineTo(X(lc),Y(lc)); ctx.stroke();
-      ctx.restore();
-      const draw = (pts,col,w) => {
-        ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-        ctx.beginPath();
-        pts.forEach((p,i) => i ? ctx.lineTo(X(p[0]),Y(p[1])) : ctx.moveTo(X(p[0]),Y(p[1])));
-        ctx.stroke();
-      };
-      const turn = [vb*span/2*s, span/2];
-      draw([[0,0], turn, [0,span]], COLB, 2.4);   // Bella — bent
-      draw([[0,0],[0,span]], COLA, 2.6);          // Alice — straight
-      // the turnaround
-      ctx.beginPath(); ctx.arc(X(turn[0]),Y(turn[1]),3.6,0,7); ctx.fillStyle = COLB; ctx.fill();
-      // the two shared events
-      [[0,0],[0,span]].forEach(p => {
-        ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),4.5,0,7); ctx.fillStyle = COLE; ctx.fill();
-        ctx.lineWidth = 1.4; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.stroke();
-      });
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s2 = 0; s2 < per && k < n; s2++, k++) bundle(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 80);
-    })();
+
+    const mar  = Math.max(7, Math.round(H*0.072));
+    const yBot = H - mar, yTop = mar;
+    const S    = yBot - yTop;                     // E₁→E₂ in px — and the SAME px per unit of x
+    const vb   = 0.60;                            // the sim's default outbound/return speed
+    const cx   = Math.round(W/2 - vb*S*0.15);     // nudge left so the bulge balances on the centre
+    const X = u => cx + u*S;                      // u measured in units of the journey's ct height
+    const Y = u => yBot - u*S;
+    const ext  = 1 + mar/S;                       // where a 45° ray from an event meets the band edge
+
+    const COLA = LIGHT ? '#2563eb' : '#7eb8ff';   // Alice — the sim's own blue  (colA)
+    const COLB = LIGHT ? '#dc2626' : '#fc8a8a';   // Bella — the sim's own red   (colB)
+    const COLE = LIGHT ? '#334155' : '#f1f3f5';   // the two shared events       (colEvent)
+    const RING = LIGHT ? 'rgba(255,255,255,.92)' : 'rgba(8,10,14,.88)';
+    const CONE = LIGHT ? 'rgba(161,98,7,.72)'    : 'rgba(254,240,190,.62)';
+
+    // the space axis of the drawn frame, through E₁ — a horizontal anchor for the
+    // band, faded at both ends so it dies before the hero mask reaches it
+    { const ax = ctx.createLinearGradient(W*0.24, 0, W*0.76, 0);
+      const mid = LIGHT ? 'rgba(51,65,85,.50)' : 'rgba(176,192,216,.48)';
+      ax.addColorStop(0,'rgba(0,0,0,0)'); ax.addColorStop(.20, mid);
+      ax.addColorStop(.80, mid);          ax.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.lineWidth = 1.8; ctx.strokeStyle = ax;
+      ctx.beginPath(); ctx.moveTo(W*0.24, Y(0)+.5); ctx.lineTo(W*0.76, Y(0)+.5); ctx.stroke(); }
+
+    // the causal diamond — future cone of E₁ ∩ past cone of E₂: every worldline
+    // that joins the two events lives inside it
+    const dia = () => { ctx.beginPath();
+      ctx.moveTo(X(0),Y(0)); ctx.lineTo(X(.5),Y(.5)); ctx.lineTo(X(0),Y(1)); ctx.lineTo(X(-.5),Y(.5));
+      ctx.closePath(); };
+    const g = ctx.createLinearGradient(0, Y(1), 0, Y(0));
+    if(LIGHT){ g.addColorStop(0,'rgba(51,65,85,.22)');    g.addColorStop(1,'rgba(51,65,85,.14)'); }
+    else     { g.addColorStop(0,'rgba(150,182,232,.26)'); g.addColorStop(1,'rgba(150,182,232,.14)'); }
+    dia(); ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = LIGHT ? 'rgba(51,65,85,.40)' : 'rgba(208,223,248,.38)';
+    dia(); ctx.stroke();
+
+    // the light cones that bound it, dashed at a true 45° (the sim's own idiom)
+    ctx.save();
+    ctx.setLineDash([7,5]); ctx.lineWidth = 3; ctx.strokeStyle = CONE;
+    ctx.beginPath();
+    ctx.moveTo(X(-ext),Y(ext));   ctx.lineTo(X(0),Y(0)); ctx.lineTo(X(ext),Y(ext));     // E₁'s future cone
+    ctx.moveTo(X(-ext),Y(1-ext)); ctx.lineTo(X(0),Y(1)); ctx.lineTo(X(ext),Y(1-ext));   // E₂'s past cone
+    ctx.stroke();
+    ctx.restore();
+
+    // the two worldlines — same start, same end, one straight and one bent.
+    // Each is laid down twice: a dark/light backing stroke so both survive on a
+    // near-black and a near-white ground, then the colour on top.
+    const wl = (pts,col,w) => {
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      pts.forEach((p,i) => i ? ctx.lineTo(X(p[0]),Y(p[1])) : ctx.moveTo(X(p[0]),Y(p[1])));
+      ctx.lineWidth = w + 3.2; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.75)' : 'rgba(8,10,14,.70)';
+      ctx.stroke();
+      ctx.lineWidth = w; ctx.strokeStyle = col; ctx.stroke();
+    };
+    wl([[0,0],[vb/2,.5],[0,1]], COLB, 6);         // Bella — out at v, turn, back at v
+    wl([[0,0],[0,1]],           COLA, 6);         // Alice — one straight segment
+
+    // E₁ and E₂ — the two events both twins share
+    [[0,0],[0,1]].forEach(p => {
+      ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),7.5,0,7);
+      ctx.fillStyle = COLE; ctx.fill();
+      ctx.lineWidth = 2.2; ctx.strokeStyle = RING; ctx.stroke();
+    });
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

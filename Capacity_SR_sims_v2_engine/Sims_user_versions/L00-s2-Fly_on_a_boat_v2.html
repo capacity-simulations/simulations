@@ -2191,10 +2191,25 @@ if(spd){ spd.value = '0.25'; spd.dispatchEvent(new Event('change')); }
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the cabin drawn from the sim's own x = v·t at EQUAL steps of time —
-     equal spacing is what constant velocity looks like. The fly is still at the
-     ceiling in every copy: the hero shows the set-up, never an outcome, so it
-     cannot answer any card in the deck. */
+  /* Hero — Galileo's ship herself, under way on open water, and nothing else.
+     ONE vessel, seen only from outside, with the deckhouse drawn CLOSED: the
+     single thing the band asserts is that you cannot see in.
+
+     Spoiler budget. The four gated cards need, respectively, a falling body
+     inside the cabin (2 · where does it land → directly below), a SECOND ship
+     speed to compare against (3 · a faster ship → exactly the same measurement),
+     a trajectory drawn in the beach frame (4 · what Galileo sees → a
+     forward-leaning parabola) and a two-frame comparison of one quantity
+     (5 · what both share → the fall time). The band carries none of those: no
+     fly, no released object, no arc or dotted path, no second ship, no second
+     observer, no beach, no interior, no timing marks. All it shows is what
+     card 1 already states in plain words — a ship gliding steadily.
+
+     Two things were cut on purpose. A masthead pennant streaming astern would
+     have illustrated "objects on a moving ship get left behind", which is card
+     2's WRONG answer A; and the previous hero's repeated cabins were dropped
+     because repeated marks invite a spacing comparison, the exact mechanism by
+     which a hero can smuggle in a velocity difference. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -2206,34 +2221,163 @@ if(spd){ spd.value = '0.25'; spd.dispatchEvent(new Event('change')); }
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    /* The buffer above is sized to the element's own box, so device pixels are
+       already square and NO anisotropic pre-compensation is wanted. Verified:
+       this build carries no `SY = SX*k` / `ctx.scale(1/AR,1)` pair. Reset the
+       matrix outright anyway so a re-entrant draw can never inherit one. */
+    ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,W,H);                 // transparent: the overlay dim is the background
-    const waterY = Math.round(H*0.82);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.26)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(0, waterY+0.5); ctx.lineTo(W, waterY+0.5); ctx.stroke();
-    const N = 9, v = 4, dt = 0.6;           // metres per second, seconds per mark
-    const span = W*0.84, x0 = W*0.08;
-    const scale = span / (v*dt*(N-1));      // px per metre
-    const X = k => x0 + v*(k*dt)*scale;     // x = v t, v constant → equal spacing
-    const cw = Math.max(20, Math.min(42, W*0.032)), chh = cw*1.35;
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0; s<per && k<N; s++, k++){
-        const x = X(k), top = waterY - chh, a = 0.14 + 0.6*(k/(N-1));
-        ctx.strokeStyle = LIGHT ? 'rgba(161,98,7,'+a+')' : 'rgba(251,191,36,'+a+')';
-        ctx.lineWidth = 1.6;
-        ctx.strokeRect(x - cw/2, top, cw, chh);
-        ctx.beginPath();
-        ctx.moveTo(x - cw/2 - 3, top); ctx.lineTo(x, top - 8); ctx.lineTo(x + cw/2 + 3, top);
-        ctx.stroke();
-        ctx.fillStyle = LIGHT ? 'rgba(190,24,93,'+Math.min(1,a+0.25)+')' : 'rgba(244,114,182,'+Math.min(1,a+0.25)+')';
-        ctx.beginPath(); ctx.arc(x, top + chh*0.2, 3.2, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    /* Wholly STATIC. drawHero is re-run by the card's animationend, a 700 ms
+       timer and two MutationObservers, each after a clear, so nothing here may
+       depend on a frame counter. */
+    const s  = Math.max(0.82, Math.min(1.06, W/1400));   // ship scale
+    const vk = H/140;                                    // band-height scale
+    const cx = Math.round(W*0.50);
+    const waterY = Math.round(H*0.735);
+    const hHW    = Math.round(150*s);                    // hull half-width
+    const deckY  = Math.round(waterY -  9*vk);
+    const keelY  = Math.round(waterY + 14*vk);
+
+    /* Light theme sits on a near-white ground, so its ink has to be genuinely
+       DARK — deep navy, burnt umber, slate — not a mid-tone wash. */
+    const SEA  = LIGHT ? 'rgba(7,89,133,'  : 'rgba(125,211,252,';
+    const WOOD = LIGHT ? 'rgba(124,45,18,' : 'rgba(251,191,36,';
+    const SAIL = LIGHT ? 'rgba(30,41,59,'  : 'rgba(254,249,231,';   // silhouette / warm canvas
+    const F = LIGHT ? 0.46 : 0.42;          // body fill
+    const S = LIGHT ? 0.95 : 0.92;          // outline
+
+    /* The CSS mask dissolves the outer 22% of the band, so the sea is faded to
+       nothing by x≈0.20W / 0.80W instead of running to the bezel: every stroke
+       then lands inside the clear centre where the eye actually is. */
+    const xA = W*0.195, xB = W*0.285, xC = W*0.715, xD = W*0.805, xSpan = xD - xA;
+    function seaBand(a){
+      const g = ctx.createLinearGradient(xA, 0, xD, 0);
+      g.addColorStop(0, SEA+'0)');
+      g.addColorStop((xB-xA)/xSpan, SEA+a+')');
+      g.addColorStop((xC-xA)/xSpan, SEA+a+')');
+      g.addColorStop(1, SEA+'0)');
+      return g;
     }
-    batch();
+    function swell(y, amp, lam, phase, lw, a){
+      ctx.beginPath();
+      let first = true;
+      for(let x = xA; x <= xD; x += 4){
+        const yy = y + Math.sin((x-cx)/lam + phase)*amp;
+        if(first){ ctx.moveTo(x, yy); first = false; } else ctx.lineTo(x, yy);
+      }
+      ctx.strokeStyle = seaBand(a); ctx.lineWidth = lw; ctx.stroke();
+    }
+    swell(waterY,           1.8*vk, 46, 0.0, 3.0, 0.62);   // the surface itself
+    swell(waterY +  7*vk,   2.2*vk, 38, 1.7, 2.1, 0.36);
+    swell(waterY + 14*vk,   2.5*vk, 31, 3.1, 1.8, 0.26);
+
+    // wake: a smooth spreading fan astern — continuous, so there is nothing
+    // discrete to count and no spacing from which to read off a speed
+    [[4,10],[7,17]].forEach(([y1,y2], i) => {
+      ctx.beginPath();
+      ctx.moveTo(cx - hHW*0.80, waterY + y1*vk);
+      ctx.quadraticCurveTo(cx - hHW*1.40, waterY + (y1+2)*vk, cx - hHW*1.95, waterY + y2*vk);
+      ctx.strokeStyle = SEA + (0.44 - i*0.14) + ')';
+      ctx.lineWidth = (2.4 - i*0.6)*s;
+      ctx.stroke();
+    });
+    // bow wave
+    ctx.beginPath();
+    ctx.moveTo(cx + hHW*0.86, waterY + 2*vk);
+    ctx.quadraticCurveTo(cx + hHW*1.10, waterY - 4.5*vk, cx + hHW*1.27, waterY + 3*vk);
+    ctx.strokeStyle = SEA + '0.52)'; ctx.lineWidth = 2.4*s; ctx.stroke();
+
+    // clears whatever was drawn behind the CURRENT path, so the shape about to
+    // be filled reads as one solid body rather than a translucent overlap
+    function solidify(){
+      ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
+    }
+
+    // ---- hull: one bold filled body, bow to the right ----
+    ctx.beginPath();
+    ctx.moveTo(cx - hHW, deckY - 5*vk);
+    ctx.quadraticCurveTo(cx, deckY + 3.5*vk, cx + hHW, deckY - 8*vk);              // sheer
+    ctx.quadraticCurveTo(cx + hHW*0.34, keelY + 4*vk, cx - hHW*0.50, keelY);       // forefoot + keel
+    ctx.quadraticCurveTo(cx - hHW*0.94, keelY - 3*vk, cx - hHW, deckY - 5*vk);     // run to the transom
+    ctx.closePath();
+    /* Punch the sea out from under the body before filling it. Without this the
+       translucent hull composites over the waterline drawn behind it and wears
+       a stripe down its middle — and a boat you can see straight through is the
+       wrong message in a sim whose whole point is a cabin you cannot see into. */
+    solidify();
+    ctx.fillStyle = WOOD + F + ')'; ctx.fill();
+    ctx.lineWidth = 3.2*s; ctx.strokeStyle = WOOD + S + ')'; ctx.stroke();
+
+    // ---- the cabin, aft and SHUT: no window, no pane lines, no interior ----
+    const cabW = Math.round(hHW*0.44), cabH = Math.round(21*vk);
+    const cabCX = cx - Math.round(hHW*0.54), cabTop = deckY - Math.round(2*vk) - cabH;
+    const cr = 3*s, cL = cabCX - cabW/2, cR = cabCX + cabW/2, cB = cabTop + cabH;
+    ctx.beginPath();
+    ctx.moveTo(cL + cr, cabTop); ctx.lineTo(cR - cr, cabTop);
+    ctx.quadraticCurveTo(cR, cabTop, cR, cabTop + cr); ctx.lineTo(cR, cB);
+    ctx.lineTo(cL, cB); ctx.lineTo(cL, cabTop + cr);
+    ctx.quadraticCurveTo(cL, cabTop, cL + cr, cabTop);
+    ctx.closePath();
+    solidify();
+    ctx.fillStyle = WOOD + '0.30)'; ctx.fill();
+    ctx.lineWidth = 2.6*s; ctx.strokeStyle = WOOD + S + ')'; ctx.stroke();
+    ctx.beginPath();                                     // pitched roof, solid
+    ctx.moveTo(cL - 4.5*s, cabTop + 1.5*vk);
+    ctx.lineTo(cabCX,      cabTop - 6*vk);
+    ctx.lineTo(cR + 4.5*s, cabTop + 1.5*vk);
+    ctx.closePath();
+    ctx.fillStyle = WOOD + '0.86)'; ctx.fill();
+
+    /* ---- mast and one broad square sail ----
+       The mast is drawn in TWO segments, below the foot and above the yard, so
+       no line ever crosses the cloth. A mast showing through a translucent
+       rectangle turns the sail into a mullioned pane of glass — which looks
+       wrong and, worse, invites exactly the "see inside the cabin" reading the
+       gated deck must not be handed. */
+    const mastX = cx + Math.round(hHW*0.18), mastTop = Math.round(H*0.105);
+    const sTop = Math.round(H*0.165), sBot = Math.round(H*0.565);
+    const clewR = { x: mastX + 62*s, y: sBot -  6*vk };
+    const clewL = { x: mastX - 56*s, y: sBot - 10*vk };
+    ctx.strokeStyle = WOOD + '0.90)'; ctx.lineWidth = 3.4*s;
+    ctx.beginPath();
+    ctx.moveTo(mastX + 1.5*s, deckY + 1*vk); ctx.lineTo(mastX,        sBot + 1*vk);    // heel
+    ctx.moveTo(mastX - 3.0*s, sTop + 1*vk);  ctx.lineTo(mastX - 5.0*s, mastTop);       // masthead
+    ctx.stroke();
+    ctx.beginPath();                                     // the yard
+    ctx.moveTo(mastX - 48*s, sTop + 3*vk); ctx.lineTo(mastX + 48*s, sTop - 1*vk);
+    ctx.lineWidth = 3.0*s; ctx.stroke();
+    ctx.beginPath();                                     // sheets, clews down to the rail
+    ctx.moveTo(clewR.x, clewR.y); ctx.lineTo(mastX + 80*s, deckY - 3*vk);
+    ctx.moveTo(clewL.x, clewL.y); ctx.lineTo(mastX - 76*s, deckY - 1*vk);
+    ctx.lineWidth = 1.7*s; ctx.strokeStyle = WOOD + '0.62)'; ctx.stroke();
+    /* The cloth: a narrow head at the yard opening to a full, sagging foot, the
+       lee (forward) leech carrying the belly and the weather leech pulled taut.
+       A square sail is unmistakable at this size and — unlike a rectangle —
+       cannot be misread as a pane of cabin glass. */
+    ctx.beginPath();
+    ctx.moveTo(mastX - 40*s, sTop + 2*vk);
+    ctx.lineTo(mastX + 40*s, sTop);
+    ctx.quadraticCurveTo(mastX + 78*s, sTop + 26*vk, clewR.x, clewR.y);   // full lee leech
+    ctx.quadraticCurveTo(mastX +  6*s, sBot + 14*vk, clewL.x, clewL.y);   // sagging foot
+    ctx.quadraticCurveTo(mastX - 52*s, sTop + 30*vk, mastX - 40*s, sTop + 2*vk);
+    ctx.closePath();
+    solidify();
+    ctx.fillStyle = SAIL + (LIGHT ? 0.54 : 0.60) + ')'; ctx.fill();
+    ctx.lineWidth = 2.8*s; ctx.strokeStyle = SAIL + (LIGHT ? 0.94 : 0.90) + ')'; ctx.stroke();
+
+    // feather the letterbox edges so the band dissolves into the card
+    const fh = Math.min(10, H*0.09);
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    let gr = ctx.createLinearGradient(0, 0, 0, fh);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, fh);
+    gr = ctx.createLinearGradient(0, H - fh, 0, H);
+    gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(1,'rgba(0,0,0,1)');
+    ctx.fillStyle = gr; ctx.fillRect(0, H - fh, W, fh);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

@@ -2118,16 +2118,18 @@ window.__giResume = function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry - a row of light cones drawn at exactly 45
-     degrees (equal pixels per unit on x and ct), each with slower worldlines
-     fanning up inside it toward, but never onto, the null boundary. It carries
-     NO interval and NO proper-time values, and no clock reading, so it cannot
-     answer any card: the deck turns on what the null line costs in time, and
-     the hero shows only the lines. */
-  let heroGen = 0;
+  /* Hero: ONE future light cone, drawn once and large in the middle of the band.
+     The band is a 1400x140 letterbox, so the cone is built inside a square region
+     (half-width == height) and the two null edges are stepped 1 pixel across per
+     1 pixel up - a true 45 degrees, which is the whole point of this sim. A single
+     massive worldline at the sim's default v/c = 0.5 climbs INSIDE the cone (2 px
+     up per 1 px across, visibly steeper), and a dashed level marks the moment the
+     pulse arrives, with the massive particle still short of that place. It carries
+     NO interval value, NO proper-time value and no clock reading, so it cannot
+     answer any card: the deck turns on what the null line costs in time, and the
+     hero shows only the geometry. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer would be stretched across and
            squashed down: a 45-degree line would no longer render at 45 degrees.
@@ -2139,48 +2141,67 @@ window.__giResume = function(){
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ppu = 22;                               // equal pixels per unit on x and ct, so light is 45 degrees
-    const yBot = H - 16, yTop = 16;
-    const span = (yBot - yTop)/ppu;               // ct height of each cone, in units
-    const Y  = ct => yBot - ct*ppu;
-    // faint spacetime grid
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += ppu){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let ct = 0; ct <= span; ct += 1){ const py = Y(ct); ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLP = LIGHT ? '#a16207' : '#fde047';   // the null lines - the sim's photon colour
-    const COLM = LIGHT ? '#0e7490' : '#22d3ee';   // massive worldlines - the sim's particle colour
-    const COLE = LIGHT ? '#334155' : '#e2e8f0';   // the emission event
-    const pitch = 190, n = Math.ceil(W/pitch) + 1;
-    function cone(k){
-      const cx = Math.round(k*pitch + pitch*0.5);
-      const X = x => cx + x*ppu;
-      const draw = (pts,col,w,glow) => {
-        ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-        ctx.shadowColor = glow ? col : 'transparent'; ctx.shadowBlur = glow ? 7 : 0;
-        ctx.beginPath();
-        pts.forEach((p,i) => i ? ctx.lineTo(X(p[0]),Y(p[1])) : ctx.moveTo(X(p[0]),Y(p[1])));
-        ctx.stroke(); ctx.shadowBlur = 0;
-      };
-      // massive worldlines at v/c = 0.85, 0.6, 0.35 and 0 - all steeper than 45 degrees
-      [0.85, 0.6, 0.35, 0].forEach((b,j) => {
-        draw([[0,0],[b*span, span]], COLM, 1.4 + 0.3*j, false);
-        draw([[0,0],[-b*span, span]], COLM, 1.4 + 0.3*j, false);
-      });
-      // the null boundary itself, last and brightest: x = +/- ct, exactly 45 degrees
-      draw([[-span,span],[0,0],[span,span]], COLP, 2.4, true);
-      // the shared emission event at the cone's apex
-      ctx.beginPath(); ctx.arc(X(0),Y(0),4.5,0,7); ctx.fillStyle = COLE; ctx.fill();
-      ctx.lineWidth = 1.4; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.stroke();
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) cone(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 80);
-    })();
+
+    /* ---- geometry ------------------------------------------------------
+       cx,y0  = the emission event E1 (the cone's apex)
+       S      = cone height AND cone half-width, so each null edge runs
+                exactly S px across for S px up: slope 1:1, 45 degrees. */
+    const cx = Math.round(W / 2);
+    const y0 = H - 19;                            // apex, clear of the bottom edge
+    const S  = H - 42;                            // 98 px at the shipped 140 px band
+    const yT = y0 - S;                            // the level at which the pulse arrives
+    const BETA = 0.5;                             // the sim's default v/c
+    const xM = cx + S * BETA;                     // massive particle at that same level
+    const HW = Math.round(Math.min(S * 3.4, W * 0.30));   // reach of the two horizontals
+
+    const COLP = LIGHT ? '#a16207' : '#fde047';   // null edges - the sim's photon colour
+    const COLM = LIGHT ? '#0e7490' : '#22d3ee';   // massive worldline - the sim's particle colour
+    const COLE = LIGHT ? '#1e293b' : '#e2e8f0';   // the emission event
+    const RING = LIGHT ? 'rgba(255,255,255,.92)' : 'rgba(8,10,14,.90)';
+    const FAINT= LIGHT ? 'rgba(51,65,85,.38)'    : 'rgba(148,163,184,.42)';
+    const CONE = LIGHT ? 'rgba(161,98,7,.13)'    : 'rgba(253,224,71,.12)';
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // the causal future: everything the pulse can reach, bounded by the null edges
+    ctx.beginPath();
+    ctx.moveTo(cx, y0); ctx.lineTo(cx - S, yT); ctx.lineTo(cx + S, yT); ctx.closePath();
+    ctx.fillStyle = CONE; ctx.fill();
+
+    // the x axis through the emission event
+    ctx.lineWidth = 1.6; ctx.strokeStyle = FAINT;
+    ctx.beginPath(); ctx.moveTo(cx - HW, y0 + .5); ctx.lineTo(cx + HW, y0 + .5); ctx.stroke();
+
+    // the level the pulse reaches - the massive particle is still short of that place
+    ctx.save();
+    ctx.setLineDash([7, 6]); ctx.lineWidth = 1.5; ctx.strokeStyle = FAINT;
+    ctx.beginPath(); ctx.moveTo(cx - HW, yT + .5); ctx.lineTo(cx + HW, yT + .5); ctx.stroke();
+    ctx.restore();
+
+    // a small arc at the apex: the angle the null edge makes with x, and nothing else
+    ctx.lineWidth = 1.5; ctx.strokeStyle = FAINT;
+    ctx.beginPath(); ctx.arc(cx, y0, 30, -Math.PI / 4, 0); ctx.stroke();
+
+    // the massive worldline: 2 px up per 1 px across - inside the cone, never on it
+    ctx.lineWidth = 4.5; ctx.strokeStyle = COLM;
+    ctx.beginPath(); ctx.moveTo(cx, y0); ctx.lineTo(xM, yT); ctx.stroke();
+
+    // the null edges themselves, boldest and last: x = +/- ct, exactly 45 degrees
+    ctx.lineWidth = 6; ctx.strokeStyle = COLP;
+    ctx.shadowColor = COLP; ctx.shadowBlur = LIGHT ? 6 : 11;
+    ctx.beginPath(); ctx.moveTo(cx - S, yT); ctx.lineTo(cx, y0); ctx.lineTo(cx + S, yT); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // events: E1 where both set out, E2 where the pulse lands, and the particle
+    const disc = (x, y, r, col, a) => {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+      ctx.globalAlpha = a; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 2.8; ctx.strokeStyle = col; ctx.stroke();
+    };
+    disc(xM, yT, 6.5, COLM, 0.30);                // massive particle, still on its way
+    disc(cx + S, yT, 9, COLP, 0.30);              // E2 - the pulse arrives
+    ctx.beginPath(); ctx.arc(cx, y0, 7, 0, 7);    // E1 - the shared emission event
+    ctx.fillStyle = COLE; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = RING; ctx.stroke();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

@@ -2501,10 +2501,20 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: a perfectly inelastic collision drawn as EQUAL-TIME-STEP dots.
-         m₁ = 2 kg at u = +1 m/s meets m₂ = 1 kg at rest; momentum fixes the
-         merged speed at m₁u/(m₁+m₂), so the outgoing dots sit closer together
-         than the incoming ones. Nothing is labelled with a number. */
+      /* Hero: the moment BEFORE a collision, and nothing after it.
+         Two carts of unequal mass close on a marked point of the track, each
+         trailing equal-time-step dots so the wider spacing reads as the faster
+         cart. The outcome is deliberately absent: gated card 2 asks what a
+         perfectly inelastic strike leaves behind, and the previous hero drew
+         exactly that after-state (a merged disc travelling on past the impact),
+         which gave the answer away before the question was asked. The masses
+         here are also deliberately unequal and both carts are moving, so the
+         picture is neither card 2's strike-a-cart-at-rest nor card 3's
+         equal-and-opposite head-on. Nothing is labelled with a number.
+         Drawn in ONE synchronous pass — the overlay re-runs drawHero from an
+         animationend hook, a 700 ms timer and two MutationObservers, each
+         clearing the canvas first, so anything deferred to rAF can be wiped
+         half-built. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store shipped hard-coded at 1280x240 while the element is
@@ -2517,47 +2527,74 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
         const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+        /* No anisotropic pre-compensation here: the buffer above is sized to the
+           element's own box, so device pixels are already square. Any surviving
+           `ctx.scale(1/AR,1)` would stretch every arc; reset the matrix outright
+           so a re-entrant draw can never inherit one. */
+        ctx.setTransform(1,0,0,1,0,0);
         ctx.clearRect(0,0,W,H);
-        const m1 = 2, m2 = 1, u = 1, v = m1*u/(m1+m2);
-        const y = H*0.50, xHit = W*0.50, SX = W*0.185;
-        const r1 = 20, r2 = 14, rM = 23;
-        const cIn   = LIGHT ? 'rgba(2,132,199,'  : 'rgba(125,211,252,';
-        const cRest = LIGHT ? 'rgba(180,83,9,'   : 'rgba(253,186,116,';
-        const cOut  = LIGHT ? 'rgba(109,40,217,' : 'rgba(196,181,253,';
-        ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.20)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(W*0.18, y+rM+12); ctx.lineTo(W*0.86, y+rM+12); ctx.stroke();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+        const k = Math.max(0.78, Math.min(1.12, W/1400));
+        const y = Math.round(H*0.50), xHit = Math.round(W*0.50);
+        const r1 = 24*k, r2 = 17*k;               // unequal masses, both in motion
+        const gap = 16*k;                         // still a clear gap: not yet touching
+        const xL = xHit - gap - r1, xR = xHit + gap + r2;
+        const railY = Math.round(y + 34*k);
+        // Light theme sits on a near-white ground, so its ink has to be genuinely
+        // DARK to carry the same weight the bright ink carries on the dark ground.
+        const cL   = LIGHT ? 'rgba(7,89,133,'   : 'rgba(125,211,252,';   // heavier cart
+        const cR   = LIGHT ? 'rgba(154,52,18,'  : 'rgba(253,186,116,';   // lighter cart
+        const cInk = LIGHT ? 'rgba(15,23,42,'   : 'rgba(226,232,240,';   // track + mark
+        const FILL = LIGHT ? '0.42)' : '0.40)';
+
+        // one thin track line, sized to sit inside the mask's clear centre
+        ctx.strokeStyle = cInk + (LIGHT ? '0.34)' : '0.34)');
+        ctx.lineWidth = Math.max(1, 1.6*k);
+        ctx.beginPath(); ctx.moveTo(W*0.27, railY); ctx.lineTo(W*0.74, railY); ctx.stroke();
+
+        // the impact point: a plumb line dropped from the gap between the carts
+        // to a mark on the track. It says WHERE, never what comes out.
+        ctx.strokeStyle = cInk + (LIGHT ? '0.42)' : '0.44)');
+        ctx.lineWidth = 2*k;
+        ctx.beginPath(); ctx.moveTo(xHit, y - 4*k); ctx.lineTo(xHit, railY + 9*k); ctx.stroke();
+        ctx.fillStyle = cInk + (LIGHT ? '0.70)' : '0.72)');
+        ctx.beginPath();
+        ctx.moveTo(xHit, railY - 6.5*k); ctx.lineTo(xHit + 6.5*k, railY);
+        ctx.lineTo(xHit, railY + 6.5*k); ctx.lineTo(xHit - 6.5*k, railY);
+        ctx.closePath(); ctx.fill();
+
+        // equal-time-step motion trails, laid down behind each cart
+        function trail(xEdge, dir, step, n, col){
+          for(let i = 0; i < n; i++){
+            const a = (0.92 - 0.075*i).toFixed(2);
+            ctx.beginPath();
+            ctx.arc(xEdge + dir*(9*k + i*step), y, 4.2*k, 0, 7);
+            ctx.fillStyle = col + a + ')'; ctx.fill();
+          }
+        }
+        trail(xL - r1, -1, W*0.0165, 9, cL);   // faster: dots further apart
+        trail(xR + r2, +1, W*0.0112, 9, cR);   // slower: dots bunched up
+
+        // the carts themselves: bold filled discs
         function disc(x, r, col){
           ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
-          ctx.fillStyle = col + '0.18)'; ctx.fill();
-          ctx.lineWidth = 2.6; ctx.strokeStyle = col + '0.95)'; ctx.stroke();
+          ctx.fillStyle = col + FILL; ctx.fill();
+          ctx.lineWidth = 3.2*k; ctx.strokeStyle = col + '0.95)'; ctx.stroke();
         }
-        function dot(x, col, a){ ctx.beginPath(); ctx.arc(x, y, 3.6, 0, 7); ctx.fillStyle = col + a + ')'; ctx.fill(); }
-        disc(xHit + r2, r2, cRest);                       // the cart waiting at rest
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const N = 14; let k = 0;
-        function batch(){
-          const per = reduce ? 2*N : 1;
-          for(let sI = 0; sI < per && k < 2*N; sI++, k++){
-            if(k < N){ const t = 1 - k/N; dot(xHit - r1 - u*SX*t, cIn, (0.35 + 0.6*(1-t)).toFixed(2)); }
-            else { const t = (k - N)/N; dot(xHit + rM + v*SX*t, cOut, (0.95 - 0.5*t).toFixed(2)); }
-          }
-          if(k < 2*N){ requestAnimationFrame(batch); return; }
-          // impact burst at the contact point, then the merged pair
-          ctx.save(); ctx.globalAlpha = 0.85;
-          ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(248,250,252,.75)'; ctx.lineWidth = 2;
-          for(let j = 0; j < 6; j++){
-            const a = j*Math.PI/3 + Math.PI/6;
-            ctx.beginPath();
-            ctx.moveTo(xHit + Math.cos(a)*(r2+6), y + Math.sin(a)*(r2+6));
-            ctx.lineTo(xHit + Math.cos(a)*(r2+18), y + Math.sin(a)*(r2+18));
-            ctx.stroke();
-          }
-          ctx.restore();
-          disc(xHit - r1 - u*SX, r1, cIn);                // where the moving cart started
-          disc(xHit + rM + v*SX, rM, cOut);               // the merged pair, further on
-        }
-        batch();
+        disc(xL, r1, cL);
+        disc(xR, r2, cR);
+
+        // feather the letterbox edges so the band dissolves into the card
+        const fh = Math.min(10, H*0.09);
+        ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+        let gr = ctx.createLinearGradient(0, 0, 0, fh);
+        gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = gr; ctx.fillRect(0, 0, W, fh);
+        gr = ctx.createLinearGradient(0, H - fh, 0, H);
+        gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(1,'rgba(0,0,0,1)');
+        ctx.fillStyle = gr; ctx.fillRect(0, H - fh, W, fh);
+        ctx.restore();
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

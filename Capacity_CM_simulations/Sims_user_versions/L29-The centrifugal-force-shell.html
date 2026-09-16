@@ -2870,10 +2870,23 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     "Controls Guide introduces each control one at a time, so you know what everything does before you experiment.",
     "Free Exploration opens everything from the start, so you can experiment entirely on your own."
 ];
-  /* Hero: one deck turning at a steady omega, marked at EQUAL TIME STEPS on three
-     radii. Same angular spacing everywhere; the arc between marks grows with r,
-     because v = omega r. Drawn from the sim's own kinematics; it shows no release,
-     no trail and no force, so it cannot answer any card. */
+  /* Hero: the APPARATUS ONLY — the carousel deck seen in three-quarter view
+     (painted sectors, brass rim, four spokes, hub), the ball held at its radius
+     by the backstop, and a rotation ring showing which way the deck turns.
+
+     Matched to the sim, not invented: 8 painted sectors and the brass rim come
+     from texDeck / the rim torus; 4 spokes from the spoke loop; the hold radius
+     is the default r0 = 2.0 m on P.Rp = 3.4 m; the backstop sits just OUTSIDE
+     the ball (it pushes inward) exactly as backstop.position.set(E.r0+BALL_R+…)
+     does. The turn sense is screen-anticlockwise: platG.rotation.y = +wt with
+     the default orbit camera (az -1.0, pol 0.6) puts the ball at the right of
+     the ellipse moving upward — confirmed by stepping the running sim.
+
+     NO-SPOILER: the deck is drawn with the ball still HELD. There is no release,
+     no trail, no tangent, no spiral (card 2 asks for the ground-frame path),
+     and NO force arrow of any kind (card 4 asks what exerts the outward push,
+     card 5 asks how it scales with omega). Only one omega is shown, so nothing
+     here hints at the mw^2r scaling either. Static draw — no async batches. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2888,35 +2901,115 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     const LIGHT = document.body.classList.contains('light-theme')
                || document.documentElement.getAttribute('data-theme') === 'light';
     ctx.clearRect(0,0,W,H);
-    const cx = W*0.5, cy = H*0.54, YS = 0.40;
-    const radii = [W*0.085, W*0.145, W*0.205];
-    const rim = W*0.235;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.26)' : 'rgba(148,163,184,.26)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.ellipse(cx,cy,rim,rim*YS,0,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.13)' : 'rgba(148,163,184,.13)';
-    ctx.lineWidth = 1;
-    radii.forEach(R => { ctx.beginPath(); ctx.ellipse(cx,cy,R,R*YS,0,0,Math.PI*2); ctx.stroke(); });
-    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.45)' : 'rgba(226,232,240,.6)';
-    ctx.beginPath(); ctx.ellipse(cx,cy,4.5,4.5*YS,0,0,Math.PI*2); ctx.fill();
-    const cols = LIGHT ? ['rgba(217,119,6,.95)','rgba(2,132,199,.9)','rgba(5,150,105,.95)']
-                       : ['rgba(253,224,171,.95)','rgba(125,211,252,.9)','rgba(110,231,183,.95)'];
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 40, dth = 2*Math.PI/N;   // equal time steps at one angular speed
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0; s<per && k<N; s++, k++){
-        const th = k*dth;
-        radii.forEach((R,i) => {
-          const x = cx + R*Math.cos(th), y = cy - R*YS*Math.sin(th);
-          ctx.fillStyle = cols[i];
-          ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fill();
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
+
+    /* --- geometry. The band is 10:1, so the deck is drawn flatter than the
+       sim's 34-degree camera; everything else keeps the sim's proportions. --- */
+    const cx = W*0.5, cy = H*0.485;
+    const RX = Math.min(W*0.152, H*1.52);   // deck radius across
+    const RY = H*0.285;                     // three-quarter-view squash
+    const TH = H*0.075;                     // painted deck edge
+    const KI = 0.48;                        // open centre (hub apron)
+    const RB = 2.0/3.4;                     // held radius r0 / deck radius Rp
+    const PHB = 118*Math.PI/180;            // where the ball sits, front-left
+    const TAU = Math.PI*2;
+    // phi: 0 = right, +pi/2 = the NEAR (bottom) edge. Screen-anticlockwise —
+    // the sim's turn sense — is DECREASING phi.
+    const ex = (k,ph) => cx + RX*k*Math.cos(ph);
+    const ey = (k,ph) => cy + RY*k*Math.sin(ph);
+
+    const C = LIGHT
+      ? { sector:'rgba(194,97,26,.72)',  edge:'rgba(124,45,18,.92)',  rim:'rgba(180,83,9,.95)',
+          spoke:'rgba(100,116,139,.95)', hub:'rgba(71,85,105,.95)',   hubCap:'rgba(148,163,184,.95)',
+          ballFill:'rgba(241,245,249,1)', ballLine:'rgba(51,65,85,1)',
+          steel:'rgba(71,85,105,.95)',   pad:'rgba(194,65,12,.95)',   turn:'rgba(71,85,105,.92)',
+          shade:'rgba(88,32,10,.45)' }
+      : { sector:'rgba(249,146,73,.58)', edge:'rgba(180,83,9,.80)',   rim:'rgba(251,191,36,.95)',
+          spoke:'rgba(241,245,249,.92)', hub:'rgba(148,163,184,.95)', hubCap:'rgba(226,232,240,.95)',
+          ballFill:'rgba(255,255,255,.97)', ballLine:'rgba(15,23,42,.85)',
+          steel:'rgba(203,213,225,.95)', pad:'rgba(249,115,22,.95)',  turn:'rgba(226,232,240,.88)',
+          shade:'rgba(69,26,8,.55)' };
+
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    /* 1 — painted deck edge (the cylinder side you see from above-front) */
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, RX, RY, 0, 0, Math.PI);
+    ctx.lineTo(cx - RX, cy + TH);
+    ctx.ellipse(cx, cy + TH, RX, RY, 0, Math.PI, 0, true);
+    ctx.closePath();
+    ctx.fillStyle = C.edge; ctx.fill();
+
+    /* 2 — four painted sectors (the sim's 8-sector deck, alternating) */
+    for(let i = 0; i < 8; i += 2){
+      const a0 = i*TAU/8 + 0.13, a1 = (i+1)*TAU/8 + 0.07;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, RX, RY, 0, a0, a1);
+      ctx.ellipse(cx, cy, RX*KI, RY*KI, 0, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = C.sector; ctx.fill();
     }
-    batch();
+
+    /* 3 — brass rim */
+    ctx.beginPath(); ctx.ellipse(cx, cy, RX, RY, 0, 0, TAU);
+    ctx.lineWidth = Math.max(3, H*0.030); ctx.strokeStyle = C.rim; ctx.stroke();
+
+    /* 4 — four spokes */
+    ctx.lineWidth = Math.max(2.4, H*0.024); ctx.strokeStyle = C.spoke;
+    for(let k = 0; k < 4; k++){
+      const ph = k*TAU/4 + 0.10 + 3*TAU/16;   // down the middle of the bare wedges
+      ctx.beginPath(); ctx.moveTo(ex(KI,ph), ey(KI,ph)); ctx.lineTo(ex(0.985,ph), ey(0.985,ph)); ctx.stroke();
+    }
+
+    /* 5 — hub and axle cap */
+    const hx = RX*0.115, hy = RY*0.115, hh2 = H*0.115;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, hx, hy, 0, 0, Math.PI);
+    ctx.lineTo(cx - hx, cy - hh2);
+    ctx.ellipse(cx, cy - hh2, hx, hy, 0, Math.PI, 0, true);
+    ctx.closePath();
+    ctx.fillStyle = C.hub; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy - hh2, hx*1.25, hy*1.25, 0, 0, TAU);
+    ctx.fillStyle = C.hubCap; ctx.fill();
+
+    /* 6 — the ball, HELD at r0, with the backstop just outside it */
+    const bx = ex(RB, PHB), by = ey(RB, PHB), br = Math.max(7, H*0.098);
+    const ux = Math.cos(PHB), uy = Math.sin(PHB)*(RY/RX);
+    const un = Math.hypot(ux, uy) || 1, nx = ux/un, ny = uy/un;
+    const sx = bx + nx*(br*1.35), sy = by + ny*(br*1.35);
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(Math.atan2(ny, nx));
+    ctx.fillStyle = C.steel;
+    ctx.fillRect( br*0.26, -br*0.95, br*0.46, br*1.90);        // steel post
+    ctx.fillStyle = C.pad;
+    ctx.fillRect(-br*0.28, -br*1.20, br*0.56, br*2.40);        // orange pad, facing the ball
+    ctx.restore();
+    ctx.beginPath();                                            // contact shadow on the deck
+    ctx.ellipse(bx, by, br*0.92, br*0.34, 0, 0, TAU);
+    ctx.fillStyle = C.shade; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by - br*0.72, br, 0, TAU);
+    ctx.fillStyle = C.ballFill; ctx.fill();
+    ctx.lineWidth = Math.max(2.2, H*0.026); ctx.strokeStyle = C.ballLine; ctx.stroke();
+
+    /* 7 — rotation ring: which way the deck turns (anticlockwise on screen).
+       Two arcs on one ellipse outside the rim, each with a head on its leading
+       end. This says only "the deck turns, this way" — the premise of card 1. */
+    const ax = RX + H*0.105, ay = RY + H*0.150;
+    const head = (ph) => {                       // head points along decreasing phi
+      const tx = ax*Math.sin(ph), ty = -ay*Math.cos(ph);
+      const tn = Math.hypot(tx, ty) || 1, dx = tx/tn, dy = ty/tn;
+      const px0 = cx + ax*Math.cos(ph), py0 = cy + ay*Math.sin(ph);
+      const L = H*0.115, Wd = H*0.070;
+      ctx.beginPath();
+      ctx.moveTo(px0 + dx*L, py0 + dy*L);
+      ctx.lineTo(px0 - dy*Wd, py0 + dx*Wd);
+      ctx.lineTo(px0 + dy*Wd, py0 - dx*Wd);
+      ctx.closePath(); ctx.fillStyle = C.turn; ctx.fill();
+    };
+    ctx.lineWidth = Math.max(3.6, H*0.036); ctx.strokeStyle = C.turn;
+    ctx.beginPath(); ctx.ellipse(cx, cy, ax, ay, 0, -0.30, Math.PI+0.42, true); ctx.stroke();  // far side
+    head(Math.PI + 0.42);
+    ctx.beginPath(); ctx.ellipse(cx, cy, ax, ay, 0, Math.PI-0.42, 0.30, true); ctx.stroke();   // near side
+    head(0.30);
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

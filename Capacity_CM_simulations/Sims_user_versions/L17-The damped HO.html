@@ -2109,11 +2109,21 @@ window.__giResume = function(){ giStep((typeof Shell !== 'undefined' && Shell.st
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: ONE lightly damped mass released from x₀ = 1 m — the sim’s own exact
-     solution x(t) = x₀ e^(−αt)(cos ω_d t + (α/ω_d) sin ω_d t) — sampled at EQUAL
-     time steps, inside its ±e^(−αt) envelope. Deliberately a single damping:
-     card 1 asks which of three dampings settles first, and the hero must not
-     answer it. */
+  /* Hero: the APPARATUS, never the answer. One mass on a spring with ONE
+     dashpot in parallel, anchored to a wall and sitting at rest — the hardware
+     that makes the motion, drawn with nothing moving yet.
+     Deliberately ABSENT, because the gated cards turn on exactly these:
+       card 1 (gated) — which of α = 0.60 / 3 / 6 reaches rest first? (critical)
+         ⇒ no family of traces, no second or third damper, no settle band, no
+           finish line, nothing that ranks one damping against another.
+       card 4 (gated) — at α = ω₀, what became of the x = 0 crossings? (gone)
+         ⇒ no trace at all, so no ringing and no non-ringing return to compare.
+       card 5 (gated) — past critical, has λ risen, fallen or held? (fallen)
+         ⇒ no λ(α) map, no peaked curve, no decay envelope ±x₀e^(−αt), and no
+           spacing/phase code that could smuggle a rate in. Nothing here varies
+           with α, because every gated answer is a statement about α.
+     Static: drawHero is re-run by animationend, a 700 ms timer and two
+     MutationObservers, each of which clears the canvas first. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2127,36 +2137,78 @@ window.__giResume = function(){ giStep((typeof Shell !== 'undefined' && Shell.st
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const w0 = 3, a = 0.45, X0 = 1, T = 9.5;
-    const wd = Math.sqrt(w0*w0 - a*a);
-    const xo = t => X0*Math.exp(-a*t)*(Math.cos(wd*t) + (a/wd)*Math.sin(wd*t));
-    const padL = W*0.055, padR = W*0.055, cy = H*0.52, amp = H*0.36;
-    const X = t => padL + (t/T)*(W-padL-padR), Y = x => cy - x*amp;
-    // equilibrium line
-    ctx.setLineDash([5,4]);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(226,232,240,.34)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, Y(0)); ctx.lineTo(W-padR, Y(0)); ctx.stroke(); ctx.setLineDash([]);
-    // decay envelope ± x₀ e^(−αt)
-    ctx.strokeStyle = LIGHT ? 'rgba(217,119,6,.40)' : 'rgba(251,191,36,.38)'; ctx.lineWidth = 1.4;
-    [1,-1].forEach(sgn => { ctx.beginPath();
-      for(let i=0;i<=160;i++){ const t = T*i/160, px = X(t), py = Y(sgn*X0*Math.exp(-a*t));
-        i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
-      ctx.stroke(); });
-    // equal-time dots along the exact trace (accumulates once; one frame under reduced motion)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.045, N = Math.ceil(T/dt); let k = 0;
-    ctx.fillStyle = LIGHT ? 'rgba(109,40,217,.92)' : 'rgba(167,139,250,.95)';
-    function batch(){
-      const per = reduce ? N+1 : 2;
-      for(let s=0; s<per && k<=N; s++, k++){
-        const t = k*dt;
-        ctx.beginPath(); ctx.arc(X(t), Y(xo(t)), 2.6, 0, 7); ctx.fill();
-      }
-      if(k <= N) requestAnimationFrame(batch);
-      else { ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA';       // release point
-             ctx.beginPath(); ctx.arc(X(0), Y(X0), 4.5, 0, 7); ctx.fill(); }
-    }
-    batch();
+    // Light theme puts near-white (226,232,240) behind the band, so the ink has
+    // to be genuinely DARK there — slate-900 / sky-800 / amber-800 / violet-800,
+    // not the mid-tones that wash out on a bright ground.
+    const INK = LIGHT ? 'rgba(15,23,42,'  : 'rgba(203,213,225,';   // wall + floor
+    const SPR = LIGHT ? 'rgba(3,105,161,' : 'rgba(125,211,252,';   // spring
+    const DMP = LIGHT ? 'rgba(154,64,6,'  : 'rgba(253,186,116,';   // dashpot
+    const MAS = LIGHT ? 'rgba(76,29,149,' : 'rgba(196,181,253,';   // the mass
+
+    // One isotropic scale. The assembly is hung on the canvas CENTRE so all of
+    // it lands inside the centre 760 px the CSS mask leaves visible.
+    // 0.205·W keeps the whole assembly inside the mask's clear window at every
+    // width; the 235 floor stops it shrinking to a toy in the 140 px band on a
+    // narrow viewport (at 1024 it spans x 277..747, mask clear from 225 to 799).
+    const HALF = Math.min(285, Math.max(235, W*0.205)), k = HALF/285, cx = W/2, cy = H*0.485;
+    const xW = cx - HALF, xR = cx + HALF;          // wall face .. right face of the mass
+    const MW = 84*k, MH = 92*k, xM = xR - MW;      // mass block
+    const yG = cy + 50*k, yTop = cy - 50*k;        // floor line / top of the wall
+    const yS = cy - 22*k, yD = cy + 22*k;          // spring axis / dashpot axis
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // ---- anchor wall + hatching -------------------------------------------
+    ctx.fillStyle = INK+'.78)';
+    ctx.fillRect(xW - 11*k, yTop, 11*k, yG - yTop);
+    ctx.strokeStyle = INK+'.52)'; ctx.lineWidth = Math.max(1.6, 2.6*k);
+    for(let y = yTop + 4*k; y <= yG - 1; y += 13*k){
+      ctx.beginPath(); ctx.moveTo(xW - 11*k, y); ctx.lineTo(xW - 24*k, y + 11*k); ctx.stroke(); }
+
+    // ---- floor -------------------------------------------------------------
+    ctx.strokeStyle = INK+'.46)'; ctx.lineWidth = Math.max(2, 3*k);
+    ctx.beginPath(); ctx.moveTo(xW - 24*k, yG); ctx.lineTo(xR + 16*k, yG); ctx.stroke();
+
+    // ---- coil spring, wall -> mass (regular coils: at rest, not stretched) --
+    { ctx.strokeStyle = SPR+'.95)'; ctx.lineWidth = Math.max(2.8, 5*k);
+      const lead = 14*k, sx = xW + lead, ex = xM - lead, n = 11, seg = (ex - sx)/n, A = 21*k;
+      ctx.beginPath(); ctx.moveTo(xW, yS); ctx.lineTo(sx, yS);
+      for(let i=0;i<n;i++) ctx.lineTo(sx + seg*(i+0.5), yS + (i%2 ? A : -A));
+      ctx.lineTo(ex, yS); ctx.lineTo(xM, yS); ctx.stroke(); }
+
+    // ---- dashpot: cylinder on the wall, piston + rod on the mass -----------
+    { const CL = (xM - xW)*0.70, CH = 21*k, xE = xW + CL, xP = xW + CL*0.78;
+      ctx.strokeStyle = DMP+'.40)'; ctx.lineWidth = Math.max(1.4, 2.2*k);   // viscous fill
+      for(let i=1;i<=9;i++){ const x = xW + CL*i/10;
+        if(Math.abs(x - xP) < 9*k) continue;                                 // clear of the piston
+        ctx.beginPath(); ctx.moveTo(x, yD - CH + 5*k); ctx.lineTo(x + 9*k, yD + CH - 5*k); ctx.stroke(); }
+      ctx.strokeStyle = DMP+'.95)'; ctx.lineWidth = Math.max(2.6, 4.4*k);   // cylinder, open right
+      ctx.beginPath();
+      ctx.moveTo(xE, yD - CH); ctx.lineTo(xW, yD - CH);
+      ctx.lineTo(xW, yD + CH); ctx.lineTo(xE, yD + CH); ctx.stroke();
+      ctx.beginPath();                                                       // inward lips at the open end
+      ctx.moveTo(xE, yD - CH); ctx.lineTo(xE, yD - CH + 7*k);
+      ctx.moveTo(xE, yD + CH); ctx.lineTo(xE, yD + CH - 7*k); ctx.stroke();
+      ctx.lineWidth = Math.max(4, 7.5*k);                                    // piston plate
+      ctx.beginPath(); ctx.moveTo(xP, yD - CH + 4*k); ctx.lineTo(xP, yD + CH - 4*k); ctx.stroke();
+      ctx.lineWidth = Math.max(3, 5*k);                                      // rod out to the mass
+      ctx.beginPath(); ctx.moveTo(xP, yD); ctx.lineTo(xM, yD); ctx.stroke(); }
+
+    // ---- the mass ----------------------------------------------------------
+    { ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(xM, yG - MH, MW, MH, 7*k);
+      else ctx.rect(xM, yG - MH, MW, MH);
+      ctx.fillStyle = MAS+(LIGHT ? '.17)' : '.20)'); ctx.fill();
+      ctx.strokeStyle = MAS+'.95)'; ctx.lineWidth = Math.max(2.4, 4.2*k); ctx.stroke(); }
+
+    // ---- feather the letterbox edges so the band never ends on a hard cut ---
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    let g = ctx.createLinearGradient(0,0,0,8);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,8);
+    g = ctx.createLinearGradient(0,H,0,H-8);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,H-8,W,8);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

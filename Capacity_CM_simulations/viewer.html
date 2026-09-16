@@ -44,6 +44,11 @@
     .fb-pill:hover { filter: brightness(1.06) saturate(1.06); box-shadow: 0 18px 34px rgba(0,0,0,0.42); }
     .fb-pill:active { transform: translateY(1px) scale(0.99); }
     .fb-pill .fb-ico { font-size: 15px; line-height: 1; }
+    /* Draggable: touch-action none so a touch drag moves the pill instead of
+       panning the page. While dragging, drop the transition so the button
+       tracks the pointer exactly rather than easing behind it. */
+    .fb-pill { touch-action: none; }
+    .fb-pill.fb-dragging { cursor: grabbing; transition: none; box-shadow: 0 22px 44px rgba(0,0,0,0.5); }
     .fb-backdrop {
       position: fixed;
       inset: 0;
@@ -119,7 +124,7 @@
 <body>
   <iframe id="simFrame" title="Simulation" allow="fullscreen"></iframe>
 
-  <button class="fb-pill" id="fbPill" type="button" title="Report a bug or leave feedback">
+  <button class="fb-pill" id="fbPill" type="button" title="Report a bug or leave feedback — drag to move it, shift-click to reset its position">
     <span class="fb-ico">💬</span><span>Feedback</span>
   </button>
 
@@ -175,7 +180,81 @@
     }
     function closeFeedback() { fbBackdrop.classList.remove('show'); }
 
-    fbPill.addEventListener('click', openFeedback);
+    /* ---- draggable feedback pill -------------------------------------
+       Reviewers lose readouts and sidebar controls behind the pill, so it can
+       be dragged anywhere and remembers where it was left (per viewer).
+       - The pill overlays an <iframe>: setPointerCapture is what keeps
+         pointermove coming to the button once the cursor is over the sim.
+       - A drag must not also open the modal, hence FB_DRAG_MIN + the one-shot
+         suppression in the click handler.
+       - Stored positions are re-clamped on load and on resize so a smaller
+         window can never strand the button off-screen.
+    ---------------------------------------------------------------------- */
+    const FB_POS_KEY  = 'fbPillPos:' + location.pathname;
+    const FB_DRAG_MIN = 4;                  // px of travel before a press is a drag
+    let fbDrag = null, fbMoved = false;
+
+    function fbClamp(left, top) {
+      const r = fbPill.getBoundingClientRect();
+      const maxL = Math.max(8, window.innerWidth  - r.width  - 8);
+      const maxT = Math.max(8, window.innerHeight - r.height - 8);
+      return { left: Math.min(Math.max(8, left), maxL), top: Math.min(Math.max(8, top), maxT) };
+    }
+    function fbPlace(left, top) {
+      const p = fbClamp(left, top);
+      fbPill.style.left   = p.left + 'px';
+      fbPill.style.top    = p.top  + 'px';
+      fbPill.style.right  = 'auto';        // release the default bottom-right anchor
+      fbPill.style.bottom = 'auto';
+    }
+    function fbResetPos() {
+      try { localStorage.removeItem(FB_POS_KEY); } catch (e) {}
+      fbPill.style.left = fbPill.style.top = fbPill.style.right = fbPill.style.bottom = '';
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(FB_POS_KEY) || 'null');
+      if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+        fbPlace(saved.left, saved.top);
+      }
+    } catch (e) {}
+
+    fbPill.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const r = fbPill.getBoundingClientRect();
+      fbDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY };
+      fbMoved = false;                     // cleared every press, so a stale drag can't eat the next click
+      try { fbPill.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    fbPill.addEventListener('pointermove', (e) => {
+      if (!fbDrag) return;
+      if (!fbMoved && Math.hypot(e.clientX - fbDrag.x0, e.clientY - fbDrag.y0) < FB_DRAG_MIN) return;
+      fbMoved = true;
+      fbPill.classList.add('fb-dragging');
+      fbPlace(e.clientX - fbDrag.dx, e.clientY - fbDrag.dy);
+    });
+    function fbEndDrag(e) {
+      if (!fbDrag) return;
+      try { fbPill.releasePointerCapture(e.pointerId); } catch (err) {}
+      fbDrag = null;
+      fbPill.classList.remove('fb-dragging');
+      if (fbMoved) {
+        const r = fbPill.getBoundingClientRect();
+        try { localStorage.setItem(FB_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (err) {}
+      }
+    }
+    fbPill.addEventListener('pointerup', fbEndDrag);
+    fbPill.addEventListener('pointercancel', fbEndDrag);
+    window.addEventListener('resize', () => {
+      if (!fbPill.style.left) return;      // still on the default anchor; CSS handles it
+      const r = fbPill.getBoundingClientRect();
+      fbPlace(r.left, r.top);
+    });
+
+    fbPill.addEventListener('click', (e) => {
+      if (fbMoved) { fbMoved = false; e.preventDefault(); e.stopPropagation(); return; }
+      if (e.shiftKey) { fbResetPos(); return; }
+      openFeedback();
+    });
     fbCancel.addEventListener('click', closeFeedback);
     fbBackdrop.addEventListener('click', (e) => { if (e.target === fbBackdrop) closeFeedback(); });
     document.addEventListener('keydown', (e) => {
