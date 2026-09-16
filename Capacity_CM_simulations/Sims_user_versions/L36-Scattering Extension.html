@@ -2325,18 +2325,29 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: the APPARATUS, not the answer — a parallel beam of charged particles
-         arriving at a single fixed charge, each track drawn only as far as the
-         curtain where the repulsion starts to matter. Nothing about the deflection
-         angle, its dependence on b or v, or the closest approach is shown, so no
-         gated prediction is given away. */
+      /* Hero: the APPARATUS of the experiment, never a result. Four particles of
+         one collimated beam are still approaching a single fixed scattering
+         centre, and one aim line carries the definition of the impact parameter
+         b (its perpendicular distance from the centre). Every track stops far
+         outside the centre and no path is ever bent, so none of the four gated
+         predictions is answered: nothing shows how ψ varies with b (card 2) or
+         with v (card 3), nothing shows a head-on shot or a closest approach
+         (card 4), and no outcome is drawn at all, so nothing says which
+         deflections are rare (card 5). No trajectory family, no scattering
+         angle, no r_min, no outgoing direction.
+
+         Static, single pass — drawHero() is re-run by animationend, a 700 ms
+         timer, resize and two MutationObservers, and each run clears the canvas,
+         so a requestAnimationFrame batch would be wiped half-drawn. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer is stretched 1.17x across and
            squashed 0.58x down: every ctx.arc() circle renders as a ~2:1 ellipse.
            Size the buffer to the element's real box before drawing. This canvas
-           is layer-owned (the welcome hero) — no simulation surface is touched. */
+           is layer-owned (the welcome hero) — no simulation surface is touched.
+           With the buffer matched to the box the pixels are square, so no
+           anisotropic pre-compensation is applied anywhere below. */
         { const hr = c.getBoundingClientRect();
           const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
@@ -2344,51 +2355,70 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         const LIGHT = document.body.classList.contains('light-theme') ||
                       document.documentElement.getAttribute('data-theme') === 'light';
         ctx.clearRect(0,0,W,H);
-        const cx = W*0.72, cy = H*0.52, R = H*0.34;
-        const veil = cx - R;
-        const beam = LIGHT ? 'rgba(2,132,199,.85)' : 'rgba(125,211,252,.85)';
-        const rows = 13, x0 = W*0.06;
-        // the curtain: where the 1/r push stops being negligible
-        function curtain(){
-          ctx.setLineDash([6,5]); ctx.lineWidth = 1.4;
-          ctx.strokeStyle = LIGHT ? 'rgba(71,85,105,.55)' : 'rgba(148,163,184,.45)';
-          ctx.beginPath(); ctx.moveTo(veil, cy-R*1.35); ctx.lineTo(veil, cy+R*1.35); ctx.stroke();
-          ctx.setLineDash([]);
+
+        // Dark ink on the near-white light ground; light ink on the dark one.
+        const BEAM = LIGHT ? '2,132,199'  : '125,211,252';   // the incoming particles
+        const CORE = LIGHT ? '190,18,60'  : '253,164,175';   // the fixed centre
+        const RULE = LIGHT ? '15,23,42'   : '148,163,184';   // construction lines
+        const RA   = LIGHT ? 0.46 : 0.50;
+
+        const cy   = H*0.50;
+        const cx   = W*0.600;            // the scattering centre
+        const xT   = W*0.335, xH = W*0.495;   // beam trail tail / particle head
+        const R    = Math.min(26, H*0.19);    // radius of the centre
+        const pr   = Math.min(10, H*0.072);   // radius of a beam particle
+        const dy   = Math.min(30, H*0.215);   // beam line spacing
+
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+        // --- the fixed scattering centre: one bold disc in a soft field glow ---
+        { const g = ctx.createRadialGradient(cx, cy, R*0.85, cx, cy, R*2.2);
+          g.addColorStop(0, 'rgba('+CORE+',.22)');
+          g.addColorStop(1, 'rgba('+CORE+',0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(cx, cy, R*2.2, 0, 7); ctx.fill(); }
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7);
+        ctx.fillStyle = 'rgba('+CORE+',.22)'; ctx.fill();
+        ctx.lineWidth = 3.2; ctx.strokeStyle = 'rgba('+CORE+',.95)'; ctx.stroke();
+
+        // --- the beam: four particles abreast, still well short of the centre ---
+        const ys = [cy - 1.5*dy, cy - 0.5*dy, cy + 0.5*dy, cy + 1.5*dy];
+        for(const y of ys){
+          const g = ctx.createLinearGradient(xT, 0, xH, 0);
+          g.addColorStop(0, 'rgba('+BEAM+',0)');
+          g.addColorStop(1, 'rgba('+BEAM+',.88)');
+          ctx.strokeStyle = g; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.moveTo(xT, y); ctx.lineTo(xH, y); ctx.stroke();
+          ctx.beginPath(); ctx.arc(xH, y, pr, 0, 7);
+          ctx.fillStyle = 'rgba('+BEAM+',.92)'; ctx.fill();
         }
-        // The 1280x240 buffer is displayed at 100vw x 140px, so a canvas circle
-        // would render as a wide ellipse; squash it by the measured aspect ratio.
-        const bb = c.getBoundingClientRect();
-        const AR = (bb.width && bb.height) ? (bb.width/W)/(bb.height/H) : 1;
-        function nucleus(){
-          ctx.save(); ctx.translate(cx, cy); ctx.scale(1/AR, 1);
-          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
-          g.addColorStop(0,'rgba(255,190,190,1)'); g.addColorStop(.3,'rgba(244,63,94,.95)'); g.addColorStop(1,'rgba(244,63,94,0)');
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.fill(); ctx.restore();
-        }
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const N = 90; let k = 0;
-        function batch(){
-          const per = reduce ? N : 3;
-          for(let s=0; s<per && k<N; s++, k++){
-            const xa = x0 + (veil - x0)*(k/N), xb = x0 + (veil - x0)*((k+1)/N);
-            ctx.strokeStyle = beam; ctx.lineWidth = 1.8;
-            for(let i=0;i<rows;i++){
-              const y = cy + (i - (rows-1)/2) * (R*2.0/(rows-1));
-              ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
-            }
-          }
-          if(k < N) requestAnimationFrame(batch);
-          else {
-            ctx.fillStyle = beam;
-            for(let i=0;i<rows;i++){
-              const y = cy + (i - (rows-1)/2) * (R*2.0/(rows-1));
-              ctx.beginPath(); ctx.moveTo(veil-2, y); ctx.lineTo(veil-11, y-4.5); ctx.lineTo(veil-11, y+4.5); ctx.closePath(); ctx.fill();
-            }
-            curtain(); nucleus();
-          }
-        }
-        curtain(); nucleus();
-        batch();
+
+        // --- b, for the top particle only: aim line, and its perpendicular
+        //     distance from the centre. A construction, so it is dashed, thin
+        //     and grey, and it STOPS at the foot of the perpendicular — no line
+        //     of any kind continues past the centre, which would imply an
+        //     outgoing direction. ---
+        const yb = ys[0];
+        ctx.strokeStyle = 'rgba('+RULE+','+RA+')';
+        ctx.setLineDash([9,7]); ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(xH + pr + 6, yb); ctx.lineTo(cx, yb); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.moveTo(cx, yb); ctx.lineTo(cx, cy); ctx.stroke();      // b
+        ctx.beginPath(); ctx.moveTo(cx - 7, yb); ctx.lineTo(cx + 7, yb); ctx.stroke(); // cap
+        ctx.beginPath(); ctx.arc(cx, cy, 2.8, 0, 7);
+        ctx.fillStyle = 'rgba('+RULE+','+RA+')'; ctx.fill();                        // the centre point
+
+        // --- feather the letterbox rim so nothing reads as chopped ---
+        ctx.globalCompositeOperation = 'destination-out';
+        { const t = ctx.createLinearGradient(0, 0, 0, 3);
+          t.addColorStop(0,'rgba(0,0,0,1)'); t.addColorStop(1,'rgba(0,0,0,0)');
+          ctx.fillStyle = t; ctx.fillRect(0, 0, W, 3);
+          const b2 = ctx.createLinearGradient(0, H-3, 0, H);
+          b2.addColorStop(0,'rgba(0,0,0,0)'); b2.addColorStop(1,'rgba(0,0,0,1)');
+          ctx.fillStyle = b2; ctx.fillRect(0, H-3, W, 3); }
+        ctx.restore();
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

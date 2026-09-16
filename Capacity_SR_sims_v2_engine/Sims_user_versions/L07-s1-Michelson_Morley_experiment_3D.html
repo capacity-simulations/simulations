@@ -4115,12 +4115,31 @@ setMode('aether');   // open on the Aether prediction, not the null result (Expe
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry — the source, the half-silvered beam splitter
-     and the two perpendicular arms ending at their mirrors, with the
-     hypothetical ether wind streaming across the frame and light accumulating
-     as dots along both arms. It carries NO times and NO fringe readings, so it
-     cannot answer any card: every question in the deck is about a round-trip
-     TIME or the difference between two of them. */
+  /* Hero: the 1887 apparatus itself, drawn as an oblique view of the sandstone
+     slab floating in its mercury trough — lamp, half-silvered splitter, the two
+     perpendicular arms ending at their mirrors, the recombined beam running out
+     to the telescope, and the hypothetical ether wind streaming past.
+
+     SPOILER AUDIT. The four gated cards all ask for a RESULT, never for the
+     hardware: card 2 (arm A along the wind takes MORE time), card 3 (arm B
+     takes longer too, by half of A's excess), card 4 (A − B follows cos 2θ:
+     zero near 45°, then reverses sign), card 5 (the measured shift is zero at
+     every angle — the null result). So the banner carries no fringes at all,
+     no eyepiece view, no timing marks, no per-arm tick counts, no A/B
+     comparison, no θ dial, no rotation arrow and no cos 2θ curve. It is a
+     single static apparatus at one orientation: it shows what the instrument
+     IS, and says nothing about what it reads or what turning it does.
+
+     GEOMETRY. Plane coordinates (a along arm A, b along arm B) are mapped by
+     P(a,b) with a and b projecting to perpendicular table directions, so the
+     drawn light path is the real one: the lamp beam runs in along −a to the
+     splitter; the splitter transmits it onward along +a to mirror A and
+     reflects the other half through 90° along +b to mirror B; each mirror face
+     is normal to its own arm (its plate therefore lies parallel to the OTHER
+     arm, which is what the projection draws); both beams return to the
+     splitter and the recombined light leaves along −b into the telescope. The
+     splitter plate bisects the two arms at 45° — its trace runs along a + b,
+     which this camera sees edge-on, hence the upright plate at the crossing. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -4134,59 +4153,150 @@ setMode('aether');   // open on the Aether prediction, not the null result (Expe
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ox = Math.round(W*0.5), oy = Math.round(H*0.54), arm = Math.min(46, Math.round(H*0.33));
-    // the hypothetical ether wind: streamlines running across the whole frame
-    ctx.strokeStyle = LIGHT ? 'rgba(190,60,60,.30)' : 'rgba(248,113,113,.28)';
-    ctx.lineWidth = 1; ctx.setLineDash([9,7]);
-    for(const dy of [-3,-2,-1,1,2,3]){
-      const y = oy + dy*Math.round(H*0.13); if(y < 4 || y > H-4) continue;
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    ctx.fillStyle = LIGHT ? 'rgba(190,60,60,.45)' : 'rgba(248,113,113,.42)';
-    for(const dy of [-3,-2,-1,1,2,3]){
-      const y = oy + dy*Math.round(H*0.13); if(y < 4 || y > H-4) continue;
-      for(let x = 40; x < W-20; x += 150){
-        ctx.beginPath(); ctx.moveTo(x+10,y); ctx.lineTo(x,y-3.5); ctx.lineTo(x,y+3.5); ctx.closePath(); ctx.fill();
-      }
-    }
-    // the interferometer: source → beam splitter → two perpendicular arms
-    const INK = LIGHT ? 'rgba(15,23,42,.78)' : 'rgba(226,232,240,.82)';
-    ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+    ctx.save();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // Light theme puts dark ink on a near-white card; dark theme puts pale ink
+    // on near-black. Both are full-strength, not mid-tone washes.
+    const INK   = LIGHT ? 'rgba(15,23,42,'   : 'rgba(226,232,240,';
+    const STONE = LIGHT ? 'rgba(51,65,85,'   : 'rgba(148,163,184,';
+    const BATH  = LIGHT ? 'rgba(30,58,138,'  : 'rgba(147,197,253,';
+    const BEAM  = LIGHT ? 'rgba(146,64,14,'  : 'rgba(253,224,71,';
+    const OPTIC = LIGHT ? 'rgba(7,89,133,'   : 'rgba(125,211,252,';
+    const WIND  = LIGHT ? 'rgba(136,19,55,'  : 'rgba(248,113,113,';
+
+    const cx = Math.round(W*0.5), cy = Math.round(H*0.52);
+    const s  = Math.min(Math.round(H*0.84), Math.round(W*0.17));   // half-side of the stone slab
+    const UX = 0.94, UY = -0.185;                                  // oblique camera: arm A → right-and-up
+    // P(a,b,z): a runs along arm A, b along arm B (perpendicular to it in the
+    // table plane), z is height above the stone in screen pixels.
+    const P  = (a,b,z) => [cx + UX*(a-b), cy + UY*(a+b) - (z||0)];
+    const up = (p,d) => [p[0], p[1]-d];
+    const seg  = (p,q) => { ctx.beginPath(); ctx.moveTo(p[0],p[1]); ctx.lineTo(q[0],q[1]); ctx.stroke(); };
+    const poly = (pts, fill, stroke, lw) => {
+      ctx.beginPath(); pts.forEach((p,i)=> i ? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1])); ctx.closePath();
+      if(fill){ ctx.fillStyle = fill; ctx.fill(); }
+      if(stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
+    };
+    const head = (p,dx,dy,len) => {                                // solid arrowhead at p, pointing (dx,dy)
+      ctx.beginPath();
+      ctx.moveTo(p[0]+dx*len, p[1]+dy*len);
+      ctx.lineTo(p[0]-dx*len*0.7 - dy*len*0.72, p[1]-dy*len*0.7 + dx*len*0.72);
+      ctx.lineTo(p[0]-dx*len*0.7 + dy*len*0.72, p[1]-dy*len*0.7 - dx*len*0.72);
+      ctx.closePath(); ctx.fill();
+    };
+
+    const TRX = 1.88*s*1.12, TRY = 0.37*s*1.12;                    // the mercury trough
+    const T = P(s,s), R = P(s,-s), B = P(-s,-s), L = P(-s,s), th = 10;   // the square stone, in projection
+
+    /* ---- the mercury the stone floats in: the ring left showing ---------
+       Drawn as even-odd cut-outs so the tints never stack into a solid wash. */
     ctx.beginPath();
-    ctx.moveTo(ox-arm-34, oy); ctx.lineTo(ox+arm, oy);        // source → BS → mirror A (along the wind)
-    ctx.moveTo(ox, oy); ctx.lineTo(ox, oy-arm);               // BS → mirror B (across the wind)
-    ctx.moveTo(ox, oy); ctx.lineTo(ox, oy+arm*0.8);           // BS → telescope
-    ctx.stroke();
-    ctx.lineWidth = 3;                                        // the two end mirrors
+    ctx.ellipse(cx, cy+9, TRX, TRY, 0, 0, 7);
+    ctx.ellipse(cx, cy, TRX, TRY, 0, 0, 7);
+    ctx.fillStyle = BATH+'.10)'; ctx.fill('evenodd');              // the wall of the trough
     ctx.beginPath();
-    ctx.moveTo(ox+arm, oy-9); ctx.lineTo(ox+arm, oy+9);
-    ctx.moveTo(ox-9, oy-arm); ctx.lineTo(ox+9, oy-arm);
-    ctx.stroke();
-    ctx.save();                                               // the half-silvered splitter at 45°
-    ctx.translate(ox, oy); ctx.rotate(-Math.PI/4);
-    ctx.strokeStyle = LIGHT ? 'rgba(2,132,199,.85)' : 'rgba(125,211,252,.9)'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.moveTo(-11,0); ctx.lineTo(11,0); ctx.stroke();
+    ctx.ellipse(cx, cy, TRX, TRY, 0, 0, 7);
+    ctx.moveTo(T[0],T[1]); ctx.lineTo(R[0],R[1]); ctx.lineTo(B[0],B[1]); ctx.lineTo(L[0],L[1]);
+    ctx.fillStyle = BATH+'.09)'; ctx.fill('evenodd');              // mercury, outside the stone
+    ctx.strokeStyle = BATH+'.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy+9, TRX, TRY, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = BATH+'.85)'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.ellipse(cx, cy, TRX, TRY, 0, 0, 7); ctx.stroke();
+
+    /* ---- the sandstone slab ---------------------------------------------- */
+    poly([L, B, R, up(R,-th), up(B,-th), up(L,-th)], STONE+'.17)', INK+'.52)', 1.8);   // its front thickness
+    poly([T, R, B, L], STONE+'.085)', INK+'.80)', 2.4);                                // its top face
+
+    /* ---- the hypothetical ether wind, streaming along arm A -------------- */
+    ctx.lineWidth = 1.8; ctx.strokeStyle = WIND+'.60)'; ctx.fillStyle = WIND+'.78)';
+    const gust = 40;
+    // Outer streaks are held clear of the trough but inside the band the CSS
+    // mask leaves opaque, so they never dissolve mid-stroke on narrow viewports.
+    const far = Math.min(1.30*TRX, Math.max(1.16*TRX, W*0.245));
+    for(const [gx,gy] of [[-0.78*TRX,-0.86*TRY-12],[0.78*TRX,-0.86*TRY-12],[-far,-2],[far,-2],
+                          [-0.92*far,0.62*TRY+18],[0.92*far,0.62*TRY+18]]){
+      const mx = cx + gx, my = cy + gy;
+      const p0 = [mx - UX*gust, my - UY*gust], p1 = [mx + UX*gust, my + UY*gust];
+      if(Math.min(p0[1],p1[1]) < 10 || Math.max(p0[1],p1[1]) > H-10) continue;
+      ctx.setLineDash([7,6]); seg(p0, p1); ctx.setLineDash([]);
+      head(p1, UX, UY, 5.5);
+    }
+
+    /* ---- the light path, riding hB above the stone ----------------------- */
+    const armL = 0.84*s, srcA = -0.92*s, objB = -0.46*s, eyeB = -0.92*s, hB = 13;
+    const BS = P(0,0,hB), MA = P(armL,0,hB), MB = P(0,armL,hB),
+          SRC = P(srcA,0,hB), OBJ = P(0,objB,hB), EYE = P(0,eyeB,hB);
+    const beam = (p,q,core) => {
+      ctx.strokeStyle = BEAM+'.14)'; ctx.lineWidth = 9; seg(p,q);
+      ctx.strokeStyle = BEAM+core+')'; ctx.lineWidth = 3.2; seg(p,q);
+    };
+    beam(P(srcA+12,0,hB), BS, '.94');       // lamp → splitter (in along −a)
+    beam(BS, MA, '.94');                    // transmitted half → mirror A (on along +a)
+    beam(BS, MB, '.94');                    // reflected half → mirror B (turned 90°, along +b)
+    beam(BS, OBJ, '.88');                   // recombined light → telescope (out along −b)
+    ctx.fillStyle = BEAM+'.95)';            // one arrow in at the lamp, one out to the telescope
+    head(P(srcA*0.48,0,hB),  UX, UY, 7);
+    head(P(0,objB*0.72,hB), -UX, UY, 7);
+
+    /* ---- the end mirrors: each face normal to its own arm ---------------- */
+    const mh = 27, mz = 26, tk = 4;
+    const mirror = (p,q,dx,dy) => {                 // p,q: the plate's footprint on the stone
+      poly([up(p,mz), up(q,mz), [q[0]+dx,q[1]+dy-mz], [p[0]+dx,p[1]+dy-mz]], OPTIC+'.26)', INK+'.55)', 1.4);
+      poly([p, q, up(q,mz), up(p,mz)], OPTIC+'.20)', INK+'.85)', 2);        // the reflecting face
+      ctx.strokeStyle = OPTIC+'.95)'; ctx.lineWidth = 2.6; seg(up(p,mz), up(q,mz));
+    };
+    mirror(P(armL,mh), P(armL,-mh), UX*tk, UY*tk);           // mirror A: plate along b ⇒ face normal along a
+    mirror(P(-mh,armL), P(mh,armL), -UX*tk, UY*tk);          // mirror B: plate along a ⇒ face normal along b
+
+    /* ---- the half-silvered splitter, and arm A's compensating plate ------
+       The plate stands on the stone at 45° to both arms: its trace runs along
+       a + b, which this camera looks straight down, so it is seen edge-on and
+       what shows is the glass thickness (along a − b) and its height. */
+    const plate = (a,b,halfT,hgt,tkk,al) => {
+      const nf = P(a-halfT+tkk, b-halfT-tkk), nr = P(a-halfT-tkk, b-halfT+tkk),   // near end of the plate
+            ff = P(a+halfT+tkk, b+halfT-tkk), fr = P(a+halfT-tkk, b+halfT+tkk);   // far end
+      poly([up(ff,hgt), up(fr,hgt), up(nr,hgt), up(nf,hgt)], OPTIC+'.44)', OPTIC+'.9)', 1.4);  // top edge, running away
+      poly([nf, nr, up(nr,hgt), up(nf,hgt)], OPTIC+'.'+al+')', OPTIC+'.95)', 2.2);             // the glass, edge-on
+    };
+    plate(0, 0, 16, 28, 2.4, '42');         // the beam splitter, at 45° to both arms
+    plate(0.5*armL, 0, 14, 22, 1.5, '22');  // compensator in arm A (equal glass in both paths)
+
+    /* ---- the lamp and the observing telescope ---------------------------- */
+    ctx.strokeStyle = INK+'.7)'; ctx.lineWidth = 2.2;
+    seg([SRC[0], SRC[1]], [SRC[0], SRC[1]+hB]);                     // lamp post
+    const sa = Math.atan2(UY, UX);                                  // the lamp faces along +a
+    ctx.strokeStyle = INK+'.80)'; ctx.lineWidth = 3;                // its hood, open toward the splitter
+    ctx.beginPath(); ctx.arc(SRC[0], SRC[1], 11, sa+0.85, sa-0.85); ctx.stroke();
+    ctx.beginPath(); ctx.arc(SRC[0], SRC[1], 11, 0, 7);
+    ctx.fillStyle = BEAM+'.20)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(SRC[0], SRC[1], 6.2, 0, 7);
+    ctx.fillStyle = BEAM+'.97)'; ctx.fill();
+    ctx.strokeStyle = INK+'.75)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(SRC[0], SRC[1], 6.2, 0, 7); ctx.stroke();
+    const ax = OBJ[0]-EYE[0], ay = OBJ[1]-EYE[1], an = Math.hypot(ax,ay) || 1;
+    const nx = -ay/an, ny = ax/an;
+    ctx.strokeStyle = INK+'.6)'; ctx.lineWidth = 2;
+    seg([EYE[0], EYE[1]], [EYE[0], EYE[1]+hB]);                     // telescope post
+    poly([[EYE[0]+nx*11, EYE[1]+ny*11], [OBJ[0]+nx*7.5, OBJ[1]+ny*7.5],
+          [OBJ[0]-nx*7.5, OBJ[1]-ny*7.5], [EYE[0]-nx*11, EYE[1]-ny*11]],
+         STONE+'.26)', INK+'.85)', 2);                              // telescope barrel
+    ctx.save();
+    ctx.translate(EYE[0], EYE[1]); ctx.rotate(Math.atan2(ay,ax));
+    ctx.beginPath(); ctx.ellipse(0, 0, 4.5, 11, 0, 0, 7);
+    ctx.fillStyle = STONE+'.34)'; ctx.fill();
+    ctx.strokeStyle = INK+'.9)'; ctx.lineWidth = 2.2; ctx.stroke();  // the eyepiece
     ctx.restore();
-    // light accumulating as dots along both arms and the source beam
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const pts = [];
-    for(let k=1;k<=4;k++) pts.push([ox-arm-34+(34+arm)*k/5, oy]);
-    for(let k=1;k<=4;k++) pts.push([ox+arm*k/4.6, oy]);
-    for(let k=1;k<=4;k++) pts.push([ox, oy-arm*k/4.6]);
-    let i = 0;
-    function batch(){
-      const per = reduce ? pts.length : 1;
-      for(let s=0; s<per && i<pts.length; s++, i++){
-        const [px,py] = pts[i];
-        ctx.beginPath(); ctx.arc(px,py,8,0,7);
-        ctx.fillStyle = LIGHT ? 'rgba(2,132,199,.16)' : 'rgba(253,224,71,.22)'; ctx.fill();
-        ctx.beginPath(); ctx.arc(px,py,3.4,0,7);
-        ctx.fillStyle = LIGHT ? '#0F172A' : '#FEF3C7'; ctx.fill();
-      }
-      if(i < pts.length) setTimeout(()=>requestAnimationFrame(batch), 70);
-    }
-    batch();
+
+    /* ---- feather the letterbox edges so nothing reads as cut off -------- */
+    ctx.globalCompositeOperation = 'destination-out';
+    let fg = ctx.createLinearGradient(0,0,0,4);
+    fg.addColorStop(0,'rgba(0,0,0,1)'); fg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0,0,W,4);
+    fg = ctx.createLinearGradient(0,H-4,0,H);
+    fg.addColorStop(0,'rgba(0,0,0,0)'); fg.addColorStop(1,'rgba(0,0,0,1)');
+    ctx.fillStyle = fg; ctx.fillRect(0,H-4,W,4);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

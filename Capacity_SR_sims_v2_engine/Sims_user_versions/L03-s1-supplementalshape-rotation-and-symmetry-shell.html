@@ -1878,13 +1878,22 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own picture — the five shapes, each drawn from the SAME
-     vertex construction the sim uses (vertices evenly spaced on a circle of
-     radius R), each turned by a DIFFERENT generic angle that is deliberately not
-     a symmetry angle of its own shape, with its θ = 0° outline dashed behind it
-     and its marked point in white. The turn animates in once from 0° and stops.
-     Deliberately no traced path and no shape sitting on its own outline: cards 3
-     and 5 ask about both, and the hero must not answer them. */
+  /* Hero: ONE bold object — a flat ribbon sweeping across the letterbox while
+     turning about its own long axis, so it shows four unequal lobes that swap
+     between its two faces and pinch to a cusp wherever the band goes edge-on.
+     Deliberately NOT the sim's own picture. The gated deck asks (2) what a rigid
+     turn changes, (3) where the triangle's marked dot sits at θ = 120°, (4) how
+     many angles in a full turn map a regular n-gon onto itself, and (5) what
+     path the marked dot sweeps out. So this hero carries: no regular polygon —
+     its side count IS the answer to card 4; no shape laid over a congruent
+     dashed copy of itself, which is card 2's answer drawn; no marked point, no
+     closed circular path and no sweep arrow about a centre — cards 3 and 5; and
+     nothing with a countable k-fold repeat, the four lobes shrinking
+     monotonically left to right so they cannot read as one motif repeated k
+     times. Rotation is carried by the twist of the band about its axis, which
+     states none of the four answers.
+     STATIC: drawHero is re-entered by animationend, a 700 ms timer and two
+     MutationObservers, each of which clears the canvas first. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -1896,60 +1905,81 @@ const Shell = (function(){
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    /* Identity transform, explicitly: one buffer pixel is one CSS pixel on BOTH
+       axes because the buffer above is sized to the element's own box. There is
+       no anisotropic pre-compensation here (no SY = SX*k, no ctx.scale(1/AR,1)),
+       and there must never be one — in a rotation sim a squashed circle would be
+       a squashed rotation. */
+    ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const D2R = Math.PI/180;
-    // n = Infinity is the circle; start/ref mirror the sim's own SHAPES table.
-    const FIG = [
-      { n:Infinity, start:90, col:'#06b6d4', turn:  0 },
-      { n:3,        start:90, col:'#a78bfa', turn: 47 },
-      { n:4,        start:45, col:'#34d399', turn: 23 },
-      { n:5,        start:90, col:'#60a5fa', turn: 31 },
-      { n:6,        start: 0, col:'#f472b6', turn: 26 }
-    ];
-    // Laid out inside the band the hero's side-fade mask leaves fully opaque.
-    const span = 0.40, left = 0.30, pitch = span/FIG.length;
-    const cy = H*0.52, R = Math.min(H*0.30, W*pitch*0.38);
-    const xs = FIG.map((f,i)=> W*(left + pitch*(i+0.5)));
-    function outline(f, cx, th, close){
-      ctx.beginPath();
-      if(f.n === Infinity){ ctx.arc(cx, cy, R, 0, Math.PI*2); return; }
-      for(let k=0;k<f.n;k++){
-        const a = (f.start + k*360/f.n + th)*D2R;
-        const x = cx + R*Math.cos(a), y = cy - R*Math.sin(a);
-        k ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
-      }
-      if(close!==false) ctx.closePath();
-    }
-    function frame(th01){
-      ctx.clearRect(0,0,W,H);
-      FIG.forEach((f,i)=>{
-        const cx = xs[i], th = f.turn*th01;
-        // θ = 0° outline, dashed
-        ctx.setLineDash([4,4]); ctx.lineWidth = 1.2;
-        ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.38)';
-        outline(f, cx, 0); ctx.stroke(); ctx.setLineDash([]);
-        // the turned shape
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = f.col;
-        ctx.fillStyle  = hexA(f.col, LIGHT ? .16 : .20);
-        outline(f, cx, th); ctx.fill(); ctx.stroke();
-        // the marked point, carried around with the shape
-        const ra = (f.start + th)*D2R;
-        ctx.beginPath(); ctx.arc(cx + R*Math.cos(ra), cy - R*Math.sin(ra), 3.6, 0, 7);
-        ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA'; ctx.fill();
-      });
-    }
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    /* Light theme gets properly dark ink on the near-white overlay, not mid-tones. */
+    const P = LIGHT
+      ? { faceA:'#0B4A6F', faceB:'#312E81', aA:.74, aB:.64, edge:'rgba(8,15,30,.95)',  axis:'rgba(15,23,42,.50)' }
+      : { faceA:'#22D3EE', faceB:'#A78BFA', aA:.56, aB:.54, edge:'rgba(226,246,255,.92)', axis:'rgba(186,208,230,.42)' };
     function hexA(h,a){ const n = parseInt(h.slice(1),16);
       return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ frame(1); return; }
-    const N = 46; let k = 0;
-    (function step(){
-      const t = k/N, e = 1 - Math.pow(1-t, 3);   // ease-out: one entrance, never a loop
-      frame(e);
-      if(k++ < N) requestAnimationFrame(step);
-    })();
+
+    // ---- the ribbon ---------------------------------------------------------
+    // x runs inside the band the side-fade mask leaves fully opaque.
+    const x0 = W*0.235, x1 = W*0.765, L = x1 - x0;
+    const LOBES = 4;
+    // Non-uniform twist: warp(t) is the fraction of the total twist completed at
+    // t, so equal twist steps land on UNEQUAL x-intervals — the lobes get
+    // narrower left to right and nothing about the figure is periodic.
+    const warp = t => 0.58*t + 0.42*t*t;
+    const tAt  = u => (Math.sqrt(0.3364 + 1.68*u) - 0.58)/0.84;   // inverse of warp
+    const PH0  = Math.PI/2;                        // both ends of the run are cusps
+    const phase = t => PH0 + LOBES*Math.PI*warp(t);
+    const Rmax = H*0.178;
+    const X    = t => x0 + L*t;
+    const mid  = t => H*0.50 + H*0.125*Math.sin(1.15*Math.PI*t + 0.35);   // one rise, one dive
+    const half = t => Math.abs(Math.cos(phase(t))) * Rmax * (1 - 0.28*t);  // band seen at an angle
+
+    // rotation axis of the band, dashed, running a little past both cusps
+    ctx.save();
+    ctx.setLineDash([7,7]); ctx.lineWidth = 1.6; ctx.strokeStyle = P.axis;
+    ctx.beginPath();
+    for(let i=0;i<=120;i++){ const t = -0.04 + 1.08*i/120, x = X(t), y = mid(t);
+      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); }
+    ctx.stroke();
+    ctx.restore();
+
+    // the lobes: one closed lens per half-twist, front and back faces alternating
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for(let j=0;j<LOBES;j++){
+      const ta = tAt(j/LOBES), tb = tAt((j+1)/LOBES), M = 40;
+      ctx.beginPath();
+      for(let i=0;i<=M;i++){ const t = ta + (tb-ta)*i/M, x = X(t), y = mid(t) - half(t);
+        i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); }
+      for(let i=M;i>=0;i--){ const t = ta + (tb-ta)*i/M; ctx.lineTo(X(t), mid(t) + half(t)); }
+      ctx.closePath();
+      // Depth: each lobe is brightest where the band faces us and fades where it
+      // is turning edge-on, so the twist reads as a twist and not as a chain.
+      const front = Math.cos(phase((ta+tb)/2)) > 0;
+      const col = front ? P.faceA : P.faceB, al = front ? P.aA : P.aB;
+      const gl = ctx.createLinearGradient(X(ta),0,X(tb),0);
+      gl.addColorStop(0,   hexA(col, al*0.45));
+      gl.addColorStop(0.5, hexA(col, al));
+      gl.addColorStop(1,   hexA(col, al*0.45));
+      ctx.fillStyle = gl;
+      ctx.fill();
+      ctx.lineWidth = 2.6; ctx.strokeStyle = P.edge; ctx.stroke();
+    }
+
+    // ---- feather the letterbox edges ---------------------------------------
+    // The band has no frame of its own, so wipe its top and bottom few pixels
+    // out to transparent rather than letting art end on a hard horizontal cut.
+    const FE = Math.max(8, Math.round(H*0.075));
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    let g = ctx.createLinearGradient(0,0,0,FE);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,FE);
+    g = ctx.createLinearGradient(0,H-FE,0,H);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,1)');
+    ctx.fillStyle = g; ctx.fillRect(0,H-FE,W,FE);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

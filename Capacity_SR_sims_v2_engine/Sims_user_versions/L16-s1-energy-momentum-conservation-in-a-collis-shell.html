@@ -2367,15 +2367,23 @@ window.__audit={
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own setup — pairs of particles closing on the dashed marker
-     where they meet, discs sized by the sim's own radius rule r = 7 + 9√m and
-     arrows scaled by speed. It draws only the BEFORE state, so it cannot answer
-     card 2: the whole deck turns on what comes OUT of the merge, and the hero
-     never shows a product. */
-  let heroGen = 0;
+  /* Hero — "closing head-on". ONE centred subject, not a tiled strip: two equal
+     bodies rushing at each other along a single line, each with a motion plume
+     streaming behind it and a stack of compression bows leaning into the gap
+     that still separates them. Static, single pass, symmetric about W/2 so the
+     whole composition sits inside the centre 760px the CSS mask keeps.
+
+     SPOILER BUDGET — what is deliberately absent. The gated cards ask what rest
+     mass the merged body has (M > 2m), whether ΣE falls across the merge (it
+     does not), how ½mv² compares with (γ−1)mc² (about half of it), and which
+     combination survives a boost ((ΣE)² − (Σpc)²). So the hero shows no product
+     body, no second moment in time, no bar/scale/tally of mass or energy, no
+     before-versus-after pairing and no boosted frame — and no glyphs at all.
+     The two bodies are drawn EQUAL and mirror-symmetric, which is exactly the
+     ungated frame card's own stated setup (equal rest masses, β = ±0.80, so
+     Σp = 0). Everything the deck gates lives after the instant drawn here. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer would be stretched across and
            squashed down: every ctx.arc() circle would render as an ellipse.
@@ -2385,49 +2393,67 @@ window.__audit={
           const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    /* No anisotropic pre-compensation: the buffer above is sized 1:1 to the
+       element's own box, so device pixels are square and the transform stays
+       identity. Any ctx.scale(1/AR,1) here would now stretch the art. */
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const yMid = Math.round(H*0.56);
-    const COL1 = LIGHT ? '#0e7490' : '#22d3ee';
-    const COL2 = LIGHT ? '#b45309' : '#f59e0b';
-    const AXIS = LIGHT ? 'rgba(15,23,42,.16)' : 'rgba(148,163,184,.18)';
-    const MARK = LIGHT ? 'rgba(109,40,217,.45)' : 'rgba(196,181,253,.45)';
-    const pitch = 230, n = Math.ceil(W/pitch) + 1;
-    // Rest masses and speeds vary bundle to bundle so the strip reads as a
-    // family of collisions rather than one repeated picture.
-    const sets = [ {m1:1.0,m2:1.0,b1:0.80,b2:0.80},
-                   {m1:1.8,m2:0.7,b1:0.50,b2:0.92},
-                   {m1:0.8,m2:1.4,b1:0.90,b2:0.42} ];
-    const R = m => (7 + 9*Math.sqrt(m)) * 0.78;   // the sim's own disc-radius rule
-    function particle(x, r, beta, dir, col){
-      const len = 14 + 26*beta;
-      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
-      const a0 = x + dir*(r+4), a1 = a0 + dir*len;
-      ctx.beginPath(); ctx.moveTo(a0,yMid); ctx.lineTo(a1,yMid); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(a1,yMid); ctx.lineTo(a1-dir*6,yMid-4); ctx.lineTo(a1-dir*6,yMid+4); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.arc(x,yMid,r,0,7);
-      ctx.fillStyle = col + '30'; ctx.fill();
-      ctx.lineWidth = 2.2; ctx.strokeStyle = col; ctx.stroke();
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // Dark ink on the near-white light ground; luminous ink on the dark one.
+    const A = LIGHT ? [12,74,110]  : [34,211,238];   // the body closing from the left
+    const B = LIGHT ? [124,45,18]  : [245,158,11];   // the body closing from the right
+    const rgba = (col,a) => 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + a + ')';
+
+    const S   = Math.max(0.80, Math.min(1.10, W/1400));   // one subject, gently sized to the band
+    const cx  = Math.round(W/2), cy = Math.round(H*0.52);
+    const r   = 34*S;                                     // body radius (both bodies equal)
+    const sep = 118*S;                                    // each body's offset from the meeting line
+
+    // A body: motion plume behind, solid core, and compression bows ahead of it.
+    // dir = +1 travels to the right, dir = -1 to the left.
+    function body(x, dir, col){
+      // plume — three tapered streaks trailing the direction of travel
+      const plume = [ {dy:0, len:60, w:9, a:.58}, {dy:22, len:44, w:7, a:.40}, {dy:-22, len:44, w:7, a:.40},
+                      {dy:38, len:26, w:5, a:.26}, {dy:-38, len:26, w:5, a:.26} ];
+      for(const p of plume){
+        const y0 = cy + p.dy*S, x0 = x - dir*(r + 6*S), x1 = x0 - dir*p.len*S;
+        ctx.strokeStyle = rgba(col, p.a); ctx.lineWidth = p.w*S;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
+      }
+      // compression bows — stacked arcs leaning into the gap, boldest at the body
+      const bows = [ {d:15, half:48, w:5.5, a:.66}, {d:28, half:41, w:4.5, a:.46}, {d:41, half:34, w:3.5, a:.30} ];
+      const face = dir > 0 ? 0 : Math.PI;
+      for(const b of bows){
+        const half = b.half*Math.PI/180;
+        ctx.strokeStyle = rgba(col, b.a); ctx.lineWidth = b.w*S;
+        ctx.beginPath(); ctx.arc(x, cy, r + b.d*S, face - half, face + half); ctx.stroke();
+      }
+      // halo, then the solid core with its rim
+      ctx.strokeStyle = rgba(col, .22); ctx.lineWidth = 2.2*S;
+      ctx.beginPath(); ctx.arc(x, cy, r + 9*S, 0, 7); ctx.stroke();
+      ctx.fillStyle = rgba(col, .88);
+      ctx.beginPath(); ctx.arc(x, cy, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = 3*S;
+      ctx.beginPath(); ctx.arc(x, cy, r, 0, 7); ctx.stroke();
     }
-    function bundle(k){
-      const cx = Math.round(k*pitch + pitch*0.5);
-      ctx.lineWidth = 1; ctx.strokeStyle = AXIS;
-      ctx.beginPath(); ctx.moveTo(cx-pitch*0.46, yMid+.5); ctx.lineTo(cx+pitch*0.46, yMid+.5); ctx.stroke();
-      ctx.save(); ctx.setLineDash([4,4]); ctx.lineWidth = 1.1; ctx.strokeStyle = MARK;
-      ctx.beginPath(); ctx.moveTo(cx+.5, yMid-34); ctx.lineTo(cx+.5, yMid+34); ctx.stroke(); ctx.restore();
-      const s = sets[k % sets.length];
-      const gap = pitch*0.30;
-      particle(cx-gap, R(s.m1), s.b1, +1, COL1);
-      particle(cx+gap, R(s.m2), s.b2, -1, COL2);
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) bundle(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 90);
-    })();
+    body(cx - sep, +1, A);
+    body(cx + sep, -1, B);
+
+    // Feather the letterbox edges so the band dissolves into the overlay
+    // instead of ending on a hard horizontal cut.
+    const fade = Math.max(6, Math.round(H*0.06));
+    ctx.globalCompositeOperation = 'destination-out';
+    let g = ctx.createLinearGradient(0, 0, 0, fade);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, fade);
+    g = ctx.createLinearGradient(0, H - fade, 0, H);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = g; ctx.fillRect(0, H - fade, W, fade);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

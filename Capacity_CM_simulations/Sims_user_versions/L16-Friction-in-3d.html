@@ -2464,9 +2464,29 @@ window.__audit = {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the same launch (v0 = 29 m/s, 45 deg) flown by the sim's own three
-     models — vacuum closed form, linear-drag closed form, quadratic drag by RK4
-     — sampled at equal time steps, so dot spacing shows where the shot is fast. */
+  /* Hero — ONE launch, three force laws.
+     A single shot (v0 = 29 m/s at 45 deg, m = 1 kg) leaves one muzzle and is
+     flown three ways by the sim's own models: vacuum (closed form), linear
+     drag F = -b*v (closed form), quadratic drag F = -c*|v|*v (RK4). Three
+     solid arcs from a common origin, three landing discs on one ground line.
+
+     NO-SPOILER CONTRACT. Every gated card in this deck is about the OPTIMAL
+     LAUNCH ANGLE once drag is switched on:
+       card 2  "with drag, which angle gives the longest shot?"   -> below 45 deg
+       card 3  "of 35 / 40 / 45 deg, which range is largest?"     -> 35 deg
+       card 6  "raise v0 from 18 to 30 m/s, what happens to it?"  -> drops further
+     So the hero deliberately shows a SINGLE launch angle and nothing else:
+     no angle fan, no second shot at a different theta, no range-vs-angle
+     curve, no optimum star, no 45-degree reference line, no angle arc and no
+     protractor. Comparing ranges at ONE angle across three drag laws is card 1
+     ("watch the race"), which is ungated and already tells the student that
+     drag shortens the shot — so the band gives away nothing that is gated.
+
+     The two drag coefficients are MATCHED at the muzzle, c = b/v0, so both
+     drag laws start with the same retarding force and differ only in how that
+     force scales with speed. No force vectors are drawn at all, so there is no
+     direction to get wrong; the only physics on the canvas is the three
+     trajectories themselves, each integrated from its own equation of motion. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store shipped hard-coded at 1280x240 while the element is
@@ -2480,46 +2500,123 @@ window.__audit = {
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
     ctx.clearRect(0,0,W,H);
-    const g = 9.81, v0 = 29, th = 45*Math.PI/180, m = 1, b = 0.30, cq = 0.016;
+    /* No ctx.scale() anywhere below: arcs are drawn in device pixels, so discs
+       stay circular. The world -> pixel map is deliberately anisotropic (a
+       10:1 letterbox cannot hold a true-aspect 86 m x 21 m flight), applied
+       only to path vertices — never as a canvas transform. */
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // ---- the three flights, in metres ------------------------------------
+    const g = 9.81, v0 = 29, th = 45*Math.PI/180, m = 1, b = 0.30, cq = b/v0;
     const vx0 = v0*Math.cos(th), vy0 = v0*Math.sin(th);
-    const vac = t => ({ x: vx0*t, y: vy0*t - 0.5*g*t*t });
-    const tau = m/b, vT = m*g/b;
-    const lin = t => ({ x: vx0*tau*(1-Math.exp(-t/tau)), y: (vy0+vT)*tau*(1-Math.exp(-t/tau)) - vT*t });
-    const quadPath = (function(){
-      let x = 0, y = 0, vx = vx0, vy = vy0, dt = 0.004, out = [];
-      for(let i = 0; i < 4000 && (y >= 0 || i < 5); i++){
-        out.push({ t: i*dt, x: x, y: y });
-        const s = Math.hypot(vx, vy), k = cq/m*s;
-        const ax = -k*vx, ay = -g - k*vy;
-        vx += ax*dt; vy += ay*dt; x += vx*dt; y += vy*dt;
+    const DT = 0.02;
+    // Sample a closed-form flight until it crosses y = 0, then land it exactly.
+    function sampleClosed(f){
+      const pts = [{ x:0, y:0 }];
+      for(let t = DT; t < 30; t += DT){
+        const p = f(t);
+        if(p.y < 0){ const q = pts[pts.length-1], fr = q.y/(q.y - p.y);
+                     pts.push({ x:q.x + fr*(p.x - q.x), y:0 }); break; }
+        pts.push(p);
       }
-      return out;
-    })();
-    const quad = t => { const i = Math.min(quadPath.length-1, Math.round(t/0.004)); return quadPath[i]; };
-    const SX = W/100, SY = (H-46)/34, y0 = H-26;          // 100 m x 34 m world window
-    const P2 = (p) => ({ px: 6 + p.x*SX, py: y0 - p.y*SY });
-    const models = LIGHT
-      ? [ { f:vac, c:'#0e7490' }, { f:lin, c:'#b45309' }, { f:quad, c:'#6d28d9' } ]
-      : [ { f:vac, c:'#22d3ee' }, { f:lin, c:'#f59e0b' }, { f:quad, c:'#a78bfa' } ];
-    // ground line
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)';
-    ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, y0+0.5); ctx.lineTo(W, y0+0.5); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const DT = 0.045, NMAX = 150; let k = 0;
-    function batch(){
-      const per = reduce ? NMAX : 3;
-      for(let s = 0; s < per && k < NMAX; s++, k++){
-        const t = k*DT;
-        models.forEach(md => {
-          const p = md.f(t); if(!p || p.y < 0) return;
-          const q = P2(p);
-          ctx.fillStyle = md.c;
-          ctx.beginPath(); ctx.arc(q.px, q.py, 2.6, 0, 6.2832); ctx.fill();
-        });
-      }
-      if(!reduce && k < NMAX) requestAnimationFrame(batch);
+      return pts;
     }
-    batch();
+    const vacPts = sampleClosed(t => ({ x: vx0*t, y: vy0*t - 0.5*g*t*t }));
+    const tau = m/b, vT = m*g/b;                       // time constant, terminal speed
+    const linPts = sampleClosed(t => ({ x: vx0*tau*(1-Math.exp(-t/tau)),
+                                        y: (vy0+vT)*tau*(1-Math.exp(-t/tau)) - vT*t }));
+    // Quadratic drag has no closed form: classical RK4 on [x, y, vx, vy].
+    const quadPts = (function(){
+      const D = s => { const sp = Math.hypot(s[2], s[3]), k = cq/m*sp;
+                       return [ s[2], s[3], -k*s[2], -g - k*s[3] ]; };
+      const pts = [{ x:0, y:0 }]; let s = [0, 0, vx0, vy0];
+      for(let i = 0; i < 4000; i++){
+        const k1 = D(s),
+              k2 = D(s.map((v,j) => v + DT/2*k1[j])),
+              k3 = D(s.map((v,j) => v + DT/2*k2[j])),
+              k4 = D(s.map((v,j) => v + DT*k3[j])),
+              n  = s.map((v,j) => v + DT/6*(k1[j] + 2*k2[j] + 2*k3[j] + k4[j]));
+        if(n[1] < 0 && i > 1){ const fr = s[1]/(s[1] - n[1]);
+                               pts.push({ x: s[0] + fr*(n[0] - s[0]), y:0 }); break; }
+        s = n; pts.push({ x:s[0], y:s[1] });
+      }
+      return pts;
+    })();
+
+    // ---- frame the subject in the middle of the band ----------------------
+    // The CSS mask fades the outer 22% of a 100vw band, so the art is scaled
+    // to the centre half and centred there rather than spanning the viewport.
+    const all = [vacPts, quadPts, linPts];
+    const Rmax = Math.max.apply(null, all.map(p => p[p.length-1].x));
+    let Ymax = 0; all.forEach(p => p.forEach(q => { if(q.y > Ymax) Ymax = q.y; }));
+    const SPAN = Math.min(W*0.50, 720), x0 = (W - SPAN)/2;
+    const baseY = H - Math.max(16, Math.round(H*0.15));
+    const topY  = Math.max(10, Math.round(H*0.13));
+    const SX = SPAN/Rmax, SY = (baseY - topY)*0.94/Ymax;
+    const PX = p => x0 + p.x*SX, PY = p => baseY - p.y*SY;
+
+    const INK  = LIGHT ? '15,23,42' : '226,232,240';
+    // Light theme sits on a near-white card, so the ink is genuinely dark
+    // (cyan-800 / amber-800 / violet-800), not a mid-tone wash.
+    const COL  = LIGHT ? { vac:'#155e75', lin:'#92400e', quad:'#5b21b6' }
+                       : { vac:'#67e8f9', lin:'#fbbf24', quad:'#c4b5fd' };
+    const RGB  = LIGHT ? { vac:'21,94,117', lin:'146,64,14', quad:'91,33,182' }
+                       : { vac:'103,232,249', lin:'251,191,36', quad:'196,181,253' };
+
+    // ---- flat ground -------------------------------------------------------
+    const gL = x0 - 26, gR = x0 + SPAN + 26;
+    ctx.strokeStyle = 'rgba(' + INK + ',' + (LIGHT ? .55 : .48) + ')';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(gL, baseY + 0.5); ctx.lineTo(gR, baseY + 0.5); ctx.stroke();
+    ctx.strokeStyle = 'rgba(' + INK + ',' + (LIGHT ? .30 : .26) + ')';
+    ctx.lineWidth = 1.8;
+    for(let x = gL + 10; x < gR; x += 34){
+      ctx.beginPath(); ctx.moveTo(x, baseY + 2); ctx.lineTo(x - 7, baseY + 9); ctx.stroke();
+    }
+
+    // ---- the three arcs ----------------------------------------------------
+    // Drawn longest-first so the shorter, drag-bitten flights sit on top where
+    // all three overlap just after the muzzle.
+    function arc(pts, key, wide){
+      ctx.beginPath();
+      ctx.moveTo(PX(pts[0]), PY(pts[0]));
+      for(let i = 1; i < pts.length; i++) ctx.lineTo(PX(pts[i]), PY(pts[i]));
+      ctx.strokeStyle = 'rgba(' + RGB[key] + ',.17)'; ctx.lineWidth = wide + 5.5; ctx.stroke();
+      ctx.strokeStyle = COL[key];                     ctx.lineWidth = wide;       ctx.stroke();
+    }
+    function lander(pts, key){
+      const x = PX(pts[pts.length-1]), y = baseY;
+      ctx.beginPath(); ctx.arc(x, y, 8.5, 0, 6.2832);
+      ctx.fillStyle = 'rgba(' + RGB[key] + ',.22)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = COL[key]; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 6.2832);
+      ctx.fillStyle = COL[key]; ctx.fill();
+    }
+    arc(vacPts,  'vac',  5);
+    arc(quadPts, 'quad', 5);
+    arc(linPts,  'lin',  5);
+    lander(vacPts,  'vac');
+    lander(quadPts, 'quad');
+    lander(linPts,  'lin');
+
+    // ---- the one muzzle they all leave from --------------------------------
+    ctx.beginPath(); ctx.arc(x0, baseY, 7.5, 0, 6.2832);
+    ctx.fillStyle = 'rgba(' + INK + ',' + (LIGHT ? .16 : .20) + ')'; ctx.fill();
+    ctx.lineWidth = 3.2; ctx.strokeStyle = 'rgba(' + INK + ',' + (LIGHT ? .88 : .82) + ')'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x0, baseY, 2.8, 0, 6.2832);
+    ctx.fillStyle = 'rgba(' + INK + ',' + (LIGHT ? .92 : .88) + ')'; ctx.fill();
+
+    // ---- feather the letterbox edges so the band has no hard cut -----------
+    const fh = Math.max(6, Math.round(H*0.07));
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const gt = ctx.createLinearGradient(0, 0, 0, fh);
+    gt.addColorStop(0, 'rgba(0,0,0,1)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, fh);
+    const gb = ctx.createLinearGradient(0, H - fh, 0, H);
+    gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = gb; ctx.fillRect(0, H - fh, W, fh);
+    ctx.restore();
   }
 
   drawHero();

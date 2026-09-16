@@ -2406,10 +2406,26 @@ const Shell = (function(){
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own cone geometry - a double cone accumulating generator by
-     generator, then ONE plane cut stroked through it (a closed, elliptical cut).
-     Deliberately shows no Sun and no open branch, so it answers none of the
-     pending predictions. */
+  /* Hero: the sim's own cone geometry, in two bold pieces — ONE double cone with
+     a single slanted plane cut through the upper nappe, and beside it that same
+     cut turned face-on, at its true shape.
+
+     Everything gated is left out. No Sun, no focus, no centre dot, no body and
+     no path-in-space: card 2 (where the Sun sits for a non-circular path) gets
+     no hint. One cut only, at one fixed tilt — no family, no progression, no
+     open branch and no second nappe cut: cards 3 and 6 (what more energy does
+     to the path, and how the plane differs either side of the edge) get no
+     hint. Nothing about energy, speed or direction of travel is drawn at all,
+     so cards 4 and 5 are untouched.
+
+     The geometry is real, not stretched. Cone r = K|y| with K = 1.7 (half-angle
+     atan K = 59.5 deg); cutting plane tilted beta from the axis-normal, so the
+     cut's eccentricity is e = sin(beta)/cos(alpha) = sin(beta)*sqrt(1+K^2).
+     beta is solved FROM the chosen e = 0.70, and the face-on ellipse uses the
+     same number: b/a = sqrt(1-e^2) = 0.7141. Neither is squashed or widened to
+     suit the letterbox — the band is filled by placing two objects side by
+     side, not by distorting either one. Static: no rAF batching, so the redraws
+     on animationend / timer / resize / theme cannot wipe a half-drawn frame. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2423,56 +2439,75 @@ const Shell = (function(){
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);
-    const K = 0.72, T = 1.0, az = 0.62, pol = 0.46;
-    const ca = Math.cos(az), sa = Math.sin(az), cp = Math.cos(pol), sp = Math.sin(pol);
-    // The 1280x240 strip is displayed at 100vw x 140px, so y is squashed ~2x
-    // relative to x. Pre-compensate with separate axis scales (reference note:
-    // "the hero must be drawn at the canvas's own aspect").
-    const SX = Math.min(W*0.075, H*0.38), SY = SX*1.9, cx = W*0.5, cy = H*0.5;
-    function proj(x,y,z){
-      const x1 = x*ca + z*sa, z1 = -x*sa + z*ca;
-      const y2 = y*cp - z1*sp;
-      return { sx: cx + SX*x1, sy: cy - SY*y2 };
-    }
-    const cone = (t,th) => ({ x:K*t*Math.cos(th), y:t, z:K*t*Math.sin(th) });
-    const INK  = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.34)';
-    const CUT  = LIGHT ? '#0f766e' : '#5eead4';
-    // the cut: plane n.r = d with beta well below the parabolic angle -> a closed cut
-    const beta = Math.atan(1/K)*0.55, d = 0.35*Math.cos(beta);
-    const nx = Math.sin(beta), ny = Math.cos(beta);
-    function cutPt(th){
-      const ux = Math.cos(th), uz = Math.sin(th);
-      const den = nx*K*ux + ny;
-      const t = d/den;
-      return cone(t, th);
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const GEN = 56;
-    let k = 0;
-    function strokeCut(){
-      ctx.strokeStyle = CUT; ctx.lineWidth = 2.6; ctx.beginPath();
-      for(let i=0;i<=200;i++){
-        const p = cutPt(2*Math.PI*i/200), q = proj(p.x,p.y,p.z);
-        i ? ctx.lineTo(q.sx,q.sy) : ctx.moveTo(q.sx,q.sy);
-      }
-      ctx.closePath(); ctx.stroke();
-      ctx.fillStyle = LIGHT ? 'rgba(15,118,110,.12)' : 'rgba(94,234,212,.10)';
+
+    // Ink that reads on near-black AND on near-white ground.
+    const EDGE = LIGHT ? 'rgba(30,41,59,'   : 'rgba(214,223,237,';   // silhouette + rims
+    const SURF = LIGHT ? 'rgba(71,85,105,'  : 'rgba(148,163,184,';   // cone surface + generators
+    const CUT  = LIGHT ? 'rgba(13,148,136,' : 'rgba(45,212,191,';    // the cut and its true shape
+
+    const SC   = Math.min(1, W/760);          // only bites on very narrow viewports
+    const cy   = H/2, half = (H/2 - 8)*SC;    // 8px clear of the letterbox edges
+    const K    = 1.7, pol = 0.33;             // cone slope; view 19 deg above the horizon
+    const cp   = Math.cos(pol), sp = Math.sin(pol);
+    const P    = half/(cp + K*sp);            // px per unit along the axis
+    const rim  = P*K, rimY = rim*sp;          // rim radius, and its foreshortened depth
+    const ECC  = 0.70;
+    const beta = Math.asin(ECC*Math.cos(Math.atan(K)));   // tilt that yields exactly e = 0.70
+    const sb   = Math.sin(beta), cb = Math.cos(beta);
+    const D    = 0.93*(cb - K*sb);            // cut reaches 93% of the way up the nappe
+    const bb   = half*0.90, aa = bb/Math.sqrt(1 - ECC*ECC);
+    const dx   = Math.min(W*0.115, 170*SC);
+    const coneX = W/2 - dx, ovalX = W/2 + dx;
+
+    // ---- the double cone -------------------------------------------------
+    for(const sgn of [1, -1]){
+      const yR = cy + sgn*P*cp;                       // rim-circle centre on screen
+      // one path: silhouette triangle + rim disc, wound the same way, so the
+      // translucent wash fills their union without doubling where they overlap
+      ctx.beginPath();
+      ctx.moveTo(coneX, cy);
+      if(sgn < 0){ ctx.lineTo(coneX - rim, yR); ctx.lineTo(coneX + rim, yR); }
+      else       { ctx.lineTo(coneX + rim, yR); ctx.lineTo(coneX - rim, yR); }
+      ctx.closePath();
+      ctx.moveTo(coneX + rim, yR);
+      ctx.ellipse(coneX, yR, rim, rimY, 0, 0, 2*Math.PI);
+      ctx.fillStyle = SURF + (LIGHT ? '0.16)' : '0.15)');
       ctx.fill();
-    }
-    function batch(){
-      const per = reduce ? GEN : 2;
-      ctx.strokeStyle = INK; ctx.lineWidth = 1;
-      for(let s2=0;s2<per && k<GEN;s2++,k++){
-        const th = 2*Math.PI*k/GEN;
-        const u = proj(cone(T,th).x, T, cone(T,th).z);
-        const l = proj(cone(-T,th).x, -T, cone(-T,th).z);
-        const a0 = proj(0,0,0);
-        ctx.beginPath(); ctx.moveTo(l.sx,l.sy); ctx.lineTo(a0.sx,a0.sy); ctx.lineTo(u.sx,u.sy); ctx.stroke();
+      ctx.strokeStyle = SURF + '0.36)'; ctx.lineWidth = 1.5;
+      for(let i = 0; i < 8; i++){                     // eight generators, not fifty-six
+        const th = 2*Math.PI*(i + 0.5)/8;
+        ctx.beginPath(); ctx.moveTo(coneX, cy);
+        ctx.lineTo(coneX + rim*Math.cos(th), yR + rimY*Math.sin(th)); ctx.stroke();
       }
-      if(k < GEN) requestAnimationFrame(batch);
-      else strokeCut();
+      ctx.strokeStyle = EDGE + '0.90)'; ctx.lineWidth = 3.0; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.ellipse(coneX, yR, rim, rimY, 0, 0, 2*Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(coneX - rim, yR); ctx.lineTo(coneX, cy); ctx.lineTo(coneX + rim, yR); ctx.stroke();
     }
-    batch();
+
+    // ---- the one plane cut, climbing to the right ------------------------
+    ctx.beginPath();
+    for(let i = 0; i <= 180; i++){
+      const th = 2*Math.PI*i/180, t = D/(cb - K*sb*Math.cos(th));
+      const x = coneX + rim*t*Math.cos(th);
+      const y = cy - P*t*cp + rim*t*Math.sin(th)*sp;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = CUT + '0.22)'; ctx.fill();
+    ctx.strokeStyle = CUT + '0.95)'; ctx.lineWidth = 3.4; ctx.stroke();
+
+    // ---- ... which is this curve, seen face-on ---------------------------
+    const x0 = coneX + rim + 18, x1 = ovalX - aa - 14;
+    if(x1 - x0 > 26){
+      ctx.strokeStyle = EDGE + '0.55)'; ctx.lineWidth = 2.4;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(x0, cy); ctx.lineTo(x1, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1 - 11, cy - 7); ctx.lineTo(x1, cy); ctx.lineTo(x1 - 11, cy + 7); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+    ctx.beginPath(); ctx.ellipse(ovalX, cy, aa, bb, 0, 0, 2*Math.PI);
+    ctx.fillStyle = CUT + '0.07)'; ctx.fill();
+    ctx.strokeStyle = CUT + '0.95)'; ctx.lineWidth = 4.2; ctx.stroke();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

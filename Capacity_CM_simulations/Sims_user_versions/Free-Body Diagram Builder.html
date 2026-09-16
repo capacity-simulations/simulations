@@ -2925,11 +2925,18 @@ renderMath();
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three different bodies, each carrying only the forces exerted ON it.
-     Lengths are one honest scale in newtons (m = 2 kg, g = 9.8, theta = 25 deg,
-     omega = 2 rad/s, r = 2 m) taken from the sim's own solution formulas. The
-     1280x240 strip renders about 2:1 wide, so x-extents are halved to keep
-     angles and lengths truthful on screen. */
+  /* Hero: the one move this sim teaches — ISOLATE THE BODY.
+     Left, the situation: a block held at rest on a 40 deg slope by a rope tied
+     up-slope and running parallel to the surface. No force arrows there — only
+     the scene, in structural ink.
+     Right, the same block lifted out of the scene and carrying only the forces
+     exerted ON it, in the sim's own force colours (gravity blue, normal green,
+     tension amber), all three tails meeting at the centre of mass.
+     Honest one-scale lengths, mg = LW px, theta = 40 deg:
+       |W| = mg,  |N| = mg cos(theta),  |T| = mg sin(theta)
+     which closes exactly (N along the outward slope normal + T up the slope
+     + W down sums to zero), so the geometry and the arrow lengths agree.
+     Deliberately NOT the block-on-table set the gated inquiry cards ask for. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store shipped hard-coded at 1280x240 while the element is
@@ -2943,69 +2950,117 @@ renderMath();
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
     ctx.clearRect(0,0,W,H);
-    const g = 9.8, m = 2, th = 25*Math.PI/180, XS = 0.5, PX = 3.0;
+
     const COL = LIGHT
-      ? { gravity:'#1d4ed8', normal:'#047857', tension:'#b45309', friction:'#be185d', line:'rgba(15,23,42,.30)', body:'rgba(4,120,87,.18)', edge:'rgba(4,120,87,.85)' }
-      : { gravity:'#60a5fa', normal:'#34d399', tension:'#fbbf24', friction:'#f472b6', line:'rgba(148,163,184,.30)', body:'rgba(59,155,143,.22)', edge:'rgba(59,155,143,.95)' };
-    const bodies = [
-      { x:W*0.20, y:H*0.52, kind:'hang', f:[ {k:'tension', a:90, N:m*g}, {k:'gravity', a:270, N:m*g} ] },
-      { x:W*0.50, y:H*0.56, kind:'slope', f:[ {k:'normal', a:90-25, N:m*g*Math.cos(th)},
-                                              {k:'friction', a:180-25, N:m*g*Math.sin(th)},
-                                              {k:'gravity', a:270, N:m*g} ] },
-      { x:W*0.80, y:H*0.50, kind:'orbit', f:[ {k:'gravity', a:180, N:m*2*2*2} ] }
-    ];
-    const HB = 26;                       // body half-height in canvas px
-    function staging(b){
-      ctx.save(); ctx.strokeStyle = COL.line; ctx.lineWidth = 1.5;
-      if(b.kind === 'hang'){
-        ctx.beginPath(); ctx.moveTo(b.x, b.y-HB); ctx.lineTo(b.x, 18); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(b.x-20*XS, 18); ctx.lineTo(b.x+20*XS, 18); ctx.stroke();
-      } else if(b.kind === 'slope'){
-        const L = 150;
-        ctx.beginPath();
-        ctx.moveTo(b.x - L*XS, b.y + HB + L*Math.tan(th));
-        ctx.lineTo(b.x + L*XS, b.y + HB - L*Math.tan(th));
-        ctx.stroke();
-      } else {
-        const R = 74;
-        ctx.beginPath(); ctx.setLineDash([5,7]); ctx.ellipse(b.x - R*XS, b.y, R*XS, R, 0, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]);
-        ctx.beginPath(); ctx.arc(b.x - R*XS, b.y, 13*XS*2, 0, 6.2832); ctx.fillStyle = COL.gravity; ctx.globalAlpha = .45; ctx.fill(); ctx.globalAlpha = 1;
-      }
-      ctx.restore();
+      ? { gravity:'#1d4ed8', normal:'#047857', tension:'#b45309',
+          struct:'rgba(51,65,85,.74)', hatch:'rgba(71,85,105,.58)', link:'rgba(51,65,85,.58)',
+          bodyFill:'rgba(4,120,87,.16)', bodyEdge:'#0f766e', iso:'rgba(15,118,110,.90)' }
+      : { gravity:'#60a5fa', normal:'#34d399', tension:'#fbbf24',
+          struct:'rgba(203,213,225,.82)', hatch:'rgba(148,163,184,.64)', link:'rgba(148,163,184,.64)',
+          bodyFill:'rgba(59,155,143,.22)', bodyEdge:'#3b9b8f', iso:'rgba(59,155,143,.95)' };
+
+    // Slope descends to the right, as the sim's own incline staging does.
+    const TH = 40*Math.PI/180, ct = Math.cos(TH), st = Math.sin(TH);
+    const DN = [ ct,  st];   // down-slope   (screen coords, y grows downward)
+    const UP = [-ct, -st];   // up-slope
+    const NR = [ st, -ct];   // outward slope normal — perpendicular to the surface
+
+    // One uniform scale so every angle and length stays truthful at any width,
+    // and the whole subject stays inside the centre band the CSS mask leaves
+    // fully opaque. OX re-centres the two clusters about the canvas midline.
+    const S = Math.max(0.55, Math.min(1, W/1250));
+    const cx = W/2, cy = H/2 + 4, OX = 47;
+    const P = (p) => [cx + S*(p[0]+OX), cy + S*p[1]];
+    const go = (p, v, d) => [p[0] + v[0]*d, p[1] + v[1]*d];
+
+    // The band is only 140px tall and the tallest pairing (N up, W down) spans
+    // LW*(1 + cos^2 theta), so the height sets LW; 40 deg then leaves the three
+    // arrows well separated in direction and all three heads clear of the body.
+    const HB = 18, LW = 76;          // block half-side; pixels that represent mg
+
+    /* ---- left: the situation ---- */
+    const Lm = [-218, -6], half = 72;                      // slope midpoint / half-span in x
+    const A = [Lm[0]-half, Lm[1]-half*st/ct];
+    const B = [Lm[0]+half, Lm[1]+half*st/ct];
+    const foot = go(Lm, DN, 26);                           // where the block touches
+    const C1   = go(foot, NR, HB);                         // block centre, sitting ON the slope
+    const rope0 = go(C1, UP, HB);                          // rope leaves the up-slope face
+    const rope1 = go(rope0, UP, 74);                        // ... parallel to the slope
+    const peg0  = go(rope1, NR, -HB);                       // post foot, on the slope surface
+
+    /* ---- right: the same body, isolated ---- */
+    // All three tails meet at the centre of mass. The sim itself anchors contact
+    // forces at the contact face, but at this size that buries half of every
+    // arrow inside the body; a common origin keeps the three directions legible.
+    const C2 = [158, -18];
+
+    function line(p, q, col, wid, dash){
+      const a = P(p), b = P(q);
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = wid; ctx.lineCap = 'round';
+      if(dash) ctx.setLineDash(dash);
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); ctx.restore();
     }
-    function box(b){
-      ctx.save();
-      ctx.setLineDash([5,4]); ctx.lineWidth = 1.2; ctx.strokeStyle = COL.edge;
-      ctx.strokeRect(b.x-(HB+5)*XS, b.y-HB-5, 2*(HB+5)*XS, 2*(HB+5));
+    function block(p){
+      const q = P(p);
+      ctx.save(); ctx.translate(q[0], q[1]); ctx.rotate(TH);   // flush with the slope
+      const r = (HB+7)*S, h = HB*S;
+      ctx.setLineDash([6*S,4*S]); ctx.lineWidth = Math.max(1.6, 2.1*S); ctx.strokeStyle = COL.iso;
+      ctx.strokeRect(-r,-r,2*r,2*r);                            // the isolation boundary
       ctx.setLineDash([]);
-      ctx.fillStyle = COL.body; ctx.strokeStyle = COL.edge; ctx.lineWidth = 2;
-      ctx.fillRect(b.x-HB*XS, b.y-HB, 2*HB*XS, 2*HB);
-      ctx.strokeRect(b.x-HB*XS, b.y-HB, 2*HB*XS, 2*HB);
+      ctx.fillStyle = COL.bodyFill; ctx.strokeStyle = COL.bodyEdge; ctx.lineWidth = Math.max(2.6, 3.4*S);
+      ctx.fillRect(-h,-h,2*h,2*h); ctx.strokeRect(-h,-h,2*h,2*h);
       ctx.restore();
     }
-    function arrow(b, fo, t){
-      const len = fo.N*PX*t; if(len < 2) return;
-      const r = fo.a*Math.PI/180;
-      const x0 = b.x, y0 = b.y;
-      const x1 = x0 + Math.cos(r)*len*XS, y1 = y0 - Math.sin(r)*len;
-      ctx.save(); ctx.strokeStyle = COL[fo.k]; ctx.fillStyle = COL[fo.k];
-      ctx.lineWidth = 3; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
-      const ang = Math.atan2(y1-y0, x1-x0), ah = 11;
+    function arrow(p, dir, len, col){
+      const a = P(p), L = len*S;
+      const hl = Math.min(16*S, L*0.55), hw = 9*S;
+      const x1 = a[0] + dir[0]*L,      y1 = a[1] + dir[1]*L;
+      const bx = x1 - dir[0]*hl,       by = y1 - dir[1]*hl;
+      const nx = -dir[1],              ny = dir[0];
+      ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(4, 6*S);
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(bx + dir[0]*hl*0.3, by + dir[1]*hl*0.3); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x1,y1);
-      ctx.lineTo(x1-ah*Math.cos(ang-Math.PI/7)*XS*2, y1-ah*Math.sin(ang-Math.PI/7));
-      ctx.lineTo(x1-ah*Math.cos(ang+Math.PI/7)*XS*2, y1-ah*Math.sin(ang+Math.PI/7));
+      ctx.lineTo(bx + nx*hw, by + ny*hw); ctx.lineTo(bx - nx*hw, by - ny*hw);
       ctx.closePath(); ctx.fill(); ctx.restore();
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 34; let k = 0;
-    function frame(){
-      ctx.clearRect(0,0,W,H);
-      const t = reduce ? 1 : Math.min(1, k/N);
-      bodies.forEach(b => { staging(b); b.f.forEach(fo => arrow(b, fo, t)); box(b); });
-      if(!reduce && k++ < N) requestAnimationFrame(frame);
+
+    // slope surface + hatching into the material (the sim hatches its floors too)
+    line(A, B, COL.struct, Math.max(4, 5.8*S));
+    const span = Math.hypot(B[0]-A[0], B[1]-A[1]);
+    const tk = [(-NR[0]*2 + UP[0])/2.33, (-NR[1]*2 + UP[1])/2.33];   // into the wedge, raked up-slope
+    for(let d = 10; d < span - 4; d += 18){
+      const p = go(A, DN, d);
+      line(p, go(p, tk, 12), COL.hatch, Math.max(2, 2.8*S));
     }
-    frame();
+    // the post the rope is tied to, and the rope itself — parallel to the slope,
+    // which is what makes the tension purely slope-aligned in the diagram. The
+    // rope carries the tension hue so the eye links it to the amber arrow.
+    line(peg0, rope1, COL.struct, Math.max(4, 5.6*S));
+    ctx.save(); ctx.globalAlpha = 0.75;
+    line(rope0, rope1, COL.tension, Math.max(3, 3.6*S));
+    ctx.restore();
+    { const q = P(rope1);                                   // the tie point
+      ctx.save(); ctx.fillStyle = COL.struct;
+      ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(3, 4*S), 0, 6.2832); ctx.fill(); ctx.restore(); }
+    block(C1);
+
+    // "…now isolate it"
+    [-47, -17, 13].forEach((lx, i) => {
+      const q = P([lx, -2]);
+      ctx.save(); ctx.strokeStyle = COL.link; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.55 + 0.22*i;
+      ctx.lineWidth = Math.max(4, 5.6*S);
+      const w = 11*S, h = 15*S;
+      ctx.beginPath(); ctx.moveTo(q[0]-w, q[1]-h); ctx.lineTo(q[0]+w, q[1]); ctx.lineTo(q[0]-w, q[1]+h);
+      ctx.stroke(); ctx.restore();
+    });
+
+    // the isolated body and, on it alone, the three forces
+    block(C2);
+    arrow(C2, NR, LW*ct, COL.normal);      // N = mg cos(theta), perpendicular to the surface
+    arrow(C2, UP, LW*st, COL.tension);     // T = mg sin(theta), up the slope
+    arrow(C2, [0,1], LW, COL.gravity);     // W = mg, straight down
   }
 
   drawHero();

@@ -2295,17 +2295,42 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: the ELLIPSE GEOMETRY the sim integrates — three orbits that share one
-         focus (the Sun), each traced out from perihelion, with the empty focus marked
-         and the two focal distances drawn to a point on the middle orbit. Nothing
-         about speed or period is shown, so no gated prediction is given away. */
+      /* Hero: THE CENTRAL FORCE, AND THE ONE SHAPE IT MAKES.
+         A star sits at one focus. Around it, concentric field contours and inward
+         arrows say only what the welcome script already says out loud — the pull is
+         toward the Sun and it weakens with distance. Wrapped around it is exactly
+         ONE orbit, drawn at its true e = 0.60 aspect (b = a*sqrt(1-e^2), never
+         stretched to fill the band), with the empty focus marked ◆.
+
+         Deliberately withheld, because the guided inquiry gates them:
+           card 2  "where is the planet fastest?"  (ans: perihelion)
+                   -> no timing marks, no equal-time dots, no velocity arrows,
+                      no wake or tail; the single body carries no motion cue.
+           card 3  "equal areas in equal times?"   (ans: yes, K2)
+                   -> no swept wedge, no shaded sector, no pair of radius vectors,
+                      nothing that reads as area.
+           card 4  "does a heavier planet orbit slower?" (ans: no, they tie)
+                   -> one body only; no second mass, no size/mass contrast.
+           card 5  "T^2 ∝ a^3 — Jupiter's period?"  (ans: ~12 yr)
+                   -> a SINGLE semi-major axis. No family of orbits, no nested
+                      sizes, nothing that could be read as a period-vs-size trend.
+                      (The concentric rings are field contours around the star and
+                      sit entirely OUTSIDE the one orbit, so they cannot be mistaken
+                      for a family of orbits.)
+         Card 1 — ellipse, Sun at one focus, ◆ empty focus, vary e — is NOT gated:
+         it is stated in full on the card itself, so that geometry is fair game.
+         Static: drawHero is re-run by animationend, a timer, resize and two
+         MutationObservers, so there is nothing to re-animate. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
            laid out 100vw x 140px, so the buffer is stretched 1.17x across and
            squashed 0.58x down: every ctx.arc() circle renders as a ~2:1 ellipse.
            Size the buffer to the element's real box before drawing. This canvas
-           is layer-owned (the welcome hero) — no simulation surface is touched. */
+           is layer-owned (the welcome hero) — no simulation surface is touched.
+           With the buffer matched to the box the scale is isotropic, so NO
+           aspect pre-compensation is applied anywhere below: a circle is a
+           circle and the orbit keeps its real eccentricity. */
         { const hr = c.getBoundingClientRect();
           const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
@@ -2313,67 +2338,118 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         const LIGHT = document.body.classList.contains('light-theme') ||
                       document.documentElement.getAttribute('data-theme') === 'light';
         ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-        const orbits = [ {a:0.34,e:0.30}, {a:0.62,e:0.46}, {a:0.92,e:0.58} ];
-        const S = W*0.215, YS = 0.42;
-        const fx = W*0.50 + S*0.34, fy = H*0.52;
-        // r(theta) = a(1-e^2)/(1 + e cos theta), focus at the origin, perihelion at theta = 0
-        const pos = (o, th) => {
-          const r = o.a*(1-o.e*o.e)/(1 + o.e*Math.cos(th));
-          return { x: fx + r*Math.cos(th)*S, y: fy - r*Math.sin(th)*S*YS };
-        };
-        const ink   = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.20)';
-        const cols  = LIGHT ? ['rgba(217,119,6,.9)','rgba(2,132,199,.9)','rgba(5,150,105,.9)']
-                            : ['rgba(253,224,171,.9)','rgba(125,211,252,.9)','rgba(110,231,183,.9)'];
-        // faint full outlines first
-        ctx.lineWidth = 1; ctx.strokeStyle = ink;
-        orbits.forEach(o => { ctx.beginPath();
-          for(let k=0;k<=280;k++){ const p = pos(o, k/280*2*Math.PI); k===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y); }
-          ctx.closePath(); ctx.stroke(); });
-        // The 1280x240 buffer is displayed at 100vw x 140px, so a canvas circle
-        // would render as a wide ellipse; squash it by the measured aspect ratio.
-        const bb = c.getBoundingClientRect();
-        const AR = (bb.width && bb.height) ? (bb.width/W)/(bb.height/H) : 1;
-        function sun(){
-          ctx.save(); ctx.translate(fx, fy); ctx.scale(1/AR, 1);
-          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
-          g.addColorStop(0,'rgba(255,224,130,1)'); g.addColorStop(.35,'rgba(255,196,60,.9)'); g.addColorStop(1,'rgba(255,196,60,0)');
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 24, 0, 7); ctx.fill(); ctx.restore();
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+        const K = Math.min(1.05, H/140);          // everything scales off the band height
+        const cy = Math.round(H*0.50);
+        const feather = Math.max(6, Math.round(H*0.075));   // soft top/bottom wipe, applied last
+        const safeY = H*0.5 - feather - 1;        // keep field marks off the feathered edges
+
+        // --- the one orbit: true anomaly measured from perihelion, Sun at the right focus
+        const a = 65*K, e = 0.60, bAx = a*Math.sqrt(1 - e*e);   // b = 52*K  ->  drawn aspect IS e=0.60
+        const ex0 = W*0.50;                       // ellipse centre
+        const sunX = ex0 + a*e, emptyX = ex0 - a*e;             // the two foci, +-39*K
+
+        // Light theme: genuinely dark ink on the near-white card. Dark theme: light ink.
+        const INK  = LIGHT ? '15,23,42'  : '226,232,240';
+        const WARM = LIGHT ? '180,83,9'  : '251,191,36';
+        const inkA  = (al) => 'rgba(' + INK  + ',' + al + ')';
+        const warmA = (al) => 'rgba(' + WARM + ',' + al + ')';
+
+        // --- 1. field contours: circles of equal pull around the star. Equal ratio
+        //     spacing (x1.225 in radius => the pull is 1.5x weaker on each next ring),
+        //     all of them clear of the orbit's aphelion (a(1+e) = 104*K).
+        const rings = [140, 167, 199, 236, 281, 334].map(r => r*K);
+        rings.forEach((R, i) => {
+          const t = i/(rings.length - 1);
+          ctx.beginPath(); ctx.arc(sunX, cy, R, 0, 7);
+          ctx.lineWidth   = (2.1 - 0.9*t)*K;
+          ctx.strokeStyle = inkA((0.34 - 0.17*t).toFixed(3));
+          ctx.stroke();
+        });
+
+        // --- 2. the pull itself: arrowheads on the contours, pointing at the star,
+        //     shrinking and fading outward. Only azimuths that stay clear of the
+        //     feathered edges are drawn, which is why the field reads as a lens.
+        function arrow(R, th, sz, al){
+          const ca = Math.cos(th), sa = Math.sin(th);
+          const px = sunX + R*ca, py = cy + R*sa;
+          const nx = -ca, ny = -sa;               // inward, toward the star
+          const tx = -sa, ty =  ca;               // perpendicular
+          ctx.beginPath();
+          ctx.moveTo(px + nx*sz*1.15,            py + ny*sz*1.15);
+          ctx.lineTo(px - nx*sz*0.35 + tx*sz*0.52, py - ny*sz*0.35 + ty*sz*0.52);
+          ctx.lineTo(px - nx*sz*0.35 - tx*sz*0.52, py - ny*sz*0.35 - ty*sz*0.52);
+          ctx.closePath();
+          ctx.fillStyle = inkA(al.toFixed(3)); ctx.fill();
+          ctx.beginPath();                        // short stalk behind the head
+          ctx.moveTo(px - nx*sz*0.5, py - ny*sz*0.5);
+          ctx.lineTo(px - nx*sz*1.9, py - ny*sz*1.9);
+          ctx.lineWidth = Math.max(1, sz*0.22); ctx.strokeStyle = inkA((al*0.8).toFixed(3));
+          ctx.stroke();
         }
-        function emptyFocus(o, col){
-          const ex = fx - 2*o.a*o.e*S, ey = fy;
-          ctx.save(); ctx.translate(ex, ey); ctx.rotate(Math.PI/4);
-          ctx.fillStyle = col; ctx.fillRect(-4,-4,8,8); ctx.restore();
-        }
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const N = 120; let k = 0;
-        function batch(){
-          const per = reduce ? N : 3;
-          for(let s=0; s<per && k<N; s++, k++){
-            const t0 = k/N*2*Math.PI, t1 = (k+1)/N*2*Math.PI;
-            orbits.forEach((o,i)=>{
-              const p0 = pos(o,t0), p1 = pos(o,t1);
-              ctx.strokeStyle = cols[i]; ctx.lineWidth = 2.2;
-              ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
-            });
+        rings.forEach((R, i) => {
+          const t  = i/(rings.length - 1);
+          const sz = (8.2 - 2.9*t)*K, al = 0.66 - 0.32*t;
+          for(let d = 0; d <= 2; d++){
+            const off = d*(Math.PI/15);           // 0, 12, 24 degrees off the axis
+            for(const base of [0, Math.PI]){
+              for(const s of (d === 0 ? [1] : [1, -1])){
+                const th = base + s*off*(base ? -1 : 1);
+                // full vertical extent of the mark (head + stalk), not just its anchor:
+                // anything that would reach into the feathered edge is simply not drawn
+                const reach = Math.abs(R*Math.sin(th)) + 1.9*sz*Math.abs(Math.sin(th)) + 0.6*sz;
+                if(reach > safeY) continue;
+                arrow(R, th, sz, al);
+              }
+            }
           }
-          if(k < N) requestAnimationFrame(batch);
-          else finish();
-        }
-        function finish(){
-          // the two focal distances to one point on the middle orbit: r1 + r2 = 2a
-          const o = orbits[1], th = 2.25, p = pos(o, th), ex = fx - 2*o.a*o.e*S;
-          ctx.setLineDash([5,4]); ctx.lineWidth = 1.4;
-          ctx.strokeStyle = LIGHT ? 'rgba(180,83,9,.95)' : 'rgba(251,191,36,.85)';
-          ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(p.x,p.y); ctx.stroke();
-          ctx.strokeStyle = LIGHT ? 'rgba(30,41,59,.9)' : 'rgba(203,213,225,.75)';
-          ctx.beginPath(); ctx.moveTo(ex,fy); ctx.lineTo(p.x,p.y); ctx.stroke();
-          ctx.setLineDash([]);
-          orbits.forEach((o,i)=>emptyFocus(o, LIGHT ? 'rgba(30,41,59,.85)' : 'rgba(203,213,225,.7)'));
-          sun();
-          ctx.fillStyle = LIGHT ? '#0f172a' : '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, 7); ctx.fill();
-        }
-        sun();
-        batch();
+        });
+
+        // --- 3. the major axis through both foci (pure geometry, no timing)
+        ctx.setLineDash([6*K, 5*K]); ctx.lineWidth = 1.2*K;
+        ctx.strokeStyle = inkA(0.30);
+        ctx.beginPath(); ctx.moveTo(ex0 - a, cy); ctx.lineTo(ex0 + a, cy); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // --- 4. the orbit. ctx.ellipse with the true semi-axes: no vertical squash.
+        ctx.beginPath(); ctx.ellipse(ex0, cy, a, bAx, 0, 0, Math.PI*2);
+        ctx.lineWidth = 2.9*K; ctx.strokeStyle = inkA(0.88); ctx.stroke();
+
+        // --- 5. the empty focus, ◆
+        ctx.save(); ctx.translate(emptyX, cy); ctx.rotate(Math.PI/4);
+        ctx.fillStyle = inkA(0.85); ctx.fillRect(-4.2*K, -4.2*K, 8.4*K, 8.4*K);
+        ctx.restore();
+
+        // --- 6. the star at the occupied focus
+        const gR = 23*K;
+        const gg = ctx.createRadialGradient(sunX, cy, 0, sunX, cy, gR);
+        gg.addColorStop(0,   warmA(0.95));
+        gg.addColorStop(0.30, warmA(0.62));
+        gg.addColorStop(1,   warmA(0));
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(sunX, cy, gR, 0, 7); ctx.fill();
+        ctx.fillStyle = warmA(1); ctx.beginPath(); ctx.arc(sunX, cy, 6.2*K, 0, 7); ctx.fill();
+
+        // --- 7. one body on the orbit, parked at a generic true anomaly (150 deg):
+        //     not perihelion, not aphelion, no trail — it marks the path, not a speed.
+        { const th = 150*Math.PI/180;
+          const r  = a*(1 - e*e)/(1 + e*Math.cos(th));
+          const px = sunX + r*Math.cos(th), py = cy - r*Math.sin(th);
+          ctx.fillStyle = inkA(0.92); ctx.beginPath(); ctx.arc(px, py, 4.6*K, 0, 7); ctx.fill();
+          ctx.lineWidth = 1.3*K; ctx.strokeStyle = inkA(0.35);
+          ctx.beginPath(); ctx.arc(px, py, 8.6*K, 0, 7); ctx.stroke(); }
+
+        // --- 8. feather the letterbox edges so nothing reads as chopped
+        ctx.globalCompositeOperation = 'destination-out';
+        let fg = ctx.createLinearGradient(0, 0, 0, feather);
+        fg.addColorStop(0, 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = fg; ctx.fillRect(0, 0, W, feather);
+        fg = ctx.createLinearGradient(0, H - feather, 0, H);
+        fg.addColorStop(0, 'rgba(0,0,0,0)'); fg.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = fg; ctx.fillRect(0, H - feather, W, feather);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.restore();
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

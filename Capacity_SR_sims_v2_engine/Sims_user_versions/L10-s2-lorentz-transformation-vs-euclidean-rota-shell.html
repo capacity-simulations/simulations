@@ -2155,81 +2155,178 @@ window.__giResume = function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own two planes, drawn with the sim's own construction and
-     palette. LEFT — the x–y plane with its invariant circle and the primed pair
-     x′, y′ turning in rigidly from θ = 0. RIGHT — the ct–x plane with its 45°
-     light lines drawing outward from the origin and the two sample events E₁, E₂
-     fading in at their lab coordinates (0, 1) and (sinh 0.8, cosh 0.8).
-     Deliberately NO boosted axes and NO hyperbola on the right: cards 2 and 3
-     ask about both, and the hero must not answer them. */
+  /* Hero: the sim's two planes side by side, drawn with the sim's own
+     construction, scale and palette — and with EXACTLY the same pixels-per-unit
+     in x and in y, so the 45° light lines on the right are a true 1:1 diagonal
+     rather than a flattened lie. Each plane is a square-ish medallion; only the
+     horizontal axis runs long, to give the 10:1 letterbox a spine.
+       LEFT  — the x–y plane: the unit invariant circle (card 3 states it in its
+               own stem) carrying the sim's sample points P₁ (1, 0) and P₂
+               (0.6, 0.8), with a sweep arrow from one to the other.
+       RIGHT — the ct–x plane, signature (+, −) (ds² = (c dt)² − dx², see the
+               Formal panel): unprimed ct and x, the dashed 45° light lines that
+               card 1 hands the student outright, and the sim's own events
+               E₁ (0, 1) and E₂ (sinh 0.8, cosh 0.8) at their LAB coordinates.
+     Both planes share one tick pitch, which is what the picture is really for:
+     same axes, same scale, one sign different.
+     DELIBERATELY ABSENT — each of these would answer a gated card:
+       · no primed axes on EITHER side. Card 2 asks what ct′ and x′ do (they
+         tilt toward the light line) and card 4 how far they can close; and the
+         LEFT primed pair turning in rigidly is card 2's distractor A drawn out.
+       · no invariant hyperbola. Card 3 asks which curve E₂ slides along.
+       · no track joining E₁ to E₂ and no arrow on the right at all, since any
+         such path is that same hyperbola by another name.
+     Static by design: drawHero is re-run by animationend, a 700 ms timer,
+     resize and two MutationObservers, each of which clears the canvas first. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so the buffer would be stretched across and squashed
-       down — every circle would render as an ellipse. Size the buffer to the
-       element's real box before drawing. This canvas is layer-owned (the welcome
-       hero); neither simulation canvas is touched. */
+       down — every circle would render as an ellipse and the 45° light lines
+       would come out at 23°. Size the buffer to the element's real box before
+       drawing. This canvas is layer-owned (the welcome hero); neither
+       simulation canvas is touched. */
     { const hr = c.getBoundingClientRect();
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    const AX   = LIGHT ? 'rgba(51,65,85,.70)' : '#7c8698';
-    const INV  = '#2dd4bf', PRM = '#fbbf24', CONE = LIGHT ? '#ca8a04' : '#ffe600';
-    const PT   = LIGHT ? '#0F172A' : '#f1f5f9';
-    const D2R  = Math.PI/180;
-    const R    = Math.min(H*0.32, W*0.085);
-    const A    = R*1.55;                          // axis half-length
-    const cy   = H*0.52;
-    const cxL  = W*0.355, cxR = W*0.645;          // inside the hero's unmasked band
-    function cross(cx){
-      ctx.strokeStyle = AX; ctx.lineWidth = 1.2; ctx.setLineDash([]);
-      ctx.beginPath(); ctx.moveTo(cx-A, cy); ctx.lineTo(cx+A, cy);
-      ctx.moveTo(cx, cy-A); ctx.lineTo(cx, cy+A); ctx.stroke();
+    ctx.clearRect(0,0,W,H);
+
+    /* Proper dark ink on the near-white light-theme overlay (#F1F5F9), light
+       ink on the dark one — mid-tones wash out on both. */
+    const AX    = LIGHT ? 'rgba(30,41,59,.90)'    : 'rgba(158,172,190,.94)';
+    const TICK  = LIGHT ? 'rgba(30,41,59,.72)'    : 'rgba(158,172,190,.80)';
+    const INV   = LIGHT ? '#0d9488'               : '#2dd4bf';
+    const INVF  = LIGHT ? 'rgba(13,148,136,.13)'  : 'rgba(45,212,191,.14)';
+    const CONE  = LIGHT ? '#a16207'               : '#ffe600';
+    const CONEF = LIGHT ? 'rgba(161,98,6,.21)'    : 'rgba(255,230,0,.24)';
+    const CONE0 = LIGHT ? 'rgba(161,98,6,0)'      : 'rgba(255,230,0,0)';
+    const PRM   = LIGHT ? '#c2410c'               : '#fbbf24';
+    const PT    = LIGHT ? '#0f172a'               : '#f1f5f9';
+
+    const cy = Math.round(H*0.50);
+    const AV = Math.min(H*0.42, 59);              // vertical axis half-length
+    const s  = Math.min(37, AV*0.63);             // PIXELS PER UNIT — the same number
+                                                  // in x and in y, which is the whole
+                                                  // basis of the 45° claim below
+    const LL = AV - 3;                            // light lines: equal run and rise
+    const D  = Math.min(W*0.145, 214);            // half-separation of the two origins
+    const AH = Math.max(28, Math.min(3.35*s, D - 36));
+    const cxL = Math.round(W/2 - D), cxR = Math.round(W/2 + D);
+    const TW = 2.4;                               // trunk weight
+
+    function head(x, y, dx, dy, col){             // solid arrowhead, tip at (x, y)
+      const L = 9, w = 4.8;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - L*dx + w*dy, y - L*dy - w*dx);
+      ctx.lineTo(x - L*dx - w*dy, y - L*dy + w*dx);
+      ctx.closePath(); ctx.fillStyle = col; ctx.fill();
     }
-    function ray(cx, dx, dy, len){
-      ctx.beginPath(); ctx.moveTo(cx - dx*len, cy - dy*len); ctx.lineTo(cx + dx*len, cy + dy*len); ctx.stroke();
-    }
-    function diamond(cx, x, y, r){
-      ctx.beginPath(); ctx.moveTo(cx+x, cy-y-r); ctx.lineTo(cx+x+r, cy-y);
-      ctx.lineTo(cx+x, cy-y+r); ctx.lineTo(cx+x-r, cy-y); ctx.closePath();
-    }
-    function frame(t){
-      ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the background
-      /* ---- left: rotation in the x–y plane ---- */
-      cross(cxL);
-      ctx.strokeStyle = INV; ctx.lineWidth = 1.8; ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(cxL, cy, R, 0, Math.PI*2); ctx.stroke();
-      const th = 35*t*D2R;
-      ctx.strokeStyle = PRM; ctx.lineWidth = 2;
-      ray(cxL, Math.cos(th), -Math.sin(th), A);                 // x′
-      ray(cxL, -Math.sin(th), -Math.cos(th), A);                // y′
-      ctx.beginPath(); ctx.arc(cxL + R*Math.cos(th), cy - R*Math.sin(th), 3.4, 0, 7);
-      ctx.fillStyle = PT; ctx.fill(); ctx.strokeStyle = PRM; ctx.lineWidth = 1.6; ctx.stroke();
-      /* ---- right: the ct–x plane with its light lines ---- */
-      cross(cxR);
-      ctx.save(); ctx.strokeStyle = CONE; ctx.setLineDash([5,4]); ctx.lineWidth = 1.4; ctx.globalAlpha = .9;
-      const L = A*Math.SQRT1_2*Math.sqrt(2)*t;
-      ray(cxR, Math.SQRT1_2, -Math.SQRT1_2, L);
-      ray(cxR, Math.SQRT1_2,  Math.SQRT1_2, L);
+    /* Unprimed axes only, with unit ticks at the SAME pitch on both of them, so
+       one unit across can be measured off the bitmap as one unit up. That is
+       what entitles the diagonals in the other panel to be called 45°. */
+    function trunk(cx){
+      ctx.save(); ctx.setLineDash([]); ctx.lineCap = 'round';
+      ctx.strokeStyle = AX; ctx.lineWidth = TW;
+      ctx.beginPath();
+      ctx.moveTo(cx - AH, cy); ctx.lineTo(cx + AH - 4, cy);
+      ctx.moveTo(cx, cy + AV); ctx.lineTo(cx, cy - AV + 4);
+      ctx.stroke();
+      head(cx + AH, cy, 1, 0, AX);
+      head(cx, cy - AV, 0, -1, AX);
       ctx.restore();
-      const s = R*0.78;                                          // pixels per unit
-      ctx.globalAlpha = Math.max(0, t*1.6 - 0.6);
-      [[0,1],[Math.sinh(0.8), Math.cosh(0.8)]].forEach(e => {
-        diamond(cxR, e[0]*s, e[1]*s, 5);
-        ctx.fillStyle = PT; ctx.fill();
-        ctx.lineWidth = 1.8; ctx.strokeStyle = PRM; ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ frame(1); return; }
-    const N = 46; let k = 0;
-    (function step(){
-      const t = k/N, e = 1 - Math.pow(1-t, 3);   // ease-out: one entrance, never a loop
-      frame(e);
-      if(k++ < N) requestAnimationFrame(step);
-    })();
+    /* Ticks go on LAST, so the ±1 marks stay legible where the invariant circle
+       and the light lines cross them — they are the evidence for the scale. */
+    function ticks(cx){
+      ctx.save(); ctx.setLineDash([]); ctx.lineCap = 'butt';
+      ctx.strokeStyle = TICK; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for(let n = 1; n*s <= AH - 12; n++){
+        ctx.moveTo(cx + n*s, cy - 5.5); ctx.lineTo(cx + n*s, cy + 5.5);
+        ctx.moveTo(cx - n*s, cy - 5.5); ctx.lineTo(cx - n*s, cy + 5.5);
+      }
+      for(let n = 1; n*s <= AV - 12; n++){
+        ctx.moveTo(cx - 5.5, cy - n*s); ctx.lineTo(cx + 5.5, cy - n*s);
+        ctx.moveTo(cx - 5.5, cy + n*s); ctx.lineTo(cx + 5.5, cy + n*s);
+      }
+      ctx.stroke(); ctx.restore();
+    }
+    function dot(cx, ux, uy){                     // Euclidean sample point, as ptEu draws P₁/P₂
+      ctx.beginPath(); ctx.arc(cx + ux*s, cy - uy*s, 6, 0, 7);
+      ctx.fillStyle = PT; ctx.fill();
+      ctx.lineWidth = 2.8; ctx.strokeStyle = PRM; ctx.stroke();
+    }
+    function dmd(cx, ux, uy){                     // Lorentz event, as ptLor draws E₁/E₂
+      const x = cx + ux*s, y = cy - uy*s, r = 7;
+      ctx.beginPath();
+      ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
+      ctx.closePath();
+      ctx.fillStyle = PT; ctx.fill();
+      ctx.lineWidth = 2.8; ctx.strokeStyle = PRM; ctx.stroke();
+    }
+
+    /* ---------- LEFT: the x–y plane ---------- */
+    ctx.beginPath(); ctx.arc(cxL, cy, s, 0, 7);
+    ctx.fillStyle = INVF; ctx.fill();
+    trunk(cxL);
+    ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = INV; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.arc(cxL, cy, s, 0, 7); ctx.stroke(); ctx.restore();
+    const aP = Math.atan2(0.8, 0.6);              // P₂'s bearing
+    ctx.save();                                   // radius out to P₂: the angle, not an axis
+    ctx.globalAlpha = .6; ctx.strokeStyle = PRM; ctx.lineWidth = 1.8; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(cxL, cy); ctx.lineTo(cxL + 0.6*s, cy - 0.8*s); ctx.stroke();
+    ctx.restore();
+    ctx.save();                                   // sweep arrow P₁ → P₂ along the circle
+    ctx.strokeStyle = PRM; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.setLineDash([]);
+    const ra = s + 12, aEnd = aP - 0.15;
+    ctx.beginPath(); ctx.arc(cxL, cy, ra, -0.10, -aEnd, true); ctx.stroke();
+    head(cxL + ra*Math.cos(aEnd), cy - ra*Math.sin(aEnd), -Math.sin(aEnd), -Math.cos(aEnd), PRM);
+    ctx.restore();
+    ticks(cxL);
+    dot(cxL, 1, 0);                               // P₁
+    dot(cxL, 0.6, 0.8);                           // P₂
+
+    /* ---------- RIGHT: the ct–x plane, c = 1 ---------- */
+    /* The two light wedges, future and past, as a glow that fades out with
+       radius. A flat fill would need a top and a bottom edge, and any closing
+       edge across a light cone is a curve the student has not met yet. */
+    ctx.save();
+    const gl = ctx.createRadialGradient(cxR, cy, 2, cxR, cy, LL*1.12);
+    gl.addColorStop(0, CONEF); gl.addColorStop(1, CONE0);
+    ctx.fillStyle = gl;
+    ctx.beginPath(); ctx.moveTo(cxR, cy); ctx.lineTo(cxR - LL*1.2, cy - LL*1.2); ctx.lineTo(cxR + LL*1.2, cy - LL*1.2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cxR, cy); ctx.lineTo(cxR - LL*1.2, cy + LL*1.2); ctx.lineTo(cxR + LL*1.2, cy + LL*1.2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    trunk(cxR);
+    ctx.save();                                   // ct = ±x — equal run and rise, so 45° on the nose
+    ctx.strokeStyle = CONE; ctx.lineWidth = 3.2; ctx.lineCap = 'butt'; ctx.setLineDash([7,5]);
+    ctx.beginPath();
+    ctx.moveTo(cxR - LL, cy + LL); ctx.lineTo(cxR + LL, cy - LL);
+    ctx.moveTo(cxR - LL, cy - LL); ctx.lineTo(cxR + LL, cy + LL);
+    ctx.stroke(); ctx.restore();
+    ticks(cxR);
+    dmd(cxR, 0, 1);                               // E₁ (x, ct) = (0, 1)
+    dmd(cxR, Math.sinh(0.8), Math.cosh(0.8));     // E₂ (x, ct) = (sinh 0.8, cosh 0.8)
+
+    /* a quiet seam between the two geometries */
+    ctx.save();
+    ctx.globalAlpha = .18; ctx.strokeStyle = AX; ctx.lineWidth = 1.6; ctx.setLineDash([4,7]);
+    ctx.beginPath(); ctx.moveTo(W/2, cy - AV*0.72); ctx.lineTo(W/2, cy + AV*0.72); ctx.stroke();
+    ctx.restore();
+
+    /* Feather the letterbox edges so nothing reads as sawn off by the band. */
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    let g = ctx.createLinearGradient(0, 0, 0, 9);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 9);
+    g = ctx.createLinearGradient(0, H, 0, H - 9);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, H - 9, W, 9);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

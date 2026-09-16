@@ -2015,11 +2015,15 @@ renderMath();
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry — frame S's lattice of rulers in blue with a
-     second frame's lattice in amber, drawn at the sim's real contracted spacing
-     1/gamma for v = 0.40 c, and a handful of events accumulating as dots. It
-     carries NO clock readings and NO time tags, so it cannot answer any card:
-     every question in the deck is about the TIME a frame assigns. */
+  /* Hero: the sim's three nouns, three objects, nothing else — the frame
+     (a ruler laid along x, its lattice points ticked), the frame's ONE clock
+     sitting at the origin, and a single event flaring seven rulers away.
+     It states the SETUP of the deck and answers none of it: there is exactly
+     one clock (card 3 asks what times a distant event, and its answer is the
+     synchronised clock network — a row of clock faces would give that away),
+     there is only frame S (card 4 introduces S′), and nothing anywhere carries
+     a time tag or a digit (cards 2 and 5 are about the numbers a frame
+     assigns). Static: one synchronous pass, so a redraw can never half-wipe it. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2033,44 +2037,89 @@ renderMath();
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const v = 0.40, gam = 1/Math.sqrt(1 - v*v);   // the sim's default boost
-    const ppu = 28, oy = Math.round(H*0.50), ox = Math.round(W*0.5);
-    const X = x => ox + x*ppu, Y = y => oy - y*ppu;
-    const nX = Math.ceil(W/(2*ppu)) + 2;
-    // frame S: upright lattice of rulers
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(150,178,214,.38)';
-    for(let i=-nX;i<=nX;i++){ const px=X(i); if(px<0||px>W) continue;
-      ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,H); ctx.stroke(); }
-    for(let j=-2;j<=2;j++){ const py=Y(j); if(py<0||py>H) continue;
-      ctx.beginPath(); ctx.moveTo(0,py); ctx.lineTo(W,py); ctx.stroke(); }
-    ctx.strokeStyle = LIGHT ? 'rgba(24,58,94,.72)' : 'rgba(196,214,238,.85)'; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(0,Y(0)); ctx.lineTo(W,Y(0)); ctx.stroke();
-    // frame S': the same rulers, contracted to 1/gamma and offset
-    const drift = 0.45;
-    ctx.setLineDash([5,5]); ctx.lineWidth = 1.1;
-    ctx.strokeStyle = LIGHT ? 'rgba(172,104,8,.52)' : 'rgba(245,158,11,.52)';
-    for(let n=-nX*2;n<=nX*2;n++){ const px=X(drift + n/gam); if(px<0||px>W) continue;
-      ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,H); ctx.stroke(); }
-    ctx.setLineDash([]);
-    // events accumulate as dots on the lattice
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const evs = [[-13,1],[-9,-2],[-5,2],[-1,-1],[3,2],[7,-2],[11,1]];
-    let k = 0;
-    function batch(){
-      const per = reduce ? evs.length : 1;
-      for(let s=0; s<per && k<evs.length; s++, k++){
-        const px = X(evs[k][0]), py = Y(evs[k][1]);
-        ctx.beginPath(); ctx.arc(px,py,13,0,7);
-        ctx.fillStyle = LIGHT ? 'rgba(2,132,199,.18)' : 'rgba(167,139,250,.30)'; ctx.fill();
-        ctx.beginPath(); ctx.arc(px,py,5.5,0,7);
-        ctx.fillStyle = LIGHT ? '#0F172A' : '#F8FAFC'; ctx.fill();
-        ctx.lineWidth = 1.6; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.85)' : 'rgba(10,12,17,.85)';
-        ctx.stroke();
-      }
-      if(k < evs.length) setTimeout(()=>requestAnimationFrame(batch), 80);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // Two palettes, both mid-tone and saturated so the art reads on a near-black
+    // and a near-white ground alike. Blue = frame S (the sim's own frame colour);
+    // violet = an event (the sim's placement glow).
+    const FRAME = LIGHT ? '37,99,235'  : '198,216,240';
+    const INK   = LIGHT ? '29,78,216'  : '232,240,251';
+    const RING  = LIGHT ? '124,58,237' : '196,181,253';
+    const CORE  = LIGHT ? '109,40,217' : '248,250,252';
+
+    const axisY = Math.round(H*0.56);
+    const cr    = Math.round(Math.min(44, H*0.315));   // clock radius — fits the 140px band with margin
+    const cx    = Math.round(W*0.375);                 // frame origin, where the clock stands
+    const ex    = Math.round(W*0.595);                 // the event
+    const s     = (ex - cx)/7;                         // one ruler unit: the event is 7 units out
+    const x0 = cx - 6*s, x1 = cx + 13*s;               // ruler extent, centred on the pair
+    const mid = (x0 + x1)/2, half = (x1 - x0)/2;
+    const fade = px => { const d = Math.abs(px - mid)/half; return d >= 1 ? 0 : Math.min(1, (1 - d)*3.4); };
+    const gap = cr + 9;                                // the ruler breaks around the clock
+
+    // ---- the frame: a ruler along x, dissolving at both ends ----
+    const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0,    'rgba(' + FRAME + ',0)');
+    g.addColorStop(0.30, 'rgba(' + FRAME + ',0.9)');
+    g.addColorStop(0.70, 'rgba(' + FRAME + ',0.9)');
+    g.addColorStop(1,    'rgba(' + FRAME + ',0)');
+    ctx.strokeStyle = g; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(x0, axisY); ctx.lineTo(cx - gap, axisY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + gap, axisY); ctx.lineTo(x1, axisY); ctx.stroke();
+    for(let n = -6; n <= 13; n++){
+      const px = cx + n*s;
+      if(Math.abs(px - cx) < gap || Math.abs(px - ex) < 30) continue;
+      const a = fade(px); if(a < 0.14) continue;
+      ctx.strokeStyle = 'rgba(' + FRAME + ',' + (0.34*a).toFixed(3) + ')'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(px, axisY - 15); ctx.lineTo(px, axisY + 15); ctx.stroke();
+      ctx.strokeStyle = 'rgba(' + FRAME + ',' + (0.90*a).toFixed(3) + ')'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(px, axisY - 6);  ctx.lineTo(px, axisY + 6);  ctx.stroke();
     }
-    batch();
+
+    // ---- the frame's clock, standing at the origin ----
+    ctx.beginPath(); ctx.arc(cx, axisY, cr, 0, 7);
+    ctx.fillStyle = 'rgba(' + FRAME + ',0.12)'; ctx.fill();
+    ctx.lineWidth = 3.4; ctx.strokeStyle = 'rgba(' + INK + ',0.95)'; ctx.stroke();
+    for(let h = 0; h < 12; h++){
+      const a = h*Math.PI/6, q = h % 3 === 0;
+      const r1 = cr - (q ? 13 : 8), r2 = cr - 4.5;
+      ctx.lineWidth = q ? 3.2 : 2; ctx.strokeStyle = 'rgba(' + INK + ',' + (q ? 0.95 : 0.55) + ')';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.sin(a)*r1, axisY - Math.cos(a)*r1);
+      ctx.lineTo(cx + Math.sin(a)*r2, axisY - Math.cos(a)*r2);
+      ctx.stroke();
+    }
+    const hand = (deg, len, w) => {           // hands are drawing, not type — no digits anywhere
+      const a = deg*Math.PI/180;
+      ctx.lineWidth = w; ctx.strokeStyle = 'rgba(' + INK + ',0.98)';
+      ctx.beginPath(); ctx.moveTo(cx, axisY);
+      ctx.lineTo(cx + Math.sin(a)*len, axisY - Math.cos(a)*len); ctx.stroke();
+    };
+    hand(305, cr*0.52, 5.2);                  // hour
+    hand(60,  cr*0.76, 3.8);                  // minute
+    ctx.beginPath(); ctx.arc(cx, axisY, 3.6, 0, 7); ctx.fillStyle = 'rgba(' + INK + ',1)'; ctx.fill();
+
+    // ---- the event: one point of spacetime, out along the ruler ----
+    const rg = ctx.createRadialGradient(ex, axisY, 2, ex, axisY, 38);
+    rg.addColorStop(0,    'rgba(' + RING + ',0.32)');
+    rg.addColorStop(0.55, 'rgba(' + RING + ',0.14)');
+    rg.addColorStop(1,    'rgba(' + RING + ',0)');
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(ex, axisY, 38, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(' + RING + ',0.85)'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(ex, axisY, 15, 0, 7); ctx.stroke();
+    ctx.strokeStyle = 'rgba(' + RING + ',0.50)'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(ex, axisY, 26, 0, 7); ctx.stroke();
+    ctx.strokeStyle = 'rgba(' + RING + ',0.80)'; ctx.lineWidth = 2.6;
+    for(let k = 0; k < 8; k++){
+      const a = k*Math.PI/4;
+      ctx.beginPath();
+      ctx.moveTo(ex + Math.cos(a)*32, axisY + Math.sin(a)*32);
+      ctx.lineTo(ex + Math.cos(a)*43, axisY + Math.sin(a)*43);
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(ex, axisY, 7.5, 0, 7);
+    ctx.fillStyle = 'rgba(' + CORE + ',1)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(' + RING + ',0.9)'; ctx.stroke();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

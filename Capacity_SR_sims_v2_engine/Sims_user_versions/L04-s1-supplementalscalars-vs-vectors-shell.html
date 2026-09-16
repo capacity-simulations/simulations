@@ -1988,67 +1988,99 @@ renderFormal();
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: ONE arrow, drawn five times over five coordinate frames turned by
-     equal steps. The arrow is identical in every panel; only the feet of its
-     two perpendicular projections — its components in that frame — move. Drawn
-     from the sim's own passive transform, c1 = A·u1, c2 = A·u2. No length is
-     quoted, so the picture states the premise, not the answer. */
+  /* Hero: the PREMISE and nothing else — a shared origin carrying two sets of
+     axes, the upright reference cross in neutral ink and a second cross turned
+     through an angle that grows across the band, sampled seven times along the
+     reference frame's own x-axis.
+     Deliberately EMPTY of physics: no arrow, no projection foot, no triangle,
+     no circle through a tip, no second object and no difference joining two
+     tips. Nothing here can be measured, so nothing here can pre-answer the
+     gated cards (speed vs velocity; what a turn does to components vs length;
+     why the length survives; which lengths are invariant). The turning of the
+     axes is already stated in the blurb below the band, so the picture repeats
+     the setup the student is about to be shown and withholds every payoff.
+     Static: the function is re-run by animationend, a 700 ms timer, two
+     MutationObservers and resize, each clearing the canvas first. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so every circle would render as a stretched ellipse.
        Size the buffer to the element's real box first. This canvas is
-       layer-owned (the welcome hero) — no simulation surface is touched. */
+       layer-owned (the welcome hero) — no simulation surface is touched.
+       (Checked for a stale anisotropic pre-compensation — SY = SX*k with a
+       ctx.scale(1/AR,1) — of the kind three sibling builds still carry: there
+       is none here, and none is added. With the buffer sized to the element,
+       one canvas unit is one CSS pixel in BOTH axes, so circles are round and
+       equal x/y radii stay equal.) */
     { const hr = c.getBoundingClientRect();
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                 // transparent: the overlay dim is the background
-    const N = 5, SP = 1/(N+3.5);
-    const R = Math.min(H*0.38, W*SP*0.42);
-    const cy = H*0.55;
-    const AX = 0.58, AY = 0.78;             // the one arrow A, fixed in the plane
-    const AXIS  = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.32)';
-    const ARROW = LIGHT ? '#1d4ed8' : '#7dd3fc';
-    const FOOT  = LIGHT ? '#b45309' : '#fbbf24';
-    function vignette(k){
-      const cx = W*(0.5 + (k-(N-1)/2)*SP);
-      const th = k*24*Math.PI/180;
-      const u1 = [Math.cos(th), Math.sin(th)], u2 = [-Math.sin(th), Math.cos(th)];
-      const P = (x,y) => [cx + x*R, cy - y*R];
-      ctx.setLineDash([]); ctx.strokeStyle = AXIS; ctx.lineWidth = 1.2;
-      [u1,u2].forEach(u => { const a = P(-u[0],-u[1]), b = P(u[0],u[1]);
-        ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); });
-      const o = P(0,0), t = P(AX,AY);
-      // the same arrow in every frame
-      ctx.strokeStyle = ARROW; ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.lineTo(t[0],t[1]); ctx.stroke();
-      const ang = Math.atan2(t[1]-o[1], t[0]-o[0]);
-      ctx.save(); ctx.translate(t[0],t[1]); ctx.rotate(ang); ctx.fillStyle = ARROW;
-      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-7,-3.2); ctx.lineTo(-7,3.2); ctx.closePath(); ctx.fill(); ctx.restore();
-      // its components in THIS frame: the two perpendicular feet
-      const c1 = AX*u1[0] + AY*u1[1], c2 = AX*u2[0] + AY*u2[1];
-      [[c1,u1],[c2,u2]].forEach(pair => {
-        const cc = pair[0], u = pair[1], f = P(cc*u[0], cc*u[1]);
-        ctx.setLineDash([3,3]); ctx.strokeStyle = FOOT; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(t[0],t[1]); ctx.lineTo(f[0],f[1]); ctx.stroke();
-        ctx.setLineDash([]); ctx.fillStyle = FOOT;
-        ctx.beginPath(); ctx.arc(f[0],f[1],3,0,7); ctx.fill();
-      });
-      ctx.setLineDash([]);
-      ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(203,213,225,.55)';
-      ctx.beginPath(); ctx.arc(o[0],o[1],2.4,0,7); ctx.fill();
+    // Light theme paints on a near-white card, so the reference frame is proper
+    // dark ink — slate-900, not a mid grey; dark theme flips to near-white.
+    const INK = LIGHT ? '15,23,42'   : '226,232,240';   // the axes x, y
+    const ACC = LIGHT ? '91,33,182'  : '196,181,253';   // the turned axes x', y'
+    const N = 7, SPAN = 0.76, cy = H*0.50;
+    const step = W*SPAN/(N-1);
+    // 0.385H keeps the longest arm clear of the feathered top and bottom edges,
+    // so the bars end on a round cap rather than being eaten by the wipe.
+    const BASE = Math.min(H*0.385, step*0.50);
+    ctx.lineCap = 'round'; ctx.setLineDash([]);
+    // The seven samples are the SAME reference frame seen seven times, so its
+    // x-axis is drawn once, as a single rail the crosses sit on. Faded at both
+    // ends to meet the CSS mask instead of stopping dead.
+    { const x0 = W*(0.5 - SPAN/2) - step*0.30, x1 = W*(0.5 + SPAN/2) + step*0.30;
+      const rail = ctx.createLinearGradient(x0, 0, x1, 0);
+      rail.addColorStop(0,    'rgba(' + INK + ',0)');
+      rail.addColorStop(0.18, 'rgba(' + INK + ',0.42)');
+      rail.addColorStop(0.82, 'rgba(' + INK + ',0.42)');
+      rail.addColorStop(1,    'rgba(' + INK + ',0)');
+      ctx.strokeStyle = rail; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(x0, cy); ctx.lineTo(x1, cy); ctx.stroke(); }
+    // one coordinate cross: two full-length perpendicular bars through (x,y)
+    function cross(x, y, r, th, rgb, w, a){
+      ctx.strokeStyle = 'rgba(' + rgb + ',' + a + ')'; ctx.lineWidth = w;
+      for(let q = 0; q < 2; q++){
+        const A = th + q*Math.PI/2, dx = Math.cos(A)*r, dy = Math.sin(A)*r;
+        ctx.beginPath(); ctx.moveTo(x - dx, y + dy); ctx.lineTo(x + dx, y - dy); ctx.stroke();
+      }
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ for(let k=0;k<N;k++) vignette(k); return; }
-    let k = 0, tick = 0;
-    function batch(){
-      if(tick % 8 === 0){ vignette(k); k++; }
-      tick++;
-      if(k < N) requestAnimationFrame(batch);
+    for(let k = 0; k < N; k++){
+      const t = k/(N-1), u = (t - 0.5)*2;
+      const x = W*(0.5 - SPAN/2 + SPAN*t);
+      // Size envelope peaked at the band's centre: the mask fades the outer 22%
+      // anyway, and the eye (and the gate's centre share) is on the middle.
+      const env = 0.46 + 0.54*Math.pow(Math.cos(u*Math.PI/2), 0.75);
+      const r = BASE*env, w = 2.2 + 5.2*env;
+      // The turn grows 0 -> 45 deg across the band. A cross repeats every 90 deg,
+      // so stopping at 45 keeps the separation monotone: the pair opens the whole
+      // way and never folds back towards looking upright again.
+      const th = t*45*Math.PI/180;
+      if(th > 0.03){                        // ... marked by a bare wedge, no scale
+        ctx.beginPath(); ctx.moveTo(x, cy);
+        ctx.arc(x, cy, r*0.58, 0, -th, true);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(' + ACC + ',0.26)'; ctx.fill();
+      }
+      cross(x, cy, r, 0,  INK, w*0.62, 0.85);   // x, y   — upright throughout
+      cross(x, cy, r, th, ACC, w, 0.95);        // x', y' — turned by th
+      ctx.beginPath(); ctx.arc(x, cy, Math.max(2.4, w*0.66), 0, 7);
+      ctx.fillStyle = 'rgba(' + INK + ',0.95)'; ctx.fill();   // the shared origin
     }
-    batch();
+    // Feather the letterbox: a destination-out wipe of the top and bottom few
+    // pixels, so no stroke ends on a hard cut at the band's edge.
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const fh = Math.max(9, Math.round(H*0.11));
+    let g = ctx.createLinearGradient(0, 0, 0, fh);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, fh);
+    g = ctx.createLinearGradient(0, H, 0, H - fh);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, H - fh, W, fh);
+    ctx.restore();
   }
   drawHero();
   // The card's entrance animation scales it to .985, so the first measurement is

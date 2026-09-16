@@ -2019,69 +2019,135 @@ Shell.init({ onFrame: SIM.onFrame, onReset: SIM.onReset, onResize: SIM.onResize,
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own transformation, swept. Each column is the SAME field
-     read from a different boost, v/c running from -0.9 on the left to +0.9 on
-     the right: the circled cross is B into the page with radius proportional
-     to gamma_v B0, and the arrow above or below it is the transverse electric
-     field E'_y = gamma_v (v/c) B0 - up for v > 0, down for v < 0, absent at
-     v = 0. It carries NO numbers and NO invariant, so it cannot answer a card;
-     it shows only that a boost turns one field into two. */
-  let heroGen = 0;
+  /* Hero: ALICE'S LAB, and nothing else.
+     A uniform magnetic field into the page (circled crosses, the sim's --bfield)
+     with one positive test charge drifting along +x through it, its velocity
+     arrow (+x, the sim's --charge amber) and the magnetic force it feels (+y,
+     the sim's --force pink).
+
+     This is card 1's own content - the ungated FRAME card already states
+     "E = 0, B0 into the page, F = q u x B pointing up for q > 0". Nothing from
+     a boosted frame is drawn: no second observer, no transverse E, no
+     before/after field pair, no force comparison, no invariant, no numbers.
+
+     SIGN CHECK. Screen axes are +x right, +y up, so +z is out of the page and
+     "into the page" is -z. The charge carries a + cut through it, so q > 0.
+     F = q u x B = q (u x_hat) x (-B0 z_hat) = -q u B0 (x_hat x z_hat)
+       = -q u B0 (-y_hat) = + q u B0 y_hat,  i.e. +y = UP the screen.
+     The force arrow is drawn upward. Correct.
+
+     LAYOUT. Every mark lives inside cx +/- 358px, because the .welcome-hero
+     mask fades the outer 22% of the band away and the eye is on the centre.
+     The lattice OMITS whole markers that the charge or its arrows would sit on
+     - a marker is either drawn complete or not at all, so no cross is ever left
+     half-eaten however the band is sized. Marker and charge radii scale with
+     the column pitch so that stays true at any viewport width. The top and
+     bottom of the 140px letterbox are feathered out so the band has no hard
+     edge. Static draw: drawHero is re-run by animationend, a 700ms timer and
+     two MutationObservers, and every run must land exactly the same picture. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
     /* The backing store ships hard-coded at 1280x240 while the element is
        laid out 100vw x 140px, so the buffer would be stretched across and
        squashed down. Size the buffer to the element's real box before
-       drawing. This canvas is layer-owned (the welcome hero) - no simulation
-       surface is touched. */
+       drawing. (No anisotropic pre-compensation is applied anywhere below:
+       the buffer now matches the CSS box 1:1, so circles stay circles.)
+       This canvas is layer-owned (the welcome hero) - no simulation surface
+       is touched. */
     { const hr = c.getBoundingClientRect();
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const COLB = LIGHT ? '#2563eb' : '#60a5fa';   // the sim's --bfield
-    const COLE = LIGHT ? '#7c3aed' : '#a78bfa';   // the sim's --efield
-    const COLA = LIGHT ? 'rgba(15,23,42,.13)' : 'rgba(148,163,184,.16)';
-    const yMid = Math.round(H*0.5);
-    const pitch = 74, n = Math.max(4, Math.round(W/pitch));
-    // the axis the boost runs along
-    ctx.strokeStyle = COLA; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, yMid+0.5); ctx.lineTo(W, yMid+0.5); ctx.stroke();
-    function column(k){
-      const t = (n > 1) ? k/(n-1) : 0.5;
-      const v = -0.9 + 1.8*t;                     // the sim's own v/c slider range
-      const g = 1/Math.sqrt(1 - v*v);
-      const x = Math.round((k + 0.5) * (W/n));
-      const r = 6*g;                              // |B'_z| = gamma_v B0
-      ctx.save();
-      ctx.strokeStyle = COLB; ctx.lineWidth = 1.8; ctx.globalAlpha = .9;
-      ctx.beginPath(); ctx.arc(x, yMid, r, 0, Math.PI*2); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x - r*0.55, yMid - r*0.55); ctx.lineTo(x + r*0.55, yMid + r*0.55);
-      ctx.moveTo(x + r*0.55, yMid - r*0.55); ctx.lineTo(x - r*0.55, yMid + r*0.55);
-      ctx.stroke();
-      ctx.restore();
-      const Ey = g*v, L = 17*Math.abs(Ey);        // E'_y = gamma_v (v/c) B0
-      if(L > 3){
-        const dir = Ey > 0 ? -1 : 1;              // physical +y is up on screen
-        const y0 = yMid + dir*(r + 5), y1 = y0 + dir*L, yb = y1 - dir*7;
-        ctx.save();
-        ctx.strokeStyle = COLE; ctx.fillStyle = COLE; ctx.lineWidth = 2.2; ctx.globalAlpha = .92;
-        ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, yb); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x - 4.5, yb); ctx.lineTo(x + 4.5, yb); ctx.closePath(); ctx.fill();
-        ctx.restore();
-      }
+    // Light theme paints on a near-white ground (--bg #e2e8f0), so the ink has
+    // to be genuinely dark, not a mid-tone wash of the dark-theme colour.
+    const COLB = LIGHT ? '#1d4ed8' : '#79b4fb';   // --bfield, darkened for light
+    const COLQ = LIGHT ? '#a35a06' : '#fbbf24';   // --charge, darkened for light
+    const COLF = LIGHT ? '#be185d' : '#f472b6';   // --force,  darkened for light
+    // NOTE: --efield purple is deliberately absent. No electric field is drawn.
+
+    const cx = W/2;
+    const HW = Math.min(W*0.26, 358);             // keep every mark inside the unmasked centre
+    const NC = 11, pitch = (2*HW)/(NC - 1);
+    const rowY = [H*0.19, H*0.50, H*0.78];
+    const R  = Math.min(10.5, pitch*0.150);       // field-marker radius
+    const qr = Math.min(15.0, pitch*0.210);       // charge radius
+
+    const qx = cx - pitch/2;                      // half-pitch: the force arrow rises through a gap
+    const qy = rowY[2];                           // the charge rides the lowest row
+    const vTip = cx + 1.5*pitch;                  // velocity-arrow tip
+    const fTip = H*0.135;                         // force-arrow tip
+    const vTail = qx + qr + 4, fTail = qy - qr - 4;
+
+    // ---- uniform B into the page -------------------------------------------
+    // A marker is skipped outright if the subject would run over it.
+    const CLR = R + 8;
+    function onSubject(mx, my){
+      if(Math.hypot(mx - qx, my - qy) < R + qr + 18) return true;           // the charge, with air around it
+      if(my > qy - CLR && my < qy + CLR && mx > vTail - CLR && mx < vTip + CLR) return true;  // u
+      if(mx > qx - CLR && mx < qx + CLR && my > fTip - CLR && my < fTail + CLR) return true;  // F
+      return false;
     }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) column(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 55);
-    })();
+    ctx.save();
+    ctx.strokeStyle = COLB; ctx.lineCap = 'round';
+    for(let r = 0; r < 3; r++) for(let i = 0; i < NC; i++){
+      const mx = cx + (i - (NC-1)/2)*pitch, my = rowY[r], d = R*0.56;
+      if(onSubject(mx, my)) continue;
+      ctx.lineWidth = Math.max(2.3, R*0.285);
+      ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI*2); ctx.stroke();
+      ctx.lineWidth = Math.max(2.5, R*0.305);
+      ctx.beginPath();
+      ctx.moveTo(mx-d, my-d); ctx.lineTo(mx+d, my+d);
+      ctx.moveTo(mx+d, my-d); ctx.lineTo(mx-d, my+d);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- the charge, its velocity and the magnetic force on it -------------
+    function arrow(x0,y0,x1,y1,col,lw,hl,hw){
+      const dx = x1-x0, dy = y1-y0, L = Math.hypot(dx,dy) || 1, ux = dx/L, uy = dy/L;
+      const bx = x1 - ux*hl, by = y1 - uy*hl;     // base of the head
+      ctx.save();
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineCap = 'butt'; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(bx + ux*0.5, by + uy*0.5); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x1,y1);
+      ctx.lineTo(bx - uy*hw, by + ux*hw);
+      ctx.lineTo(bx + uy*hw, by - ux*hw);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    // u along +x
+    arrow(vTail, qy, vTip, qy, COLQ, qr*0.30, qr*1.15, qr*0.68);
+    // F = q u x B, straight up the screen (+y) for the q > 0 drawn here
+    arrow(qx, fTail, qx, fTip, COLF, qr*0.36, qr*1.20, qr*0.74);
+
+    // the charge itself
+    ctx.save();
+    ctx.beginPath(); ctx.arc(qx, qy, qr, 0, Math.PI*2);
+    ctx.fillStyle = COLQ; ctx.fill();
+    ctx.restore();
+    // its polarity, cut clean through the disc so it needs no second colour
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000';
+    const pb = qr*0.55, pt = qr*0.165;
+    ctx.fillRect(qx - pb, qy - pt, 2*pb, 2*pt);
+    ctx.fillRect(qx - pt, qy - pb, 2*pt, 2*pb);
+    ctx.restore();
+
+    // ---- feather the letterbox edges ---------------------------------------
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const FT = 13;
+    let g = ctx.createLinearGradient(0,0,0,FT);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,FT);
+    g = ctx.createLinearGradient(0,H,0,H-FT);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,H-FT,W,FT);
+    ctx.restore();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

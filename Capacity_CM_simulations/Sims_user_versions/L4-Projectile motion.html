@@ -2412,10 +2412,20 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: ONE launch, drawn from the sim's own closed forms
-         x(t) = v0 cos(theta) t, y(t) = v0 sin(theta) t - g t^2 / 2.
-         Deliberately a single angle and a single speed: cards 3, 4 and 6 ask how the
-         range depends on the angle and on the speed, and the welcome must not answer them. */
+      /* Hero: ONE launch, ONE speed, ONE angle — the arc alone, drawn STATICALLY
+         from the sim's own closed forms x(t)=v0 cos(th) t, y(t)=v0 sin(th) t - g t^2/2.
+         SPOILER FENCE. Four gated cards must survive this banner:
+           card 2  twin race (a vertical toss vs this launch)  -> "they land together"
+           card 3  30 deg vs 60 deg at one speed               -> "same distance"
+           card 4  which single angle goes farthest            -> "45 deg"
+           card 6  double v0, range changes by what factor     -> "4"
+         So the banner shows exactly one trajectory: no second angle, no second speed,
+         no dropped/tossed twin, no marked optimum, no R(theta) curve, and no
+         tangent-line-minus-half-g-t-squared construction (that picture IS card 2's
+         argument). The arc is also drawn on a SINGLE isotropic metres-per-pixel
+         scale, so the parabola on screen is the real shape, not a stretched one;
+         the angle is chosen (not 45, not 30, not 60) purely because its natural
+         R/H = 4/tan(th) fills a 10:1 letterbox. No text and no digits on canvas. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2427,57 +2437,94 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
           const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
           if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
         const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        // No residual ctx.scale()/aspect pre-compensation anywhere in here: the
+        // buffer is sized in CSS pixels above, so bitmap pixels are square and a
+        // ctx.arc() is a true circle. Everything below uses ONE scale for x and y.
         const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
         ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-        const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-        const g = 9.81, v0 = 25, th = 40*Math.PI/180;
-        const T = 2*v0*Math.sin(th)/g, R = v0*v0*Math.sin(2*th)/g, Hm = Math.pow(v0*Math.sin(th),2)/(2*g);
-        const x0 = W*0.305, ground = H*0.88, span = W*0.375, rise = H*0.62;
-        const px = t => x0 + (v0*Math.cos(th)*t)/R*span;
-        const py = t => ground - (v0*Math.sin(th)*t - 0.5*g*t*t)/Hm*rise;
-        // ground
-        ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.32)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(W*0.23, ground); ctx.lineTo(W*0.77, ground); ctx.stroke();
-        // launch velocity + angle
-        // launch velocity + angle, drawn along the TANGENT of the plotted arc so the
-        // arrow and the theta wedge stay consistent with the curve the viewer sees
-        // (the hero canvas is displayed with a non-uniform aspect).
-        const tgx = span*v0*Math.cos(th)/R, tgy = -rise*v0*Math.sin(th)/Hm;
-        const tgL = Math.hypot(tgx, tgy), L = 92, vx = tgx/tgL*L, vy = tgy/tgL*L;
-        const vcol = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(56,189,248,.95)';
-        ctx.strokeStyle = vcol; ctx.fillStyle = vcol; ctx.lineWidth = 3; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(x0, ground); ctx.lineTo(x0+vx, ground+vy); ctx.stroke();
-        (function(){ const a = Math.atan2(vy,vx), k = 13;
-          ctx.beginPath(); ctx.moveTo(x0+vx, ground+vy);
-          ctx.lineTo(x0+vx-k*Math.cos(a-0.42), ground+vy-k*Math.sin(a-0.42));
-          ctx.lineTo(x0+vx-k*Math.cos(a+0.42), ground+vy-k*Math.sin(a+0.42));
-          ctx.closePath(); ctx.fill(); })();
-        const aTan = Math.atan2(vy, vx);
-        ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.38)' : 'rgba(148,163,184,.45)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(x0, ground, 46, aTan, 0, false); ctx.stroke();
-        ctx.font = '600 20px ' + font; ctx.textAlign = 'left';
-        ctx.fillStyle = vcol; ctx.fillText('v\u2080', x0+vx-30, ground+vy-10);
-        ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.95)' : 'rgba(203,213,225,.9)';
-        ctx.fillText('\u03b8', x0 + 60*Math.cos(aTan*0.5) - 4, ground + 60*Math.sin(aTan*0.5) + 7);
-        ctx.fillStyle = LIGHT ? 'rgba(4,120,87,.95)' : 'rgba(159,224,198,.85)';
-        ctx.fillText('one launch, one arc', W*0.235, H*0.20);
-        // the arc, accumulated as equal-time dots
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const N = 110, dot = LIGHT ? 'rgba(217,119,6,.95)' : 'rgba(251,191,36,.95)';
-        let k = 0;
-        function batch(){
-          const per = reduce ? N : 3;
-          for(let i=0;i<per && k<=N;i++,k++){
-            const t = T*k/N;
-            ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(px(t), py(t), 3.2, 0, 7); ctx.fill();
-          }
-          if(k <= N) requestAnimationFrame(batch);
-          else {
-            ctx.fillStyle = LIGHT ? 'rgba(180,83,9,1)' : 'rgba(253,224,171,1)';
-            ctx.beginPath(); ctx.arc(px(T), py(T), 6, 0, 7); ctx.fill();
-          }
-        }
-        batch();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+        const C = LIGHT
+          ? { ground:'rgba(15,23,42,.58)', hatch:'rgba(15,23,42,.30)',
+              glow:'rgba(180,83,9,.16)',  arc:'rgba(180,83,9,.95)',
+              ball:'rgba(120,53,15,1)',   halo:'rgba(180,83,9,.24)',
+              vec:'rgba(3,105,161,1)',    wedge:'rgba(15,23,42,.50)', wedgeFill:'rgba(3,105,161,.16)' }
+          : { ground:'rgba(148,163,184,.50)', hatch:'rgba(148,163,184,.28)',
+              glow:'rgba(251,191,36,.15)',    arc:'rgba(251,191,36,.95)',
+              ball:'rgba(254,243,199,1)',     halo:'rgba(251,191,36,.26)',
+              vec:'rgba(56,189,248,.98)',     wedge:'rgba(148,163,184,.60)', wedgeFill:'rgba(56,189,248,.16)' };
+
+        // --- the one launch, in metres -------------------------------------
+        const g = 9.81, v0 = 25, th = 22*Math.PI/180;
+        const T  = 2*v0*Math.sin(th)/g;
+        const R  = v0*v0*Math.sin(2*th)/g;
+        const Hm = Math.pow(v0*Math.sin(th),2)/(2*g);
+        // ONE scale, metres -> px, so the drawn curve is the true parabola.
+        // Take the largest scale that fits both the width budget and the height
+        // budget of the band, then centre the arc horizontally.
+        const s = Math.min(W*0.54/R, H*0.56/Hm);
+        const span = s*R;
+        const ground = Math.round(H*0.88), x0 = Math.round((W - span)/2);
+        const px = t => x0 + s*(v0*Math.cos(th)*t);
+        const py = t => ground - s*(v0*Math.sin(th)*t - 0.5*g*t*t);
+
+        // --- ground ---------------------------------------------------------
+        const gL = x0 - span*0.10, gR = x0 + span*1.10;
+        ctx.strokeStyle = C.ground; ctx.lineWidth = 2.8;
+        ctx.beginPath(); ctx.moveTo(gL, ground + 0.5); ctx.lineTo(gR, ground + 0.5); ctx.stroke();
+        ctx.strokeStyle = C.hatch; ctx.lineWidth = 2;
+        { const step = Math.max(38, (gR - gL)/15), h = Math.min(7, (H - ground) - 4);
+          for(let x = gL + step*0.5; x < gR; x += step){
+            ctx.beginPath(); ctx.moveTo(x, ground + 2); ctx.lineTo(x - h, ground + 2 + h); ctx.stroke(); } }
+
+        // --- the arc: a soft underglow, then one crisp bold stroke ----------
+        const N = 160;
+        const path = new Path2D();
+        for(let i = 0; i <= N; i++){ const t = T*i/N; i ? path.lineTo(px(t), py(t)) : path.moveTo(px(t), py(t)); }
+        ctx.strokeStyle = C.glow; ctx.lineWidth = 13; ctx.stroke(path);
+        ctx.strokeStyle = C.arc;  ctx.lineWidth = 4.4; ctx.stroke(path);
+
+        // --- launch point, and v0 along the true tangent (which IS the arc) --
+        const tanA = -th;   // isotropic scale => the on-screen angle IS the launch angle
+        const L = Math.min(96, span*0.20), vx = L*Math.cos(tanA), vy = L*Math.sin(tanA);
+        // the launch angle, as a filled sector between the ground and the tangent —
+        // a stroked arc alone is a 15px scratch at this angle and reads as a stray mark
+        { const rw = Math.min(62, span*0.14);
+          ctx.fillStyle = C.wedgeFill;
+          ctx.beginPath(); ctx.moveTo(x0, ground); ctx.arc(x0, ground, rw, tanA, 0, false);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = C.wedge; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(x0, ground, rw, tanA, 0, false); ctx.stroke(); }
+        ctx.strokeStyle = C.vec; ctx.fillStyle = C.vec; ctx.lineWidth = 3.6;
+        ctx.beginPath(); ctx.moveTo(x0, ground); ctx.lineTo(x0 + vx, ground + vy); ctx.stroke();
+        { const k = 14;
+          ctx.beginPath(); ctx.moveTo(x0 + vx, ground + vy);
+          ctx.lineTo(x0 + vx - k*Math.cos(tanA - 0.40), ground + vy - k*Math.sin(tanA - 0.40));
+          ctx.lineTo(x0 + vx - k*Math.cos(tanA + 0.40), ground + vy - k*Math.sin(tanA + 0.40));
+          ctx.closePath(); ctx.fill(); }
+        ctx.beginPath(); ctx.arc(x0, ground, 5.4, 0, 7); ctx.fill();
+
+        // --- the ball, caught on the way down (a true circle) ---------------
+        { const tb = 0.70*T, bx = px(tb), by = py(tb);
+          ctx.fillStyle = C.halo; ctx.beginPath(); ctx.arc(bx, by, 15, 0, 7); ctx.fill();
+          ctx.fillStyle = C.ball; ctx.beginPath(); ctx.arc(bx, by, 8, 0, 7); ctx.fill();
+          ctx.strokeStyle = C.arc; ctx.lineWidth = 2.2;
+          ctx.beginPath(); ctx.arc(bx, by, 8, 0, 7); ctx.stroke(); }
+
+        // --- where this one arc comes down ----------------------------------
+        ctx.strokeStyle = C.arc; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(px(T), ground - 9); ctx.lineTo(px(T), ground + 5); ctx.stroke();
+
+        // --- feather the letterbox edges so nothing reads as cut off --------
+        ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+        { const fade = 7;
+          let gt = ctx.createLinearGradient(0,0,0,fade);
+          gt.addColorStop(0,'rgba(0,0,0,1)'); gt.addColorStop(1,'rgba(0,0,0,0)');
+          ctx.fillStyle = gt; ctx.fillRect(0,0,W,fade);
+          let gb = ctx.createLinearGradient(0,H-fade,0,H);
+          gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,1)');
+          ctx.fillStyle = gb; ctx.fillRect(0,H-fade,W,fade); }
+        ctx.restore();
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

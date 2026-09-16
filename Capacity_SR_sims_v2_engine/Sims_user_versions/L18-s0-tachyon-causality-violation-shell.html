@@ -2456,18 +2456,27 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own construction — a light cone drawn at exactly 45 degrees
-     (equal pixels per unit on x and ct) with event A at its apex, event B placed
-     OUTSIDE it, and the S-prime lines of constant time, ct = beta x, sweeping up
-     through B as beta rises. Those lines are the sim's own tilted x-prime axis;
-     the ones that have passed B (beta above delta-ct over delta-x) are drawn in
-     the sim's superluminal red. It carries NO numbers and no readout, so it
-     cannot answer any card: the deck turns on WHICH boost reverses the order and
-     what a reply then does, and the hero shows only the construction. */
-  let heroGen = 0;
+  /* Hero: this sim's apparatus, drawn ONCE, large and centred — event A at the
+     apex of its light cone, event B out beyond the cone, and the A→B signal
+     between them. Both events wear a grab handle, because in THIS build the
+     student constructs the pair by dragging the two events.
+     45-DEGREE HONESTY: the drawn region is square (as tall as the band) and uses
+     equal pixels per unit on x and ct, so a light ray is a true 1:1 diagonal.
+     The rest of the 10:1 letterbox is deliberately left empty rather than tiled.
+     NO SPOILERS: there is no boost, no S′ axis, no tilted line of constant time,
+     no reply leg, no closed loop and no number anywhere — so the hero cannot
+     answer a gated card. The deck asks whether a timelike pair's order is
+     absolute (Q1), what Δs² < 0 changes inside Δct′ = γ(Δct − (v/c)·Δx) (Q2),
+     how the reversing boost β = Δct/Δx scales as Δx grows (Q3) and what pushes
+     the reply's arrival below ct = 0 (Q4). The hero shows only the construction
+     those questions are asked ABOUT.
+     Sign convention is the sim's own: Δs² = Δct² − Δx² (timelike POSITIVE), so
+     B drawn outside the cone is the spacelike, Δs² < 0 case the sim is named for.
+     Static: drawHero is re-run by animationend, a 700 ms timer, resize and two
+     MutationObservers, and each run clears the canvas — nothing is accumulated
+     across frames, so no redraw can catch a half-finished picture. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so the buffer would be stretched across and squashed
        down: a 45-degree line would no longer render at 45 degrees. Size the
@@ -2479,57 +2488,74 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                        // transparent: the overlay dim is the background
-    const ppu  = Math.max(16, Math.round(H*0.26)); // equal px per unit on x and ct → light is 45 degrees
-    const yA   = Math.round(H*0.74);
-    const Y    = ct => yA - ct*ppu;
+    ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
     const COLC = LIGHT ? '#a16207' : '#facc15';    // light cone        (sim COL.cone)
     const COLA = LIGHT ? '#1d4ed8' : '#60a5fa';    // event A           (sim COL.A)
     const COLB = LIGHT ? '#be123c' : '#fb7185';    // event B           (sim COL.B)
-    const COLS = LIGHT ? '#0f766e' : '#2dd4bf';    // S' constant-time  (sim COL.pax)
-    const COLF = LIGHT ? '#b91c1c' : '#f87171';    // past the flip     (sim COL.sigFTL)
-    const BX = 2.5, BCT = 1.0;                     // B outside the cone: |dx| > |dct|, signal 2.5 c
-    const BFLIP = BCT/BX;                          // 0.40 — dct' = 0 at v/c = dct/dx
-    const reach = (H/ppu) + 1;
-    const pitch = Math.max(260, Math.round(ppu*9));
-    const n = Math.ceil(W/pitch) + 1;
-    const cxOf = k => Math.round(k*pitch + pitch*0.55);
-    function base(k){
-      const cx0 = cxOf(k);
-      ctx.setLineDash([5,4]); ctx.lineWidth = 1.6; ctx.strokeStyle = COLC;
-      ctx.beginPath();
-      ctx.moveTo(cx0 - reach*ppu, Y(reach)); ctx.lineTo(cx0, Y(0)); ctx.lineTo(cx0 + reach*ppu, Y(reach));
-      ctx.stroke(); ctx.setLineDash([]);
-      ctx.lineWidth = 2.2; ctx.strokeStyle = COLF;          // the A->B signal: spacelike, v > c
-      ctx.beginPath(); ctx.moveTo(cx0, Y(0)); ctx.lineTo(cx0 + BX*ppu, Y(BCT)); ctx.stroke();
+    const COLF = LIGHT ? '#b91c1c' : '#f87171';    // the A→B signal    (sim COL.sigFTL)
+    const COLX = '#64748b';                        // the x axis of S — mid slate, reads on either ground
+    const RIM  = LIGHT ? 'rgba(255,255,255,.92)' : 'rgba(8,10,14,.88)';
+    const S    = H/140;                            // the band is 140px by design; scale if it ever is not
+
+    // --- geometry ------------------------------------------------------------
+    const ppu  = Math.max(14, Math.round(H*0.30)); // EQUAL px per unit on x and ct → the cone is exactly 45°
+    const ay   = Math.round(H*0.84);               // A sits low, so the future cone fills the band
+    const rise = Math.round(H*0.78);               // rays climb `rise` and therefore spread `rise` each way
+    const BX = 2.5, BCT = 1.0;                     // B beyond the cone: |Δx| > |Δct|, i.e. Δs² < 0
+    const bdx = Math.round(BX*ppu), bdy = Math.round(BCT*ppu);
+    const extL = rise + Math.round(24*S), extR = Math.max(rise, bdx + Math.round(20*S)) + Math.round(24*S);
+    const ax   = Math.round(W/2 + (extL - extR)/2);// A's x, chosen so the whole figure centres in the band
+    const bx   = ax + bdx, by = ay - bdy;
+
+    // --- the x axis of S through A, ticked at one unit --------------------------
+    ctx.globalAlpha = .85; ctx.strokeStyle = COLX; ctx.lineWidth = Math.max(1.4, 1.8*S);
+    ctx.beginPath(); ctx.moveTo(ax - extL, ay + .5); ctx.lineTo(ax + extR, ay + .5); ctx.stroke();
+    for(let k = -3; k <= 3; k++){
+      if(!k) continue;
+      const tx = ax + k*ppu;
+      if(tx < ax - extL || tx > ax + extR) continue;
+      ctx.beginPath(); ctx.moveTo(tx, ay + 2*S); ctx.lineTo(tx, ay + 7*S); ctx.stroke();
     }
-    function slice(k, beta, a){
-      const cx0 = cxOf(k), span = reach*1.6;
-      ctx.lineWidth = 1.2; ctx.globalAlpha = a;
-      ctx.strokeStyle = beta > BFLIP ? COLF : COLS;
-      ctx.beginPath();
-      ctx.moveTo(cx0 - span*ppu, Y(-beta*span)); ctx.lineTo(cx0 + span*ppu, Y(beta*span));
-      ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1;
+
+    // --- A's future light cone: the 45° boundary, with its interior shaded -------
+    const top = ay - rise;
+    /* the shading fades out before the band ends, so the cone opens out of the
+       top rather than being chopped off flat by the letterbox */
+    const g = ctx.createLinearGradient(0, ay, 0, top);
+    g.addColorStop(0,    LIGHT ? 'rgba(161,98,7,.30)' : 'rgba(250,204,21,.26)');
+    g.addColorStop(0.62, LIGHT ? 'rgba(161,98,7,.17)' : 'rgba(250,204,21,.15)');
+    g.addColorStop(1,    LIGHT ? 'rgba(161,98,7,0)'   : 'rgba(250,204,21,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - rise, top); ctx.lineTo(ax + rise, top); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = COLC; ctx.lineWidth = 4*S; ctx.setLineDash([10*S, 6*S]);
+    ctx.beginPath(); ctx.moveTo(ax - rise, top); ctx.lineTo(ax, ay); ctx.lineTo(ax + rise, top); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // --- the A→B signal: shallower than 45°, so it leaves the cone sideways ------
+    const RH = 13*S;                                // handle radius — the leg stops at B's handle
+    const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax)/len, uy = (by - ay)/len;
+    const tipX = bx - ux*RH, tipY = by - uy*RH;
+    ctx.strokeStyle = COLF; ctx.lineWidth = 5.5*S;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tipX, tipY); ctx.stroke();
+    { const an = Math.atan2(uy, ux), L = 15*S;      // arrowhead: A sends, B receives
+      ctx.fillStyle = COLF; ctx.beginPath(); ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - L*Math.cos(an - 0.44), tipY - L*Math.sin(an - 0.44));
+      ctx.lineTo(tipX - L*Math.cos(an + 0.44), tipY - L*Math.sin(an + 0.44));
+      ctx.closePath(); ctx.fill(); }
+
+    // --- the two events, as the grab handles the student actually drags ---------
+    function handle(x, y, col){
+      ctx.beginPath(); ctx.arc(x, y, RH, 0, 7);
+      ctx.globalAlpha = .20; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 3.2*S; ctx.strokeStyle = col; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4.4*S, 0, 7);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 1.4*S; ctx.strokeStyle = RIM; ctx.stroke();
     }
-    function events(k){
-      const cx0 = cxOf(k);
-      ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.lineWidth = 1.4;
-      ctx.fillStyle = COLA; ctx.beginPath(); ctx.arc(cx0, Y(0), 4.6, 0, 7); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = COLB; ctx.beginPath(); ctx.arc(cx0 + BX*ppu, Y(BCT), 4.6, 0, 7); ctx.fill(); ctx.stroke();
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const JN = 15;
-    let j = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      if(j === 0) for(let k=0;k<n;k++) base(k);
-      const per = reduce ? JN : 1;
-      for(let s=0; s<per && j<JN; s++, j++){
-        const beta = j*0.06;                       // 0 … 0.84, sweeping the S' now-line up past B
-        for(let k=0;k<n;k++) slice(k, beta, 0.30 + 0.60*(j/(JN-1)));
-      }
-      if(j < JN) setTimeout(()=>requestAnimationFrame(batch), 70);
-      else for(let k=0;k<n;k++) events(k);
-    })();
+    handle(ax, ay, COLA);                           // A — the sender, at the apex of its own cone
+    handle(bx, by, COLB);                           // B — the reception, outside it
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

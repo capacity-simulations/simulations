@@ -2311,11 +2311,23 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: the four inner orbits, built from the sim's own a and e
-         (Mercury .3871/.2056, Venus .7233/.0068, Earth 1/.0167, Mars 1.5237/.0934)
-         with the Sun at the shared focus, seen at the same shallow angle as the
-         3D view. Pure geometry — it carries no timing information, so it cannot
-         answer the first prediction (where a planet moves fastest). */
+      /* Hero: the four inner worlds as lit spheres — Mercury, Venus, Earth, Mars,
+         inward-to-outward left to right, at their TRUE relative equatorial radii
+         (0.383 / 0.950 / 1.000 / 0.532 Earth radii), every one lit from a single
+         off-frame source up and to the left. In the sim's own planet colours.
+
+         Deliberately carries NO orbit curve, NO Sun, NO focus, NO motion and NO
+         timing, because all three gated cards live in exactly that material:
+           card 2 — Mercury is fastest at its CLOSEST point (perihelion);
+           card 4 — the Sun sits noticeably off-centre in MERCURY's orbit (e=.206,
+                    Kepler's first law, the Sun at one focus);
+           card 5 — Neptune runs about 5x slower than Earth (v ~ 1/sqrt(a)).
+         Drawing any closed conic with the Sun at a focus would hand a student
+         card 4 outright — the previous hero did — and any animated planet or
+         equal-time dot would hand them card 2. So the band shows the cast and the
+         one light that lights it, and nothing about paths, shapes or speeds.
+         No text or digits. Static: drawHero is re-run by animationend, a 700ms
+         timer and two MutationObservers, each of which clears the canvas. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2330,56 +2342,55 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         const LIGHT = document.body.classList.contains('light-theme')
                    || document.documentElement.getAttribute('data-theme') === 'light';
         ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-        const S = 150, YS = 0.40, cx = W*0.5 - 20, cy = H*0.5;
-        const orbits = [
-          { a:0.3871, e:0.2056, col:'#c9b39a', lcol:'#8a6f45', r:3.6, th:2.55 },
-          { a:0.7233, e:0.0068, col:'#e6c98a', lcol:'#a9790f', r:4.4, th:0.55 },
-          { a:1.0000, e:0.0167, col:'#5da9ff', lcol:'#1d6fd0', r:4.6, th:4.25 },
-          { a:1.5237, e:0.0934, col:'#d97757', lcol:'#b2482a', r:4.0, th:5.45 }
+        /* The buffer is sized 1:1 to the element's CSS box just above, so the
+           surface is already isotropic: NO ctx.scale() pre-compensation is applied
+           and none is wanted — ctx.arc() renders a true circle. Confirmed by
+           measuring a disc's width and height off the rendered bitmap. */
+        const hx = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+        const mix = (a, b, t) => { const A = hx(a), B = hx(b);
+          return 'rgb(' + Math.round(A[0]+(B[0]-A[0])*t) + ',' +
+                          Math.round(A[1]+(B[1]-A[1])*t) + ',' +
+                          Math.round(A[2]+(B[2]-A[2])*t) + ')'; };
+        const INK = LIGHT ? '#0f172a' : '#0b1020';   // light theme wants genuinely dark ink
+        const worlds = [                              // rr = true radius / Earth's
+          { rr:0.3829, col:'#c9b39a', lcol:'#8a6f45' },
+          { rr:0.9499, col:'#e6c98a', lcol:'#a9790f' },
+          { rr:1.0000, col:'#5da9ff', lcol:'#1d6fd0' },
+          { rr:0.5320, col:'#d97757', lcol:'#b2482a' }
         ];
-        // r(theta) = a(1-e^2)/(1+e cos theta) — Sun at the focus, exactly as the sim draws it
-        const pos = (o, th) => {
-          const r = o.a*(1 - o.e*o.e)/(1 + o.e*Math.cos(th));
-          return { x: cx + r*Math.cos(th)*S, y: cy - r*Math.sin(th)*S*YS };
-        };
-        function sun(){
-          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
-          g.addColorStop(0,'rgba(255,238,178,1)'); g.addColorStop(.32,'rgba(255,206,86,.9)'); g.addColorStop(1,'rgba(255,198,62,0)');
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 20, 0, 7); ctx.fill();
-        }
-        function outline(o, frac){
-          ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.34)' : 'rgba(203,213,225,.34)';
-          ctx.lineWidth = 1.2; ctx.beginPath();
-          const N = Math.max(2, Math.round(280*frac));
-          for(let k=0;k<=N;k++){ const p = pos(o, k/280*2*Math.PI); k===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y); }
+        const R = Math.min(H*0.33, W*0.033);          // Earth's drawn radius
+        const pitch = R*4.5, y = H*0.50, x0 = W*0.5 - pitch*1.5;
+        function sphere(x, r, o){
+          const base  = LIGHT ? o.lcol : o.col;
+          const hi    = mix(base, '#ffffff', LIGHT ? 0.30 : 0.52);
+          const mid   = mix(base, INK,       0.38);
+          const night = mix(base, INK,       LIGHT ? 0.84 : 0.80);
+          const sx = x - r*0.52, sy = y - r*0.34;     // sub-solar point: one light, off-frame upper-left
+          ctx.save();
+          ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.clip();
+          ctx.fillStyle = night; ctx.fillRect(x-r-1, y-r-1, 2*r+2, 2*r+2);
+          const g = ctx.createRadialGradient(sx, sy, r*0.04, sx, sy, r*1.48);
+          g.addColorStop(0.00, hi);
+          g.addColorStop(0.28, base);
+          g.addColorStop(0.60, mid);
+          g.addColorStop(1.00, night);
+          ctx.fillStyle = g; ctx.fillRect(x-r-1, y-r-1, 2*r+2, 2*r+2);
+          ctx.restore();
+          ctx.beginPath(); ctx.arc(x, y, Math.max(1, r-0.6), 0, 7);
+          ctx.lineWidth = Math.max(1.1, r*0.045);
+          ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.42)' : 'rgba(226,232,240,.30)';
           ctx.stroke();
         }
-        function planet(o){
-          const p = pos(o, o.th);
-          ctx.fillStyle = LIGHT ? o.lcol : o.col;
-          ctx.beginPath(); ctx.arc(p.x, p.y, o.r, 0, 7); ctx.fill();
-        }
-        function caption(){
-          ctx.font = '600 15px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-          ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.72)' : 'rgba(226,232,240,.72)';
-          ctx.textAlign = 'center';
-          ctx.fillText('the four inner orbits, seen at a shallow angle', W*0.5, H*0.94);
-        }
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        let t = 0;
-        function frame(){            // one orchestrated entrance, never a loop
-          ctx.clearRect(0,0,W,H);
-          sun();
-          orbits.forEach((o,i) => {
-            const f = reduce ? 1 : Math.max(0, Math.min(1, (t - i*0.17)/0.52));
-            if(f > 0) outline(o, f);
-            if(f >= 1) planet(o);
-          });
-          if(t > 0.75) caption();
-          t += reduce ? 2 : 0.03;
-          if(t < 1.6) requestAnimationFrame(frame);
-        }
-        frame();
+        worlds.forEach((o, i) => sphere(x0 + i*pitch, R*o.rr, o));
+        // Feather the top and bottom few pixels so the 140px letterbox never
+        // reads as having sliced something off.
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        const ft = ctx.createLinearGradient(0, 0, 0, H), e = Math.min(0.5, 7/H);
+        ft.addColorStop(0, 'rgba(0,0,0,1)');   ft.addColorStop(e,   'rgba(0,0,0,0)');
+        ft.addColorStop(1-e, 'rgba(0,0,0,0)'); ft.addColorStop(1,   'rgba(0,0,0,1)');
+        ctx.fillStyle = ft; ctx.fillRect(0, 0, W, H);
+        ctx.restore();
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

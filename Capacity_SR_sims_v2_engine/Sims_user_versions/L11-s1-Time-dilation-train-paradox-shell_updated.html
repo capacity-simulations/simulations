@@ -5838,12 +5838,27 @@ window.Sim2D = (function() {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own apparatus — a carriage running along the rail with the
-     two mirrors and the photon in flight between them, plus fading ghost
-     carriages for the motion. It carries NO clock readings, NO gamma and NO
-     platform-frame light path, so it cannot answer any card: every question in
-     the deck is about the TIME a frame records, the cause of the difference,
-     how gamma scales, or whose clock each observer finds slow. */
+  /* Hero: the apparatus as a bold silhouette — ONE carriage riding the rail,
+     the two light-clock mirrors a height h apart inside it, speed streaks
+     behind and direction chevrons ahead. That is exactly the ungated card 1
+     set-up ("a photon bounces between two mirrors a height h apart inside a
+     train moving at speed v") and nothing more.
+
+     Deliberately absent, because the gated cards turn on them:
+       card 2 — who records the longer time (B, the platform): so NO clock
+                faces, NO readings, NO tick marks, NO second observer.
+       card 3 — why (the photon's PATH between the mirrors is longer): so NO
+                photon, NO beam, NO dashed gap line, NO diagonal, and no row of
+                ghost carriages whose per-copy photon heights would trace that
+                diagonal as an envelope. The mirrors are drawn empty.
+       card 4 — gamma reaches 3.2 at beta = 0.95: so NO gamma, NO scale, NO
+                stretched/compressed geometry, no two lengths to compare.
+       card 5 — the effect is symmetric: so NO side-by-side frames, one frame
+                only, and no platform observer drawn at all.
+
+     Static: drawHero is re-run by animationend, a 700 ms timer, two
+     MutationObservers and resize, each of which clears the canvas, so there is
+     no animation to be interrupted mid-flight. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -5857,79 +5872,110 @@ window.Sim2D = (function() {
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const RAIL  = LIGHT ? 'rgba(15,23,42,.28)'  : 'rgba(150,178,214,.34)';
-    const CAR   = LIGHT ? 'rgba(24,58,94,.70)'  : 'rgba(96,165,250,.78)';
-    const MIRR  = LIGHT ? 'rgba(24,58,94,.90)'  : 'rgba(196,214,238,.92)';
-    const GAPL  = LIGHT ? 'rgba(15,23,42,.22)'  : 'rgba(196,214,238,.26)';
-    const PHOT  = LIGHT ? '#b45309' : '#fef3c7';
-    const railY = Math.round(H*0.80);
-    // rail + sleepers
-    ctx.lineWidth = 1.4; ctx.strokeStyle = RAIL;
-    ctx.beginPath(); ctx.moveTo(0, railY); ctx.lineTo(W, railY); ctx.stroke();
-    ctx.lineWidth = 1;
-    for(let x = (W/2)%26; x < W; x += 26){
-      ctx.beginPath(); ctx.moveTo(x, railY+1); ctx.lineTo(x, railY+7); ctx.stroke();
-    }
-    // one carriage: rounded body sitting on the rail, mirrors inside
-    const cw = Math.min(210, W*0.24), chh = Math.round(H*0.50);
-    function carriage(cx, alpha){
-      const x0 = cx - cw/2, y0 = railY - chh - 6;
-      ctx.save(); ctx.globalAlpha = alpha;
-      ctx.strokeStyle = CAR; ctx.lineWidth = 1.6;
+    /* No ctx.scale / anisotropic pre-compensation here: the block above sizes
+       the backing store to the element's own box, so buffer pixels are already
+       square. Any SY = SX*k left over from the 1280x240 era would now stretch
+       the art vertically. */
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.lineJoin = 'round';
+    // Light theme gets genuinely dark ink on the near-white overlay; dark theme
+    // gets near-white ink. No mid-tones — the old build washed out at 1.4px.
+    const INK = LIGHT ? '15,32,58'  : '200,221,247';   // rail, sleepers, mirrors
+    const CAR = LIGHT ? '23,58,107' : '128,181,247';   // carriage, streaks, chevrons
+    const rgba = (t,a) => 'rgba(' + t + ',' + a + ')';
+    function rr(x,y,w,h,r){                            // rounded rect, no roundRect dependency
+      r = Math.min(r, w/2, h/2);
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(x0, y0, cw, chh, 9);
-      else ctx.rect(x0, y0, cw, chh);
-      ctx.stroke();
-      // wheels
-      ctx.beginPath(); ctx.arc(x0 + cw*0.24, railY - 3, 4, 0, 7); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x0 + cw*0.76, railY - 3, 4, 0, 7); ctx.stroke();
-      ctx.restore();
-      return { x0:x0, y0:y0 };
+      ctx.moveTo(x+r, y);
+      ctx.arcTo(x+w, y,   x+w, y+h, r);
+      ctx.arcTo(x+w, y+h, x,   y+h, r);
+      ctx.arcTo(x,   y+h, x,   y,   r);
+      ctx.arcTo(x,   y,   x+w, y,   r);
+      ctx.closePath();
     }
-    // motion ghosts trailing behind
-    const mainX = W*0.5;
-    carriage(mainX - cw*1.35, 0.16);
-    carriage(mainX - cw*0.70, 0.30);
-    const box = carriage(mainX, 0.95);
-    // the two mirrors, a height h apart, inside the carriage
-    const mx = box.x0 + cw*0.50, mw = cw*0.26;
-    const myTop = box.y0 + chh*0.20, myBot = box.y0 + chh*0.80;
-    ctx.strokeStyle = MIRR; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(mx - mw/2, myTop); ctx.lineTo(mx + mw/2, myTop); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(mx - mw/2, myBot); ctx.lineTo(mx + mw/2, myBot); ctx.stroke();
+    function bar(x1,y1,x2,y2,w,col){                   // thick round-capped stroke
+      ctx.lineCap = 'round'; ctx.lineWidth = w; ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+
+    const railY = Math.round(H*0.795);
+    const cw  = Math.max(250, Math.min(340, Math.round(W*0.225)));   // carriage length
+    const bh  = Math.round(H*0.50);                                  // carriage height
+    // nudged right of dead centre so the trailing streaks (heavier than the
+    // chevrons ahead) do not pull the whole group left of the title below
+    const x0  = Math.round(W*0.5 - cw/2 + 13), y0 = railY - bh - 11;
+
+    // ── rail: one heavy line, kept off the masked outer edges so the ink stays
+    //    where the eye is (the mask fades the outer 22% anyway)
+    const rx1 = W*0.13, rx2 = W*0.87;
+    const gr = ctx.createLinearGradient(rx1,0,rx2,0);
+    gr.addColorStop(0,    rgba(INK,0));
+    gr.addColorStop(0.16, rgba(INK,0.92));
+    gr.addColorStop(0.84, rgba(INK,0.92));
+    gr.addColorStop(1,    rgba(INK,0));
+    ctx.strokeStyle = gr; ctx.lineWidth = 4.5;
+    ctx.beginPath(); ctx.moveTo(rx1, railY+0.5); ctx.lineTo(rx2, railY+0.5); ctx.stroke();
+    // sleepers: evenly spaced, uniform — a plain track, no spacing that encodes anything
+    ctx.strokeStyle = rgba(INK,0.55); ctx.lineWidth = 4;
+    for(let x = W*0.5 - Math.floor((W*0.5 - W*0.17)/30)*30; x < W*0.83; x += 30){
+      ctx.beginPath(); ctx.moveTo(x, railY+4); ctx.lineTo(x, railY+13); ctx.stroke();
+    }
+
+    // ── speed streaks trailing the carriage (it runs to the right)
+    const sL = [116, 60, 94, 52], sY = [0.16, 0.38, 0.60, 0.84], sO = [0, 9, 2, 15];
+    for(let k = 0; k < 4; k++){
+      const xe = x0 - 15 - sO[k], y = y0 + bh*sY[k], xs = xe - sL[k];
+      const sg = ctx.createLinearGradient(xs,0,xe,0);        // taper away behind: motion, not a list of rules
+      sg.addColorStop(0, rgba(CAR,0)); sg.addColorStop(0.55, rgba(CAR,0.38)); sg.addColorStop(1, rgba(CAR,0.66));
+      bar(xs, y, xe, y, 6, sg);
+    }
+
+    // ── the carriage: heavy outline + a solid roof slab so it reads as a body
+    rr(x0, y0, cw, bh, 11);
+    ctx.lineWidth = 5; ctx.strokeStyle = rgba(CAR,0.95); ctx.stroke();
+    rr(x0 + cw*0.045, y0 - 8, cw*0.91, 8, 3.5);
+    ctx.fillStyle = rgba(CAR,0.88); ctx.fill();
+    // wheels: two bogies riding the rail
+    ctx.fillStyle = rgba(CAR,0.92);
+    [0.16, 0.29, 0.71, 0.84].forEach(function(u){
+      ctx.beginPath(); ctx.arc(x0 + cw*u, railY - 8, 8, 0, 7); ctx.fill();
+    });
+    // two windows at the far end — they only say "carriage"; nothing is in them
+    ctx.fillStyle = rgba(CAR,0.42);
+    [0.075, 0.185].forEach(function(u){
+      rr(x0 + cw*u, y0 + bh*0.22, cw*0.085, bh*0.30, 3.5); ctx.fill();
+    });
+
+    // ── the two mirrors, a height h apart, facing each other inside the
+    //    carriage, each on its little mount. Nothing between them: the beam,
+    //    its path and its length are all gated content.
+    const mx = x0 + cw*0.56, mw = cw*0.30;
+    [0.26, 0.74].forEach(function(u){
+      const my = y0 + bh*u, out = u < 0.5 ? -1 : 1;
+      bar(mx - mw/2, my, mx + mw/2, my, 7, rgba(INK,0.95));
+      bar(mx - mw/2, my + out*3.5, mx - mw/2, my + out*8, 3.5, rgba(INK,0.75));
+      bar(mx + mw/2, my + out*3.5, mx + mw/2, my + out*8, 3.5, rgba(INK,0.75));
+    });
+
+    // ── direction chevrons ahead
+    ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for(let k = 0; k < 3; k++){
+      const ax = x0 + cw + 17 + k*14, ay = y0 + bh*0.5;
+      ctx.strokeStyle = rgba(CAR, 0.75 - k*0.2);
+      ctx.beginPath(); ctx.moveTo(ax, ay-8); ctx.lineTo(ax+8, ay); ctx.lineTo(ax, ay+8); ctx.stroke();
+    }
     ctx.lineCap = 'butt';
-    ctx.setLineDash([3,4]); ctx.lineWidth = 1; ctx.strokeStyle = GAPL;
-    ctx.beginPath(); ctx.moveTo(mx, myTop); ctx.lineTo(mx, myBot); ctx.stroke();
-    ctx.setLineDash([]);
-    // motion chevrons ahead of the carriage
-    ctx.strokeStyle = CAR; ctx.lineWidth = 1.6;
-    for(let k=0;k<3;k++){
-      const ax = mainX + cw*0.62 + k*11, ay = box.y0 + chh*0.5;
-      ctx.globalAlpha = 0.65 - k*0.18;
-      ctx.beginPath(); ctx.moveTo(ax, ay-5); ctx.lineTo(ax+5, ay); ctx.lineTo(ax, ay+5); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    // the photon: fades in travelling between the mirrors
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let f = 0;
-    const token = (drawHero.token = (drawHero.token || 0) + 1);
-    function photon(){
-      if(token !== drawHero.token) return;             // a redraw superseded this run
-      const span = myBot - myTop;
-      const u = reduce ? 0.5 : (1 - Math.cos(Math.min(1, f/26) * Math.PI))/2;
-      const py = myBot - span*u;
-      // erase the gap strip and redraw the dashed gap each frame
-      ctx.clearRect(mx - 9, myTop - 2, 18, span + 4);
-      ctx.setLineDash([3,4]); ctx.lineWidth = 1; ctx.strokeStyle = GAPL;
-      ctx.beginPath(); ctx.moveTo(mx, myTop); ctx.lineTo(mx, myBot); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(mx, py, 7, 0, 7);
-      ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.16)' : 'rgba(254,243,199,.22)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(mx, py, 3, 0, 7);
-      ctx.fillStyle = PHOT; ctx.fill();
-      if(!reduce && f < 26){ f++; requestAnimationFrame(photon); }
-    }
-    photon();
+
+    // ── feather the letterbox edges so nothing meets the 140px cut hard
+    ctx.globalCompositeOperation = 'destination-out';
+    let fg = ctx.createLinearGradient(0,0,0,10);
+    fg.addColorStop(0,'rgba(0,0,0,1)'); fg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0,0,W,10);
+    fg = ctx.createLinearGradient(0,H,0,H-12);
+    fg.addColorStop(0,'rgba(0,0,0,1)'); fg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = fg; ctx.fillRect(0,H-12,W,12);
+    ctx.globalCompositeOperation = 'source-over';
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

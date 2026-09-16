@@ -2500,10 +2500,30 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: the two scenes this sim offers - a block carrying several forces on a
-         flat table, and the same block resting on a slope under gravity. Deliberately
-         draws NO resultant and NO component split: card 2 asks which way the block
-         goes, and the welcome must not answer it. */
+      /* Hero: a CONTACT CHAIN — deliberately NOT either scene this sim runs.
+         Three identical crates stand in a row on a level floor; one applied push
+         (orange) acts on the outer face of the left crate. Every crate carries its
+         weight (green, down) and the floor's normal (blue, up) drawn to the SAME
+         length: the floor is level and the acceleration is horizontal, so N - mg = 0
+         closes exactly. At each contact a violet third-law pair points outward from
+         the contact plane, each member into the crate it acts on — 2/3 P at the
+         first contact, 1/3 P at the second — which leaves every crate the same
+         unbalanced P/3 to the right, i.e. one shared acceleration.
+         One px-per-newton scale throughout (mg = 40u, P = 72u).
+
+         What is kept OUT, because the gated cards ask for exactly these:
+           card 2  which way a block with three angled forces starts to move
+                   -> no angled force, no resultant, no vector sum, no top view;
+           card 3  what the path does when the net force turns
+                   -> no trajectory, no velocity, no curve, no motion cue at all;
+           card 4  what happens when one of three balancing forces is removed
+                   -> no three-force closure to break (the only closure drawn is the
+                      vertical N = mg pair, which card 1 already hands the student);
+           card 5  a on a frictionless slope when the mass doubles
+           card 6  the sticking angle tan(theta) <= mu
+                   -> no incline anywhere, no friction arrow, no mu, no angle.
+         Static: this runs again on animationend, on a 700ms timer and from two
+         MutationObservers, each after a clearRect, so nothing may be staged. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2517,65 +2537,77 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
         const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
         ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-        const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-        const inkFaint = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.30)';
-        const inkLab   = LIGHT ? 'rgba(4,120,87,.95)' : 'rgba(159,224,198,.85)';
-        const cols = LIGHT ? ['rgba(217,119,6,.95)','rgba(2,132,199,.95)','rgba(190,24,93,.95)','rgba(124,58,237,.95)']
-                           : ['rgba(251,146,60,.95)','rgba(56,189,248,.95)','rgba(244,114,182,.95)','rgba(167,139,250,.95)'];
-        function arrow(x0,y0,dx,dy,col,w){
-          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
-          const x1 = x0+dx, y1 = y0+dy;
-          ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
-          const a = Math.atan2(dy,dx), L = 13;
-          ctx.beginPath(); ctx.moveTo(x1,y1);
-          ctx.lineTo(x1-L*Math.cos(a-0.42), y1-L*Math.sin(a-0.42));
-          ctx.lineTo(x1-L*Math.cos(a+0.42), y1-L*Math.sin(a+0.42));
+        ctx.setTransform(1,0,0,1,0,0);   // the buffer above is 1:1 with the element's CSS
+                                         // box, so no anisotropic pre-compensation is wanted.
+        // Light theme sits on a near-white card: dark, saturated ink, never mid-tones.
+        const CO = { push: LIGHT ? 'rgba(180,83,9,.98)'   : 'rgba(251,146,60,.98)',   // applied force
+                     pair: LIGHT ? 'rgba(109,40,217,.98)' : 'rgba(167,139,250,.98)',  // contact (third-law) pairs
+                     norm: LIGHT ? 'rgba(3,105,161,.98)'  : 'rgba(56,189,248,.98)',   // normal from the floor
+                     grav: LIGHT ? 'rgba(4,120,87,.98)'   : 'rgba(110,231,183,.98)',  // weight
+                     edge: LIGHT ? 'rgba(15,23,42,.88)'   : 'rgba(226,232,240,.82)',
+                     face: LIGHT ? 'rgba(15,23,42,.13)'   : 'rgba(148,163,184,.20)' };
+        const GND = LIGHT ? '15,23,42' : '203,213,225';
+        // Design space: u runs either side of the band centre, v down a nominal
+        // 140-tall band; s maps it onto whatever box the element actually has.
+        const s = Math.min(1.30, Math.max(0.60, 1.15 * H / 140), W / 1046);
+        const X = u => W / 2 + u * s, Y = v => H / 2 + (v - 70) * s;
+        function arrow(u0, v0, du, dv, col, w){
+          const x0 = X(u0), y0 = Y(v0), x1 = X(u0 + du), y1 = Y(v0 + dv);
+          const L = Math.min(12, Math.hypot(du, dv) * 0.45) * s;
+          const a = Math.atan2(y1 - y0, x1 - x0);
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = w * s;
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.beginPath(); ctx.moveTo(x0, y0);
+          ctx.lineTo(x1 - 0.55 * L * Math.cos(a), y1 - 0.55 * L * Math.sin(a)); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x1, y1);
+          ctx.lineTo(x1 - L * Math.cos(a - 0.44), y1 - L * Math.sin(a - 0.44));
+          ctx.lineTo(x1 - L * Math.cos(a + 0.44), y1 - L * Math.sin(a + 0.44));
           ctx.closePath(); ctx.fill();
         }
-        function box(cx,cy,half,ang){
-          ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang||0);
-          ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.22)';
-          ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(203,213,225,.75)'; ctx.lineWidth = 2;
-          ctx.fillRect(-half,-half,2*half,2*half); ctx.strokeRect(-half,-half,2*half,2*half);
-          ctx.restore();
+        // ---- geometry, in design units ----
+        const CW = 84, CH = 46, FLOOR = 96, TOPY = FLOOR - CH, MIDY = FLOOR - CH / 2;
+        const CX = [-112, 52, 188];                       // crate centres, left to right
+        const AR = CX[0] + CW / 2, BL = CX[1] - CW / 2;   // first contact plane (A|B)
+        const BR = CX[1] + CW / 2, CL = CX[2] - CW / 2;   // second contact plane (B|C)
+        // ---- the floor: level, faded at both ends so it has no hard cut ----
+        { const g = ctx.createLinearGradient(X(-258), 0, X(258), 0);
+          g.addColorStop(0, 'rgba(' + GND + ',0)');      g.addColorStop(0.13, 'rgba(' + GND + ',.62)');
+          g.addColorStop(0.87, 'rgba(' + GND + ',.62)'); g.addColorStop(1, 'rgba(' + GND + ',0)');
+          ctx.strokeStyle = g; ctx.lineWidth = 3.4 * s; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(X(-258), Y(FLOOR)); ctx.lineTo(X(258), Y(FLOOR)); ctx.stroke(); }
+        // ground hatch, skipped under each crate so the weight arrows stay in clear space
+        ctx.strokeStyle = 'rgba(' + GND + ',.34)'; ctx.lineWidth = 2 * s;
+        for(let u = -244; u <= 244; u += 24){
+          if(CX.some(cx => Math.abs(u - cx) < CW / 2 + 9)) continue;
+          ctx.beginPath(); ctx.moveTo(X(u), Y(FLOOR + 1.5)); ctx.lineTo(X(u - 10), Y(FLOOR + 12)); ctx.stroke();
         }
-        // ---- captions (literal font stack; canvas cannot resolve var(--...)) ----
-        ctx.font = '600 20px ' + font; ctx.fillStyle = inkLab; ctx.textAlign = 'left';
-        ctx.fillText('a block on a flat table', W*0.145, H*0.19);
-        ctx.fillText('or on a slope', W*0.585, H*0.19);
-        // ---- right scene: the incline, drawn first so the block reads as resting ----
-        const ax = W*0.585, by = H*0.86, bx = W*0.855, ty = H*0.40;   // slope from (ax,ty) to (bx,by)
-        ctx.strokeStyle = inkFaint; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(ax,ty); ctx.lineTo(bx,by); ctx.lineTo(ax,by); ctx.closePath(); ctx.stroke();
-        ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)'; ctx.fill();
-        const slopeAng = Math.atan2(by-ty, bx-ax);
-        const mx = ax + (bx-ax)*0.42, my = ty + (by-ty)*0.42;
-        const nx = Math.sin(slopeAng), ny = -Math.cos(slopeAng);      // outward normal
-        box(mx + nx*20, my + ny*20, 20, slopeAng);
-        // theta arc at the foot of the slope
-        ctx.strokeStyle = inkFaint; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(bx, by, 42, Math.PI, Math.PI + slopeAng, false);
-        ctx.stroke();
-        ctx.font = '600 18px ' + font; ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.92)' : 'rgba(203,213,225,.88)';
-        ctx.fillText('\u03b8', bx + 56*Math.cos(Math.PI + slopeAng*0.5) - 5, by + 56*Math.sin(Math.PI + slopeAng*0.5) + 6);
-        // ---- animated: forces on the flat block, then gravity on the slope block ----
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const ox = W*0.285, oy = H*0.62;
-        const FS = [ [132,-40], [-50,-84], [92,66], [-110,22] ];      // px, no resultant is ever drawn
-        box(ox, oy, 26, 0);
-        let k = 0;
-        function step(){
-          if(k < FS.length) arrow(ox, oy, FS[k][0], FS[k][1], cols[k], 4);
-          else if(k === FS.length){
-            const gx = mx + nx*20, gy = my + ny*20;
-            arrow(gx, gy, 0, 58, LIGHT ? 'rgba(5,150,105,1)' : 'rgba(110,231,183,1)', 4);
-            ctx.font = '600 18px ' + font; ctx.textAlign = 'left';
-            ctx.fillStyle = LIGHT ? 'rgba(4,120,87,.95)' : 'rgba(110,231,183,.95)';
-            ctx.fillText('gravity', gx+10, gy+56);
-          }
-          k++; if(k <= FS.length) setTimeout(step, reduce ? 0 : 360);
-        }
-        step();
+        // ---- three identical crates resting on it ----
+        CX.forEach(cx => {
+          ctx.fillStyle = CO.face; ctx.strokeStyle = CO.edge; ctx.lineWidth = 2.6 * s;
+          ctx.beginPath(); ctx.rect(X(cx - CW / 2), Y(TOPY), CW * s, CH * s);
+          ctx.fill(); ctx.stroke();
+        });
+        // ---- vertical pair on each crate: N up, mg down, equal lengths = exact closure
+        CX.forEach(cx => {
+          arrow(cx - 9, MIDY, 0, -40, CO.norm, 4.4);
+          arrow(cx + 9, MIDY, 0,  40, CO.grav, 4.4);
+        });
+        // ---- horizontal: the applied push, then one third-law pair per contact ----
+        arrow(AR - CW - 76, MIDY, 72, 0, CO.push, 5.6);   // P on crate A, from outside
+        arrow(AR + 48, MIDY - 11, -48, 0, CO.pair, 4.4);  // on A from B: 2/3 P, leftward
+        arrow(BL - 48, MIDY + 11,  48, 0, CO.pair, 4.4);  // on B from A: 2/3 P, rightward
+        arrow(BR + 24, MIDY - 11, -24, 0, CO.pair, 4.4);  // on B from C: 1/3 P, leftward
+        arrow(CL - 24, MIDY + 11,  24, 0, CO.pair, 4.4);  // on C from B: 1/3 P, rightward
+        // ---- feather the letterbox edges: no hard cut top or bottom ----
+        { const f = Math.max(4, Math.round(7 * s));
+          ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+          const gt = ctx.createLinearGradient(0, 0, 0, f);
+          gt.addColorStop(0, 'rgba(0,0,0,1)'); gt.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gt; ctx.fillRect(0, 0, W, f);
+          const gb = ctx.createLinearGradient(0, H - f, 0, H);
+          gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,1)');
+          ctx.fillStyle = gb; ctx.fillRect(0, H - f, W, f);
+          ctx.restore(); }
       }
       drawHero();
       // The welcome card's entrance animation scales an ancestor to .985, so the

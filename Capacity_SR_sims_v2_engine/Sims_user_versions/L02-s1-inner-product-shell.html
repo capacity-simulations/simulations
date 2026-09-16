@@ -2332,11 +2332,35 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the APPARATUS only — one plane, two arrows u and V, and two sets of
-     axes differing by a rotation. Deliberately carries NO numbers: cards 2-4 ask
-     what the components, the lengths and u·V do under rotation, and the hero
-     must not answer any of them. The axes are drawn at a single fixed angle
-     (nothing rotates) so not even the invariance is demonstrated here. */
+  /* ── HERO: "two arrows live in this plane" ────────────────────────────────
+     The band is a 10:1 letterbox ABOVE the title, so the subject has to be a
+     few very large shapes. It is two bold tapered arrows, anchored at two
+     different points in the plane. Nothing else.
+
+     WHAT IS DELIBERATELY ABSENT, and why (the gated cards ask for exactly
+     these things, so the banner must not hand them over):
+       · NO axes, and above all no SECOND set of axes. Cards 2 and 3 ask what
+         a rotation of the frame does to ‖V‖ and to u·V. One arrow drawn once
+         with two rotated frames straddling it *is* that argument — "the arrow
+         was never moved, only the axes" — with no number needed. Drawing no
+         frame at all makes the question unanswerable from the banner.
+       · NO shared vertex, NO angle arc, NO projection foot, NO right-angle
+         mark, and the two directions are 26° apart — nowhere near 90°, 0° or
+         180°. Card 4 asks what u·V = 0 means (perpendicular); a perpendicular
+         pair, or a projection dropped from one arrow onto the other, would
+         answer it outright.
+       · NO ticks, NO grid, NO circle or arc through an arrow tip, and no
+         second congruent copy of either arrow at another orientation. Each of
+         those states an invariance (or, worse, its negation — "length changes
+         when you turn the axes" is card 2's WRONG answer) without writing a
+         digit. Spacing, envelopes and repeats leak just as loudly as numbers.
+       · NO text and no digits at all.
+     The two arrows differ in length, colour, thickness and tilt so the pair
+     can never read as one arrow strobed through a rotation.
+
+     Static by construction: drawHero is re-run by animationend, a 700 ms
+     timer, two MutationObservers and resize, each of which clears the canvas,
+     so an animated hero would restart or half-draw. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* Size the backing store from the element's real box — a parse-time width/
@@ -2346,46 +2370,67 @@ const Shell = (function(){
       const hw = Math.max(320, Math.round(hr.width)), hh = Math.max(80, Math.round(hr.height));
       if(c.width !== hw || c.height !== hh){ c.width = hw; c.height = hh; } }
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    /* The buffer above is sized in CSS pixels from the element's own box, so
+       one canvas unit is already one CSS pixel on BOTH axes. There is no
+       anisotropic pre-compensation to undo here (no SY = SX*k, no
+       ctx.scale(1/AR,1)); adding one would stretch the art vertically. */
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    ctx.setTransform(1,0,0,1,0,0);                // identity first, so the wipe below covers the whole band
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ox = W/2, oy = H*0.58, AX = Math.min(W*0.42, 300), AY = H*0.40;
-    const TH = 35*Math.PI/180;                    // one fixed angle between the frames
-    const grey   = LIGHT ? 'rgba(15,23,42,.38)'  : 'rgba(148,163,184,.42)';
-    const violet = LIGHT ? 'rgba(109,40,217,.55)' : 'rgba(167,139,250,.60)';
-    function arrow(dx, dy, len, col, lab, wide){
-      const tx = ox + dx*len, ty = oy - dy*len;
-      ctx.strokeStyle = col; ctx.lineWidth = wide ? 3.2 : 1.6; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(tx, ty); ctx.stroke();
-      const a = Math.atan2(-dy, dx), s = wide ? 10 : 7;
-      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(tx, ty);
-      ctx.lineTo(tx - s*Math.cos(a-0.42), ty - s*Math.sin(a-0.42));
-      ctx.lineTo(tx - s*Math.cos(a+0.42), ty - s*Math.sin(a+0.42));
+
+    // Proper dark ink on the near-white light ground; bright ink on the dark one.
+    const COL_V = LIGHT ? '#1D4ED8' : '#7CB7FF';          // the long, shallow arrow
+    const COL_U = LIGHT ? '#B45309' : '#F6AE3A';          // the shorter, steeper one
+
+    /* Composition is authored in a fixed 680 x 140 box and mapped uniformly
+       into the middle of the band, so it keeps its proportions at every
+       viewport and never wanders under the CSS mask (outer 22% each side). */
+    const DW = 680, DH = 140;
+    const s  = Math.min(Math.min(W*0.52, DW)/DW, H/DH);
+    ctx.save();
+    ctx.translate(W/2 - DW*s/2, H/2 - DH*s/2);
+    ctx.scale(s, s);
+
+    // One tapered arrow: shaft narrow at the tail, full width at the neck,
+    // then a broad head. Solid fill — hairlines turn to mud at this size.
+    function vec(x0,y0,x1,y1,w,col){
+      const dx = x1-x0, dy = y1-y0, L = Math.hypot(dx,dy) || 1;
+      const ux = dx/L, uy = dy/L, px = -uy, py = ux;
+      const hl = Math.min(L*0.34, w*2.7), hw = w*1.85;    // head length / half-width
+      const nx = x1 - ux*hl, ny = y1 - uy*hl;             // neck
+      const a = w*0.60, b = w;                            // half-width: tail → neck
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(x0 + px*a, y0 + py*a);
+      ctx.lineTo(nx + px*b, ny + py*b);
+      ctx.lineTo(nx + px*hw, ny + py*hw);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(nx - px*hw, ny - py*hw);
+      ctx.lineTo(nx - px*b, ny - py*b);
+      ctx.lineTo(x0 - px*a, y0 - py*a);
       ctx.closePath(); ctx.fill();
-      if(lab){ ctx.font = '600 13px Inter, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(lab, tx + 12*Math.cos(a), ty + 12*Math.sin(a)); }
+      ctx.beginPath(); ctx.arc(x0, y0, w*0.72, 0, 7); ctx.fill();   // anchor bead
     }
-    // Frame S: grey axes, horizontal / vertical
-    arrow( 1, 0, AX, grey, 'x'); arrow(-1, 0, AX*0.55, grey, null);
-    arrow( 0, 1, AY, grey, 'y'); arrow( 0,-1, AY*0.55, grey, null);
-    // Frame S′: the same plane, axes turned by a fixed angle
-    arrow( Math.cos(TH),  Math.sin(TH), AX*0.9, violet, 'x′');
-    arrow(-Math.cos(TH), -Math.sin(TH), AX*0.5, violet, null);
-    arrow(-Math.sin(TH),  Math.cos(TH), AY*0.9, violet, 'y′');
-    arrow( Math.sin(TH), -Math.cos(TH), AY*0.5, violet, null);
-    ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA';
-    ctx.beginPath(); ctx.arc(ox, oy, 3.2, 0, 7); ctx.fill();
-    // The two arrows grow in — the objects the whole simulation is about.
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const V = { dx: 3/5, dy: 4/5, len: Math.min(AY*1.05, 78), col:'#60a5fa', lab:'V' };
-    const U = { dx: 4/Math.sqrt(17), dy: -1/Math.sqrt(17), len: Math.min(AX*0.30, 86), col:'#f59e0b', lab:'u' };
-    let f = 0, F = reduce ? 1 : 22;
-    (function grow(){
-      const k = F ? Math.min(1, (f+1)/F) : 1;
-      arrow(V.dx, V.dy, V.len*k, V.col, k>=1 ? V.lab : null, true);
-      arrow(U.dx, U.dy, U.len*k, U.col, k>=1 ? U.lab : null, true);
-      f++;
-      if(k < 1) requestAnimationFrame(grow);
-    })();
+
+    /* Nothing else is drawn. Scatter marks were tried and cut: at this size
+       they read as dust, and any repeated small mark invites a reading of
+       spacing — and spacing is information. */
+
+    vec(  4, 104, 336,  34, 11.5, COL_V);  // long and shallow, 11.9° up
+    vec(420,  44, 664, 106, 10.0, COL_U);  // shorter and steeper, 14.3° down
+    ctx.restore();
+
+    /* Feather the letterbox edges so nothing reads as cut off by the band. */
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const fade = Math.max(8, Math.round(H*0.10));
+    let g = ctx.createLinearGradient(0, 0, 0, fade);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, fade);
+    g = ctx.createLinearGradient(0, H, 0, H - fade);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, H - fade, W, fade);
+    ctx.restore();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

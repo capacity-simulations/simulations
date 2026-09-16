@@ -2420,11 +2420,26 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own kinematics of the CARRIAGE — x(t) = v t — drawn as the
-     carriage at equal steps of time against the platform's fixed lamp post, so
-     the equal spacing IS the constant velocity. Deliberately shows no throw:
-     card 2 asks what path the platform observer sees, and the hero must not
-     answer it (nor card 3's flight time, nor cards 4–5). */
+  /* Hero: the sim's premise in one wide, static frame — one big cutaway carriage
+     running along the track, the passenger mid-throw with the ball airborne
+     inside, and a platform observer standing on the ground watching it go by.
+     Two vantage points on one throw; nothing else.
+
+     NO-SPOILER contract. The gated cards are 2 (what path does the PLATFORM see),
+     3 (flight time in the two frames), 4 (does doubling v change what the
+     passenger sees) and 5 (what a second carriage at the same v sees). So the
+     art carries: no trajectory of any kind — no arc, no trail, no ghost ball, no
+     dashed path; a single instant only, which commits to no path shape; one
+     carriage only (never a second, and never the same carriage twice); no clock,
+     stopwatch or timing mark; no speed labels or a second value of v.
+     Card 1 is ungated and already states the throw and the catch, so a ball in
+     flight above the thrower's hand reveals nothing the student has not read.
+     Galilean sim (w = w' + v, y = ut − ½gt²): no gamma, no light ray, nothing
+     relativistic may appear here.
+
+     Static — drawHero is re-run by animationend, a 700 ms timer, resize and two
+     MutationObservers, and each run clears the canvas, so a deferred batch can be
+     wiped mid-reveal. One pass, no timers. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
     /* The backing store ships hard-coded at 1280x240 while the element is laid
@@ -2437,60 +2452,131 @@ const Shell = (function(){
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const groundY = Math.round(H*0.80);
-    const railCol  = LIGHT ? 'rgba(15,23,42,.30)'  : 'rgba(148,163,184,.34)';
-    const tieCol   = LIGHT ? 'rgba(15,23,42,.14)'  : 'rgba(148,163,184,.16)';
-    const bodyCol  = LIGHT ? 'rgba(51,71,90,'      : 'rgba(200,216,236,';
-    const cyan     = LIGHT ? 'rgba(2,132,199,'     : 'rgba(34,211,238,';
-    const ballCol  = LIGHT ? 'rgba(225,29,72,'     : 'rgba(244,63,94,';
-    // rail + sleepers (fixed to the platform, like the sim's track)
-    ctx.strokeStyle = railCol; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(0, groundY+0.5); ctx.lineTo(W, groundY+0.5); ctx.stroke();
-    ctx.fillStyle = tieCol;
-    for(let X=8; X<W; X+=16) ctx.fillRect(X, groundY+2, 5, 5);
-    // the platform's lamp post — the one landmark that stays put
-    (function(){
-      const px = Math.round(W*0.085), poleH = Math.round(H*0.42), topY = groundY - poleH;
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.45)' : 'rgba(170,182,198,.6)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(px, groundY); ctx.lineTo(px, topY); ctx.lineTo(px+9, topY+3); ctx.stroke();
-      const g = ctx.createRadialGradient(px+9, topY+5, 1, px+9, topY+5, 22);
-      g.addColorStop(0,'rgba(255,226,150,'+(LIGHT?0.75:0.9)+')'); g.addColorStop(1,'rgba(255,214,130,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px+9, topY+5, 22, 0, 7); ctx.fill();
-    })();
-    // carriage silhouettes at equal time steps: x_k = x0 + v·k·dt
-    const N = 7, halfW = Math.max(26, Math.round(W*0.035)), bodyH = Math.round(H*0.34);
-    const x0 = Math.round(W*0.18), xN = Math.round(W*0.92) - halfW;
-    const dx = (xN - x0) / (N - 1);
-    const wheelR = Math.max(3, Math.round(bodyH*0.16));
-    function carriage(cx, a, solid){
-      const top = groundY - wheelR*2 - bodyH, bot = groundY - wheelR*2;
-      ctx.fillStyle = bodyCol + (a*(solid?0.90:0.40)).toFixed(2) + ')';
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // Palette: the sim's own coding — cyan carriage stripe, amber observer,
+    // rose ball — in a dark and a light variant so both grounds stay legible.
+    const ink   = LIGHT ? 'rgba(15,23,42,'  : 'rgba(214,227,243,';
+    const cyan  = LIGHT ? 'rgba(2,132,199,' : 'rgba(34,211,238,';
+    const amber = LIGHT ? 'rgba(161,74,8,'  : 'rgba(251,191,36,';
+    const rose  = LIGHT ? 'rgba(190,18,60,' : 'rgba(244,63,94,';
+
+    const groundY = Math.round(H * 0.80);
+    const LW      = Math.max(3, H * 0.038);       // one bold stroke weight everywhere
+
+    // ---- track: the platform's fixed ground, kept inside the mask's opaque band
+    ctx.strokeStyle = ink + '0.55)'; ctx.lineWidth = LW;
+    ctx.beginPath(); ctx.moveTo(W*0.155, groundY); ctx.lineTo(W*0.845, groundY); ctx.stroke();
+    ctx.fillStyle = ink + '0.32)';
+    { const s0 = W*0.17, s1 = W*0.83, n = 11, tw = Math.max(5, H*0.055), th = Math.max(4, H*0.045);
+      for(let i=0; i<n; i++){
+        const x = Math.round(s0 + (s1-s0)*i/(n-1) - tw/2);
+        ctx.fillRect(x, Math.round(groundY + LW*0.5 + 2), tw, th);
+      } }
+
+    // ---- the carriage, in cutaway side view: one element, large and centred
+    const cx      = Math.round(W*0.465);
+    const halfW   = Math.max(60, Math.round(W*0.135));
+    const wheelR  = Math.max(6, Math.round(H*0.075));
+    const bottomY = groundY - Math.round(wheelR*1.45);   // underframe, wheels proud of it
+    const skirtH  = Math.max(6, Math.round(H*0.085));    // liveried lower band
+    const floorY  = bottomY - skirtH;                    // the passenger stands here
+    const topY    = Math.round(H*0.11);                  // roof, clear of the letterbox
+    const inH     = floorY - topY;                       // interior height
+    const L = cx - halfW, R = cx + halfW, rad = Math.min(14, inH*0.28);
+
+    // motion of the carriage: three trailing streaks, no path and no ball history
+    for(let i=0; i<3; i++){
+      const y   = topY + inH*(0.26 + 0.24*i);
+      const len = W*0.055*(1 - 0.24*i);
+      ctx.strokeStyle = ink + (0.46 - 0.11*i).toFixed(2) + ')';
+      ctx.lineWidth = LW*0.8;
+      ctx.beginPath(); ctx.moveTo(L - 14 - len, y); ctx.lineTo(L - 14, y); ctx.stroke();
+    }
+
+    // wheels (behind the body so the underframe reads as one piece)
+    ctx.strokeStyle = ink + '0.85)'; ctx.lineWidth = LW*0.85;
+    [cx - halfW*0.55, cx + halfW*0.55].forEach(wx=>{
+      ctx.beginPath(); ctx.arc(wx, groundY - wheelR, wheelR, 0, 7); ctx.stroke();
+    });
+
+    // liveried skirt — the cyan the sim uses for "train"
+    ctx.fillStyle = cyan + '0.85)';
+    ctx.fillRect(L + LW*0.5, floorY, halfW*2 - LW, skirtH);
+
+    // body shell, open side (a cutaway, so the interior is visible)
+    ctx.strokeStyle = ink + '0.92)'; ctx.lineWidth = LW;
+    ctx.beginPath();
+    ctx.moveTo(L, bottomY);
+    ctx.lineTo(L, topY + rad); ctx.quadraticCurveTo(L, topY, L + rad, topY);
+    ctx.lineTo(R - rad, topY); ctx.quadraticCurveTo(R, topY, R, topY + rad);
+    ctx.lineTo(R, bottomY); ctx.closePath(); ctx.stroke();
+    // roof cap, overhanging slightly — the line that says "carriage", not "box"
+    ctx.lineWidth = LW;
+    ctx.beginPath(); ctx.moveTo(L - 12, topY); ctx.lineTo(R + 12, topY); ctx.stroke();
+    // couplers at both ends of the underframe: rolling stock, not a crate
+    ctx.lineWidth = LW*0.9; ctx.strokeStyle = ink + '0.7)';
+    ctx.beginPath();
+    ctx.moveTo(L - 11, bottomY - skirtH*0.45); ctx.lineTo(L, bottomY - skirtH*0.45);
+    ctx.moveTo(R, bottomY - skirtH*0.45); ctx.lineTo(R + 11, bottomY - skirtH*0.45);
+    ctx.stroke();
+
+    // far-wall windows, two to a side — carriage character, and they leave the
+    // centre of the interior (thrower and ball) completely clear
+    { const wH = inH*0.34, wT = topY + inH*0.17, wW = halfW*0.30, wr = 3;
+      ctx.strokeStyle = ink + '0.38)'; ctx.lineWidth = Math.max(2, LW*0.55);
+      [L + halfW*0.14, L + halfW*0.52, R - halfW*0.52 - wW, R - halfW*0.14 - wW].forEach(wx=>{
+        ctx.beginPath();
+        ctx.moveTo(wx+wr, wT); ctx.lineTo(wx+wW-wr, wT);
+        ctx.quadraticCurveTo(wx+wW, wT, wx+wW, wT+wr); ctx.lineTo(wx+wW, wT+wH-wr);
+        ctx.quadraticCurveTo(wx+wW, wT+wH, wx+wW-wr, wT+wH); ctx.lineTo(wx+wr, wT+wH);
+        ctx.quadraticCurveTo(wx, wT+wH, wx, wT+wH-wr); ctx.lineTo(wx, wT+wr);
+        ctx.quadraticCurveTo(wx, wT, wx+wr, wT); ctx.closePath(); ctx.stroke();
+      }); }
+
+    // ---- the passenger, mid-throw, and the ball already airborne above the hand.
+    // One instant only — no arc, no trail, no ghost positions.
+    const handX = cx + Math.round(halfW*0.05);
+    let handY = topY + inH*0.48;
+    { const fb = floorY, fh = Math.min(inH*0.52, H*0.25);
+      const hr2 = Math.max(3.5, fh*0.15), headY = fb - fh + hr2;
+      ctx.strokeStyle = ink + '0.92)'; ctx.lineWidth = Math.max(2.6, LW*0.82);
+      ctx.fillStyle   = ink + '0.92)';
+      ctx.beginPath(); ctx.arc(cx, headY, hr2, 0, 7); ctx.fill();
+      const neck = headY + hr2, hip = fb - fh*0.36, sh = neck + fh*0.10;
+      handY = headY - hr2*1.1;                           // hand just above head height
+      ctx.beginPath(); ctx.moveTo(cx, neck); ctx.lineTo(cx, hip); ctx.stroke();
+      ctx.beginPath();                                   // legs
+      ctx.moveTo(cx, hip); ctx.lineTo(cx - fh*0.19, fb);
+      ctx.moveTo(cx, hip); ctx.lineTo(cx + fh*0.19, fb); ctx.stroke();
+      ctx.beginPath();                                   // throwing arm up, other arm down
+      ctx.moveTo(cx, sh); ctx.lineTo(handX, handY);
+      ctx.moveTo(cx, sh); ctx.lineTo(cx - fh*0.26, sh + fh*0.22); ctx.stroke();
+    }
+
+    // ---- the ball: one position, directly above the hand that released it
+    { const br = Math.max(5, H*0.063);
+      const by = Math.max(topY + br + LW*1.2, handY - inH*0.28);
+      ctx.fillStyle = rose + '0.95)';
+      ctx.beginPath(); ctx.arc(handX, by, br, 0, 7); ctx.fill();
+      ctx.strokeStyle = LIGHT ? 'rgba(136,19,55,0.9)' : 'rgba(254,205,211,0.9)';
+      ctx.lineWidth = Math.max(2, LW*0.45);
+      ctx.beginPath(); ctx.arc(handX, by, br, 0, 7); ctx.stroke(); }
+
+    // ---- the platform observer, on the ground, watching the carriage go past
+    { const fx = Math.round(W*0.755), fb = groundY, fh = Math.max(24, H*0.30);
+      const hr2 = Math.max(3.5, fh*0.15), headY = fb - fh + hr2;
+      ctx.strokeStyle = amber + '0.95)'; ctx.lineWidth = Math.max(2.6, LW*0.82);
+      ctx.fillStyle   = amber + '0.95)';
+      ctx.beginPath(); ctx.arc(fx, headY, hr2, 0, 7); ctx.fill();
+      const neck = headY + hr2, hip = fb - fh*0.36, sh = neck + fh*0.09;
+      ctx.beginPath(); ctx.moveTo(fx, neck); ctx.lineTo(fx, hip); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(cx-halfW, bot); ctx.lineTo(cx-halfW, top+5);
-      ctx.quadraticCurveTo(cx-halfW, top, cx-halfW+5, top);
-      ctx.lineTo(cx+halfW-5, top); ctx.quadraticCurveTo(cx+halfW, top, cx+halfW, top+5);
-      ctx.lineTo(cx+halfW, bot); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = cyan + (a*(solid?0.95:0.45)).toFixed(2) + ')';
-      ctx.fillRect(cx-halfW+2, bot-Math.max(2,bodyH*0.16), halfW*2-4, Math.max(2, bodyH*0.09));
-      ctx.fillStyle = bodyCol + (a*(solid?0.85:0.35)).toFixed(2) + ')';
-      [cx-halfW*0.5, cx+halfW*0.5].forEach(wx=>{
-        ctx.beginPath(); ctx.arc(wx, groundY-wheelR, wheelR, 0, 7); ctx.fill();
-      });
-      // the ball, still in the passenger's hand — no throw is drawn
-      ctx.fillStyle = ballCol + (a*(solid?0.95:0.45)).toFixed(2) + ')';
-      ctx.beginPath(); ctx.arc(cx, bot - bodyH*0.42, Math.max(2.4, bodyH*0.11), 0, 7); ctx.fill();
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0; s<per && k<N; s++, k++){
-        const a = 0.28 + 0.72*(k/(N-1));
-        carriage(x0 + dx*k, a, k === N-1);
-      }
-      if(k < N) setTimeout(()=>requestAnimationFrame(batch), 70);
-    }
-    batch();
+      ctx.moveTo(fx, hip); ctx.lineTo(fx - fh*0.20, fb);
+      ctx.moveTo(fx, hip); ctx.lineTo(fx + fh*0.20, fb); ctx.stroke();
+      ctx.beginPath();                                   // arms, one raised toward the train
+      ctx.moveTo(fx, sh); ctx.lineTo(fx - fh*0.26, sh - fh*0.06);
+      ctx.moveTo(fx, sh); ctx.lineTo(fx + fh*0.20, sh + fh*0.18); ctx.stroke(); }
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the

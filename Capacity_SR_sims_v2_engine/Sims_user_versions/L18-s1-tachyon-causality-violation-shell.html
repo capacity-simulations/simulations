@@ -2145,17 +2145,28 @@ const Shell = (function(){
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own geometry — a row of light cones drawn at exactly 45
-     degrees (equal pixels per unit on x and ct), each with a superluminal leg
-     leaving the cone sideways and a reply leg running back to the apex line
-     and past it, so the round trip closes below where it began. It carries NO
-     interval value, NO time-order badge, NO arrival number and no banner, so
-     it cannot answer any card: the deck turns on WHICH control closes the loop
-     and WHICH separations a boost can re-order, and the hero shows only lines. */
-  let heroGen = 0;
+  /* Hero: this sim's apparatus, drawn ONCE and large — a Minkowski diagram in
+     Alice's own frame. E₁ sits at the apex on Alice's worldline (x = 0, the
+     cyan dashed vertical); the dashed amber light cone opens through it, future
+     above and past below; E₂ lies far OUTSIDE the cone, joined to E₁ by the
+     bold rose leg, so the pair reads as spacelike from its geometry alone.
+     Equal pixels per unit on x and ct — the cone edges are a true 1:1 slope,
+     verified on the rendered bitmap — and the figure is confined to a squarish
+     centred area so 45° stays 45°; the rest of the 10:1 band stays quiet.
+
+     ANTI-SPOILER. The gated cards ask: (2) whether a universal clock lets any
+     observer see the reply arrive before the send, (3) at which boost cΔt′
+     crosses zero, (4) which change drives E₃ below ct = 0, (5) which pairs a
+     boost can re-order. So the hero carries NO reply leg, NO E₃, NO closed
+     round trip, NO boosted frame, NO reversed time order — and no interval
+     value, time-order badge, arrival number or banner. It shows only the
+     rest-frame apparatus and one separation lying outside the cone, which is
+     the setup stated in the un-gated opening card.
+
+     Static: drawHero is re-run by animationend, a timer, resize and two
+     MutationObservers, and each run clears the canvas, so nothing is deferred. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const gen = ++heroGen;               // a redraw supersedes any accumulation still running
     /* The backing store ships hard-coded at 1280x240 while the element is laid
        out 100vw x 140px, so the buffer would be stretched across and squashed
        down: a 45-degree line would no longer render at 45 degrees. Size the
@@ -2167,55 +2178,69 @@ const Shell = (function(){
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the background
-    const ppu = 17;                               // equal pixels per unit on x and ct, so light is 45 degrees
-    const yMid = Math.round(H*0.56);
-    const Y  = ct => yMid - ct*ppu;
-    // faint spacetime grid
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    for(let px = 0; px <= W; px += ppu){ ctx.beginPath(); ctx.moveTo(px+.5,0); ctx.lineTo(px+.5,H); ctx.stroke(); }
-    for(let py = yMid % ppu; py <= H; py += ppu){ ctx.beginPath(); ctx.moveTo(0,py+.5); ctx.lineTo(W,py+.5); ctx.stroke(); }
-    const COLC = LIGHT ? '#a16207' : '#fde68a';   // the light cone — the sim's cone colour
-    const COLS = LIGHT ? '#be123c' : '#f43f5e';   // the spacelike outgoing leg — the sim's spacelike colour
-    const COLR = LIGHT ? '#be123c' : '#fb7185';   // the reply leg — the sim's return colour
-    const COLE = LIGHT ? '#334155' : '#e2e8f0';
-    const pitch = 230, n = Math.ceil(W/pitch) + 1;
-    function unit(k){
-      const cx = Math.round(k*pitch + pitch*0.5);
-      const X = x => cx + x*ppu;
-      const line = (pts,col,w,dash,glow) => {
-        ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-        ctx.setLineDash(dash || []);
-        ctx.shadowColor = glow ? col : 'transparent'; ctx.shadowBlur = glow ? 7 : 0;
-        ctx.beginPath();
-        pts.forEach((p,i) => i ? ctx.lineTo(X(p[0]),Y(p[1])) : ctx.moveTo(X(p[0]),Y(p[1])));
-        ctx.stroke(); ctx.shadowBlur = 0; ctx.setLineDash([]);
-      };
-      const R = 4.2;                                 // cone half-span, in units
-      // the light cone of E1, dashed at exactly 45 degrees, both directions
-      line([[-R,-R],[R,R]], COLC, 1.8, [6,4], true);
-      line([[R,-R],[-R,R]], COLC, 1.8, [6,4], true);
-      // the superluminal outgoing leg E1 -> E2: shallower than 45 degrees, so
-      // it leaves the cone sideways (|Delta x| > |c Delta t|, a spacelike pair)
-      line([[0,0],[4.0,1.7]], COLS, 2.4, null, true);
-      // the reply leg E2 -> E3: back to x = 0, stepping DOWN in ct, closing the
-      // round trip below the apex
-      line([[4.0,1.7],[0,-1.5]], COLR, 2.2, [7,4], false);
-      // E1 (apex), E2 (outside the cone), E3 (below E1 on the same worldline)
-      [[0,0],[4.0,1.7],[0,-1.5]].forEach((p,i)=>{
-        ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),i===2?3.6:4.2,0,7);
-        ctx.fillStyle = i===0 ? COLE : (i===1 ? COLS : COLR); ctx.fill();
-        ctx.lineWidth = 1.3; ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(8,10,14,.85)'; ctx.stroke();
-      });
-    }
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    (function batch(){
-      if(gen !== heroGen) return;
-      const per = reduce ? n : 1;
-      for(let s = 0; s < per && k < n; s++, k++) unit(k);
-      if(k < n) setTimeout(()=>requestAnimationFrame(batch), 90);
-    })();
+    // The sim's own canvas palette, so the banner reads as this sim: cone #fde68a,
+    // observer worldline #22d3ee, E₁ #60a5fa, E₂ #f59e0b, spacelike leg #f43f5e.
+    const P = LIGHT
+      ? { cone:'#a16207', fill:'161,98,7', wl:'rgba(14,116,144,.60)', leg:'#be123c',
+          e1:'#1d4ed8', e2:'#b45309', rim:'rgba(255,255,255,.92)', glow:0 }
+      : { cone:'#fde68a', fill:'253,230,138', wl:'rgba(34,211,238,.62)', leg:'#f43f5e',
+          e1:'#60a5fa', e2:'#f59e0b', rim:'rgba(6,9,14,.85)', glow:8 };
+
+    // Geometry. One pixel of x equals one pixel of ct, so every cone edge is a
+    // genuine 45°. The figure is sized off H (the 140px band), never off W, and
+    // is centred on the band so it sits where the mask is fully opaque.
+    const FADE = Math.round(H*0.16);              // soft top/bottom fade of the letterbox
+    const OVER = 10;                              // overshoot: the cone runs off the band, the fade hides the cut
+    const yA   = Math.round(H*0.64);              // apex (E₁) — low, so the future cone gets the room
+    const Rup  = yA + OVER, Rdn = (H - yA) + OVER;  // 45° ⇒ half-width === rise, exactly
+    const dx2  = Math.round(H*1.07), dy2 = Math.round(H*0.40);   // E₂: |Δx| ≫ |cΔt| — well outside the cone
+    const cx   = Math.round(W/2 - (dx2 - Rup)/2); // centre the whole figure, not just the apex
+    const yE2  = yA - dy2;
+
+    // the light cone's interior, brightest at the apex
+    const g = ctx.createRadialGradient(cx,yA,3, cx,yA, Math.max(Rup,Rdn));
+    g.addColorStop(0, 'rgba('+P.fill+','+(LIGHT?0.30:0.26)+')');
+    g.addColorStop(1, 'rgba('+P.fill+','+(LIGHT?0.13:0.12)+')');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(cx,yA); ctx.lineTo(cx-Rup,yA-Rup); ctx.lineTo(cx+Rup,yA-Rup); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx,yA); ctx.lineTo(cx-Rdn,yA+Rdn); ctx.lineTo(cx+Rdn,yA+Rdn); ctx.closePath(); ctx.fill();
+
+    // Alice's worldline, x = 0
+    ctx.strokeStyle = P.wl; ctx.lineWidth = 2.2; ctx.setLineDash([3,5]); ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(cx+.5,-OVER); ctx.lineTo(cx+.5,H+OVER); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // the light cone of E₁ — dashed, at exactly 45°, all four directions
+    ctx.strokeStyle = P.cone; ctx.lineWidth = 5; ctx.setLineDash([11,7]);
+    ctx.shadowColor = P.cone; ctx.shadowBlur = P.glow;
+    [[-Rup,-Rup],[Rup,-Rup],[-Rdn,Rdn],[Rdn,Rdn]].forEach(d=>{
+      ctx.beginPath(); ctx.moveTo(cx,yA); ctx.lineTo(cx+d[0], yA+d[1]); ctx.stroke(); });
+    ctx.setLineDash([]); ctx.shadowBlur = 0;
+
+    // the separation E₁E₂ — shallower than 45°, so it lies outside the cone.
+    // No arrowhead, no number: geometry only, no claim about ordering.
+    ctx.strokeStyle = P.leg; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.shadowColor = P.leg; ctx.shadowBlur = P.glow;
+    ctx.beginPath(); ctx.moveTo(cx,yA); ctx.lineTo(cx+dx2, yE2); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // the two events
+    const dot = (x,y,fill)=>{
+      ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fillStyle = fill; ctx.fill();
+      ctx.lineWidth = 2.2; ctx.strokeStyle = P.rim; ctx.stroke(); };
+    dot(cx, yA, P.e1);
+    dot(cx+dx2, yE2, P.e2);
+
+    // Feather the letterbox edges so the cone leaves the band instead of being
+    // chopped by it — and so nothing hard-contacts the top or bottom rows.
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    let vg = ctx.createLinearGradient(0,0,0,FADE);
+    vg.addColorStop(0,'rgba(0,0,0,1)'); vg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = vg; ctx.fillRect(0,0,W,FADE);
+    vg = ctx.createLinearGradient(0,H,0,H-FADE);
+    vg.addColorStop(0,'rgba(0,0,0,1)'); vg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = vg; ctx.fillRect(0,H-FADE,W,FADE);
+    ctx.restore();
   }
   drawHero();
   // The card's entrance animation applies scale(.985) to an ANCESTOR, so a

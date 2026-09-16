@@ -2148,12 +2148,23 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three paths past the SAME Sun, sharing one closest approach, drawn
-     from this sim's own conic geometry r = p/(1 + e cos th) with p = q(1+e)
-     and the sim's three eccentricities. Dots sit at EQUAL TIME steps, from
-     r^2 dth/dt = l with l = sqrt(GM p) and GM = 1 — so their spacing is the
-     body's speed. Nothing is labelled: which energy makes which path is the
-     inquiry's question, not the hero's answer. */
+  /* Hero — "six bodies, one Sun, one instant".
+     A SNAPSHOT, not a trajectory study: six small bodies caught at different
+     distances from the same Sun, each trailing a wake of EQUAL-TIME dots. The
+     dots are the only physics on the canvas — their spacing is the body's
+     speed, and speed near a central mass falls off as 1/sqrt(r), so the close
+     bodies stride and the distant ones creep. Wakes are short local segments,
+     deliberately NOT completed into a path.
+
+     Deliberately absent, because the gated inquiry cards ask for them:
+       · no V(r) curve and no r-axis          (card 1: where does V → 0?)
+       · no closed orbit of any kind          (card 2: E < 0 ⇒ closed ellipse)
+       · no open / escaping path              (card 3: E > 0 ⇒ hyperbola)
+       · no energy line, no E∩V crossing,
+         no turning-radius or aphelion mark   (card 4: what the crossing means)
+     Nothing on the canvas carries a sign, a scale or a label, so no card's
+     answer can be read off it. A wide band gets a wide subject honestly: the
+     spread of DISTANCES fills the letterbox, so no shape is stretched to fit. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
         /* The backing store ships hard-coded at 1280x240 while the element is
@@ -2167,71 +2178,96 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
     const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);
-    const q = 0.6;                       // shared perihelion distance
-    const ECC = [0.4, 1.0, 1.3];         // the sim's bound / parabolic / unbound shapes
-    const DT = 0.15, KMAX = 46, RMAX = 7.5;
-    const S = 148, YS = 0.50;
-    const cx = W*0.50 + 0.40*S, cy = H*0.50;
-    const cols = LIGHT ? ['#2563eb','#b45309','#db2777'] : ['#60a5fa','#fbbf24','#f472b6'];
-    const P = (x,y) => [cx + x*S, cy - y*S*YS];
-    function build(e){
-      const p = q*(1+e), l = Math.sqrt(p);
-      const thMax = (e < 1) ? Math.PI : Math.acos(-1/e) - 0.02;
-      const N = 3000, dth = thMax/N;
-      const pts = [[q, 0]], line = [];
-      let th = 0, t = 0, k = 1;
-      for(let n = 0; n <= N; n++){
-        const r = p/(1 + e*Math.cos(th));
-        if(r <= RMAX) line.push([r*Math.cos(th), r*Math.sin(th)]);
-        if(r > RMAX) break;
-        t += r*r*dth/l;
-        th += dth;
-        const rr = p/(1 + e*Math.cos(th));
-        if(rr > RMAX) break;
-        while(t >= k*DT && k <= KMAX){
-          pts.push([rr*Math.cos(th), rr*Math.sin(th)]);
-          pts.push([rr*Math.cos(th), -rr*Math.sin(th)]);
-          k++;
-        }
-        if(k > KMAX) break;
-      }
-      return { pts, line };
+    const cx = W*0.50, cy = H*0.52;
+    // Horizontal reach of the swarm. Capped so that at 1400px the whole subject
+    // stays inside the centre window the overlay's CSS mask leaves visible.
+    const SPAN = Math.min(W*0.235, 330);
+
+    const INK   = LIGHT ? '29,78,216'  : '191,219,254';   // rims + wakes
+    const LITC  = LIGHT ? '30,64,175'  : '226,232,240';   // sunward limb
+    const DIMC  = LIGHT ? '147,197,253': '30,64,175';     // far limb
+    const SUN   = LIGHT ? '#b45309'    : '#fde68a';
+    const SUNR  = LIGHT ? '180,83,9'   : '253,224,71';
+
+    // A sparse, deterministic star field so the letterbox reads as sky rather
+    // than as beads on a blank strip. Seeded, not random, so every redraw —
+    // animationend, the 700ms timer, resize, both MutationObservers — repaints
+    // exactly the same picture. Kept clear of the Sun so the centre stays clean.
+    let seed = 20250917;
+    const rnd = () => (seed = (seed*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for(let i = 0; i < 54; i++){
+      const sx = rnd()*W, sy = 6 + rnd()*(H-12);
+      if(Math.hypot(sx-cx, sy-cy) < 78) continue;
+      const sr = 0.7 + rnd()*1.0;
+      ctx.fillStyle = 'rgba(' + (LIGHT ? '71,85,105' : '203,213,225') + ',' + (0.14 + rnd()*0.26).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, 7); ctx.fill();
     }
-    const fam = ECC.map(build);
-    // faint outlines
-    ctx.lineWidth = 1;
-    fam.forEach((f, i) => {
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.20)';
-      ctx.beginPath();
-      f.line.forEach((pt, j) => { const [X,Y] = P(pt[0], pt[1]); j ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y); });
-      ctx.stroke();
-      ctx.beginPath();
-      f.line.forEach((pt, j) => { const [X,Y] = P(pt[0], -pt[1]); j ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y); });
-      ctx.stroke();
+
+    // The Sun: a broad corona so the centre of the band carries weight, then a
+    // hard core so it still reads at a glance on a near-white ground.
+    const RC = Math.min(56, H*0.40);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RC);
+    g.addColorStop(0,   'rgba(' + SUNR + ',.95)');
+    g.addColorStop(.30, 'rgba(' + SUNR + ',.55)');
+    g.addColorStop(1,   'rgba(' + SUNR + ',0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, RC, 0, 7); ctx.fill();
+    ctx.fillStyle = SUN; ctx.beginPath(); ctx.arc(cx, cy, 12.5, 0, 7); ctx.fill();
+    ctx.lineWidth = 2.4; ctx.strokeStyle = LIGHT ? 'rgba(120,53,15,.85)' : 'rgba(255,247,214,.9)';
+    ctx.beginPath(); ctx.arc(cx, cy, 16.5, 0, 7); ctx.stroke();
+
+    // Each body is placed in POLAR form — [distance as a fraction of SPAN,
+    // bearing in degrees] — because the wake is an arc about the Sun and the
+    // band is only 140px tall: the bearing is what decides whether that arc
+    // survives the letterbox. All six circulate the same way (wakes trail
+    // toward larger bearing), so every body is seated just short of the
+    // horizontal through the Sun and its wake sweeps back down onto it. The
+    // close pair therefore shows a visibly curved arc; the distant ones sit
+    // almost on the axis, where their much shorter wakes barely bend.
+    const BODIES = [
+      [0.26, -34], [0.38, 157],
+      [0.52, -14], [0.68, 169],
+      [0.84,  -9], [1.00, 176]
+    ];
+    // Equal-time wake: a body a distance R from the mass covers v*dt = K/sqrt(R)
+    // per tick, so the step LENGTH between dots — not their count — carries the
+    // speed. K scales with the viewport so the band reads the same at any width.
+    const K = 90 * (SPAN/330);
+    const NW = 8;
+
+    BODIES.forEach(function(b){
+      const R  = Math.max(22, b[0]*SPAN), ph = b[1]*Math.PI/180;
+      const x  = cx + R*Math.cos(ph), y = cy + R*Math.sin(ph);
+      const dphi = (K/Math.sqrt(R))/R;            // angular step for one tick
+      // Sunlight falls off with distance, so the far bodies are rendered dimmer
+      // than the near ones. Purely an illumination cue — it carries no energy,
+      // no sign and no scale, and every body is drawn the same SIZE.
+      const lit = 0.66 + 0.34*(1 - b[0]);
+      // a soft arc under the dots binds them into one wake instead of a
+      // string of loose beads — it stops where the dots stop
+      ctx.lineWidth = 2.0; ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(' + INK + ',' + (0.20*lit).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(cx, cy, R, ph, ph + NW*(K/Math.sqrt(R))/R); ctx.stroke();
+      // wake trails BEHIND the body, fading and thinning away from it
+      for(let k = 1; k <= NW; k++){
+        const a = ph + k*dphi;
+        const wx = cx + R*Math.cos(a), wy = cy + R*Math.sin(a);
+        const rr = Math.max(1.5, 5.0 - 0.42*k);
+        ctx.fillStyle = 'rgba(' + INK + ',' + (lit*(1.0 - 0.103*k)).toFixed(2) + ')';
+        ctx.beginPath(); ctx.arc(wx, wy, rr, 0, 7); ctx.fill();
+      }
+      // The body itself, with a lit limb: the half facing the Sun is bright and
+      // the far half falls into shadow, so the terminator runs perpendicular to
+      // the line back to the star. Only illumination — it says nothing about
+      // how fast, how bound, or how far the body will get.
+      const RB = 9.8, ux = Math.cos(ph), uy = Math.sin(ph);
+      const lg = ctx.createLinearGradient(x - ux*RB, y - uy*RB, x + ux*RB, y + uy*RB);
+      lg.addColorStop(0,   'rgba(' + LITC + ',' + (0.97*lit).toFixed(2) + ')');
+      lg.addColorStop(.55, 'rgba(' + LITC + ',' + (0.45*lit).toFixed(2) + ')');
+      lg.addColorStop(1,   'rgba(' + DIMC + ',' + (0.30*lit).toFixed(2) + ')');
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(x, y, RB, 0, 7); ctx.fill();
+      ctx.lineWidth = 3.0; ctx.strokeStyle = 'rgba(' + INK + ',' + lit.toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(x, y, RB, 0, 7); ctx.stroke();
     });
-    // the Sun at the shared focus
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26);
-    g.addColorStop(0, 'rgba(255,224,130,1)'); g.addColorStop(.35, 'rgba(255,196,60,.9)'); g.addColorStop(1, 'rgba(255,196,60,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, 7); ctx.fill();
-    ctx.fillStyle = LIGHT ? '#d97706' : '#fcd34d';
-    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 7); ctx.fill();
-    // equal-time dots accumulate outward from the shared perihelion
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const total = Math.max.apply(null, fam.map(f => f.pts.length));
-    let k = 0;
-    function batch(){
-      const per = reduce ? total : 2;
-      for(let s = 0; s < per && k < total; s++, k++){
-        fam.forEach((f, i) => {
-          const pt = f.pts[k]; if(!pt) return;
-          const [X,Y] = P(pt[0], pt[1]);
-          ctx.fillStyle = cols[i];
-          ctx.beginPath(); ctx.arc(X, Y, 3.0, 0, 7); ctx.fill();
-        });
-      }
-      if(k < total) requestAnimationFrame(batch);
-    }
-    batch();
   }
   drawHero();
   // The welcome card's entrance animation scales an ancestor to .985, so the
