@@ -1415,6 +1415,17 @@ window.__audit = { at(momentumGeV) {
   function forceRaceVisible() {
     if (stripToggle && !stripToggle.checked) { stripToggle.checked = true; setStripVisible(true); }
   }
+  /* top-bar Play doubles as replay once the event has finished. Deferred a tick
+     so it runs AFTER the shell's own toggle, and only when the toggle landed on
+     play (same pattern as the cloud chamber's replay). */
+  (function () {
+    const sp = document.getElementById('shell-play');
+    if (sp) sp.addEventListener('click', () => setTimeout(() => {
+      if (window.Shell && Shell.playing && ev && ev.clock >= (ev.cycle || ev.dur) + HOLD - 1e-9) {
+        state.fireCount++; ev = buildEvent(false); drawAll();
+      }
+    }, 0));
+  })();
   /* ---------- guided-inquiry layer: choice feedback + data-reveal hooks ---------- */
   document.querySelectorAll('#inq-cards .inq-step').forEach(card => {
     const evalBox = card.querySelector('.predict-eval');
@@ -1470,8 +1481,10 @@ window.__audit = { at(momentumGeV) {
     dt = Math.min(Math.max(dt || 0, 0), 0.1);
     ev.clock += dt;
     if (ev.clock >= (ev.cycle || ev.dur) + HOLD) {
-      state.fireCount++;
-      ev = buildEvent(false);
+      /* animation complete: hold the finished event and PAUSE (user request -
+         no auto-loop). The top button flips to Play; pressing it replays. */
+      ev.clock = (ev.cycle || ev.dur) + HOLD;
+      if (window.Shell && Shell.setPlaying) Shell.setPlaying(false);
     }
     drawAll();
   }
