@@ -1200,6 +1200,15 @@ function drawEarth(cx,cy,R,t){
   const og = ctx.createRadialGradient(-R*0.4,-R*0.4,R*0.05,0,0,R*1.05);
   og.addColorStop(0,'#5fa7ea'); og.addColorStop(0.45,'#2a6fc4'); og.addColorStop(1,'#0c2c62');
   ctx.fillStyle=og; ctx.fillRect(-R,-R,2*R,2*R);
+  /* sun-glint sparkles on the lit ocean */
+  for (let i=0;i<16;i++){
+    const ang=-2.55+hash(i)*1.35, rad=R*(0.18+0.62*hash(i+4));
+    const x=Math.cos(ang)*rad, y=Math.sin(ang)*rad;
+    if (x*x+y*y>R*R*0.92) continue;
+    const tw=0.2+0.8*(0.5+0.5*Math.sin(t*4.6+i*1.8));
+    ctx.fillStyle='rgba(210,235,255,'+(0.22*tw).toFixed(2)+')';
+    ctx.beginPath(); ctx.arc(x,y,Math.max(0.7,R*0.007),0,7); ctx.fill();
+  }
   const rot = t*0.045 + 1.9, tilt = 0.40;
   const proj = (lon,lat)=>{
     const l=lon*dRad+rot, la=lat*dRad;
@@ -1249,18 +1258,18 @@ function drawEarth(cx,cy,R,t){
   ctx.restore();
   /* cloud systems: swirled streaks + fronts, drifting a little faster than the ground */
   ctx.save(); ctx.globalAlpha=0.72;
-  for (let i=0;i<9;i++){
+  for (let i=0;i<14;i++){
     const lon=(hash(i*3.3)*360-180), lat=(hash(i*1.7)-0.5)*130;
-    const c=proj(lon+t*0.6+i*7,lat);
+    const c=proj(lon+t*(0.55+0.25*hash(i+4))+i*7,lat);
     if (c[2]<0.05) continue;
     const sx=Math.max(0.15,c[2]);
     ctx.save(); ctx.translate(c[0],c[1]); ctx.rotate(hash(i+9)*1.4-0.7);
-    const len=R*(0.28+0.3*hash(i+2))*sx, wid=R*(0.05+0.05*hash(i+4));
+    const len=R*(0.22+0.32*hash(i+2))*sx, wid=R*(0.04+0.055*hash(i+4))*sx;
     const g=ctx.createLinearGradient(-len,0,len,0);
     g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(0.35,'rgba(255,255,255,0.9)'); g.addColorStop(0.7,'rgba(255,255,255,0.75)'); g.addColorStop(1,'rgba(255,255,255,0)');
     ctx.fillStyle=g;
     ctx.beginPath();
-    for (let k=0;k<=24;k++){ const u=k/24, X=-len+2*len*u, Y=-wid*(0.6+0.5*Math.sin(u*7+i))*Math.sin(u*Math.PI); k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+    for (let k=0;k<=24;k++){ const u=k/24, X=-len+2*len*u, Y=-wid*(0.6+0.5*Math.sin(u*7+i+t*0.3))*Math.sin(u*Math.PI); k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
     for (let k=24;k>=0;k--){ const u=k/24, X=-len+2*len*u, Y=wid*(0.6+0.5*Math.cos(u*6+i))*Math.sin(u*Math.PI); ctx.lineTo(X,Y); }
     ctx.closePath(); ctx.fill();
     ctx.restore();
@@ -1273,12 +1282,13 @@ function drawEarth(cx,cy,R,t){
   const sp=ctx.createRadialGradient(-R*0.42,-R*0.36,0,-R*0.42,-R*0.36,R*0.5);
   sp.addColorStop(0,'rgba(255,255,255,0.28)'); sp.addColorStop(1,'rgba(255,255,255,0)');
   ctx.fillStyle=sp; ctx.beginPath(); ctx.arc(-R*0.42,-R*0.36,R*0.5,0,7); ctx.fill();
-  /* city lights on the night side */
+  /* city lights on the night side — they twinkle */
   ctx.fillStyle='rgba(255,214,140,0.7)';
   for (let i=0;i<70 && landA>0.02;i++){
     const p=proj(hash(i*2.9)*360-180, (hash(i*1.3)-0.5)*120);
     if (p[2]<0 || p[0]<R*0.25) continue;
-    ctx.globalAlpha=(0.35+0.4*hash(i+3))*landA;
+    const tw=0.55+0.45*(0.5+0.5*Math.sin(t*3.8+i*2.3));
+    ctx.globalAlpha=(0.35+0.4*hash(i+3))*landA*tw;
     ctx.fillRect(p[0],p[1],Math.max(1,R*0.008),Math.max(1,R*0.008));
   }
   ctx.globalAlpha=1;
@@ -1319,11 +1329,11 @@ function drawCloudbank(cx,cy,R,t){
 }
 
 function drawMountain(cx,cy,R,t){
-  /* fractal massif (preview-iterated): jagged per-peak construction — lit west
-     face / shaded east face split on a jagged spine, hugging snow caps above a
-     snowline, hazy back ranges, forest band; base is planted ON the ground */
+  /* fractal massif: jagged per-peak construction — lit west face / shaded east
+     face split on a jagged spine, snow caps, forest band; base ON the ground.
+     Clouds, mist, wind-sway and snow glitter give it weather. */
   ctx.save(); ctx.translate(cx,cy);
-  const yb=R*0.55;
+  const yb=R;                              /* local +R = horizon (gh:0.50) */
   const jag=(x0,y0,x1,y1,seed,n,amp)=>{
     const L=Math.hypot(x1-x0,y1-y0)||1, nx=-(y1-y0)/L, ny=(x1-x0)/L, pts=[];
     for (let i=0;i<=n;i++){
@@ -1353,16 +1363,53 @@ function drawMountain(cx,cy,R,t){
       }
     }
   };
-  peak(-0.90*R,-0.55*R,0.75*R,0.70*R,'#b0c0d0','#a3b4c6',31,false,yb-R*0.10);
-  peak( 0.55*R,-0.70*R,0.80*R,0.85*R,'#aabccc','#9eb0c2',37,false,yb-R*0.10);
-  peak(-0.25*R,-0.85*R,0.80*R,0.75*R,'#8ca0b6','#7c92aa',41,true, yb-R*0.05);
-  peak( 0.95*R,-0.60*R,0.70*R,0.65*R,'#92a6ba','#8298ae',47,false,yb-R*0.05);
+  const puff=(x,y,r,a)=>{
+    const g=ctx.createRadialGradient(x-r*0.28,y-r*0.32,r*0.08,x,y,r);
+    g.addColorStop(0,'rgba(255,255,255,'+a.toFixed(2)+')');
+    g.addColorStop(0.55,'rgba(228,236,244,'+(a*0.45).toFixed(2)+')');
+    g.addColorStop(1,'rgba(228,236,244,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  };
+  const wrapX=(x,span)=>{ const s=span; return ((x%s)+s)%s - s/2; };
+  const drift=t*R*0.035;
+  /* back weather — clouds behind the massif */
+  for (let i=0;i<7;i++){
+    const x=wrapX(hash(i*2.1)*R*3.6 + drift*(0.35+0.4*hash(i)), R*3.6);
+    const y=yb-R*(0.80+0.50*hash(i+3));
+    puff(x,y,R*(0.20+0.20*hash(i+5)), 0.20+0.12*hash(i));
+  }
+  peak(-0.90*R,-0.55*R,0.75*R,0.70*R,'#b0c0d0','#a3b4c6',31,false,yb);
+  peak( 0.55*R,-0.70*R,0.80*R,0.85*R,'#aabccc','#9eb0c2',37,false,yb);
+  peak(-0.25*R,-0.85*R,0.80*R,0.75*R,'#8ca0b6','#7c92aa',41,true, yb);
+  peak( 0.95*R,-0.60*R,0.70*R,0.65*R,'#92a6ba','#8298ae',47,false,yb);
+  /* mid clouds weaving through the saddles */
+  for (let i=0;i<5;i++){
+    const x=wrapX(hash(i*4.1)*R*3.2 + drift*(0.55+0.25*hash(i+2)), R*3.2);
+    const y=yb-R*(0.50+0.38*hash(i+7));
+    puff(x,y,R*(0.14+0.16*hash(i+8)), 0.28+0.14*hash(i));
+  }
   peak(-0.45*R,-1.30*R,0.95*R,0.85*R,'#70849b','#42546a',53,true, yb);
   peak( 0.62*R,-1.02*R,0.85*R,0.90*R,'#68809d','#3a4c62',59,true, yb);
+  /* forest band — crowns lean with the wind */
   for (let i=0;i<70;i++){
-    const x=(-1.5+3.0*hash(i*3.3))*R, s=R*(0.03+0.045*hash(i)), yy=yb-R*0.01+R*0.03*hash(i+40);
+    const sway=Math.sin(t*1.35+i*0.37)*R*0.014;
+    const x=(-1.5+3.0*hash(i*3.3))*R + sway, s=R*(0.03+0.045*hash(i)), yy=yb-R*0.01+R*0.03*hash(i+40);
     ctx.fillStyle='rgba('+(50+18*hash(i+9)|0)+','+(82+14*hash(i+5)|0)+',50,0.95)';
     ctx.beginPath(); ctx.moveTo(x,yy-s); ctx.lineTo(x-s*0.45,yy); ctx.lineTo(x+s*0.45,yy); ctx.closePath(); ctx.fill();
+  }
+  /* valley mist hugging the ground */
+  for (let i=0;i<4;i++){
+    const x=Math.sin(t*0.11+i*1.6)*R*0.85 + (i-1.5)*R*0.65;
+    puff(x, yb-R*0.06, R*(0.32+0.12*hash(i+2)), 0.13+0.05*hash(i));
+  }
+  /* snow glitter on the sunlit faces */
+  if (R>=14){
+    for (let i=0;i<18;i++){
+      const x=(-0.85+1.7*hash(i*1.9))*R, y=yb-R*(0.78+0.48*hash(i*2.7));
+      const tw=0.25+0.75*(0.5+0.5*Math.sin(t*3.4+i*2.1));
+      ctx.fillStyle='rgba(255,255,255,'+(0.40*tw).toFixed(2)+')';
+      ctx.beginPath(); ctx.arc(x,y,Math.max(0.6,R*0.007),0,7); ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -1372,7 +1419,16 @@ function drawCity(cx,cy,R,t){
   /* a downtown district seen from street level: three depth layers in haze,
      glass/stone towers with setbacks, crowns and antennas, a lit avenue */
   ctx.save(); ctx.translate(cx,cy);
-  const base=R*0.48;
+  const base=R;                            /* local +R = horizon (gh:0.50) */
+  const wrap=(x,span)=>{ const s=span||R*2.6; return ((x%s)+s)%s - s/2; };
+  /* distant cloud bank behind the skyline */
+  for (let i=0;i<5;i++){
+    const x=wrap(hash(i*2.4)*R*2.8 + t*R*0.012*(0.4+hash(i)), R*2.8);
+    const y=base-R*(0.95+0.35*hash(i+3)), rr=R*(0.22+0.18*hash(i+5));
+    const cg=ctx.createRadialGradient(x,y,0,x,y,rr);
+    cg.addColorStop(0,'rgba(255,255,255,0.45)'); cg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.ellipse(x,y,rr,rr*0.38,0,0,7); ctx.fill();
+  }
   const tower=(x,w,h,dep,seed)=>{
     /* dep 0 = far (hazy) … 1 = near */
     const mix=(a,b,u)=>Math.round(a+(b-a)*u);
@@ -1387,13 +1443,15 @@ function drawCity(cx,cy,R,t){
     if (hash(seed+2)<0.5){ fg.addColorStop(0,c(158,178,200)); fg.addColorStop(0.6,c(118,140,166)); fg.addColorStop(1,c(90,108,132)); }
     else { fg.addColorStop(0,c(190,182,170)); fg.addColorStop(0.6,c(150,142,132)); fg.addColorStop(1,c(112,104,96)); }
     ctx.fillStyle=fg; ctx.fillRect(x0,y0,w,h);
-    /* windows: floor bands */
+    /* windows: floor bands — each pane switches on its own clock */
     const fl=Math.max(3,(h/(R*0.028))|0), cols=Math.max(2,(w/(R*0.03))|0);
     for (let r2=0;r2<fl;r2++){
       const fy=y0+h*(0.04+r2*0.92/fl), fh=h*0.92/fl;
       for (let c2=0;c2<cols;c2++){
-        const lit=hash(seed*13+r2*3.1+c2*1.7)<0.45;
-        ctx.fillStyle=lit?c(255,232,180,0.55*dep+0.2):c(36,46,60,0.35+0.35*dep);
+        const ph=hash(seed*13+r2*3.1+c2*1.7);
+        const lit=hash(ph*40+Math.floor(t*0.32+ph*7))<(0.40+0.16*dep);
+        const glow=lit?0.75+0.25*Math.sin(t*2.4+ph*9):0;
+        ctx.fillStyle=lit?c(255,232,180,(0.45*dep+0.22)*glow):c(36,46,60,0.35+0.35*dep);
         ctx.fillRect(x0+w*(0.08+c2*0.86/cols), fy, w*0.86/cols*0.55, fh*0.45);
       }
     }
@@ -1403,6 +1461,16 @@ function drawCity(cx,cy,R,t){
     else if (k<0.6){ ctx.strokeStyle=c(150,160,175); ctx.lineWidth=Math.max(1,R*0.012); ctx.beginPath(); ctx.moveTo(x,y0); ctx.lineTo(x,y0-h*0.16); ctx.stroke();
       const bl=0.5+0.5*Math.sin(t*2.5+seed); ctx.fillStyle='rgba(255,70,60,'+(0.3+0.6*bl).toFixed(2)+')'; ctx.beginPath(); ctx.arc(x,y0-h*0.16,Math.max(1.4,R*0.012),0,7); ctx.fill(); }
     else if (k<0.75){ ctx.fillStyle=c(120,132,150); ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x,y0-h*0.09); ctx.lineTo(x0+w,y0); ctx.closePath(); ctx.fill(); }
+    /* rooftop steam on some nearer towers */
+    if (dep>0.45 && hash(seed+11)<0.42){
+      for (let p=0;p<4;p++){
+        const u=(t*0.16+hash(seed+p)+p*0.23)%1;
+        const sx=x+(hash(seed+p*2)-0.5)*w*0.35+Math.sin(t*0.9+p)*R*0.02;
+        const sy=y0-u*R*0.20;
+        ctx.fillStyle='rgba(220,230,238,'+(0.26*(1-u)*dep).toFixed(2)+')';
+        ctx.beginPath(); ctx.ellipse(sx,sy,R*(0.025+0.045*u),R*(0.018+0.028*u),0,0,7); ctx.fill();
+      }
+    }
   };
   /* far layer */
   for (let i=0;i<10;i++){ const x=((i/9)-0.5)*2.4*R+R*0.07, h=R*(0.45+0.6*hash(i*5.1+3)), w=R*(0.16+0.1*hash(i*2.9)); tower(x,w,h,0.25,i+40); }
@@ -1410,30 +1478,37 @@ function drawCity(cx,cy,R,t){
   for (let i=0;i<9;i++){ const x=((i/8)-0.5)*2.2*R-R*0.05, h=R*(0.35+0.75*hash(i*3.3+2)), w=R*(0.15+0.11*hash(i*1.7)); tower(x,w,h,0.6,i+20); }
   /* near layer */
   for (let i=0;i<6;i++){ const x=((i/5)-0.5)*2.1*R+R*0.03, h=R*(0.25+0.55*hash(i*7.7+1)), w=R*(0.18+0.12*hash(i*4.1)); tower(x,w,h,1,i); }
-  /* street: asphalt, lit windows reflected, tiny cars, street lamps, trees */
+  /* street: asphalt, centre line, traffic, street lamps, trees */
   const sg=ctx.createLinearGradient(0,base-R*0.03,0,base+R*0.06);
   sg.addColorStop(0,'rgba(70,76,84,0)'); sg.addColorStop(0.4,'rgba(70,76,84,0.9)'); sg.addColorStop(1,'rgba(60,66,74,0.95)');
   ctx.fillStyle=sg; ctx.fillRect(-R*1.3,base-R*0.03,R*2.6,R*0.09);
   ctx.strokeStyle='rgba(255,235,160,0.55)'; ctx.lineWidth=Math.max(1,R*0.006); ctx.setLineDash([R*0.03,R*0.03]);
   ctx.beginPath(); ctx.moveTo(-R*1.3,base+R*0.015); ctx.lineTo(R*1.3,base+R*0.015); ctx.stroke(); ctx.setLineDash([]);
-  for (let i=0;i<9;i++){
-    const x=((hash(i*3.7)*2.4-1.2)*R + t*R*0.05*(i%2?1:-1))%(R*2.4);
-    const xx=x>R*1.2?x-R*2.4:(x<-R*1.2?x+R*2.4:x);
-    ctx.fillStyle=['#c9d4dd','#d8b26e','#8b9fb9','#dce3ea'][i%4];
-    ctx.fillRect(xx,base+R*0.005+(i%2)*R*0.02,R*0.035,R*0.014);
+  for (let i=0;i<10;i++){
+    const span=R*2.5, dir=i%2?1:-1;
+    const x=wrap(hash(i*3.7)*span + t*R*(0.07+0.05*hash(i))*dir, span);
+    const y=base+R*(dir>0?0.003:0.022);
+    const L=R*0.046, hh=R*0.015;
+    ctx.fillStyle=['#c5d0dc','#d4a85c','#8fa3bb','#e6edf3','#c07060'][i%5];
+    ctx.fillRect(x-L/2,y,L,hh);
+    ctx.fillStyle='#3a4654'; ctx.fillRect(x-L*0.22,y+hh*0.08,L*0.44,hh*0.55);
+    ctx.fillStyle='#fff4c8'; ctx.fillRect(x+dir*(L/2-R*0.006), y+hh*0.2, R*0.008, hh*0.55);
+    ctx.fillStyle='#ff6a55'; ctx.fillRect(x-dir*(L/2-R*0.002), y+hh*0.2, R*0.007, hh*0.55);
   }
   for (let i=0;i<7;i++){
     const x=((i/6)-0.5)*2.2*R;
     ctx.fillStyle='#3d4650'; ctx.fillRect(x-R*0.004,base-R*0.09,R*0.008,R*0.09);
-    const lg=ctx.createRadialGradient(x,base-R*0.09,0,x,base-R*0.09,R*0.05);
-    lg.addColorStop(0,'rgba(255,232,170,0.7)'); lg.addColorStop(1,'rgba(255,232,170,0)');
-    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(x,base-R*0.09,R*0.05,0,7); ctx.fill();
+    const pulse=0.55+0.45*(0.5+0.5*Math.sin(t*2.6+i*1.3));
+    const lg=ctx.createRadialGradient(x,base-R*0.09,0,x,base-R*0.09,R*0.055);
+    lg.addColorStop(0,'rgba(255,232,170,'+(0.72*pulse).toFixed(2)+')'); lg.addColorStop(1,'rgba(255,232,170,0)');
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(x,base-R*0.09,R*0.055,0,7); ctx.fill();
   }
   for (let i=0;i<8;i++){
     const x=((i/7)-0.5)*2.3*R+R*0.09, s=R*(0.04+0.02*hash(i));
+    const sway=Math.sin(t*1.15+i)*s*0.12;
     ctx.fillStyle='#4a3a2a'; ctx.fillRect(x-s*0.1,base-s*1.2,s*0.2,s*1.2);
     ctx.fillStyle='rgba('+(60+20*hash(i+3)|0)+','+(110+20*hash(i+5)|0)+',60,0.95)';
-    ctx.beginPath(); ctx.arc(x,base-s*1.5,s*0.7,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+sway,base-s*1.5,s*0.7,0,7); ctx.fill();
   }
   /* ground haze */
   const sh=ctx.createLinearGradient(0,base-R*0.2,0,base+R*0.06);
@@ -1447,7 +1522,7 @@ function drawBuilding(cx,cy,R,t){
   /* 30 m apartment block (9 storeys): lit front, shaded side, balconies,
      glass entrance with canopy, sidewalk, planted trees, blinking mast light */
   ctx.save(); ctx.translate(cx,cy);
-  const h=R*1.9, w=R*1.25, x0=-w/2, y0=-h/2, side=R*0.34, yb=y0+h;
+  const h=R*1.9, w=R*1.25, x0=-w/2, side=R*0.34, yb=R, y0=yb-h;
   /* contact shadow */
   ctx.fillStyle='rgba(0,0,0,0.18)';
   ctx.beginPath(); ctx.ellipse(side*0.35,yb+R*0.01,w*0.9,R*0.05,0,0,7); ctx.fill();
@@ -1471,14 +1546,14 @@ function drawBuilding(cx,cy,R,t){
       const wx=x0+w*(0.06+c2*0.19), ww=w*0.13;
       if (c2===2 && r2>2){
         /* balcony window + railing */
-        ctx.fillStyle=hash(r2*7+c2)<0.35?'rgba(255,224,150,0.9)':'rgba(56,72,92,0.8)';
+        ctx.fillStyle=hash(r2*7+c2+Math.floor(t*0.3+r2*0.4))<0.35?'rgba(255,224,150,0.9)':'rgba(56,72,92,0.8)';
         ctx.fillRect(wx-ww*0.1, fy+fh*0.1, ww*1.2, fh*0.62);
         ctx.fillStyle='rgba(120,130,145,0.9)'; ctx.fillRect(wx-ww*0.25, fy+fh*0.55, ww*1.5, fh*0.07);
         ctx.strokeStyle='rgba(120,130,145,0.8)'; ctx.lineWidth=Math.max(0.8,R*0.006);
         for (let k=0;k<6;k++){ ctx.beginPath(); ctx.moveTo(wx-ww*0.25+k*ww*0.3, fy+fh*0.55); ctx.lineTo(wx-ww*0.25+k*ww*0.3, fy+fh*0.8); ctx.stroke(); }
         ctx.fillStyle='rgba(120,130,145,0.9)'; ctx.fillRect(wx-ww*0.25, fy+fh*0.8, ww*1.5, fh*0.06);
       } else {
-        ctx.fillStyle=hash(r2*7+c2*3.1)<0.32?'rgba(255,224,150,0.9)':'rgba(56,72,92,0.8)';
+        ctx.fillStyle=hash(r2*7+c2*3.1+Math.floor(t*0.28+c2*0.7))<0.32?'rgba(255,224,150,0.9)':'rgba(56,72,92,0.8)';
         ctx.fillRect(wx, fy+fh*0.12, ww, fh*0.62);
         /* sky reflection on glass */
         ctx.fillStyle='rgba(255,255,255,0.18)'; ctx.fillRect(wx, fy+fh*0.12, ww*0.35, fh*0.62);
@@ -1505,118 +1580,126 @@ function drawBuilding(cx,cy,R,t){
   ctx.fillStyle='#8f8a80'; ctx.fillRect(x0-R*0.5,yb+R*0.03,w+side+R*0.9,R*0.008);
   /* trees flanking the entrance */
   for (const tx of [x0-R*0.22, x0+w+side+R*0.18]){
+    const sway=Math.sin(t*1.2+tx)*R*0.012;
     ctx.fillStyle='#4e3b2a'; ctx.fillRect(tx-R*0.012,yb-R*0.22,R*0.024,R*0.22);
     for (const [ox,oy,rr,col] of [[0,-0.33,0.14,'#4f7f3a'],[-0.08,-0.26,0.11,'#5e9245'],[0.09,-0.27,0.10,'#487537'],[0,-0.42,0.09,'#6aa04f']]){
-      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tx+ox*R,yb+oy*R,rr*R,0,7); ctx.fill();
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tx+ox*R+sway,yb+oy*R,rr*R,0,7); ctx.fill();
     }
   }
   ctx.restore();
 }
 
 /* ============================== HUMAN ============================== */
-/* Realistic standing figure, front view, arms relaxed. The RIGHT hand (viewer's
-   right) is the zoom target; the pin's off/oy put it on the zoom centre.
-   Proportions in units of H (height): head 1/7.5, shoulders 0.30H, hands at ~0.58H. */
-const HU = { handX:0.186, handY:0.585 };   /* target hand centre, in H units from top-centre */
+/* Front-facing standing figure. Viewer's-right hand = person's left hand, and
+   is the zoom target: HU is that hand's middle-finger MCP in units of height H,
+   measured from the top-centre of the figure (matches drawHand's origin). */
+const HU = { handX:0.172, handY:0.552 };
 function drawHuman(cx,cy,R,t){
   const H=2*R, top=cy-R;
-  const br=Math.sin(t*1.3)*0.0035*H;          /* breathing lift of chest/head */
-  const sw=Math.sin(t*0.6)*0.004*H;           /* slow weight sway */
-  const X=x=>cx+x*H+sw, Y=y=>top+y*H;
-  const SK=['#efc7a4','#d9a67c','#a8724c'], SH=['#6d9bd6','#3e6fb0','#264b7a'], JN=['#5a6d92','#3a4b70','#25314f'], HR=['#5a3d29','#3a2618','#1f140c'];
-  const limb=(pts,cols)=>{
-    /* pts: [x,y,w] in H units; polygon with perpendicular gradient, round ends */
-    const Ls=[],Rs=[];
-    for(let i=0;i<pts.length;i++){
-      const [x,y,w]=pts[i]; let dx,dy;
-      if(i===0){dx=pts[1][0]-x;dy=pts[1][1]-y;} else if(i===pts.length-1){dx=x-pts[i-1][0];dy=y-pts[i-1][1];}
-      else{dx=pts[i+1][0]-pts[i-1][0];dy=pts[i+1][1]-pts[i-1][1];}
-      const L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
-      Ls.push([x+nx*w/2,y+ny*w/2]); Rs.push([x-nx*w/2,y-ny*w/2]);
-    }
-    let minx=1e9,maxx=-1e9; for (const [x,y,w] of pts){ minx=Math.min(minx,x-w/2); maxx=Math.max(maxx,x+w/2); }
-    ctx.fillStyle=gradX(X(minx),X(maxx),cols[0],cols[1],cols[2]);
-    ctx.beginPath();
-    Ls.forEach(([x,y],i)=>i?ctx.lineTo(X(x),Y(y)):ctx.moveTo(X(x),Y(y)));
-    Rs.reverse().forEach(([x,y])=>ctx.lineTo(X(x),Y(y)));
-    ctx.closePath(); ctx.fill();
-    for(const [x,y,w] of [pts[0],pts[pts.length-1]]){ ctx.beginPath(); ctx.arc(X(x),Y(y),w*H/2,0,7); ctx.fill(); }
-  };
+  const X=x=>cx+x*H;
+  const Yu=y=>top+y*H;
+  const Yl=y=>top+y*H;
+  const SK=['#efc7a4','#d9a67c','#a8724c'], SH=['#6d9bd6','#3e6fb0','#264b7a'];
+  const JN=['#5a6d92','#3a4b70','#25314f'], HR=['#5a3d29','#3a2618','#1f140c'];
+  /* idle life — breath/blink/left-arm only. The zoom-target (viewer's-right)
+     hand MCP stays at HU so the hand pin never ghosts. */
+  const breath=0.016*Math.sin(t*1.22);
+  const leftIdle=Math.sin(t*0.88)*0.015;
+  const bmod=(t*0.36)%1;
+  const lid=bmod>0.93?Math.sin((bmod-0.93)/0.07*Math.PI):0;
+  const nod=0.0035*Math.sin(t*1.22);
   ctx.save();
   /* ground shadow */
   ctx.fillStyle='rgba(0,0,0,0.22)';
-  ctx.beginPath(); ctx.ellipse(X(0), Y(0.992), 0.17*H, 0.02*H, 0, 0, 7); ctx.fill();
-  /* legs (jeans) */
+  ctx.beginPath(); ctx.ellipse(X(0), Yl(0.992), 0.16*H, 0.018*H, 0, 0, 7); ctx.fill();
+  /* legs — hip to ankle, planted */
   for (const s of [-1,1]){
-    limb([[s*0.062,0.50,0.11],[s*0.062,0.72,0.088],[s*0.06,0.94,0.064]],JN);
-    /* seam highlight */
-    ctx.strokeStyle='rgba(150,170,205,0.18)'; ctx.lineWidth=Math.max(0.6,H*0.003);
-    ctx.beginPath(); ctx.moveTo(X(s*0.075),Y(0.53)); ctx.lineTo(X(s*0.07),Y(0.93)); ctx.stroke();
+    tube(X(s*0.055),Yl(0.495), X(s*0.058),Yl(0.72), 0.100*H, 0.084*H, JN[0],JN[1],JN[2]);
+    tube(X(s*0.058),Yl(0.72),  X(s*0.060),Yl(0.945), 0.084*H, 0.062*H, JN[0],JN[1],JN[2]);
+    ctx.strokeStyle='rgba(150,170,205,0.16)'; ctx.lineWidth=Math.max(0.6,H*0.003);
+    ctx.beginPath(); ctx.moveTo(X(s*0.072),Yl(0.52)); ctx.lineTo(X(s*0.070),Yl(0.93)); ctx.stroke();
   }
   /* shoes */
   for (const s of [-1,1]){
     ctx.fillStyle=gradX(X(s*0.06-0.05),X(s*0.06+0.05),'#4a4a52','#2b2b31','#151518');
-    ctx.beginPath(); ctx.ellipse(X(s*0.066),Y(0.968),0.05*H,0.028*H,s*0.12,0,7); ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,0.10)'; ctx.beginPath(); ctx.ellipse(X(s*0.066),Y(0.958),0.045*H,0.012*H,0,0,7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(X(s*0.068),Yl(0.970),0.048*H,0.026*H,s*0.10,0,7); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.ellipse(X(s*0.068),Yl(0.960),0.042*H,0.011*H,0,0,7); ctx.fill();
   }
-  /* arms (skin) — shoulder → elbow → wrist */
+  /* arms start INSIDE the sleeve (no proximal cap, so no floating deltoid). */
+  const armSeg=(x1,y1,x2,y2,w1,w2)=>{
+    const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
+    ctx.fillStyle=gradX(Math.min(x1,x2)-w1, Math.max(x1,x2)+w1, SK[0],SK[1],SK[2]);
+    ctx.beginPath();
+    ctx.moveTo(x1+nx*w1/2, y1+ny*w1/2); ctx.lineTo(x2+nx*w2/2, y2+ny*w2/2);
+    ctx.lineTo(x2-nx*w2/2, y2-ny*w2/2); ctx.lineTo(x1-nx*w1/2, y1-ny*w1/2);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x2,y2,w2/2,0,7); ctx.fill();
+  };
   for (const s of [-1,1]){
-    limb([[s*0.155,0.205,0.064],[s*0.172,0.36,0.052],[s*0.186,0.535,0.038]],SK);
+    const idle=s<0?leftIdle:0;
+    const wx=X(s*HU.handX+idle*0.55), wy=Yu(HU.handY-0.028+Math.abs(idle)*0.35);
+    armSeg(X(s*0.138),Yu(0.235), X(s*0.158+idle*0.25),Yu(0.360+Math.abs(idle)*0.12), 0.054*H, 0.046*H);
+    armSeg(X(s*0.158+idle*0.25),Yu(0.360+Math.abs(idle)*0.12), wx, wy, 0.046*H, 0.032*H);
   }
-  /* hands: back of hand, fingers down, thumb toward the body (matches drawHand) */
-  for (const s of [-1,1]){
-    const hx=s*HU.handX, hy=HU.handY;
-    ctx.fillStyle=gradX(X(hx-0.03),X(hx+0.03),SK[0],SK[1],SK[2]);
-    rrPath(X(hx-0.024),Y(hy-0.038),0.048*H,0.05*H,0.012*H); ctx.fill();
-    for (let f=0;f<4;f++){ const fx=hx-0.018+f*0.012; rrPath(X(fx-0.005),Y(hy+0.005),0.0105*H,[0.036,0.043,0.04,0.03][f]*H,0.005*H); ctx.fill(); }
-    rrPath(X(hx-s*0.036-0.006),Y(hy-0.03),0.012*H,0.036*H,0.006*H); ctx.fill();
-  }
-  /* torso: T-shirt */
-  ctx.fillStyle=gradX(X(-0.155),X(0.155),SH[0],SH[1],SH[2]);
+  /* T-shirt: sleeves sit ON the shoulder and wrap the upper arm completely.
+     Breath is a tiny chest scale from the midline — hands stay put. */
+  const Xs=x=>cx+x*H*(1+breath);
+  ctx.fillStyle=gradX(Xs(-0.15),Xs(0.15),SH[0],SH[1],SH[2]);
   ctx.beginPath();
-  ctx.moveTo(X(-0.03),Y(0.165)+br);
-  ctx.quadraticCurveTo(X(-0.12),Y(0.168)+br, X(-0.16),Y(0.195)+br);   /* left shoulder */
-  ctx.lineTo(X(-0.182),Y(0.29));                                        /* sleeve end */
-  ctx.lineTo(X(-0.125),Y(0.305));                                       /* armpit */
-  ctx.quadraticCurveTo(X(-0.108),Y(0.40), X(-0.118),Y(0.485));          /* waist → hem */
-  ctx.lineTo(X(0.118),Y(0.485));
-  ctx.quadraticCurveTo(X(0.108),Y(0.40), X(0.125),Y(0.305));
-  ctx.lineTo(X(0.182),Y(0.29));
-  ctx.lineTo(X(0.16),Y(0.195)+br);
-  ctx.quadraticCurveTo(X(0.12),Y(0.168)+br, X(0.03),Y(0.165)+br);
-  ctx.quadraticCurveTo(X(0),Y(0.19)+br, X(-0.03),Y(0.165)+br);        /* neckline */
+  ctx.moveTo(Xs(-0.028),Yu(0.165));
+  ctx.quadraticCurveTo(Xs(-0.095),Yu(0.160), Xs(-0.155),Yu(0.188));     /* left shoulder seam */
+  ctx.quadraticCurveTo(Xs(-0.215),Yu(0.215), Xs(-0.200),Yu(0.305));     /* sleeve outer */
+  ctx.quadraticCurveTo(Xs(-0.175),Yu(0.325), Xs(-0.128),Yu(0.312));     /* sleeve hem on arm */
+  ctx.lineTo(Xs(-0.108),Yu(0.325));                                    /* armpit */
+  ctx.quadraticCurveTo(Xs(-0.098),Yu(0.408), Xs(-0.106),Yu(0.478));     /* waist */
+  ctx.lineTo(Xs(0.106),Yu(0.478));
+  ctx.quadraticCurveTo(Xs(0.098),Yu(0.408), Xs(0.108),Yu(0.325));
+  ctx.lineTo(Xs(0.128),Yu(0.312));
+  ctx.quadraticCurveTo(Xs(0.175),Yu(0.325), Xs(0.200),Yu(0.305));
+  ctx.quadraticCurveTo(Xs(0.215),Yu(0.215), Xs(0.155),Yu(0.188));
+  ctx.quadraticCurveTo(Xs(0.095),Yu(0.160), Xs(0.028),Yu(0.165));
+  ctx.quadraticCurveTo(Xs(0),Yu(0.188), Xs(-0.028),Yu(0.165));          /* neckline */
   ctx.closePath(); ctx.fill();
-  /* shirt folds / hem shade */
-  ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(X(-0.118),Y(0.47),0.236*H,0.015*H);
+  ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(Xs(-0.108),Yu(0.464),0.216*H*(1+breath),0.014*H);
   ctx.strokeStyle='rgba(0,0,0,0.10)'; ctx.lineWidth=Math.max(0.6,H*0.003);
-  ctx.beginPath(); ctx.moveTo(X(-0.06),Y(0.33)); ctx.quadraticCurveTo(X(-0.03),Y(0.40),X(-0.05),Y(0.47)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(Xs(-0.055),Yu(0.33)); ctx.quadraticCurveTo(Xs(-0.028),Yu(0.40),Xs(-0.048),Yu(0.465)); ctx.stroke();
+  /* hands — same renderer as the hand pin. The viewer's-right copy crossfades
+     out as the dedicated hand pin fades in, so the two never ghost. */
+  const hR=(0.18/1.7)*H/2;
+  const handPx=0.18/(5*Math.pow(10,S.view))*CW;
+  const pinA=clamp((handPx-0.05*CW)/(0.08*CW),0,1);
+  drawHand(X(-HU.handX+leftIdle*0.55), Yu(HU.handY+Math.abs(leftIdle)*0.35), hR, t, {flip:1, nested:1});
+  if (pinA<0.08){
+    drawHand(X(HU.handX), Yu(HU.handY), hR, t, {nested:1});
+  }
   /* neck */
-  ctx.fillStyle=gradX(X(-0.026),X(0.026),SK[1],SK[1],SK[2]);
-  ctx.fillRect(X(-0.026),Y(0.115)+br,0.052*H,0.075*H);
-  ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(X(-0.026),Y(0.115)+br,0.052*H,0.02*H);
+  ctx.fillStyle=gradX(X(-0.024),X(0.024),SK[1],SK[1],SK[2]);
+  ctx.beginPath();
+  ctx.moveTo(X(-0.022),Yu(0.130)); ctx.lineTo(X(-0.026),Yu(0.185));
+  ctx.lineTo(X(0.026),Yu(0.185)); ctx.lineTo(X(0.022),Yu(0.130));
+  ctx.closePath(); ctx.fill();
   /* head */
-  const hy=Y(0.068)+br;
+  const hy=Yu(0.072+nod);
   ctx.fillStyle=gradX(X(-0.055),X(0.055),SK[0],SK[1],SK[2]);
-  ctx.beginPath(); ctx.ellipse(X(0),hy,0.053*H,0.068*H,0,0,7); ctx.fill();
-  /* ears */
-  for (const s of [-1,1]){ ctx.beginPath(); ctx.ellipse(X(s*0.054),hy+0.004*H,0.008*H,0.013*H,0,0,7); ctx.fill(); }
-  /* hair: short crop with fringe */
+  ctx.beginPath(); ctx.ellipse(X(0),hy,0.052*H,0.066*H,0,0,7); ctx.fill();
+  for (const s of [-1,1]){ ctx.beginPath(); ctx.ellipse(X(s*0.053),hy+0.004*H,0.008*H,0.013*H,0,0,7); ctx.fill(); }
   ctx.fillStyle=gradX(X(-0.06),X(0.06),HR[0],HR[1],HR[2]);
   ctx.beginPath();
-  ctx.moveTo(X(-0.056),hy+0.002*H);
-  ctx.quadraticCurveTo(X(-0.062),hy-0.06*H, X(0),hy-0.072*H);
-  ctx.quadraticCurveTo(X(0.062),hy-0.06*H, X(0.056),hy+0.002*H);
-  ctx.quadraticCurveTo(X(0.05),hy-0.03*H, X(0.02),hy-0.034*H);
-  ctx.quadraticCurveTo(X(-0.02),hy-0.045*H, X(-0.05),hy-0.028*H);
+  ctx.moveTo(X(-0.054),hy+0.004*H);
+  ctx.quadraticCurveTo(X(-0.060),hy-0.058*H, X(0),hy-0.070*H);
+  ctx.quadraticCurveTo(X(0.060),hy-0.058*H, X(0.054),hy+0.004*H);
+  ctx.quadraticCurveTo(X(0.048),hy-0.028*H, X(0.018),hy-0.032*H);
+  ctx.quadraticCurveTo(X(-0.018),hy-0.042*H, X(-0.048),hy-0.026*H);
   ctx.closePath(); ctx.fill();
-  /* face */
-  ctx.fillStyle='rgba(60,35,25,0.85)';
-  for (const s of [-1,1]){ ctx.beginPath(); ctx.ellipse(X(s*0.02),hy-0.002*H,0.0055*H,0.0035*H,0,0,7); ctx.fill(); }
-  ctx.strokeStyle='rgba(60,35,25,0.55)'; ctx.lineWidth=Math.max(0.6,H*0.0025);
-  for (const s of [-1,1]){ ctx.beginPath(); ctx.moveTo(X(s*0.03),hy-0.014*H); ctx.lineTo(X(s*0.011),hy-0.016*H); ctx.stroke(); }
-  ctx.strokeStyle='rgba(120,70,50,0.5)';
-  ctx.beginPath(); ctx.moveTo(X(-0.012),hy+0.032*H); ctx.quadraticCurveTo(X(0),hy+0.038*H,X(0.012),hy+0.032*H); ctx.stroke();
-  ctx.fillStyle='rgba(0,0,0,0.08)'; ctx.beginPath(); ctx.ellipse(X(0.004),hy+0.016*H,0.008*H,0.006*H,0,0,7); ctx.fill();
+  if (H>90){
+    ctx.fillStyle='rgba(60,35,25,0.85)';
+    for (const s of [-1,1]){ ctx.beginPath(); ctx.ellipse(X(s*0.019),hy-0.002*H,0.005*H,Math.max(H*0.0006,0.0032*H*(1-lid)),0,0,7); ctx.fill(); }
+    ctx.strokeStyle='rgba(60,35,25,0.50)'; ctx.lineWidth=Math.max(0.6,H*0.0024);
+    for (const s of [-1,1]){ ctx.beginPath(); ctx.moveTo(X(s*0.028),hy-0.014*H); ctx.lineTo(X(s*0.010),hy-0.015*H); ctx.stroke(); }
+    ctx.strokeStyle='rgba(120,70,50,0.5)';
+    ctx.beginPath(); ctx.moveTo(X(-0.011),hy+0.030*H); ctx.quadraticCurveTo(X(0),hy+0.038*H+breath*H*0.15,X(0.011),hy+0.030*H); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -1762,110 +1845,126 @@ function furrows(u,alpha){
 let _cx=0,_cy=0;   /* current local-origin position (set by each target-anchored draw) */
 
 /* ============================== HAND ============================== */
-/* right hand hanging, seen from the back; origin = proximal segment of the middle
-   finger (the finger we dive into). Units: R = half the hand length (9 cm). */
-function drawHand(cx,cy,R,t){
-  /* Rebuilt (user request: continuous + realistic). All flesh is filled with ONE
-     shared gradient object, so forearm, palm, thumb and fingers merge seamlessly
-     — the old per-tube gradients restarted the lighting at every segment and
-     read as seams and a pale "ghost" thumb. Idle animation: slow sway plus a
-     phase-offset micro-curl per finger. */
-  ctx.save(); _cx=cx; _cy=cy; ctx.translate(cx,cy);
-  ctx.translate(0.12*R,-0.30*R);
-  const sway=Math.sin(t*0.6)*0.01*R;
-  ctx.translate(sway,0);
-  /* one shared skin paint for every flesh shape */
-  const SKIN=ctx.createRadialGradient(-0.30*R,-0.75*R,R*0.10,0.05*R,-0.30*R,2.35*R);
-  SKIN.addColorStop(0,'#f2cda9'); SKIN.addColorStop(0.45,'#dcaa80'); SKIN.addColorStop(1,'#a8724c');
+/* Person's left hand (viewer's right), dorsal view, fingers hanging down.
+   Origin = middle-finger MCP — the same point drawFinger zooms into.
+   R = half the 18 cm hand length (9 cm). opt.flip mirrors for the other hand;
+   opt.nested skips a second idle sway when the human figure already sways. */
+function drawHand(cx,cy,R,t,opt){
+  opt = opt || {};
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (opt.flip) ctx.scale(-1, 1);
+  const SKIN=ctx.createRadialGradient(-0.28*R,-0.70*R,R*0.08, 0.04*R,-0.15*R,2.2*R);
+  SKIN.addColorStop(0,'#f2cda9'); SKIN.addColorStop(0.42,'#dcaa80'); SKIN.addColorStop(1,'#a8724c');
   ctx.fillStyle=SKIN;
-  const cap=(x1,y1,x2,y2,w1,w2)=>{           /* tapered capsule, no own gradient */
-    const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+  const cap=(x1,y1,x2,y2,w1,w2)=>{
+    const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
     ctx.beginPath();
-    ctx.moveTo(x1+nx*w1/2,y1+ny*w1/2); ctx.lineTo(x2+nx*w2/2,y2+ny*w2/2);
-    ctx.lineTo(x2-nx*w2/2,y2-ny*w2/2); ctx.lineTo(x1-nx*w1/2,y1-ny*w1/2);
+    ctx.moveTo(x1+nx*w1/2, y1+ny*w1/2);
+    ctx.lineTo(x2+nx*w2/2, y2+ny*w2/2);
+    ctx.lineTo(x2-nx*w2/2, y2-ny*w2/2);
+    ctx.lineTo(x1-nx*w1/2, y1-ny*w1/2);
     ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.arc(x1,y1,w1/2,0,7); ctx.fill();
     ctx.beginPath(); ctx.arc(x2,y2,w2/2,0,7); ctx.fill();
   };
-  /* forearm — width meets the wrist exactly where the palm begins */
-  cap(0.0,-3.2*R, 0.0,-0.80*R, 0.90*R, 0.82*R);
-  /* palm (same silhouette as before, now in the shared paint) */
+  /* short wrist only — the figure's forearm already fills in at human scale */
+  cap(0.00,-1.35*R, 0.00,-1.08*R, 0.72*R, 0.68*R);
+  /* palm extends PAST the MCP so fingers are buried in the same fill, not
+     perched on a rounded palm edge. Shared SKIN — no per-finger lighting. */
+  const F=[
+    {x:-0.30, len:0.82, w:0.195, a:Math.sin(t*0.65+0.2)*0.05-0.04},  /* index  */
+    {x: 0.00, len:0.94, w:0.205, a:0},                                /* middle */
+    {x: 0.28, len:0.86, w:0.190, a:Math.sin(t*0.65+1.4)*0.05+0.03},  /* ring   */
+    {x: 0.50, len:0.68, w:0.165, a:Math.sin(t*0.65+2.2)*0.05+0.07}   /* pinky  */
+  ];
   ctx.beginPath();
-  ctx.moveTo(-0.36*R,-1.02*R);
-  ctx.quadraticCurveTo(-0.52*R,-0.6*R,-0.52*R,-0.15*R);
-  ctx.quadraticCurveTo(-0.5*R,0.06*R,-0.42*R,0.08*R);
-  ctx.lineTo(0.42*R,0.08*R);
-  ctx.quadraticCurveTo(0.52*R,0.04*R,0.5*R,-0.2*R);
-  ctx.quadraticCurveTo(0.46*R,-0.65*R,0.36*R,-1.02*R);
+  ctx.moveTo(-0.34*R, -1.14*R);
+  ctx.quadraticCurveTo(-0.50*R, -0.78*R, -0.48*R, -0.28*R);
+  /* thumb, continuous with the radial palm */
+  ctx.quadraticCurveTo(-0.58*R, -0.16*R, -0.66*R,  0.04*R);
+  ctx.quadraticCurveTo(-0.76*R,  0.22*R, -0.72*R,  0.42*R);
+  ctx.quadraticCurveTo(-0.68*R,  0.56*R, -0.58*R,  0.48*R);
+  ctx.quadraticCurveTo(-0.46*R,  0.18*R, -0.40*R,  0.10*R);
+  /* distal palm sits under the finger bases (MCP is y=0) */
+  ctx.quadraticCurveTo(-0.18*R,  0.24*R,  0.10*R,  0.22*R);
+  ctx.quadraticCurveTo( 0.38*R,  0.18*R,  0.58*R,  0.08*R);
+  ctx.quadraticCurveTo( 0.56*R, -0.22*R,  0.42*R, -0.78*R);
+  ctx.quadraticCurveTo( 0.34*R, -1.14*R,  0.30*R, -1.14*R);
   ctx.closePath(); ctx.fill();
-  /* thenar bulge merges the thumb into the palm */
-  ctx.beginPath(); ctx.ellipse(-0.45*R,-0.22*R,0.17*R,0.34*R,0.25,0,7); ctx.fill();
-  /* thumb */
-  cap(-0.42*R,-0.5*R,-0.66*R,0.08*R,0.27*R,0.22*R);
-  cap(-0.66*R,0.08*R,-0.74*R,0.46*R,0.22*R,0.17*R);
-  /* four fingers, tucked under the palm edge, with a gentle idle micro-curl */
-  const FX=[-0.36,-0.12,0.12,0.36], FL=[0.86,1.0,0.93,0.72], FW=[0.2,0.205,0.195,0.17];
-  const tip=[];
+  /* fingers: same SKIN, proximal end buried well inside the palm */
+  const tips=[];
+  const y0=-0.42*R;
   for (let i=0;i<4;i++){
-    const x=FX[i]*R, L=FL[i]*R, w=FW[i]*R;
-    const curl=Math.sin(t*0.7+i*0.9)*0.014*R;
-    const drift=(i-1.5)*0.02*R + curl;
-    cap(x,-0.06*R, x+drift*0.5, L*0.5, w, w*0.94);
-    cap(x+drift*0.5, L*0.5, x+drift, L, w*0.94, w*0.82);
-    tip.push([x+drift,L,w]);
+    const f=F[i], mx=f.x*R, L=f.len*R, w=f.w*R, a=f.a;
+    ctx.save();
+    ctx.translate(mx, 0);
+    ctx.rotate(a);
+    ctx.beginPath();
+    const w0=w*1.22, w1=w*0.86;
+    ctx.moveTo(-w0/2, y0);
+    ctx.lineTo(-w1/2, L);
+    ctx.quadraticCurveTo(-w1*0.18, L+w1*0.52, 0, L+w1*0.46);
+    ctx.quadraticCurveTo( w1*0.18, L+w1*0.52, w1/2, L);
+    ctx.lineTo(w0/2, y0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    tips.push({x:mx, y:0, L:L, w:w, a:a});
   }
-  /* ---- interior modelling on top of the seamless base ---- */
-  /* soft cylindrical shading down each finger's right side (low alpha: no seams) */
-  for (let i=0;i<4;i++){
-    const [tx,L,w]=tip[i], x=FX[i]*R;
-    const fg=ctx.createLinearGradient(x-w/2,0,x+w/2,0);
-    fg.addColorStop(0,'rgba(255,240,222,0.14)'); fg.addColorStop(0.55,'rgba(0,0,0,0)'); fg.addColorStop(1,'rgba(96,58,32,0.16)');
-    ctx.fillStyle=fg;
-    cap(x,-0.06*R, (x+tx)/2, L*0.5, w, w*0.94);
-    cap((x+tx)/2, L*0.5, tx, L, w*0.94, w*0.82);
-    ctx.fillStyle=SKIN;
+  /* webbing between fingers — same fill, no gap at the MCP */
+  for (let i=0;i<3;i++){
+    const a=F[i], b=F[i+1];
+    const x1=(a.x+a.w*0.42)*R, x2=(b.x-b.w*0.42)*R;
+    ctx.beginPath();
+    ctx.moveTo(x1, -0.12*R);
+    ctx.quadraticCurveTo((x1+x2)/2, 0.16*R, x2, -0.12*R);
+    ctx.lineTo(x2, -0.36*R);
+    ctx.lineTo(x1, -0.36*R);
+    ctx.closePath(); ctx.fill();
   }
-  /* finger crotches: soft AO wedges, not hard lines */
-  for (const gx of [-0.24,0,0.24]){
-    const g2=ctx.createRadialGradient(gx*R,0.10*R,0,gx*R,0.10*R,0.14*R);
-    g2.addColorStop(0,'rgba(96,58,32,0.30)'); g2.addColorStop(1,'rgba(96,58,32,0)');
-    ctx.fillStyle=g2; ctx.beginPath(); ctx.arc(gx*R,0.10*R,0.14*R,0,7); ctx.fill();
-  }
-  /* wrist crease + faint tendons */
-  ctx.strokeStyle='rgba(120,70,42,0.16)'; ctx.lineWidth=Math.max(1,R*0.02);
-  ctx.beginPath(); ctx.moveTo(-0.3*R,-0.98*R); ctx.quadraticCurveTo(0,-0.92*R,0.32*R,-1.0*R); ctx.stroke();
-  ctx.strokeStyle='rgba(255,236,215,0.13)'; ctx.lineWidth=Math.max(1,R*0.028);
-  for (const fx of [-0.34,-0.12,0.12,0.34]){
-    ctx.beginPath(); ctx.moveTo(fx*0.35*R,-0.78*R);
-    ctx.quadraticCurveTo(fx*0.7*R,-0.4*R,fx*R,-0.04*R); ctx.stroke();
-  }
-  /* knuckle bumps */
-  for (let i=0;i<4;i++) ellipseFill(FX[i]*R,-0.01*R,FW[i]*R*0.40,FW[i]*R*0.26,0,'rgba(255,240,225,0.16)');
-  /* joint creases + nails */
-  for (let i=0;i<4;i++){
-    const x=FX[i]*R, [tx,L,w]=tip[i], drift=tx-x;
-    for (const u of [0.5,0.78]){
-      const jx=x+drift*u, jy=L*u;
-      ctx.strokeStyle='rgba(120,70,42,0.26)'; ctx.lineWidth=Math.max(1,R*0.016);
-      ctx.beginPath(); ctx.moveTo(jx-w*0.32,jy-w*0.04); ctx.quadraticCurveTo(jx,jy+w*0.08,jx+w*0.32,jy-w*0.04); ctx.stroke();
-      ctx.strokeStyle='rgba(255,236,215,0.14)';
-      ctx.beginPath(); ctx.moveTo(jx-w*0.28,jy+w*0.07); ctx.quadraticCurveTo(jx,jy+w*0.17,jx+w*0.28,jy+w*0.07); ctx.stroke();
+  /* interior modelling — skip when the hand is a few pixels on the human figure */
+  if (R>=12){
+    ctx.strokeStyle='rgba(120,70,42,0.18)'; ctx.lineWidth=Math.max(1,R*0.022);
+    ctx.beginPath(); ctx.moveTo(-0.28*R,-1.02*R); ctx.quadraticCurveTo(0,-0.94*R,0.28*R,-1.02*R); ctx.stroke();
+    ctx.strokeStyle='rgba(255,236,215,0.08)'; ctx.lineWidth=Math.max(0.8,R*0.018);
+    for (const fx of [-0.28,0.00,0.28,0.48]){
+      ctx.beginPath(); ctx.moveTo(fx*0.4*R,-0.82*R);
+      ctx.quadraticCurveTo(fx*0.85*R,-0.22*R, fx*R, 0.28*R); ctx.stroke();
     }
-    /* nail: plate + lunula + soft rim */
-    ellipseFill(tx,L-w*0.34,w*0.30,w*0.36,0,'rgba(246,220,202,0.95)');
-    ellipseFill(tx,L-w*0.52,w*0.20,w*0.12,0,'rgba(255,246,238,0.55)');
-    ctx.strokeStyle='rgba(140,90,60,0.25)'; ctx.lineWidth=Math.max(0.8,R*0.01);
-    ctx.beginPath(); ctx.ellipse(tx,L-w*0.34,w*0.30,w*0.36,0,0,7); ctx.stroke();
   }
-  /* thumb nail */
-  ellipseFill(-0.745*R,0.42*R,0.055*R,0.075*R,0.2,'rgba(246,220,202,0.9)');
-  /* sparse fine hairs, back of the hand only (they read as scratches on fingers) */
-  ctx.strokeStyle='rgba(60,38,22,0.28)'; ctx.lineCap='round';
-  ctx.lineWidth=Math.max(0.7,R*0.007);
-  for (let i=0;i<16;i++){
-    const x=(hash(i*2.3)-0.5)*0.72*R, y=-0.78*R+hash(i*1.7)*0.62*R;
-    const len=R*(0.07+0.05*hash(i)), lean=(hash(i+5)-0.5)*0.6;
-    ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+lean*len*0.5,y+len*0.55,x+lean*len,y+len); ctx.stroke();
+  if (R>=18){
+    for (let i=0;i<4;i++){
+      const tp=tips[i], c=Math.cos(tp.a), s=Math.sin(tp.a);
+      const local=(ly,lw)=>{
+        const x=tp.x + s*ly, y=tp.y + c*ly;
+        ctx.save(); ctx.translate(x,y); ctx.rotate(tp.a);
+        ctx.strokeStyle='rgba(120,70,42,0.28)'; ctx.lineWidth=Math.max(0.8,R*0.014);
+        ctx.beginPath(); ctx.moveTo(-lw*0.32,-lw*0.04); ctx.quadraticCurveTo(0,lw*0.08,lw*0.32,-lw*0.04); ctx.stroke();
+        ctx.restore();
+      };
+      local(tp.L*0.50, tp.w*0.92);
+      local(tp.L*0.76, tp.w*0.82);
+      /* nail on the distal dorsum */
+      const nx=tp.x + s*(tp.L-tp.w*0.38), ny=tp.y + c*(tp.L-tp.w*0.38);
+      ctx.save(); ctx.translate(nx,ny); ctx.rotate(tp.a);
+      ellipseFill(0,0, tp.w*0.28, tp.w*0.34, 0, 'rgba(246,220,202,0.92)');
+      ellipseFill(0,-tp.w*0.12, tp.w*0.18, tp.w*0.10, 0, 'rgba(255,246,238,0.50)');
+      ctx.strokeStyle='rgba(140,90,60,0.28)'; ctx.lineWidth=Math.max(0.7,R*0.01);
+      ctx.beginPath(); ctx.ellipse(0,0,tp.w*0.28,tp.w*0.34,0,0,7); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.save(); ctx.translate(-0.70*R, 0.34*R); ctx.rotate(-0.35);
+    ellipseFill(0,0, 0.050*R, 0.070*R, 0, 'rgba(246,220,202,0.9)');
+    ctx.restore();
+  }
+  if (R>=28){
+    ctx.strokeStyle='rgba(60,38,22,0.26)'; ctx.lineCap='round';
+    ctx.lineWidth=Math.max(0.6,R*0.007);
+    for (let i=0;i<12;i++){
+      const x=(hash(i*2.3)-0.5)*0.62*R, y=-0.88*R+hash(i*1.7)*0.55*R;
+      const len=R*(0.06+0.04*hash(i)), lean=(hash(i+5)-0.5)*0.45;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+lean*len*0.5, y+len*0.5, x+lean*len, y+len); ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -2359,9 +2458,9 @@ function drawQuark(cx,cy,R,t){
 const pins=[
   {n:'Earth',    s:1.274e7, lbl:'1.27×10⁷ m', row:0, pr:9,  draw:drawEarth,    bg:bgSky},
   {n:'cloud bank', s:5e5,   lbl:'~500 km',    row:0, pr:2,  draw:drawCloudbank,bg:null, off:0.40, ground:1, gh:0.35, minor:1},
-  {n:'mountain', s:1e4,     lbl:'~10 km',     row:1, pr:2,  draw:drawMountain, bg:null, off:-0.55, ground:1, gh:0.28, minor:1},
-  {n:'city',     s:500,     lbl:'~500 m',     row:0, pr:2,  draw:drawCity,     bg:null, off:0.55,  ground:1, gh:0.30, minor:1},
-  {n:'building', s:30,      lbl:'~30 m',      row:1, pr:2,  draw:drawBuilding, bg:null, off:-0.62, ground:1, gh:0.475, minor:1},
+  {n:'mountain', s:1e4,     lbl:'~10 km',     row:1, pr:2,  draw:drawMountain, bg:null, off:-0.55, ground:1, gh:0.50, minor:1},
+  {n:'city',     s:500,     lbl:'~500 m',     row:0, pr:2,  draw:drawCity,     bg:null, off:0.55,  ground:1, gh:0.50, minor:1},
+  {n:'building', s:30,      lbl:'~30 m',      row:1, pr:2,  draw:drawBuilding, bg:null, off:-0.62, ground:1, gh:0.50, minor:1},
   {n:'human',    s:1.7,     lbl:'1.7 m',      row:1, pr:8,  draw:drawHuman,    bg:bgSkin, off:-HU.handX, oy:0.5-HU.handY},
   {n:'hand',     s:0.18,    lbl:'18 cm',      row:0, pr:2,  draw:drawHand,     bg:null, minor:1},
   {n:'finger',   s:0.02,    lbl:'2 cm',       row:1, pr:2,  draw:drawFinger,   bg:null, minor:1},
