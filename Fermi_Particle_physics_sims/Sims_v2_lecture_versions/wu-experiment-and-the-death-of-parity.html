@@ -577,18 +577,20 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
           <!-- What the single β counter records, per field orientation … -->
           <div class="sim-ctl sim-box">
             <table class="sim-tbl">
-              <tr><td id="cntLbl">β counter (free counting)</td><td id="cntUp">0</td></tr>
-              <tr><td>rate, B ↑ run</td><td id="rateUp">—</td></tr>
-              <tr><td>rate, B ↓ run</td><td id="rateDn">—</td></tr>
+              <tr><td id="cntLbl">β counts (free — not recorded)</td><td id="cntUp">0</td></tr>
+              <tr><td>R↑ — early rate ÷ warm</td><td id="rateUp">—</td></tr>
+              <tr><td>R↓ — early rate ÷ warm</td><td id="rateDn">—</td></tr>
             </table>
             <div class="sim-note ht-hide">One counter, <b>above</b> the source (Wu, 1957). Rates are the cold-start counting rate normalized to the warm rate; the asymmetry is read by <b>flipping B</b> between runs.</div>
           </div>
           <!-- … versus what those counts are compared against. -->
           <div class="sim-ctl sim-box">
             <table class="sim-tbl">
-              <tr><td>𝒜 measured</td><td id="aMeas">—</td></tr>
-              <tr><td>𝒜 theory</td><td id="aTheo">—</td></tr>
+              <tr><td>𝒜 = (R↓−R↑)/(R↓+R↑)</td><td id="aMeas">—</td></tr>
+              <tr><td>𝒜 theory = P̄·⟨v/c⟩/2</td><td id="aTheo">—</td></tr>
+              <tr><td>vs parity-symmetric 𝒜 = 0</td><td id="aSig">—</td></tr>
             </table>
+            <div class="sim-note ht-hide">early window = first 4 s of each recorded run; warm rate = isotropic reference.</div>
             <div class="sim-note ht-hide">Negative 𝒜 ⇒ the excess is emitted <b>opposite B</b> (opposite the spin). A(⁶⁰Co) = −1 is fixed by the weak interaction and v/c ≈ 0.60 by the decay energy — only P varies. The theory value appears once you commit a prediction (or after N &gt; 200).</div>
           </div>
         </div>
@@ -1132,9 +1134,11 @@ function measured(){
   const s=0.5*Math.sqrt(1/U.earlyTot + 1/D.earlyTot);
   const peU = U.earlyTsum ? U.earlyPsum/U.earlyTsum : U.P0;
   const peD = D.earlyTsum ? D.earlyPsum/D.earlyTsum : D.P0;
+  const fU=U.earlyUp/U.earlyTot, fD=D.earlyUp/D.earlyTot;
+  const sU=Math.sqrt(fU*(1-fU)/U.earlyTot)/0.5, sD=Math.sqrt(fD*(1-fD)/D.earlyTot)/0.5;
   /* effective (early-window-averaged) polarization: the crystal warms during the
      t<4 s counting window, so P0-at-3mK overstated the theory target */
-  return {a:a, s:s, t:U.earlyTot+D.earlyTot, rU:rU, rD:rD, P0:(peU+peD)/2};
+  return {a:a, s:s, t:U.earlyTot+D.earlyTot, rU:rU, rD:rD, sU:sU, sD:sD, P0:(peU+peD)/2};
 }
 /* Sign-aware significance: the Wu signal is 𝒜 ≥ 2σ from zero, signed like
    A·P·β (A = −1 ⇒ negative), and closer to the theory value A·P·(v/c)/2 than
@@ -1461,13 +1465,21 @@ function rate0Of(run){ return (run && run.earlyTot) ? ((run.earlyUp/run.earlyTot
 function updateReadouts(){
   const t = S.total, m = measured();
   const cl = document.getElementById('cntLbl');
-  if(cl) cl.textContent = S.run ? 'β counter (this run)' : 'β counter (free counting — not recorded)';
-  cntUpEl.textContent = t? fmt(S.nUp)+' ('+(100*S.nUp/t).toFixed(1)+'%)' : '0';
+  if(cl) cl.textContent = S.run ? 'β counts (this run)' : 'β counts (free — not recorded)';
+  cntUpEl.textContent = t? fmt(S.nUp) : '0';
   const rU = rate0Of(S.runs.up), rD = rate0Of(S.runs.dn);
-  rateUpEl.textContent = rU!==null ? rU.toFixed(2)+' × warm' : '—';
-  rateDnEl.textContent = rD!==null ? rD.toFixed(2)+' × warm' : '—';
-  aMeasEl.textContent = m.t ? (m.a.toFixed(3)+' ± '+m.s.toFixed(3)) : '— (need both runs)';
-  aTheoEl.textContent = (S.pred!==null || m.t>=REVEAL_N) ? (Math.abs(A_COEF)*(m.P0||S.P)*VC/2).toFixed(3) : '—';
+  /* per-rate sqrt(N) errors even when only one run exists yet */
+  const sig1=run=>{ if(!run||!run.earlyTot) return null;
+    const f=run.earlyUp/run.earlyTot; return Math.sqrt(f*(1-f)/run.earlyTot)/0.5; };
+  const sUu=sig1(S.runs.up), sDd=sig1(S.runs.dn);
+  rateUpEl.textContent = rU!==null ? rU.toFixed(2)+' ± '+sUu.toFixed(2) : '—';
+  rateDnEl.textContent = rD!==null ? rD.toFixed(2)+' ± '+sDd.toFixed(2) : '—';
+  aMeasEl.textContent = m.t ? (m.a.toFixed(3)+' ± '+m.s.toFixed(3)+'  (N = '+fmt(m.t)+')') : '— (need both runs)';
+  const P0used = m.P0||S.P;
+  aTheoEl.textContent = (S.pred!==null || m.t>=REVEAL_N)
+    ? (Math.abs(A_COEF)*P0used*VC/2).toFixed(3)+'  (P̄ ≈ '+P0used.toFixed(2)+')' : '—';
+  const asg = document.getElementById('aSig');
+  if(asg) asg.textContent = (m.t && m.s>0) ? (Math.abs(m.a)/m.s).toFixed(1)+'σ' : '—';
   polVal.textContent  = fmtT(S.T);
   const pd = document.getElementById('pDeriv'); if(pd) pd.textContent = S.P.toFixed(2);
 }
