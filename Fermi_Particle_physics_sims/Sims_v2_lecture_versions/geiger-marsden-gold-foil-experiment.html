@@ -891,7 +891,11 @@ function record(th){
   var deg=th/D2R, b=Math.floor(deg/BINW); if(b>=NBINS)b=NBINS-1; if(b<0)b=0;
   st.bins[b]++; st.nScat++;
   var sg=(Math.random()<0.5?1:-1);
-  if(deg>1){ var sK=Math.sin(th/2)/Math.sin(5*D2R), keep=Math.min(1,sK*sK*sK*sK);
+  /* sin³ flattener (was sin⁴): with the Rutherford dN/dθ ∝ cos(θ/2)/sin³(θ/2),
+     a sin³ keep gives drawn-dot density ≈ uniform along the arc from THMIN out to
+     10° — sin⁴ made it ∝ sinθ, which vanished at 0° and left a fake dark gap
+     around the beam spot (SME: the centre must read continuous). */
+  if(deg>1){ var sK=Math.sin(th/2)/Math.sin(5*D2R), keep=Math.min(1,sK*sK*sK);
     if(Math.random()<0.05*keep*dotP()) pushDot(sg*th,st.t); }
   if(deg>=90){ st.nBack++;
     if(flashes.length<36)flashes.push({a:sg*th,t:st.t});
@@ -1086,6 +1090,25 @@ function draw(){
   gg.addColorStop(0,'#8a6914'); gg.addColorStop(0.5,'#f3d158'); gg.addColorStop(1,'#a97e1c');
   X.fillStyle=gg; X.fillRect(cx-2.5,cy-fh,5,fh*2);
   label('gold foil',cx+2,Math.min(cy+fh+18,appH-6),'center',C.text,small?12:14);
+  /* forward beam spot — the unscattered + <1° beam blazes CONTINUOUSLY at 0°
+     (Rutherford intensity is maximal toward the centre; the gap there was an
+     artifact). Wedge spans ±EXT90 (θ of 90% containment, 3.16°), fading out by
+     ~1.6×EXT90 so the scintillation dots merge into it. Uses the C.glow/EXT90
+     pair the changelog describes (they were defined but never drawn). */
+  if(hasData){
+    X.save(); X.lineCap='butt';
+    var gN=8, gHW=EXT90*1.6*D2R, gs;
+    for(gs=0;gs<gN;gs++){
+      var ga1=(gs/gN)*gHW, ga2=((gs+1)/gN)*gHW;
+      X.strokeStyle='rgba('+C.glow+','+(0.55*(1-gs/gN)*(1-gs/gN)).toFixed(3)+')';
+      X.lineWidth=13;
+      X.beginPath(); X.arc(cx,cy,R,ga1,ga2,false); X.stroke();
+      X.beginPath(); X.arc(cx,cy,R,-ga2,-ga1,false); X.stroke();
+    }
+    X.strokeStyle='rgba('+C.glow+',0.8)'; X.lineWidth=13;
+    X.beginPath(); X.arc(cx,cy,R,-0.25*EXT90*D2R,0.25*EXT90*D2R,false); X.stroke();
+    X.restore();
+  }
   /* scintillation dots — equal size at every angle */
   X.fillStyle=C.dot;
   var i2;
