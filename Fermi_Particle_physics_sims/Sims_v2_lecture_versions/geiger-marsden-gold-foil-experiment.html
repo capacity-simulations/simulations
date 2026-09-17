@@ -414,7 +414,7 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
      - [dom] "Odds are per incident α. The 1° line is only where this model starts counting …" — readouts panel .sim-note, ~L495
      - [dom] "Screen: upper and lower arcs … large angles over-shown." — #gmDotNote (dynamic innerHTML), ~L496
      - [dom] "Natural α sources run 4–9 MeV (RaC′ 7.7 MeV = 0.240 GeV/c)." — #gmBeamNote (dynamic; also covers the "Accelerator beam" variant), ~L526
-     - [canvas] "5.0 MeV α · Au foil 0.40 µm · 10 k α/s" (values are live) — the setup chip; gated at its chip(chipTxt,null) call site in draw(), ~L10
+     - [canvas] "5.0 MeV α, Au foil 0.40 µm, 10 k α/s" (values are live) — the setup chip; gated at its chip(chipTxt,null) call site in draw(), ~L10
      - [canvas] "overlay: plum-pudding prediction (dashed)" — chamber chip; gated at its chip() call site in draw(), ~L1098
      (removed 2026-09-15 with the Overlay-prediction toggle, no longer exists: the "The green points are the measurement …" .sim-note)81. Call-site gate leaves chipY unadvanced, so the three conditional chips below close the gap.
      NOTE: default flipped — Hide Text boots CHECKED in this sim (curriculum request).
@@ -565,7 +565,7 @@ body.light-theme .sim-hot,html[data-theme="light"] .sim-hot{color:#c2410c}
   <div class="sim-eq" id="gmEq1">dσ/dΩ = (zZ·α_em·ħc / 4Eₖ)² · 1/sin⁴(θ/2)</div>
   <div class="sim-eq" id="gmEq2">d<sub>min</sub> = zZ·α_em·ħc/Eₖ , q = 2p·sin(θ/2) , Eₖ = p²/2m_α</div>
   <div class="sim-eq" id="gmEq3">dN / (N₀ dΩ) = n·t · dσ/dΩ</div>
-  <div class="sim-eq-live" id="gmFormalLive">z = 2 (α charge number), Z = 79 (gold) · Eₖ = 5.0 MeV · d<sub>min</sub> = 45.5 fm</div>
+  <div class="sim-eq-live" id="gmFormalLive">z = 2 (α charge number), Z = 79 (gold), Eₖ = 5.0 MeV, d<sub>min</sub> = 45.5 fm</div>
   <div class="sim-eq-live" id="gmFormalNote">θ is the scattering angle in the LAB frame (lab ≈ CM to 2 % for α on ¹⁹⁷Au); the upper and lower screen arcs are opposite azimuthal sides of the same θ. Solid curve = Rutherford × a phenomenological nuclear-absorption factor: a logistic cut-off of 0.4 fm width removes α whose closest approach reaches d_touch = R_Au + R_α ≈ 8.9 fm (⇒ R_Au ≈ 7 fm). Single scattering only; foil n·t = 2.4×10²² m⁻² (0.40 µm gold).</div>
 </div>
   </section>
@@ -891,7 +891,11 @@ function record(th){
   var deg=th/D2R, b=Math.floor(deg/BINW); if(b>=NBINS)b=NBINS-1; if(b<0)b=0;
   st.bins[b]++; st.nScat++;
   var sg=(Math.random()<0.5?1:-1);
-  if(deg>1){ var sK=Math.sin(th/2)/Math.sin(5*D2R), keep=Math.min(1,sK*sK*sK*sK);
+  /* sin³ flattener (was sin⁴): with the Rutherford dN/dθ ∝ cos(θ/2)/sin³(θ/2),
+     a sin³ keep gives drawn-dot density ≈ uniform along the arc from THMIN out to
+     10° — sin⁴ made it ∝ sinθ, which vanished at 0° and left a fake dark gap
+     around the beam spot (SME: the centre must read continuous). */
+  if(deg>1){ var sK=Math.sin(th/2)/Math.sin(5*D2R), keep=Math.min(1,sK*sK*sK);
     if(Math.random()<0.05*keep*dotP()) pushDot(sg*th,st.t); }
   if(deg>=90){ st.nBack++;
     if(flashes.length<36)flashes.push({a:sg*th,t:st.t});
@@ -901,6 +905,10 @@ function record(th){
 /* incident alphas -> a physical fraction n*t*sigma(>1deg) actually scatters */
 function fireBatch(n){
   if(n<=0)return; var Ek=EkOf(st.p);
+  /* beam-front stamp, FROZEN at beam-on: glow, dots and plot all wait for this one
+     arrival time. Computed once (not per-frame) so the plot band appearing cannot
+     change the geometry and re-flip the gate (that feedback caused flicker). */
+  if(st.Nf===0) st.tGate=st.t+(geo?((geo.cx-geo.exitX)+(geo.R-5))/Math.max(120,geo.R*9*st.p):1.2);
   st.Nf+=n;
   var P1=NT*sigGT(THMIN,Ek); if(P1>0.95)P1=0.95;
   var k=poisson(n*P1,Math.random); if(k>n)k=n;
@@ -911,6 +919,7 @@ function fireBatch(n){
 function applyRun(p,N,seed){
   st.p=Math.min(PMAX,Math.max(PMIN,p||0.193));
   st.Nf=N; st.nScat=0; st.nBack=0; st.nAbs=0; st.acc=0; st.trAcc=0; st.t=0; st.bins.fill(0);
+  st.tGate=-1;   /* snapshot runs are established mid-run: no arrival gate (fireBatch re-stamps on a fresh beam) */
   dots.length=0; dotPtr=0; tracers.length=0; flashes.length=0;
   if(N>0){ var Ek=EkOf(st.p), rnd=mul32(seed||1), b, i;
     var absAcc=0;
@@ -972,9 +981,9 @@ function syncUI(){ var Ek=EkOf(st.p), n;
   n=el('gmStylePts'); if(n)n.classList.toggle('sim-on',!st.histo);
   var v150=coefFm2(Ek)/Math.pow(Math.sin(75*D2R),4)/100;
   var gflEl=el('gmFormalLive');
-  if(gflEl) gflEl.innerHTML='z = 2 (α charge number), Z = 79 (gold), α_em = 1/137.036 · p = '+st.p.toFixed(3)+
-    ' GeV/c → Eₖ = '+(Ek*1000).toFixed(1)+' MeV · d<sub>min</sub> (head-on, θ = 180°) = '+dminOf(Ek).toFixed(1)+
-    ' fm · dσ/dΩ(150°) = '+v150.toFixed(2)+' b/sr · n·t·σ(θ>90°) = 1 in '+sig3(1/(NT*sigGT(Math.PI/2,Ek))); }
+  if(gflEl) gflEl.innerHTML='z = 2 (α charge number), Z = 79 (gold), α_em = 1/137.036, p = '+st.p.toFixed(3)+
+    ' GeV/c → Eₖ = '+(Ek*1000).toFixed(1)+' MeV, d<sub>min</sub> (head-on, θ = 180°) = '+dminOf(Ek).toFixed(1)+
+    ' fm, dσ/dΩ(150°) = '+v150.toFixed(2)+' b/sr, n·t·σ(θ>90°) = 1 in '+sig3(1/(NT*sigGT(Math.PI/2,Ek))); }
 
 /* ---- canvas sizing ---- */
 function sizeCanvas(){ var r=CV.getBoundingClientRect();
@@ -1036,7 +1045,10 @@ function draw(){
   /* The plot band is reserved only when it will actually be drawn, so unchecking
      "Show counts-vs-angle plot" hands its height back to the scattering chamber
      instead of leaving a blank strip. Same path the pre-Play state already used. */
-  var showHist=hasData&&st.showPlot;
+  /* the plot begins with the first ARRIVALS, not the first firing — same frozen
+     beam-front gate as the glow and dots, so all three appear together */
+  var arrived=hasData&&(st.tGate<0||st.t>=st.tGate);
+  var showHist=arrived&&st.showPlot;
   var histoH = showHist ? ((h<360)?Math.max(96,h*0.36):Math.min(Math.max(h*0.30,150),270)) : 0;
   var appH = showHist ? (h-histoH-6) : (h-28);
 
@@ -1065,6 +1077,7 @@ function draw(){
     var absDeg=Math.abs(td);
     if(small && absDeg!==0 && absDeg!==90) continue;
     var lx=cx+(R+24)*c1, ly=cy+(R+24)*s1+5;
+    if(s1>0.5 && ly+3>appH-1) continue; /* audit fix: lower labels stop at the chamber/plot divider instead of being struck through */
     label(absDeg+'°', lx, ly, 'center', C.muted, 12);
   }
   /* collimator + beam */
@@ -1085,10 +1098,39 @@ function draw(){
   gg.addColorStop(0,'#8a6914'); gg.addColorStop(0.5,'#f3d158'); gg.addColorStop(1,'#a97e1c');
   X.fillStyle=gg; X.fillRect(cx-2.5,cy-fh,5,fh*2);
   label('gold foil',cx+2,Math.min(cy+fh+18,appH-6),'center',C.text,small?12:14);
-  /* scintillation dots — equal size at every angle */
+  /* forward beam spot — the unscattered + <1° beam blazes CONTINUOUSLY at 0°
+     (Rutherford intensity is maximal toward the centre; the gap there was an
+     artifact). Wedge spans ±EXT90 (θ of 90% containment, 3.16°), fading out by
+     ~1.6×EXT90 so the scintillation dots merge into it. Uses the C.glow/EXT90
+     pair the changelog describes (they were defined but never drawn). */
+  /* Scintillation is caused by arriving alpha ONLY: the glow ramps up with the
+     accumulated beam (full after ~8000 incident alpha, <1 s at the slow rate)
+     instead of snapping on - a lit screen before any alpha arrive would read
+     as a false detection (SME). Reset/empty runs (Nf=0) show no glow at all. */
+  var beamArrived=st.tGate<0||st.t>=st.tGate;
+  var gI=Math.min(1,st.Nf/8000);
+  /* arrival gate: no scintillation before the beam front (frozen at beam-on)
+     reaches the screen, then a short fade-in. Snapshots (tGate=-1) skip it. */
+  if(gI>0 && st.tGate>=0) gI*=Math.max(0,Math.min(1,(st.t-st.tGate)/0.5));
+  if(gI>0){
+    X.save(); X.lineCap='butt';
+    var gN=8, gHW=EXT90*1.6*D2R, gs;
+    for(gs=0;gs<gN;gs++){
+      var ga1=(gs/gN)*gHW, ga2=((gs+1)/gN)*gHW;
+      X.strokeStyle='rgba('+C.glow+','+(gI*0.55*(1-gs/gN)*(1-gs/gN)).toFixed(3)+')';
+      X.lineWidth=13;
+      X.beginPath(); X.arc(cx,cy,R,ga1,ga2,false); X.stroke();
+      X.beginPath(); X.arc(cx,cy,R,-ga2,-ga1,false); X.stroke();
+    }
+    X.strokeStyle='rgba('+C.glow+','+(gI*0.8).toFixed(3)+')'; X.lineWidth=13;
+    X.beginPath(); X.arc(cx,cy,R,-0.25*EXT90*D2R,0.25*EXT90*D2R,false); X.stroke();
+    X.restore();
+  }
+  /* scintillation dots — equal size at every angle; hidden until the beam front
+     arrives so dots never precede the glow/plot (that mismatch read as lag) */
   X.fillStyle=C.dot;
   var i2;
-  for(i2=0;i2<dots.length;i2++){ var d3=dots[i2], age=st.t-d3.t;
+  for(i2=0;beamArrived&&i2<dots.length;i2++){ var d3=dots[i2], age=st.t-d3.t;
     X.globalAlpha = age<0.35?0.95:Math.max(0.4,0.95-0.09*age);
     var rd=R+d3.j, sz=2.4;
     X.fillRect(cx+rd*Math.cos(d3.a)-sz/2, cy-rd*Math.sin(d3.a)-sz/2, sz, sz); }
@@ -1111,7 +1153,7 @@ function draw(){
   /* chips — start below the plot title, never over the source block */
   var chipY=36, chipTxt;
   function chip(t,col){ if(chipY+30>cy-24) return; chipY+=drawChip(10,chipY,t,C,col); }
-  chipTxt=(Ek*1000).toFixed(1)+' MeV α · Au foil 0.40 µm · '+(st.rate>=1000?(st.rate/1000)+' k':st.rate)+' α/s';
+  chipTxt=(Ek*1000).toFixed(1)+' MeV α, Au foil 0.40 µm, '+(st.rate>=1000?(st.rate/1000)+' k':st.rate)+' α/s';
   /* Hide Text: gated at the call site, not inside chip(), so chipY is never advanced —
      the three conditional chips below simply move up and no gap is left behind. */
   if(!HT()) chip(chipTxt,null);
@@ -1304,10 +1346,14 @@ function onFrame(dt){
 /* ---- controls ---- */
 function bind(id,ev,fn){ var n=el(id); if(n)n.addEventListener(ev,fn); }
 /* momentum: rebuild live at the current statistics; never pauses the run */
+/* momentum change = a NEW experiment (user request): the run is cleared and the
+   beam restarts from the source with the new p — tracers fly, the beam-front
+   gate re-arms (fireBatch re-stamps it on the first batch of the fresh run),
+   and dots/glow/plot re-accumulate from zero. */
 bind('gmMomentum','input',function(){
   var p=parseFloat(this.value); if(!isFinite(p))p=0.193;
-  applyRun(p,st.Nf,4517); syncUI(); updateCounts(); draw(); });
-bind('gmMomentum','change',function(){ if(SH&&SH.setPlaying&&!SH.playing) SH.setPlaying(true); });
+  applyRun(p,0,4517); syncUI(); updateCounts(); draw(); });
+bind('gmMomentum','change',function(){ if(SH&&SH.setPlaying) SH.setPlaying(true); });
 /* model switch changes ONLY the overlaid prediction — the data are untouched */
 bind('gmRateSlow','click',function(){ st.rate=RSLOW; syncUI(); draw(); });
 bind('gmRateFast','click',function(){ st.rate=RFAST; syncUI(); draw(); });
@@ -1348,8 +1394,16 @@ function onReset(){ st.showPlum=true; st.flat=false; st.showPlot=true; st.histo=
   /* The shared reset handler then re-enters lecture mode (finishInquiry → onComplete:
      EMPTY) but ends with setPlaying(true) — while first load is EMPTY + PAUSED
      ("Play prominent"). Re-assert the pause after the handler finishes, or the beam
-     fires into the fresh chamber and Reset comes back with plot entries. */
-  if(window.Shell&&Shell.setPlaying) setTimeout(function(){ Shell.setPlaying(false); },0);
+     fires into the fresh chamber and Reset comes back with plot entries.
+     Hardened: some browsers can slip one rAF in before the 0ms timer, firing ~10²
+     α into the fresh chamber (enough to pop the histogram band). Re-assert at 0
+     AND 50ms, and wipe any α that leaked so Reset always lands EMPTY + PAUSED. */
+  if(window.Shell&&Shell.setPlaying){
+    [0,50].forEach(function(ms){ setTimeout(function(){
+      Shell.setPlaying(false);
+      if(st.Nf>0){ applyRun(0.193,0,1); syncUI(); updateCounts(); draw(); }
+    },ms); });
+  }
 }
 function onResize(){ sizeCanvas(); draw(); }
 

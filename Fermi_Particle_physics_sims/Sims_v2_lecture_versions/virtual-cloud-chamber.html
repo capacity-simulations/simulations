@@ -333,6 +333,11 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-rowflex{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
 .sim-check{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--text)}
 .sim-btn{font-size:14px;padding:4px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+/* armed Fire button: a new particle is selected and waiting for launch */
+@keyframes fireArm{0%,100%{box-shadow:0 0 0 0 var(--accent);}50%{box-shadow:0 0 12px 3px var(--accent);}}
+.sim-btn.armed{border-color:var(--accent);color:var(--accent);animation:fireArm 1.1s ease-in-out infinite;}
+/* finished track: the same button offers a replay of the same shot */
+.sim-btn.again{border-color:var(--accent);color:var(--accent);}
 .sim-btn:hover{border-color:var(--accent)}
 .sim-hint{margin:9px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-muted)}
 .sim-more{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
@@ -362,6 +367,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .shell-panel:not(:has(> .shell-panel-head)){padding:12px;}
 .shell-panel .sim-h,.shell-panel .sim-ptitle{font-size:11px;letter-spacing:1.2px;}
 .sim-box{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);}
+/* 4) Track-readout rows sit in their own control box: label left / value right
+   with dashed row separators, same treatment as the design-system readouts. */
+.sim-ro{background:var(--ctrl-bg);border:1px solid var(--ctrl-border);border-radius:8px;padding:4px 12px;gap:0 12px;}
+.sim-ro dt,.sim-ro dd{padding:7px 0;border-bottom:1px dashed var(--ctrl-border);align-self:center;}
+.sim-ro dt:last-of-type,.sim-ro dd:last-of-type{border-bottom:0;}
+#roHint{background:var(--ctrl-bg);border:1px dashed var(--ctrl-border);border-radius:8px;padding:8px 10px;margin:0;}
 </style>
 </head>
 <body>
@@ -926,6 +937,8 @@ function rebuildGeometry(){
 /* ---------- firing / ghosts ---------- */
 function animMode(){return (performance.now()-st.lastFrame<200)?'anim':'full';}
 function fire(mode){
+ /* any launch (user, slider, inquiry scene, reset) consumes the armed state */
+ st.armed=false;if(fireBtn)fireBtn.classList.remove('armed');
  var key=st.mystery?st.mystery.key:st.pKey;
  var Ek=st.mystery?st.mystery.Ek:st.Ek;
  st.track=computeTrack(key,Ek,st.B,st.plate);
@@ -1061,7 +1074,12 @@ function nudgeChipDown(box,blockers){
   moved=false;
   for(i=0;i<blockers.length;i++){
    b=blockers[i];
-   if(rectsHit(box,b,gap)){box.Y=Math.min(H-box.h-3,b.Y+b.h+gap);moved=true;}
+   if(rectsHit(box,b,gap)){
+    var cand=b.Y+b.h+gap;
+    /* no room below the blocker (bottom clamp would re-collide): go above it */
+    box.Y=(cand>H-box.h-3)?Math.max(2,b.Y-box.h-gap):cand;
+    moved=true;
+   }
   }
  }
  return box;
@@ -1092,6 +1110,42 @@ function drawGhostSet(special){
    if(pen)ctx.lineTo(X,Y);else ctx.moveTo(X,Y);pen=true;}
   ctx.stroke();ctx.restore();
  });
+}
+/* ---------- frozen ghost-tag placement ----------
+   Each ghost's readout is placed ONCE, on the first frame it is drawn: a fixed
+   26px offset perpendicular to its OWN arc, with the along-track anchor and the
+   side chosen (once) to dodge the tags that are already frozen and stay
+   on-canvas. After that the tag is a pure function of the arc + stored choice,
+   so launching new particles NEVER moves a previous readout — the newcomer
+   does the dodging. Resize re-derives pixels from the same frozen choice, so
+   tags stay glued to their arcs. */
+function tagRectOf(g){
+ var n=g.pts.length,i=Math.max(0,Math.min(n-1,Math.floor(n*g.tagPos.f)));
+ var j=Math.min(n-1,i+4),p=g.pts[i],q=g.pts[j];
+ var ax=cx+(p.x+(g.slide||0))*scale,ay=cy-p.y*scale;
+ var dx=(q.x-p.x)*scale,dy=-(q.y-p.y)*scale,L=Math.hypot(dx,dy)||1;
+ var nx=-dy/L*g.tagPos.s,ny=dx/L*g.tagPos.s;
+ return chipRect(ax+nx*g.tagPos.d,ay+ny*g.tagPos.d-11,g.tag,'center');
+}
+function ensureTagPos(g,frozen){
+ if(g.tagPos)return;
+ var fr=g.rev?[0.12,0.28,0.05]:[0.55,0.72,0.38,0.86];
+ for(var fi=0;fi<fr.length;fi++)for(var si=0;si<2;si++){
+  g.tagPos={f:fr[fi],s:si===0?1:-1,d:26};
+  var r=tagRectOf(g),ok=r.X>=4&&r.Y>=4&&r.X+r.w<=W-4&&r.Y+r.h<=H-4;
+  if(ok)for(var k=0;k<frozen.length;k++)if(rectsHit(r,frozen[k],4)){ok=false;break;}
+  if(ok)return;
+ }
+ g.tagPos={f:fr[0],s:1,d:26};
+}
+function keptGhostTags(){
+ var gn=st.ghosts.length,out=[];
+ st.ghosts.forEach(function(g,gi){
+  if(!g.tag||!g.pts||g.pts.length<4)return;
+  if(!g.special&&gi<gn-2)return;
+  out.push(g);
+ });
+ return out;
 }
 function draw(){
  ctx.clearRect(0,0,W,H);
@@ -1180,6 +1234,10 @@ function draw(){
   chip(cx,cy-8,'\u25B6 Play (or Fire) to expose the photograph','center','#ffd479');
  }else{
   var energyBoxes=[];
+  /* register the frozen ghost-tag rects up front so the LIVE pill dodges them
+     (safe now: the tags never nudge, so no phantom feedback is possible) */
+  (function(){var gSeen=[];keptGhostTags().forEach(function(g){
+    ensureTagPos(g,gSeen);var gr=tagRectOf(g);gSeen.push(gr);energyBoxes.push(gr);});})();
   if(st.mode==='track'){
    /* direction cues are legitimate only once the plate can fix the direction */
    var ey=cy+HALF_H*scale;
@@ -1207,13 +1265,9 @@ function draw(){
    var cb=nudgeChipDown(chipStackRect(cx+cp.x*scale,cy-cp.y*scale-26-extraH,lines,'center'),energyBoxes);
    energyBoxes.push(chipStack(cb.X+cb.w/2,cb.Y,lines,'center',liveCol));
   }
-  var gnPre=st.ghosts.length;
-  st.ghosts.forEach(function(g,gi){
-   if(!g.tag||!g.pts||g.pts.length<4)return;
-   if(!g.special&&gi<gnPre-2)return;
-   var gp=g.pts[Math.floor(g.pts.length*(g.rev?0.12:0.55))];
-   energyBoxes.push(chipRect(cx+(gp.x+(g.slide||0))*scale,cy-gp.y*scale-26,g.tag,'center'));
-  });
+  /* (ghost-tag rects are NOT pre-registered here: the tag loop below copies
+     energyBoxes, so registering them made every tag collide with its own
+     phantom copy and sit 28px low — audit finding) */
   /* r values now live in the identity pill above — one box per particle */
   /* status — right aligned so it can never collide with the B chip */
   var stat=null,scol='#ffd479';
@@ -1221,19 +1275,26 @@ function draw(){
   else if(t.stopped)stat='stopped inside the lead';
   else if(!t.plateOn){stat='no plate \u00B7 direction unknown';scol='#c9d2df';}
   else stat='lead plate in';
-  if(stat)chip(W-10,8,stat,'right',scol);
+  if(stat)chip(W-10,W<600?34:8,stat,'right',scol); /* drop below the DOM title band on narrow canvases */
  }
- /* ghost tags — newest two, plus every reveal overlay */
- var gn=st.ghosts.length,gBoxes=energyBoxes?energyBoxes.slice():[];
- st.ghosts.forEach(function(g,gi){
-  if(!g.tag||!g.pts||g.pts.length<4)return;
-  if(!g.special&&gi<gn-2)return;
-  var p=g.pts[Math.floor(g.pts.length*(g.rev?0.12:0.55))];
-  /* nudge each tag below any previously drawn ghost tag so they never overlap */
-  var gb=nudgeChipDown(chipRect(cx+(p.x+(g.slide||0))*scale,cy-p.y*scale-26,g.tag,'center'),gBoxes);
-  gBoxes.push(chip(gb.X+gb.w/2,gb.Y,g.tag,'center',g.col));
+ /* ghost tags — newest two, plus every reveal overlay; frozen placement (see
+    tagRectOf/ensureTagPos above): previous readouts never move on a new launch */
+ var gSeen2=[];
+ keptGhostTags().forEach(function(g){
+  ensureTagPos(g,gSeen2);
+  var gr=tagRectOf(g);gSeen2.push(gr);
+  chip(gr.X+gr.w/2,gr.Y,g.tag,'center',g.col);
  });
  if(st.sceneNoteT>0&&st.sceneNote)chip(cx,H-30,st.sceneNote,'center','#ffd479');
+ /* Fire button state machine: armed (blinking, new species waiting) wins;
+    otherwise a COMPLETED motion turns it into "Play again" — same particle,
+    same parameters — until a new shot or a new selection replaces it. */
+ var done=!st.armed&&!!st.track&&(st.mode==='track'?st.s>=st.track.len-1e-9:st.expo>=1);
+ st._againUI=done;
+ /* Fire button only; the top-bar button is handled by pausing on completion,
+    so it shows its native "Play" state (enforced per frame, write-guarded) */
+ var fTxt=done?'↻ Play again':'▶ Fire';
+ if(fireBtn.textContent!==fTxt){fireBtn.textContent=fTxt;fireBtn.classList.toggle('again',done);}
 }
 /* ---------- shell hooks ---------- */
 function betaAt(t,s){
@@ -1246,12 +1307,18 @@ function onFrame(dt){
  if(!st.track)fire('anim');
  var t=st.track;
  if(t){
-  if(st.mode==='photo'){if(st.expo<1)st.expo=Math.min(1,st.expo+dt*1.2);st.s=t.len;}
+  var wasRunning=(st.mode==='photo')?st.expo<1:st.s<t.len;
+  if(st.mode==='photo'){if(st.expo<1)st.expo=Math.min(1,st.expo+dt*0.7);st.s=t.len;} /* develop rate 1.2->0.7 (user: too fast) */
   else{
    st.expo=1;
    /* head speed follows the LOCAL beta, so it slows after the plate */
-   if(st.s<t.len)st.s=Math.max(0,Math.min(t.len,st.s+0.34*Math.max(0.05,betaAt(t,st.s))*dt));
+   if(st.s<t.len)st.s=Math.max(0,Math.min(t.len,st.s+0.17*Math.max(0.05,betaAt(t,st.s))*dt)); /* head speed halved 0.34->0.17 m/s (user: too fast even at 1x); per-point beta scaling and the Speed menu unchanged */
   }
+  /* the motion just finished ON SCREEN (we watched it cross the finish, not a
+     scene that starts pre-completed): pause, so the top-bar button flips to
+     "Play" - clicking it (or "Play again") relaunches the same shot */
+  var nowDone=(st.mode==='photo')?st.expo>=1:st.s>=t.len-1e-9;
+  if(wasRunning&&nowDone&&window.Shell&&Shell.setPlaying)Shell.setPlaying(false);
  }
  for(var i=0;i<st.ghosts.length;i++){
   var g=st.ghosts[i];
@@ -1343,8 +1410,13 @@ function onReset(){
  stageFor(window.Shell&&typeof Shell.step==='number'?Shell.step:0);
 }
 function onComplete(){
- /* free exploration: every particle reachable, readouts on, sim running */
+ /* free exploration: every particle reachable, readouts on. The entry shot is
+    launched LIVE (user request): instead of opening on an already-developed
+    track (which left Fire on "Play again" while the top button said Pause),
+    the current particle fires and flies; when it exits, the completion pause
+    flips the top button to Play and Fire to "Play again" together. */
  st.showNums=true;syncPanels();
+ st.scrub=false;fire('anim');
  Shell.setPlaying(true);
 }
 /* ---------- wiring ---------- */
@@ -1364,8 +1436,24 @@ plateChk.addEventListener('change',function(){
  syncPanels();fire(animMode());
 });
 clearBtn.addEventListener('click',function(){st.ghosts=[];draw();});
+/* top-bar Play doubles as "Play again" when the motion is complete. The shell's
+   own toggle listener registers LATER (inside Shell.init), so this handler is
+   deferred a tick to run after it — acting first meant: fire, set playing, then
+   the shell toggle flipped playing straight back off (the "second click" bug).
+   The relaunch happens only when the toggle landed on PLAY (user intent). */
+(function(){var sp=document.getElementById('shell-play');
+ if(sp)sp.addEventListener('click',function(){
+  setTimeout(function(){
+   if(st._againUI&&window.Shell&&Shell.playing){st.scrub=false;fire('anim');Shell.setPlaying(true);}
+  },0);
+ });})();
 fireBtn.addEventListener('click',function(){
  if(st.mystery&&st.mystery.phase===1){/* keep the unknown running */}
+ if(st.armed){ /* launch the armed selection: ghost the old track now, not at pick time */
+  var hid=!!(st.mystery&&st.mystery.phase===1);
+  if(st.track&&!st.scrub)pushGhost(hid);
+  if(st.mystery)cancelMystery();
+ }
  st.scrub=false;fire('anim');
  if(window.Shell&&Shell.setPlaying)Shell.setPlaying(true);
 });
@@ -1374,10 +1462,13 @@ beamBox.addEventListener('click',function(e){
  var b=e.target.closest('.sim-chip');if(!b)return;
  var k=b.dataset.p;
  if(k==='?'){mysteryClick();return;}
- var hid=!!(st.mystery&&st.mystery.phase===1);
- if(st.track&&!st.scrub)pushGhost(hid);
- if(st.mystery)cancelMystery();
- st.scrub=false;st.pKey=k;setActive(k);st.probeSig='';st.anon=false;fire(animMode());
+ /* selecting a species no longer auto-fires (user request): it ARMS the shot —
+    the sim pauses and the Fire button blinks until the user launches it.
+    Ghosting of the current track is deferred to the actual launch. */
+ st.pKey=k;setActive(k);st.probeSig='';st.anon=false;
+ st.armed=true;fireBtn.classList.add('armed');
+ if(window.Shell&&Shell.setPlaying)Shell.setPlaying(false);
+ draw();
 });
 /* ---------- guided-inquiry cards (questions, not answers) ---------- */
 function syncInqText(){

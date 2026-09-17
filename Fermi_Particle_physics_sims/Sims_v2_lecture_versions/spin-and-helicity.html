@@ -308,6 +308,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-chip:hover{border-color:var(--accent);}
 .sim-chip.sim-on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
 .sim-chip.sim-mini{min-width:60px;padding:5px 6px;}
+.sim-check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:var(--text);cursor:pointer;user-select:none;}
+.sim-check input{accent-color:var(--accent);margin:0;cursor:pointer;}
 .sim-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px;min-width:0;}
 .sim-flip + .sim-row{margin-top:2px;}
 .sim-flipnote .sim-lab{font-size:13px;}
@@ -510,17 +512,20 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <button class="sim-chip sim-mini" id="jMatch" type="button">ride along</button>
     <button class="sim-chip sim-mini" id="jOver" type="button">overtake</button>
   </div>
+  <label class="sim-check" for="chiralBarTgl"><input type="checkbox" id="chiralBarTgl" checked> Show chirality bar</label>
 </div>
 
-<div class="shell-panel sim-panel">
-  <div class="sim-h">Observer-frame readouts</div>
+<div class="shell-panel sim-panel collapsed"><!-- readouts closed by default (user request); header click reopens -->
+  <div class="shell-panel-head"><h3>Observer-frame readouts</h3><span class="shell-caret">▾</span></div>
+  <div class="shell-panel-body">
   <table class="sim-read"><tbody>
     <tr><td>E′ energy</td><td id="rE">1.123 MeV</td></tr>
     <tr><td>p′ momentum</td><td id="rP">+1.00 MeV</td></tr>
-    <tr><td>helicity h</td><td id="rH">+½ħ · spin along p′</td></tr>
+    <tr><td>helicity h</td><td id="rH">+½ħ, spin along p′</td></tr>
     <tr><td>speed in frame</td><td id="rV">0.890 c</td></tr>
-    <tr><td>chirality R : L</td><td id="rC">94.5% · 5.5%</td></tr>
+    <tr><td>chirality R : L</td><td id="rC">94.5%, 5.5%</td></tr>
   </tbody></table>
+  </div>
 </div>
     </div>
   </aside>
@@ -806,6 +811,7 @@ window.__audit = {
   var pSlider = $('pSlider'), bSlider = $('bSlider'), pVal = $('pVal'), bVal = $('bVal');
   var flipTick = $('flipTick'), flipLab = $('flipLab');
   var rE = $('rE'), rP = $('rP'), rH = $('rH'), rV = $('rV'), rC = $('rC');
+  var chiralBarTgl = $('chiralBarTgl');
 
   // ---------- physics (same formulas as the audit hook) ----------
   function phys() {
@@ -899,7 +905,12 @@ window.__audit = {
     var fs = Math.max(14, Math.min(18, H * 0.024));
     var fsB = Math.max(15, Math.min(20, H * 0.028));
     var short = W < 620;
-    var xe = W * (0.08 + wrap01(state.xe) * 0.84);
+    /* drift band inset by the longest arrow (+head): the spin and momentum
+       arrows anchor at the electron and may NOT be shortened or flipped (the
+       fixed spin arrow is the invariance statement), so the electron simply
+       never drifts close enough to an edge for them to truncate. */
+    var edgeM = Math.min(W * 0.2, 145) + 14;
+    var xe = edgeM + wrap01(state.xe) * (W - 2 * edgeM);
     var hCol = d.pT >= 0 ? C.right : C.left;
     var undef = Math.abs(d.betaRel) < 0.004;
 
@@ -926,11 +937,18 @@ window.__audit = {
        the spin arrow (horizontal); the surface dot circulates on a meridian ring
        at a fixed sense the boost slider can never touch. Classical picture,
        knowingly wrong — but no longer wrong in the "orbiting an atom" way. */
-    var mx = xe + re * 0.34 * Math.cos(state.phase);
-    var my = yT + re * 0.85 * Math.sin(state.phase);
+    /* ring scaled up for prominence (user request): a great-circle ring on the
+       ball's surface legitimately spans the full ball radius (ry ~ re), with a
+       slightly more open tilt (rx). Pure projection geometry - the rotation
+       itself (sense, rate, invariance) is untouched. */
+    var ringRx = re * 0.42, ringRy = re * 0.98;
+    var mx = xe + ringRx * Math.cos(state.phase);
+    var my = yT + ringRy * Math.sin(state.phase);
     var frontM = Math.cos(state.phase) >= 0;
-    var mr = Math.max(2.5, re * 0.26);
-    if (!frontM) { ctx.fillStyle = rgba(COL_S, 0.45); ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+    var mr = Math.max(3, re * 0.30);
+    /* (rear-half dot is drawn AFTER the ball body below — drawing it here put it
+       under the opaque ball, so the dot vanished for half of every revolution
+       and the rotation never read as complete) */
 
     // spin axis through the centre, along S. The curved arrow wraps the axle and
     // shows the rotation SENSE (right-hand rule: S along +x, front face sweeps
@@ -959,18 +977,30 @@ window.__audit = {
     }
     ctx.restore();
 
-    // electron glow + body
+    // electron glow + body. The body keeps its FULL radius deliberately - it is
+    // the electron itself (a ball spinning about its own axis, nothing orbits);
+    // shrinking it would make the surface-dot track read as orbital motion, the
+    // exact misconception the HC-review rebuild removed. Prominence for the ring
+    // comes from dimming the body slightly instead (contrast, not geometry).
     ctx.fillStyle = rgba(hCol, 0.14);
     ctx.beginPath(); ctx.arc(xe, yT, re * 2.4, 0, 7); ctx.fill();
-    ctx.fillStyle = C.text;
+    ctx.fillStyle = rgba(C.text, 0.8);
     ctx.beginPath(); ctx.arc(xe, yT, re, 0, 7); ctx.fill();
     ctx.strokeStyle = C.bg; ctx.lineWidth = 2; ctx.stroke();
 
-    // meridian ring (perpendicular to the axis) + circulating surface dot
-    ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(COL_S, 0.6); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(xe, yT, re * 0.34, re * 0.85, 0, 0, Math.PI * 2); ctx.stroke();
+    // meridian ring (perpendicular to the axis) + circulating surface dot.
+    // Depth cue: the NEAR half (cos t >= 0, same convention as frontM) is a solid
+    // stroke; the FAR half is dotted and dimmer — dotted = behind the plane.
+    ctx.save(); ctx.lineWidth = 2.5;
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(COL_S, 0.5);
+    ctx.beginPath(); ctx.ellipse(xe, yT, ringRx, ringRy, 0, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+    ctx.setLineDash([]); ctx.strokeStyle = COL_S;
+    ctx.beginPath(); ctx.ellipse(xe, yT, ringRx, ringRy, 0, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke();
     ctx.restore();
+    // the dot now survives the whole revolution: bright on the near half, dimmer
+    // and slightly smaller ghosted through the ball on the far half
     if (frontM) { ctx.fillStyle = COL_S; ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+    else { ctx.fillStyle = rgba(COL_S, 0.45); ctx.beginPath(); ctx.arc(mx, my, mr * 0.8, 0, 7); ctx.fill(); }
 
     // spin arrow (never changes)
     var Ls = Math.max(60, Math.min(130, W * 0.09));
@@ -1016,10 +1046,18 @@ window.__audit = {
     // top chips: observer boost (left) + helicity badge (right)
     chipBox(12, 10, (short ? 'β = ' : 'boost β = ') + state.betaObs.toFixed(4), C.text, C, fsB, false);
     var t2, c2;
-    if (undef) { t2 = 'p′ ≈ 0 · h undefined'; c2 = C.muted; }
-    else if (d.pT >= 0) { t2 = short ? 'h = +½ħ' : 'h = +½ħ · spin along p′'; c2 = C.right; }
-    else { t2 = short ? 'h = −½ħ' : 'h = −½ħ · spin against p′'; c2 = C.left; }
+    if (undef) { t2 = 'p′ ≈ 0, h undefined'; c2 = C.muted; }
+    else if (d.pT >= 0) { t2 = short ? 'h = +½ħ' : 'h = +½ħ, spin along p′'; c2 = C.right; }
+    else { t2 = short ? 'h = −½ħ' : 'h = −½ħ, spin against p′'; c2 = C.left; }
     chipBox(W - 12, 10, t2, c2, C, fsB, true);
+
+    var eqEl = document.getElementById('chiralEq');
+    var showBar = !chiralBarTgl || chiralBarTgl.checked;
+    if (eqEl) {
+      var eqDisp = showBar ? '' : 'none';
+      if (eqEl.style.display !== eqDisp) eqEl.style.display = eqDisp;
+    }
+    if (!showBar) return;
 
     // chirality panel (bottom band — L/R weights follow the electron's signed velocity in the observer frame)
     var px0 = W * 0.07, pwd = W * 0.86, py0 = H * 0.75, ph = H * 0.19;
@@ -1035,9 +1073,32 @@ window.__audit = {
     ctx.beginPath(); ctx.moveTo(bx + bw / 2, by - 4); ctx.lineTo(bx + bw / 2, by + bh + 4); ctx.stroke();
     ctx.restore();
     var ly = Math.min(by + bh + fs + 6, py0 + ph - 5);
+    /* the fixed-size KaTeX card (top:87%) assumes a tall canvas: shrink it on
+       short panels so its bottom row is never clipped (threshold uses H only —
+       no measure-feedback loop), and if its rect still covers the percentage
+       row, print the percentages inside the bar instead of underneath it */
+    var eqFs = H < 430 ? '11px' : '';
+    if (eqEl && eqEl.style.fontSize !== eqFs) eqEl.style.fontSize = eqFs;
+    /* at the sim's own 240px canvas minimum even the 11px card clips: lift its
+       top just enough to stay on-canvas (never binds at 15px heights) */
+    var eqTop = H < 430 ? Math.min(0.87 * H, H - 42).toFixed(0) + 'px' : '';
+    if (eqEl && eqEl.style.top !== eqTop) eqEl.style.top = eqTop;
+    var inBar = false;
+    if (eqEl && eqEl.offsetParent){
+      var er = eqEl.getBoundingClientRect(), crc = cv.getBoundingClientRect();
+      var eTop = er.top - crc.top, eLft = er.left - crc.left, eRgt = er.right - crc.left;
+      inBar = (eTop < ly + 2) && (eLft < bx + 150 || eRgt > bx + bw - 150);
+    }
     ctx.font = '600 ' + fs + 'px ' + FONT;
-    ctx.fillStyle = COL_R; ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx, ly);
-    ctx.fillStyle = COL_L; ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw, ly);
+    if (inBar){
+      var lyB = by + bh / 2 + fs * 0.36;
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx + 8, lyB);
+      ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw - 8, lyB);
+    } else {
+      ctx.fillStyle = COL_R; ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx, ly);
+      ctx.fillStyle = COL_L; ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw, ly);
+    }
     ctx.textAlign = 'left';
     /* chiral weights vs p and m render as KaTeX in #chiralEq, overlaid on the
        panel's empty bottom band (user request: proper rendering, not canvas text) */
@@ -1046,6 +1107,20 @@ window.__audit = {
   // ---------- readouts / prediction ----------
   function updateReadouts(d) {
     d = d || phys();
+    /* preset chips reflect the CURRENT state: a chip is lit while beta sits on
+       that preset's target (ride-along's target tracks the live p), and clears
+       the moment the slider leaves it — so the user always sees which preset
+       they are in. At very high p ride-along and overtake targets coincide
+       (you cannot overtake); ride-along wins the tie, matching card 4. */
+    if (jLab && jMatch && jOver) {
+      var bNow = state.betaObs, rideT = Math.round(d.bP / 0.0005) * 0.0005;
+      var onLab = Math.abs(bNow) <= 2.5e-4;
+      var onRide = !onLab && Math.abs(bNow - rideT) <= 2.5e-4;
+      var onOver = !onLab && !onRide && Math.abs(bNow - 0.9995) <= 2.5e-4;
+      jLab.classList.toggle('sim-on', onLab);
+      jMatch.classList.toggle('sim-on', onRide);
+      jOver.classList.toggle('sim-on', onOver);
+    }
     if (pVal) pVal.textContent = fmtPin(state.pMeV);
     if (bVal) bVal.textContent = state.betaObs.toFixed(4);
     if (flipLab) flipLab.textContent = d.bP.toFixed(d.bP > 0.999 ? 4 : 3);
@@ -1054,11 +1129,11 @@ window.__audit = {
     if (rP) rP.textContent = fmtMomSigned(d.pT);
     if (rH) {
       if (Math.abs(d.betaRel) < 0.004) { rH.textContent = 'undefined (p′ ≈ 0)'; rH.style.color = 'var(--muted)'; }
-      else if (d.pT >= 0) { rH.textContent = '+½ħ · spin along p′'; rH.style.color = COL_R; }
-      else { rH.textContent = '−½ħ · spin against p′'; rH.style.color = COL_L; }
+      else if (d.pT >= 0) { rH.textContent = '+½ħ, spin along p′'; rH.style.color = COL_R; }
+      else { rH.textContent = '−½ħ, spin against p′'; rH.style.color = COL_L; }
     }
     if (rV) rV.textContent = d.betaRel.toFixed(3) + ' c';
-    if (rC) rC.textContent = pctS(d.fR) + ' · ' + pctS(d.fL);
+    if (rC) rC.textContent = pctS(d.fR) + ', ' + pctS(d.fL);
   }
 
   function tick(d) {
@@ -1099,6 +1174,10 @@ window.__audit = {
   if (jLab) jLab.addEventListener('click', function () { restartAnim(); setBeta(0); });
   if (jMatch) jMatch.addEventListener('click', function () { restartAnim(); setBeta(Math.round(phys().bP / 0.0005) * 0.0005); });
   if (jOver) jOver.addEventListener('click', function () { restartAnim(); setBeta(0.9995); });
+  if (chiralBarTgl) chiralBarTgl.addEventListener('change', function () {
+    tick();
+    if (chiralBarTgl.checked) requestAnimationFrame(function () { tick(); });
+  });
 
   // ---------- KaTeX (guarded, retried) ----------
   var mathTries = 0;

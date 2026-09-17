@@ -369,6 +369,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <dd>Open the muon channel at √s = 2 GeV → raise both beams to 10 GeV and watch reach grow while rate drops ×25 → compare 25+1 GeV vs 5+5 GeV (same √s = 10: asymmetry only buys a boost) → cross the W⁺W⁻ threshold at 161 GeV → plan a run: luminosity and efficiency set the count.</dd>
   <dt>Misconception</dt>
   <dd>“More energy ⇒ more events.” Wrong twice: (1) away from the Z⁰ pole this s-channel rate scales as 1/s — energy widens the menu of particles, luminosity buys statistics (the one exception, the Z⁰ resonance, is a narrow 2.5 GeV window at 91 GeV); (2) beam energies don’t simply add — unequal beams waste energy on center-of-mass motion, visible as E₁+E₂ − √s.</dd>
+  <dt>Decay prongs</dt>
+  <dd>Unstable products decay in flight: after the pair flies out, its track ends fan into short <em>prongs</em> tipped with dots — the secondaries of the decay. The sim draws 2 prongs for τ⁺τ⁻ and 3 for B⁺B⁻, W⁺W⁻, ZZ and tt̄; μ⁺μ⁻ tracks stay clean because muons cross the whole detector without decaying. The fan marks the decay vertex schematically — prong counts indicate “a few secondaries”, not the exact multiplicity of each real decay mode.</dd>
 </dl>
         <table class="shell-info-table">
   <tr><th>Principle</th><th>Where it appears</th></tr>
@@ -441,7 +443,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 
   <main class="shell-hero">
     <div class="plot-box sim-stagebox">
-  <div class="plot-title">Head-on e⁺e⁻: what can you make?</div>
+  <div class="plot-title">Head-on collision</div>
   <canvas id="simMainCv"></canvas>
 </div>
   </main>
@@ -518,9 +520,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
   <div class="sim-box">
     <label class="sim-check"><input type="checkbox" id="simLink" checked><span>link beams (symmetric)</span></label>
   </div>
+  <div class="sim-box"><!-- view toggle moved up from the Readouts panel (user: unnoticeable there); the beam sliders slide the operating point along this very plot -->
+    <label class="sim-check"><input type="checkbox" id="simShowPlot" checked><span>Show σ(√s) plot</span></label>
+  </div>
 </div>
 <div class="shell-panel">
-  <div class="sim-ptitle">Run plan</div>
+  <div class="sim-ptitle">Experimental readouts</div>
   <div class="sim-box">
     <label class="sim-row" for="simLum"><span>∫L dt</span><b id="simLumVal">1.0 fb⁻¹</b></label>
     <input class="sim-slider" type="range" id="simLum" min="-2" max="2" step="0.001" value="0" aria-label="integrated luminosity">
@@ -529,20 +534,19 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <label class="sim-row" for="simEff"><span>efficiency ε</span><b id="simEffVal">0.90</b></label>
     <input class="sim-slider" type="range" id="simEff" min="0" max="1" step="0.01" value="0.9" aria-label="detection efficiency">
   </div>
+  <div class="sim-box"><!-- the one readout these two controls drive: N = σ·∫L dt·ε -->
+    <div class="sim-row" style="margin:0"><span>μ⁺μ⁻ events</span><b id="simEvents">7.82×10⁵</b></div>
+  </div>
 </div>
 <div class="shell-panel">
-  <details class="sim-drop" open>
+  <details class="sim-drop"><!-- boots closed (user request); header click opens -->
     <summary><div class="sim-ptitle">Readouts</div></summary>
     <table class="sim-table">
       <tr><td>√s</td><td id="simRoots">10.00 GeV</td></tr>
       <tr><td>σ(μ⁺μ⁻)</td><td id="simSigma">0.869 nb</td></tr>
-      <tr><td>μ⁺μ⁻ events</td><td id="simEvents">7.82×10⁵</td></tr>
       <tr><td>lost to boost</td><td id="simWaste">0.00 GeV</td></tr>
     </table>
   </details>
-  <div class="sim-box">
-    <label class="sim-check"><input type="checkbox" id="simShowPlot" checked><span>Show σ(√s) plot</span></label>
-  </div>
 </div>
     </div>
   </aside>
@@ -816,8 +820,8 @@ var THR = [
   { sym: 'ZZ',   m: 182.37 },
   { sym: 'tt̅',  m: 345.4 }
 ];
-var T_CYCLE = 2.6;
-var HOLD_CY = 2.35;   /* products fully out — the informative frame to park on */
+var T_CYCLE = 4.2;   /* was 2.6: product tracks finished growing at 2.6 and faded immediately — they now HOLD fully drawn for ~1.1 s before a gentler fade (user request) */
+var HOLD_CY = 3.0;    /* products fully out (2.6) AND decay fans complete (3.0) — the informative frame to park on */
 
 var S = { E1: 5, E2: 5, link: true, L: 1, eff: 0.9, t: 0, cy: HOLD_CY, evCos: 0.35, evSign: 1, showPlot: true, oneShot: false, flavor: 0 };
 
@@ -885,7 +889,7 @@ function updateUI(){
   els.effv.textContent = S.eff.toFixed(2);
   var rs = sqrtS(S.E1, S.E2), open = rs >= THR[0].m - 1e-12, sg = sigNb(rs);
   els.rs.textContent = fmtRS(rs) + ' GeV';
-  els.sg.innerHTML = open ? fmtSigma(sg) : '0 · closed';
+  els.sg.innerHTML = open ? fmtSigma(sg) : '0, closed';
   els.ev.innerHTML = open ? fmtN(sg * S.L * 1e6 * S.eff) : '0';
   els.ws.textContent = fmtW(Math.max(0, S.E1 + S.E2 - rs));
 }
@@ -982,7 +986,16 @@ function draw(){
   /* ---- headline ---- */
   ctx.font = '700 ' + fBig + FAM;
   ctx.fillStyle = P.text; ctx.textAlign = 'center';
-  ctx.fillText('√s = ' + fmtRS(rs) + ' GeV', W / 2, headH - 8);
+  /* the DOM plot-title occupies the top-left (~x<300 in its 12-26px band); on
+     narrow canvases a centered headline would run under it, so slide the
+     headline right just enough to clear, keeping it on-canvas */
+  var hlTxt = '√s = ' + fmtRS(rs) + ' GeV';
+  var hlHalf = ctx.measureText(hlTxt).width / 2;
+  var hlX = W / 2;
+  if (hlX - hlHalf < 306 && headH - 8 - fBig * 0.75 < 28){
+    hlX = Math.min(306 + hlHalf, W - padX - hlHalf);
+  }
+  ctx.fillText(hlTxt, hlX, headH - 8);
 
   /* ---- beam labels (own row, edges) + waste (center) ---- */
   var rowY = sceneTop + fs + 2;
@@ -1021,7 +1034,13 @@ function draw(){
   /* solenoid field declaration — the track curvature (opposite for e⁺/e⁻, tighter at low p) is this B via r = p/qB */
   ctx.font = '600 ' + Math.max(11, fs - 2) + FAM;
   ctx.fillStyle = P.muted; ctx.textAlign = 'left';
-  ctx.fillText('B ⊙ out of screen (detector solenoid, schematic)', xIP + R * 0.98 + 8, pipeY - R * 0.72);
+  /* shrink-to-fit: fall back to the short form, and skip entirely rather than
+     clip mid-word off the right canvas edge on narrow canvases */
+  var solX = xIP + R * 0.98 + 8;
+  var solTxt = 'B ⊙ out of screen (detector solenoid, schematic)';
+  if (solX + ctx.measureText(solTxt).width > W - 6) solTxt = 'B ⊙ out of screen';
+  if (solX + ctx.measureText(solTxt).width <= W - 6)
+    ctx.fillText(solTxt, solX, pipeY - R * 0.72);
 
   /* direction chevrons */
   function chevronRow(xa, xb, dir, col){
@@ -1080,7 +1099,7 @@ function draw(){
   if (S.cy >= 1.45){
     var g = c01((S.cy - 1.45) / 1.15);
     var ease = 1 - (1 - g) * (1 - g);
-    var fade = c01((T_CYCLE - S.cy) / 0.2);
+    var fade = c01((T_CYCLE - S.cy) / 0.5);
 
     function track(pz, px, col, tag, q){
       var pm = Math.hypot(pz, px);
@@ -1149,15 +1168,23 @@ function draw(){
       var gam = 1 / Math.sqrt(Math.max(1e-12, 1 - b * b));
       var tpA = track(gam * (pstar * cth + b * Estar), pstar * sth, P.m1, chv.tA, -chv.q);
       var tpB = track(gam * (-pstar * cth + b * Estar), -pstar * sth, P.m2, chv.tB, chv.q);
-      /* decay stubs: heavy products (τ, B, W, Z) fan out at the track end */
+      /* decay stubs: heavy products (τ, B, W, Z) fan out at the track end.
+         Staged as a SECOND act (user request — growing them alongside the
+         parent buried them under the moving arrowhead and read as a glitch):
+         the parent flies 1.45→2.6, then the decay fans out during the hold,
+         longer and at full strength, each prong tipped with a secondary dot. */
+      var sg2 = c01((S.cy - 2.6) / 0.4);
+      var sEase = 1 - (1 - sg2) * (1 - sg2);
       function stubsAt(tp, col){
-        if (!tp || !chv.stub) return;
-        ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = 0.8 * fade; ctx.lineWidth = 2; ctx.lineCap = 'round';
-        var a0 = Math.atan2(tp.dy, tp.dx), s3;
+        if (!tp || !chv.stub || sg2 <= 0) return;
+        ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = fade; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        var a0 = Math.atan2(tp.dy, tp.dx), s3, sl = 26 * sEase;
         for (s3 = 0; s3 < chv.stub; s3++){
-          var aa = a0 + (s3 - (chv.stub - 1) / 2) * 0.5;
-          ctx.beginPath(); ctx.moveTo(tp.ex, tp.ey);
-          ctx.lineTo(tp.ex + Math.cos(aa) * 15 * ease, tp.ey + Math.sin(aa) * 15 * ease); ctx.stroke();
+          var aa = a0 + (s3 - (chv.stub - 1) / 2) * 0.55;
+          var sx2 = tp.ex + Math.cos(aa) * sl, sy2 = tp.ey + Math.sin(aa) * sl;
+          ctx.beginPath(); ctx.moveTo(tp.ex, tp.ey); ctx.lineTo(sx2, sy2); ctx.stroke();
+          ctx.fillStyle = col;
+          ctx.beginPath(); ctx.arc(sx2, sy2, 2.6, 0, 6.2832); ctx.fill();
         }
         ctx.restore();
       }
@@ -1182,7 +1209,9 @@ function draw(){
   /* idle gap between events — at low expected yield, say WHY it is quiet */
   if (S.cy >= T_CYCLE && !S.oneShot && idleT() > 1.2 && !(window.HT && HT())){
     ctx.font = '600 ' + fs + FAM; ctx.fillStyle = P.muted; ctx.textAlign = 'center';
-    ctx.fillText('low rate — waiting for the next event (σ·∫L dt·ε is small)', xIP, pipeY + R + fs + 10);
+    /* clamp inside the scene band so it never runs through the threshold chips */
+    ctx.fillText('low rate — waiting for the next event (σ·∫L dt·ε is small)', xIP,
+      Math.min(pipeY + R + fs + 10, sceneBot - 8));
   }
 
   /* ---- chart: sigma vs sqrt(s), thresholds, operating point ---- */
@@ -1295,12 +1324,17 @@ function draw(){
   if (open){
     var cyv = yOf(sg), pr = 4.5 + 1.5 * Math.sin(S.t * 4);
     /* the collision flash echoes on the operating point — the event just seen
-       IS this dot on the σ curve (HC: link the top to the bottom) */
-    if (S.cy >= 1.1 && S.cy < 1.45){
-      var ff = (S.cy - 1.1) / 0.35;
-      ctx.strokeStyle = P.accent; ctx.globalAlpha = (1 - ff) * 0.45; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(xIP, pipeY + R * 0.95); ctx.lineTo(cx, cyv); ctx.stroke();
-      ctx.globalAlpha = 1;
+       IS this dot on the σ curve (HC: link the top to the bottom). The link
+       line now PERSISTS for the whole collision cycle (user request): bright
+       during the flash, steady while the products hold, gone with them. */
+    if (S.cy >= 1.1){
+      var ff = c01((S.cy - 1.1) / 0.35);
+      var aLink = (0.45 - 0.2 * ff) * c01((T_CYCLE - S.cy) / 0.5);
+      if (aLink > 0.01){
+        ctx.strokeStyle = P.accent; ctx.globalAlpha = aLink; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(xIP, pipeY + R * 0.95); ctx.lineTo(cx, cyv); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       pr += (1 - ff) * 5;
     }
     ctx.fillStyle = P.accent;
