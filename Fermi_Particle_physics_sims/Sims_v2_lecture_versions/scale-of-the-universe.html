@@ -1094,24 +1094,73 @@ function drawEarth(cx,cy,R,t){
   ctx.restore();
 }
 function drawHuman(cx,cy,R,t){
+  /* Rebuilt figure (user request): anatomical silhouette — sloped shoulders,
+     visible neck, waist/hip curves, tapered limbs (polygon limbs: no stroke-cap
+     knee bulges), gradient shading, and a live idle animation (breathing +
+     arm micro-sway). Geometry iterated against rendered previews. */
   const H=2*R, top=cy-R;
+  const breathe=Math.sin(t*1.5)*0.004*H, sway=Math.sin(t*0.9)*0.006*H;
+  const P=(x,y)=>[cx+x*H, top+y*H];
   ctx.save();
-  ctx.fillStyle='#24313f'; ctx.strokeStyle='#24313f'; ctx.lineCap='round';
-  ctx.fillStyle='rgba(0,0,0,0.18)';
-  ctx.beginPath(); ctx.ellipse(cx, top+H+2, 0.16*H, 0.03*H, 0, 0, 7); ctx.fill();
-  ctx.fillStyle='#24313f';
-  ctx.beginPath(); ctx.arc(cx, top+0.075*H, 0.072*H, 0, 7); ctx.fill();
-  rrPath(cx-0.115*H, top+0.16*H, 0.23*H, 0.36*H, 0.09*H); ctx.fill();
-  ctx.lineWidth=0.05*H;
-  ctx.beginPath(); ctx.moveTo(cx-0.115*H, top+0.20*H); ctx.lineTo(cx-0.17*H, top+0.47*H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx+0.115*H, top+0.20*H); ctx.lineTo(cx+0.17*H, top+0.47*H); ctx.stroke();
-  ctx.lineWidth=0.055*H;
-  ctx.beginPath(); ctx.moveTo(cx-0.05*H, top+0.51*H); ctx.lineTo(cx-0.07*H, top+0.98*H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx+0.05*H, top+0.51*H); ctx.lineTo(cx+0.07*H, top+0.98*H); ctx.stroke();
-  /* visible hands at the arm ends — the right one is the zoom target */
+  const g=ctx.createLinearGradient(0,top,0,top+H);
+  g.addColorStop(0,'#2e3e50'); g.addColorStop(1,'#1c2733');
+  /* ground shadow, breathing-synced */
+  ctx.fillStyle='rgba(0,0,0,0.20)';
+  ctx.beginPath(); ctx.ellipse(cx, top+0.995*H, (0.14+0.002*Math.sin(t*1.5))*H, 0.014*H, 0, 0, 7); ctx.fill();
+  /* tapered limb: [[x,y,w]...] in H units -> one polygon + end caps */
+  function limb(pts,dy0){
+    dy0=dy0||0;
+    const Ls=[],Rs=[];
+    for(let i=0;i<pts.length;i++){
+      const [x,y,w]=pts[i];
+      let dx,dy;
+      if(i===0){dx=pts[1][0]-x;dy=pts[1][1]-y;}
+      else if(i===pts.length-1){dx=x-pts[i-1][0];dy=y-pts[i-1][1];}
+      else{dx=pts[i+1][0]-pts[i-1][0];dy=pts[i+1][1]-pts[i-1][1];}
+      const L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
+      Ls.push([x+nx*w/2,y+ny*w/2]); Rs.push([x-nx*w/2,y-ny*w/2]);
+    }
+    ctx.beginPath();
+    Ls.forEach(([x,y],i)=>{const[a,b]=P(x,y);i?ctx.lineTo(a,b+dy0):ctx.moveTo(a,b+dy0);});
+    Rs.reverse().forEach(([x,y])=>{const[a,b]=P(x,y);ctx.lineTo(a,b+dy0);});
+    ctx.closePath(); ctx.fill();
+    for(const [x,y,w] of [pts[0],pts[pts.length-1]]){
+      const[a,b]=P(x,y);
+      ctx.beginPath(); ctx.arc(a,b+dy0,w*H/2,0,7); ctx.fill();
+    }
+  }
+  ctx.fillStyle=g;
+  /* legs + feet (drawn first, hips cover the thigh tops) */
+  for(const s of [-1,1]){
+    limb([[s*0.056,0.500,0.080],[s*0.050,0.715,0.058],[s*0.054,0.940,0.042]]);
+    limb([[s*0.056,0.952,0.030],[s*0.102,0.960,0.030]]);
+  }
+  /* arms (shoulder -> elbow -> wrist, relaxed bend + micro-sway) */
+  for(const s of [-1,1]){
+    const sw=s*sway/H;
+    limb([[s*0.116,0.225,0.050],[s*0.150+sw,0.340,0.042],[s*0.162+2*sw,0.465,0.033]],breathe*0.6);
+  }
+  /* torso: left boundary mirrored, shallow-V crotch */
+  ctx.beginPath();
+  { const q=(x0,y0,x1,y1,x2,y2)=>ctx.quadraticCurveTo(cx+x1*H,top+y1*H+breathe,cx+x2*H,top+y2*H+(y2<0.3?breathe:0));
+    const [ax,ay]=P(-0.024,0.158); ctx.moveTo(ax,ay+breathe);
+    q(-0.024,0.158,-0.135,0.162,-0.142,0.238);
+    ctx.quadraticCurveTo(cx-0.116*H,top+0.330*H,cx-0.090*H,top+0.408*H);
+    ctx.quadraticCurveTo(cx-0.124*H,top+0.468*H,cx-0.118*H,top+0.552*H);
+    ctx.lineTo(cx-0.020*H,top+0.578*H); ctx.lineTo(cx+0.020*H,top+0.578*H);
+    ctx.lineTo(cx+0.118*H,top+0.552*H);
+    ctx.quadraticCurveTo(cx+0.124*H,top+0.468*H,cx+0.090*H,top+0.408*H);
+    ctx.quadraticCurveTo(cx+0.116*H,top+0.330*H,cx+0.142*H,top+0.238*H+breathe);
+    ctx.quadraticCurveTo(cx+0.135*H,top+0.162*H+breathe,cx+0.024*H,top+0.158*H+breathe);
+    ctx.closePath(); ctx.fill(); }
+  /* neck + head (breathing raises them with the chest) */
+  ctx.lineCap='round'; ctx.strokeStyle=g; ctx.lineWidth=0.044*H;
+  ctx.beginPath(); ctx.moveTo(cx,top+0.108*H+breathe); ctx.lineTo(cx,top+0.170*H+breathe); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(cx,top+0.062*H+breathe,0.056*H,0.067*H,0,0,7); ctx.fill();
+  /* hands — the right one is the zoom target (position preserved) */
   ctx.fillStyle='#e9c19b';
-  ctx.beginPath(); ctx.ellipse(cx-0.17*H, top+0.485*H, 0.016*H, 0.021*H, 0.35, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(cx+0.17*H, top+0.485*H, 0.016*H, 0.021*H, -0.35, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx-0.166*H-2*sway,top+0.492*H+breathe*0.6,0.0165*H,0.023*H,0.25,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx+0.166*H+2*sway,top+0.492*H+breathe*0.6,0.0165*H,0.023*H,-0.25,0,7); ctx.fill();
   ctx.restore();
 }
 function drawHair(cx,cy,R,t){
