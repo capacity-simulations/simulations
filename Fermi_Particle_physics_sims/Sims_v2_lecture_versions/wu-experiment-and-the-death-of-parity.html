@@ -1023,7 +1023,7 @@ function startRun(){
   if(S.run) return;
   setT(TMIN);
   resampleSpins(); clearCounts();
-  S.run = { dir:S.Bdir, t:0, T0:S.T, P0:S.P, pts:[], winUp:0, winTot:0, winT:0, earlyUp:0, earlyTot:0 };
+  S.run = { dir:S.Bdir, t:0, T0:S.T, P0:S.P, pts:[], winUp:0, winTot:0, winT:0, earlyUp:0, earlyTot:0, earlyPsum:0, earlyTsum:0 };
   syncControls(); updateReadouts();
   try{ if(window.Shell && Shell.setPlaying) Shell.setPlaying(true); }catch(e){}
 }
@@ -1046,9 +1046,10 @@ function physics(dt){
   if(S.run){
     S.run.t += dt;
     setT(S.run.T0 * Math.exp(S.run.t / WARM_TAU));       /* the crystal warms back up */
+    if(S.run.t < 4){ S.run.earlyPsum += S.P*dt; S.run.earlyTsum += dt; }  /* window-averaged P for an unbiased theory row */
     S.run.winT += dt;
-    if(S.run.winT >= 1.0){                                /* one measured point per second */
-      if(S.run.winTot > 0) S.run.pts.push([S.run.t, (S.run.winUp/S.run.winTot)/0.5]);
+    if(S.run.winT >= 2.0){                                /* one measured point per 2 s (more counts per point) */
+      if(S.run.winTot > 0) S.run.pts.push([S.run.t, (S.run.winUp/S.run.winTot)/0.5, S.run.winTot]);
       S.run.winT = 0; S.run.winUp = 0; S.run.winTot = 0;
       syncControls(); updateReadouts(); drawRate();
     }
@@ -1128,7 +1129,11 @@ function measured(){
   if(rU+rD<=0) return {a:0,s:0,t:0};
   const a=(rD-rU)/(rD+rU);
   const s=0.5*Math.sqrt(1/U.earlyTot + 1/D.earlyTot);
-  return {a:a, s:s, t:U.earlyTot+D.earlyTot, rU:rU, rD:rD, P0:(U.P0+D.P0)/2};
+  const peU = U.earlyTsum ? U.earlyPsum/U.earlyTsum : U.P0;
+  const peD = D.earlyTsum ? D.earlyPsum/D.earlyTsum : D.P0;
+  /* effective (early-window-averaged) polarization: the crystal warms during the
+     t<4 s counting window, so P0-at-3mK overstated the theory target */
+  return {a:a, s:s, t:U.earlyTot+D.earlyTot, rU:rU, rD:rD, P0:(peU+peD)/2};
 }
 /* Sign-aware significance: the Wu signal is 𝒜 ≥ 2σ from zero, signed like
    A·P·β (A = −1 ⇒ negative), and closer to the theory value A·P·(v/c)/2 than
@@ -1614,7 +1619,7 @@ function drawRate(){
   }
   c.textAlign='center';
   for(const t of [0,10,20]) c.fillText(t+' s', X(t), H-7);
-  c.fillText('time since cooling', mL+pw/2, H-7+0); c.textAlign='left';
+  c.fillText('time since cooling (compressed \u2014 real run \u2248 8 min)', mL+pw/2, H-7+0); c.textAlign='left';
   const theo = (dir,P0,t)=> 1 + dir*A_COEF*VC*0.5*polOfT(TMIN*Math.exp(t/WARM_TAU))*(P0/polOfT(TMIN));
   const drawRun = (run, col, live)=>{
     if(!run) return;
@@ -1626,10 +1631,21 @@ function drawRate(){
       const y=Y(theo(run.dir, run.P0, t)); (t===0)?c.moveTo(X(t),y):c.lineTo(X(t),y);
     }
     c.stroke(); c.setLineDash([]); c.globalAlpha=1;
-    /* measured points */
-    c.fillStyle=col;
+    /* measured points with sqrt(N) error bars (Wu 1957 presentation) */
     for(const p of run.pts){
-      c.beginPath(); c.arc(X(p[0]), Y(Math.max(0.55,Math.min(1.45,p[1]))), live?2.6:2.2, 0, 6.2832); c.fill();
+      const yc=Y(Math.max(0.55,Math.min(1.45,p[1])));
+      if(p[2]>0){
+        const f=Math.max(0.02,Math.min(0.98,p[1]*0.5));
+        const sig=Math.sqrt(f*(1-f)/p[2])/0.5;
+        const yl=Y(Math.max(0.55,Math.min(1.45,p[1]-sig))), yh=Y(Math.max(0.55,Math.min(1.45,p[1]+sig)));
+        c.strokeStyle=col; c.globalAlpha=0.7; c.lineWidth=1.2;
+        c.beginPath(); c.moveTo(X(p[0]),yl); c.lineTo(X(p[0]),yh); c.stroke();
+        c.beginPath(); c.moveTo(X(p[0])-2.5,yl); c.lineTo(X(p[0])+2.5,yl);
+        c.moveTo(X(p[0])-2.5,yh); c.lineTo(X(p[0])+2.5,yh); c.stroke();
+        c.globalAlpha=1;
+      }
+      c.fillStyle=col;
+      c.beginPath(); c.arc(X(p[0]), yc, live?2.6:2.2, 0, 6.2832); c.fill();
     }
   };
   drawRun(S.runs.up, '#3b82f6', false);
