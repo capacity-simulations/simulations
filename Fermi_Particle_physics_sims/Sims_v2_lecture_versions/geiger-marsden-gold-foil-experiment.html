@@ -905,7 +905,10 @@ function record(th){
 /* incident alphas -> a physical fraction n*t*sigma(>1deg) actually scatters */
 function fireBatch(n){
   if(n<=0)return; var Ek=EkOf(st.p);
-  if(st.Nf===0) st.t0=st.t;   /* beam-on stamp: the screen glow waits one transit time from here */
+  /* beam-front stamp, FROZEN at beam-on: glow, dots and plot all wait for this one
+     arrival time. Computed once (not per-frame) so the plot band appearing cannot
+     change the geometry and re-flip the gate (that feedback caused flicker). */
+  if(st.Nf===0) st.tGate=st.t+(geo?((geo.cx-geo.exitX)+(geo.R-5))/Math.max(120,geo.R*9*st.p):1.2);
   st.Nf+=n;
   var P1=NT*sigGT(THMIN,Ek); if(P1>0.95)P1=0.95;
   var k=poisson(n*P1,Math.random); if(k>n)k=n;
@@ -916,7 +919,7 @@ function fireBatch(n){
 function applyRun(p,N,seed){
   st.p=Math.min(PMAX,Math.max(PMIN,p||0.193));
   st.Nf=N; st.nScat=0; st.nBack=0; st.nAbs=0; st.acc=0; st.trAcc=0; st.t=0; st.bins.fill(0);
-  st.t0=-1;   /* snapshot runs are established mid-run: no arrival ramp (fireBatch re-stamps on a fresh beam) */
+  st.tGate=-1;   /* snapshot runs are established mid-run: no arrival gate (fireBatch re-stamps on a fresh beam) */
   dots.length=0; dotPtr=0; tracers.length=0; flashes.length=0;
   if(N>0){ var Ek=EkOf(st.p), rnd=mul32(seed||1), b, i;
     var absAcc=0;
@@ -1042,9 +1045,9 @@ function draw(){
   /* The plot band is reserved only when it will actually be drawn, so unchecking
      "Show counts-vs-angle plot" hands its height back to the scattering chamber
      instead of leaving a blank strip. Same path the pre-Play state already used. */
-  /* the plot begins with the first ARRIVALS, not the first firing — same transit
-     gate as the screen glow, so counts appear when alpha reach the ZnS screen */
-  var arrived=hasData&&(st.t0<0||!geo||(st.t-st.t0)>=((geo.cx-geo.exitX)+(geo.R-5))/Math.max(120,geo.R*9*st.p));
+  /* the plot begins with the first ARRIVALS, not the first firing — same frozen
+     beam-front gate as the glow and dots, so all three appear together */
+  var arrived=hasData&&(st.tGate<0||st.t>=st.tGate);
   var showHist=arrived&&st.showPlot;
   var histoH = showHist ? ((h<360)?Math.max(96,h*0.36):Math.min(Math.max(h*0.30,150),270)) : 0;
   var appH = showHist ? (h-histoH-6) : (h-28);
@@ -1104,15 +1107,11 @@ function draw(){
      accumulated beam (full after ~8000 incident alpha, <1 s at the slow rate)
      instead of snapping on - a lit screen before any alpha arrive would read
      as a false detection (SME). Reset/empty runs (Nf=0) show no glow at all. */
+  var beamArrived=st.tGate<0||st.t>=st.tGate;
   var gI=Math.min(1,st.Nf/8000);
-  /* arrival gate: no scintillation before the first alpha can physically reach the
-     screen - one transit (source->foil->screen) at the SAME speed the tracers
-     animate (VPX), then a short fade-in. Snapshot runs (t0=-1) skip the ramp. */
-  if(gI>0 && st.t0>=0){
-    var gVPX=Math.max(120,R*9*st.p);
-    var gTr=((cx-exitX)+(R-5))/gVPX;
-    gI*=Math.max(0,Math.min(1,(st.t-st.t0-gTr)/0.5));
-  }
+  /* arrival gate: no scintillation before the beam front (frozen at beam-on)
+     reaches the screen, then a short fade-in. Snapshots (tGate=-1) skip it. */
+  if(gI>0 && st.tGate>=0) gI*=Math.max(0,Math.min(1,(st.t-st.tGate)/0.5));
   if(gI>0){
     X.save(); X.lineCap='butt';
     var gN=8, gHW=EXT90*1.6*D2R, gs;
@@ -1127,10 +1126,11 @@ function draw(){
     X.beginPath(); X.arc(cx,cy,R,-0.25*EXT90*D2R,0.25*EXT90*D2R,false); X.stroke();
     X.restore();
   }
-  /* scintillation dots — equal size at every angle */
+  /* scintillation dots — equal size at every angle; hidden until the beam front
+     arrives so dots never precede the glow/plot (that mismatch read as lag) */
   X.fillStyle=C.dot;
   var i2;
-  for(i2=0;i2<dots.length;i2++){ var d3=dots[i2], age=st.t-d3.t;
+  for(i2=0;beamArrived&&i2<dots.length;i2++){ var d3=dots[i2], age=st.t-d3.t;
     X.globalAlpha = age<0.35?0.95:Math.max(0.4,0.95-0.09*age);
     var rd=R+d3.j, sz=2.4;
     X.fillRect(cx+rd*Math.cos(d3.a)-sz/2, cy-rd*Math.sin(d3.a)-sz/2, sz, sz); }
