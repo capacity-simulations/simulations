@@ -898,6 +898,46 @@ function ball(x,y,r,c1,c2){
   g.addColorStop(0,c1); g.addColorStop(1,c2);
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
 }
+/* studio sphere (CERN-video look): top-left key light, matte mid, dark rim,
+   soft contact shadow — the workhorse of the rebuilt deep scales */
+function orb(x,y,r,hi,mid,dk,shadow){
+  if (shadow!==false){
+    ctx.fillStyle='rgba(0,0,0,0.16)';
+    ctx.beginPath(); ctx.ellipse(x, y+r*0.85, r*0.8, r*0.28, 0, 0, 7); ctx.fill();
+  }
+  const g = ctx.createRadialGradient(x - r*0.42, y - r*0.45, r*0.08, x, y, r*1.02);
+  g.addColorStop(0,hi); g.addColorStop(0.55,mid); g.addColorStop(1,dk);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  const s = ctx.createRadialGradient(x - r*0.38, y - r*0.42, 0, x - r*0.38, y - r*0.42, r*0.5);
+  s.addColorStop(0,'rgba(255,255,255,0.35)'); s.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=s; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+}
+/* cinematic post-pass: studio key light + vignette + animated film grain.
+   Applied to the scene band under the instrument overlays (waves/labels/ruler). */
+let grainPat=null;
+function cinematic(t){
+  if (!grainPat && typeof document!=='undefined'){
+    const gc=document.createElement('canvas'); gc.width=gc.height=96;
+    const gx=gc.getContext('2d'), im=gx.createImageData(96,96);
+    for (let i=0;i<im.data.length;i+=4){
+      const v=(Math.random()*255)|0;
+      im.data[i]=im.data[i+1]=im.data[i+2]=v; im.data[i+3]=26;
+    }
+    gx.putImageData(im,0,0); grainPat=ctx.createPattern(gc,'repeat');
+  }
+  let g = ctx.createLinearGradient(0,0,0,sceneH);
+  g.addColorStop(0,'rgba(255,255,255,0.045)'); g.addColorStop(0.5,'rgba(255,255,255,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
+  g = ctx.createRadialGradient(CW/2,sceneH*0.5,Math.min(CW,sceneH)*0.35,CW/2,sceneH*0.5,Math.max(CW,sceneH)*0.75);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.30)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
+  if (grainPat){
+    ctx.save(); ctx.globalAlpha=0.5;
+    ctx.translate(((t*61)|0)%96, ((t*47)|0)%96);
+    ctx.fillStyle=grainPat; ctx.fillRect(-96,-96,CW+192,sceneH+192);
+    ctx.restore();
+  }
+}
 function wavy(x1,y1,x2,y2,amp,waves,ph){
   const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
   ctx.beginPath();
@@ -1012,45 +1052,46 @@ function bgCapsid(t){
     }
   }
 }
-function bgVac(t){
+/* shared dark-studio void (CERN-video grey, translated to the app's dark theme):
+   neutral slate, top-left key light, soft centre lift */
+function bgStudio(base,keyA,liftA){
   const g = ctx.createLinearGradient(0,0,0,sceneH);
-  g.addColorStop(0,'#0a1122'); g.addColorStop(1,'#0d1830');
+  g.addColorStop(0,base[0]); g.addColorStop(1,base[1]);
   ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
-  const h = ctx.createRadialGradient(CW/2,sceneH*0.5,0,CW/2,sceneH*0.5,CW*0.5);
-  h.addColorStop(0,'rgba(90,130,220,0.09)'); h.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=h; ctx.fillRect(0,0,CW,sceneH);
+  let k = ctx.createRadialGradient(CW*0.28,sceneH*0.12,0,CW*0.28,sceneH*0.12,CW*0.75);
+  k.addColorStop(0,'rgba(235,242,246,'+keyA+')'); k.addColorStop(1,'rgba(235,242,246,0)');
+  ctx.fillStyle=k; ctx.fillRect(0,0,CW,sceneH);
+  k = ctx.createRadialGradient(CW/2,sceneH*0.52,0,CW/2,sceneH*0.52,CW*0.45);
+  k.addColorStop(0,'rgba(210,222,230,'+liftA+')'); k.addColorStop(1,'rgba(210,222,230,0)');
+  ctx.fillStyle=k; ctx.fillRect(0,0,CW,sceneH);
 }
+function bgVac(t){ bgStudio(['#12161d','#171d26'],0.05,0.05); }
 function bgCloud(t){
-  ctx.fillStyle='#070d1c'; ctx.fillRect(0,0,CW,sceneH);
-  const R = Math.min(CW,sceneH)*0.75, x=CW/2, y=sceneH*0.52;
-  let g = ctx.createRadialGradient(x,y,0,x,y,R);
-  g.addColorStop(0,'rgba(110,170,255,0.30)'); g.addColorStop(0.5,'rgba(110,170,255,0.12)'); g.addColorStop(1,'rgba(110,170,255,0)');
+  bgStudio(['#11161c','#161c24'],0.06,0.04);
+  /* the atom's own soft presence, desaturated to studio teal-grey */
+  const R = Math.min(CW,sceneH)*0.7, x=CW/2, y=sceneH*0.52;
+  const a = 0.10 + 0.03*Math.sin(t*0.8);
+  const g = ctx.createRadialGradient(x,y,0,x,y,R*0.5);
+  g.addColorStop(0,'rgba(205,230,235,' + a.toFixed(3) + ')'); g.addColorStop(1,'rgba(205,230,235,0)');
   ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
-  g = ctx.createRadialGradient(x,y,0,x,y,R*0.28);
-  const a = 0.16 + 0.05*Math.sin(t*1.1);
-  g.addColorStop(0,'rgba(170,215,255,' + a.toFixed(3) + ')'); g.addColorStop(1,'rgba(170,215,255,0)');
-  ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
-  ctx.fillStyle='rgba(150,200,255,0.12)';
-  for (let i=0;i<50;i++){ ctx.beginPath(); ctx.arc(hash(i*2.1)*CW, hash(i*3.7+5)*sceneH, 1.2, 0, 7); ctx.fill(); }
 }
 function bgNuc(t){
-  ctx.fillStyle='#190c08'; ctx.fillRect(0,0,CW,sceneH);
+  bgStudio(['#171313','#1d1617'],0.05,0.03);
   const R = Math.min(CW,sceneH)*0.3;
   for (let i=0;i<9;i++){
-    /* staggered grid (packed neighbours), not a random jumble */
+    /* staggered grid (packed neighbours), not a random jumble — now soft
+       out-of-focus nucleons in the video palette */
     const gx=(i%3), gy=(i/3|0);
-    const x=CW*(0.17+gx*0.33)+(gy%2?CW*0.16:0) + Math.sin(t*0.6+i)*6;
-    const y=sceneH*(0.14+gy*0.36) + Math.cos(t*0.5+i)*6;
+    const x=CW*(0.17+gx*0.33)+(gy%2?CW*0.16:0) + Math.sin(t*0.5+i)*6;
+    const y=sceneH*(0.14+gy*0.36) + Math.cos(t*0.4+i)*6;
     const g = ctx.createRadialGradient(x,y,0,x,y,R);
-    g.addColorStop(0, i%2 ? 'rgba(200,80,64,0.30)' : 'rgba(140,150,165,0.25)');
+    g.addColorStop(0, i%2 ? 'rgba(198,66,48,0.22)' : 'rgba(206,210,216,0.16)');
     g.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,R,0,7); ctx.fill();
   }
 }
 function bgProton(t){
-  const g = ctx.createLinearGradient(0,0,0,sceneH);
-  g.addColorStop(0,'#1c0a10'); g.addColorStop(1,'#2a0f14');
-  ctx.fillStyle=g; ctx.fillRect(0,0,CW,sceneH);
+  bgStudio(['#1a1112','#221417'],0.045,0.03);
   const seed = Math.floor(t*2);
   for (let i=0;i<10;i++){
     const a = 0.05 + 0.09*hash(i + seed);
@@ -1164,6 +1205,8 @@ function drawHuman(cx,cy,R,t){
   ctx.restore();
 }
 function drawHair(cx,cy,R,t){
+  /* CERN-video cuticle shaft: cylinder-shaded tube wrapped in overlapping
+     shingle scales, each with a lit top edge and a shadowed lip */
   const sway=R*0.14;
   const xAt = y => cx + Math.sin(y/Math.max(sceneH,1)*2.4 + 0.7) * sway;
   ctx.save();
@@ -1173,12 +1216,34 @@ function drawHair(cx,cy,R,t){
   for (let y=sceneH+50; y>=-50; y-=step) ctx.lineTo(xAt(y)+R, y);
   ctx.closePath();
   const g = ctx.createLinearGradient(cx-R,0,cx+R,0);
-  g.addColorStop(0,'#6a4826'); g.addColorStop(0.35,'#c99f66'); g.addColorStop(0.65,'#b58a4f'); g.addColorStop(1,'#5e4123');
+  g.addColorStop(0,'#4d3b28'); g.addColorStop(0.22,'#8a6f4d'); g.addColorStop(0.46,'#c2a377');
+  g.addColorStop(0.60,'#a8865a'); g.addColorStop(0.85,'#5c4630'); g.addColorStop(1,'#3a2c1e');
   ctx.fillStyle=g; ctx.fill();
-  ctx.strokeStyle='rgba(60,40,20,0.28)'; ctx.lineWidth=Math.max(1.5,R*0.015);
-  const cst=Math.max(12, R*0.5);
-  for (let y=0; y<=sceneH; y+=cst){
-    ctx.beginPath(); ctx.ellipse(xAt(y), y, R*0.96, R*0.18, 0, 0.15*Math.PI, 0.85*Math.PI); ctx.stroke();
+  ctx.clip();   /* everything below stays inside the shaft */
+  const cst=Math.max(12, R*0.42);
+  for (let row=0, y=-cst; y<=sceneH+cst; y+=cst, row++){
+    const yo=y + (row%2 ? cst*0.18 : 0), xo=xAt(yo);
+    /* shadowed lip under each scale */
+    ctx.strokeStyle='rgba(38,26,16,0.45)'; ctx.lineWidth=Math.max(2,R*0.045);
+    ctx.beginPath(); ctx.ellipse(xo, yo, R*1.02, R*0.30, 0, 0.12*Math.PI, 0.88*Math.PI); ctx.stroke();
+    /* lit top edge just above the lip */
+    ctx.strokeStyle='rgba(236,214,178,0.30)'; ctx.lineWidth=Math.max(1.2,R*0.022);
+    ctx.beginPath(); ctx.ellipse(xo, yo-Math.max(2,R*0.05), R*1.0, R*0.29, 0, 0.16*Math.PI, 0.84*Math.PI); ctx.stroke();
+    /* ragged scale edge: a couple of short nicks so rows read organic */
+    ctx.strokeStyle='rgba(38,26,16,0.30)'; ctx.lineWidth=Math.max(1,R*0.02);
+    for (let k=0;k<3;k++){
+      const a=(0.28+0.22*k+0.07*hash(row*7+k))*Math.PI;
+      const ex=xo+Math.cos(a)*R*0.98, ey=yo+Math.sin(a)*R*0.29;
+      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+(hash(row+k)-0.5)*R*0.1, ey+cst*0.28); ctx.stroke();
+    }
+  }
+  /* fine longitudinal striations + left rim light */
+  for (let k=0;k<5;k++){
+    const fx=-R*0.75+k*R*0.36;
+    ctx.strokeStyle='rgba(255,240,215,'+(k===1?0.10:0.05)+')'; ctx.lineWidth=Math.max(1,R*0.03);
+    ctx.beginPath();
+    for (let y=-40;y<=sceneH+40;y+=step) { const X=xAt(y)+fx; y<=-40+step ? ctx.moveTo(X,y) : ctx.lineTo(X,y); }
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -1237,45 +1302,63 @@ function drawVirus(cx,cy,R,t){
   wavy(-R*0.28,0,R*0.28,0,R*0.13,3,t*1.5);
   ctx.restore();
 }
+/* CERN-video style: a protein-like coiled coil — two intertwined strands of
+   small matte atoms twisting slowly, rendered back-to-front for depth */
 function drawMolecule(cx,cy,R,t){
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(t*0.12);
-  const rr=R*0.55, ra=R*0.19;
-  const px=[], py=[];
-  for (let i=0;i<6;i++){ const a=i/6*6.283; px.push(Math.cos(a)*rr); py.push(Math.sin(a)*rr); }
-  ctx.strokeStyle='#cdd7e4'; ctx.lineWidth=Math.max(2.5,R*0.07); ctx.lineCap='round';
-  for (let i=0;i<6;i++){
-    ctx.beginPath(); ctx.moveTo(px[i],py[i]); ctx.lineTo(px[(i+1)%6],py[(i+1)%6]); ctx.stroke();
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.20);
+  const N=34, span=R*1.7, tw=t*0.35;
+  const beads=[];
+  for (let s2=0;s2<2;s2++){
+    for (let i=0;i<=N;i++){
+      const u=i/N, x=-span/2+span*u, ph=u*9.4+tw+s2*Math.PI;
+      const z=Math.cos(ph);
+      beads.push({x, y:Math.sin(ph)*R*0.30, z, s:s2, u});
+    }
   }
-  for (let i=0;i<6;i+=2){
-    const a=i/6*6.283;
-    ctx.beginPath(); ctx.moveTo(px[i],py[i]); ctx.lineTo(Math.cos(a)*R*0.9, Math.sin(a)*R*0.9); ctx.stroke();
-  }
-  for (let i=0;i<6;i++){
-    if (i%2) ball(px[i],py[i],ra,'#ffb3a9','#c0392b');
-    else     ball(px[i],py[i],ra,'#cfd8e2','#77828e');
-  }
-  for (let i=0;i<6;i+=2){
-    const a=i/6*6.283;
-    ball(Math.cos(a)*R*0.9, Math.sin(a)*R*0.9, R*0.1, '#ffffff', '#b9c2cc');
+  beads.sort((a,b)=>a.z-b.z);
+  for (const b of beads){
+    const dep=(b.z+1)/2;                       /* 0 back .. 1 front */
+    const r=R*(0.085+0.055*dep);
+    const acc=(((b.u*N)|0)%6===2)&&b.s===0;    /* occasional red atom, video-style */
+    const k=0.45+0.55*dep;
+    if (acc) orb(b.x,b.y,r,'rgba('+(255*k|0)+','+(178*k|0)+','+(160*k|0)+',1)',
+                 'rgba('+(206*k|0)+','+(62*k|0)+','+(45*k|0)+',1)','rgba(60,14,10,1)',false);
+    else orb(b.x,b.y,r,'rgba('+(250*k|0)+','+(252*k|0)+','+(255*k|0)+',1)',
+             'rgba('+(196*k|0)+','+(203*k|0)+','+(212*k|0)+',1)','rgba(52,58,66,1)',false);
   }
   ctx.restore();
 }
-/* Electron cloud only — no Bohr orbits, no orbiting point electrons. */
+/* Electron ORBITAL LOBES (CERN-video signature) — density lobes, not orbits and
+   not orbiting point electrons; a faint boundary sphere and a bright nucleus dot. */
 function drawAtom(cx,cy,R,t){
-  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,R);
-  g.addColorStop(0,'rgba(120,180,255,0.42)'); g.addColorStop(0.45,'rgba(120,180,255,0.18)'); g.addColorStop(1,'rgba(120,180,255,0)');
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.fill();
-  ctx.strokeStyle='rgba(170,215,255,0.22)'; ctx.lineWidth=Math.max(1,R*0.014);
-  for (const f of [0.5,0.86]){
-    ctx.beginPath();
-    for (let i=0;i<=64;i++){
-      const a=i/64*6.2832, rr=R*f*(1+0.05*Math.sin(a*8));
-      const X=cx+Math.cos(a)*rr, Y=cy+Math.sin(a)*rr;
-      i ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y);
+  ctx.save(); ctx.translate(cx,cy);
+  /* faint s-shell boundary */
+  const bs = ctx.createRadialGradient(0,0,R*0.72,0,0,R);
+  bs.addColorStop(0,'rgba(205,228,235,0)'); bs.addColorStop(0.85,'rgba(205,228,235,0.10)'); bs.addColorStop(1,'rgba(205,228,235,0)');
+  ctx.fillStyle=bs; ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill();
+  ctx.strokeStyle='rgba(215,235,240,0.14)'; ctx.lineWidth=Math.max(1,R*0.012);
+  ctx.beginPath(); ctx.arc(0,0,R*0.985,0,7); ctx.stroke();
+  /* three p-lobes at 120°, breathing very slowly (density, not motion) */
+  const rot=0.35+0.03*Math.sin(t*0.4);
+  for (let L2=0;L2<3;L2++){
+    ctx.save(); ctx.rotate(rot+L2*2.0944);
+    for (const [f,a] of [[1,0.16],[0.66,0.20],[0.38,0.26]]){
+      const len=R*0.92*f, wid=R*0.30*f;
+      ctx.fillStyle='rgba(214,236,240,'+a+')';
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.bezierCurveTo(wid*0.9,-len*0.28, wid,-len*0.75, 0,-len);
+      ctx.bezierCurveTo(-wid,-len*0.75, -wid*0.9,-len*0.28, 0,0);
+      ctx.closePath(); ctx.fill();
     }
-    ctx.closePath(); ctx.stroke();
+    ctx.restore();
   }
-  ball(cx,cy,Math.max(2,R*0.012),'#ffffff','#9cc0ff');
+  /* nucleus point + glow */
+  const ng = ctx.createRadialGradient(0,0,0,0,0,Math.max(6,R*0.05));
+  ng.addColorStop(0,'rgba(255,255,255,0.9)'); ng.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=ng; ctx.beginPath(); ctx.arc(0,0,Math.max(6,R*0.05),0,7); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,0,Math.max(1.6,R*0.011),0,7); ctx.fill();
+  ctx.restore();
 }
 /* close-packed nucleus: nucleons on a triangular (hexagonal) lattice clipped to a
    disc — evenly packed, deterministic, alternating protons/neutrons */
@@ -1288,30 +1371,33 @@ const NUC=[];
   }
 })();
 function drawNucleus(cx,cy,R,t){
-  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.3);
-  g.addColorStop(0,'rgba(255,150,80,0.25)'); g.addColorStop(1,'rgba(255,150,80,0)');
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R*1.3,0,7); ctx.fill();
+  /* CERN-video palette: matte red protons, bone-white neutrons, studio light */
+  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.35);
+  g.addColorStop(0,'rgba(255,235,225,0.10)'); g.addColorStop(1,'rgba(255,235,225,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R*1.35,0,7); ctx.fill();
   const sorted = NUC.slice().sort((a,b)=>a[1]-b[1]);
   for (let i=0;i<sorted.length;i++){
     const n=sorted[i];
-    const x=cx+n[0]*R*0.92+Math.sin(t*2.3+i)*R*0.015;
-    const y=cy+n[1]*R*0.92+Math.cos(t*2.1+i*1.3)*R*0.015;
-    if (n[2]) ball(x,y,R*0.21,'#ffb0a6','#c0392b');
-    else      ball(x,y,R*0.21,'#cdd6e2','#7b8a9c');
+    const x=cx+n[0]*R*0.92+Math.sin(t*1.6+i)*R*0.012;
+    const y=cy+n[1]*R*0.92+Math.cos(t*1.5+i*1.3)*R*0.012;
+    if (n[2]) orb(x,y,R*0.22,'#ffc9b8','#d2402e','#4f120b',false);
+    else      orb(x,y,R*0.22,'#ffffff','#cfd4da','#565e68',false);
   }
 }
 function drawProton(cx,cy,R,t){
   ctx.save(); ctx.translate(cx,cy);
+  /* matte studio sphere (video nucleon), gently breathing outline via clip */
   ctx.beginPath();
   for (let i=0;i<=40;i++){
     const a=i/40*6.283;
-    const r=R*(1+0.045*Math.sin(a*3+t*1.6)+0.02*Math.sin(a*5-t));
+    const r=R*(1+0.03*Math.sin(a*3+t*1.1)+0.012*Math.sin(a*5-t*0.7));
     const x=Math.cos(a)*r, y=Math.sin(a)*r;
     i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
   }
   ctx.closePath();
-  ctx.fillStyle='rgba(190,70,55,0.35)'; ctx.fill();
-  ctx.strokeStyle='rgba(255,150,120,0.8)'; ctx.lineWidth=Math.max(2,R*0.02); ctx.stroke();
+  const pg = ctx.createRadialGradient(-R*0.42,-R*0.45,R*0.08,0,0,R*1.05);
+  pg.addColorStop(0,'rgba(255,196,178,0.85)'); pg.addColorStop(0.55,'rgba(196,60,42,0.72)'); pg.addColorStop(1,'rgba(60,14,10,0.85)');
+  ctx.fillStyle=pg; ctx.fill();
   const QC=[['#ff8a80','#d32f2f'],['#8affa0','#2e7d32'],['#8ab8ff','#2f5dd3']];
   const qp=[];
   for (let i=0;i<3;i++){
@@ -1330,14 +1416,16 @@ function drawProton(cx,cy,R,t){
   ctx.restore();
 }
 function drawQuark(cx,cy,R,t){
-  ctx.strokeStyle='rgba(150,200,255,0.5)'; ctx.lineWidth=1.6;
-  ctx.setLineDash([7,9]); ctx.lineDashOffset=-t*12;
+  ctx.strokeStyle='rgba(220,235,240,0.35)'; ctx.lineWidth=1.4;
+  ctx.setLineDash([7,9]); ctx.lineDashOffset=-t*10;
   ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
   ctx.setLineDash([]);
-  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,12);
-  g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.35,'rgba(190,120,255,0.4)'); g.addColorStop(1,'rgba(190,120,255,0)');
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,12,0,7); ctx.fill();
-  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx,cy,2.6,0,7); ctx.fill();
+  /* point-like: a clean white star with a soft breathing halo */
+  const p=0.9+0.1*Math.sin(t*2.2);
+  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,14*p);
+  g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.35,'rgba(225,240,245,0.35)'); g.addColorStop(1,'rgba(225,240,245,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,14*p,0,7); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx,cy,2.4,0,7); ctx.fill();
 }
 
 /* ---------- macro filler objects (scenery only: minor pins, no controls) ---------- */
@@ -1867,6 +1955,7 @@ function draw(){
     p.draw(ocx, ocy, px/2, S.t);
     ctx.restore();
   }
+  cinematic(S.t);   /* studio light + vignette + grain under the instrument overlays */
   drawWaves(d);
   let feat=null, fBest=Infinity;
   for (const p of pins){
