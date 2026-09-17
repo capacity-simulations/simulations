@@ -1065,14 +1065,21 @@ window.__audit = {
 
     const ladderH = state.showLadder ? Math.max(84, Math.min(190, H * 0.24)) : 0;
     const ladderY = H - m - ladderH;
-    const legendH = 24;
+    let legendH = 24;
     const gridAX = m, gridAW = (W - 3 * m) * 0.62;
     const headH = 20;
     const gridTop = capY + 12 + headH;
-    const gridRegH = ladderY - 10 - legendH - gridTop;
+    let gridRegH = ladderY - 10 - legendH - gridTop;
     const gap = Math.max(6, Math.min(12, W * 0.008));
     let tile = Math.min((gridAW - 4 * gap) / 5, (gridRegH - 3 * gap) / 4);
-    tile = Math.max(24, tile);
+    if (tile < 24) {
+      /* short region: reclaim the legend band rather than letting the 24px
+         tile floor overflow the grid onto the legend */
+      legendH = 0;
+      gridRegH = ladderY - 10 - gridTop;
+      tile = Math.min((gridAW - 4 * gap) / 5, (gridRegH - 3 * gap) / 4);
+    }
+    tile = Math.max(18, tile);
     const gridW = 5 * tile + 4 * gap, gridH = 4 * tile + 3 * gap;
     const gx = gridAX + (gridAW - gridW) / 2, gy = gridTop + (gridRegH - gridH) / 2;
 
@@ -1119,7 +1126,7 @@ window.__audit = {
       ctx.restore();
     }
 
-    drawLegend(th, gridAX + gridAW / 2, ladderY - 10 - legendH / 2);
+    if (legendH) drawLegend(th, gridAX + gridAW / 2, ladderY - 10 - legendH / 2);
     drawDetail(th, gridAX + gridAW + m, gy, W - m - (gridAX + gridAW + m), gridH); /* top flush with tile grid, not the column headers */
     if (state.showLadder) drawLadder(th, m, ladderY, W - 2 * m, ladderH);
   }
@@ -1237,7 +1244,8 @@ window.__audit = {
     ctx.fillStyle = alphaCol(th.surface, 0.6); ctx.strokeStyle = th.border; ctx.lineWidth = 1.5;
     rr(x, y, w, h, 12); ctx.fill(); rr(x, y, w, h, 12); ctx.stroke();
     ctx.font = uf(14, 700); ctx.fillStyle = th.muted; ctx.textAlign = 'left';
-    ctx.fillText('mass — log scale', x + 12, y + 18);
+    /* caption only when the band is tall enough that the top label lane clears it */
+    if (h >= 130) ctx.fillText('mass — log scale', x + 12, y + 18);
     const axisY = y + h * 0.55;
     const zx = x + 12, zw = Math.max(60, Math.min(110, w * 0.10));
     const ax0 = zx + zw + 30, ax1 = x + w - 24;
@@ -1267,7 +1275,12 @@ window.__audit = {
       pts.push({ i, x: px, p });
     }
     pts.sort((a, b) => a.x - b.x);
-    const laneOff = h < 110 ? [-h * 0.18, h * 0.18, -h * 0.34] : [-h * 0.16, h * 0.16, -h * 0.31, h * 0.27];
+    /* clamp lane depths so label glyphs stay between the caption/top border and
+       the tick-label row instead of overprinting them at small band heights */
+    const negMax = h * 0.55 - (h >= 130 ? 31 : 15);
+    const posMax = h * 0.45 - 28;
+    const laneOff = (h < 110 ? [-h * 0.18, h * 0.18, -h * 0.34] : [-h * 0.16, h * 0.16, -h * 0.31, h * 0.27])
+      .map(o => o < 0 ? Math.max(o, -negMax) : Math.min(o, posMax));
     const laneEnd = laneOff.map(() => -1e9);
     ctx.font = uf(14, 700);
     for (const q of pts) {
