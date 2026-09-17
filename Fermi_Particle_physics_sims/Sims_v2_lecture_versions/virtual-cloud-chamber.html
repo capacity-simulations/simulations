@@ -1285,16 +1285,10 @@ function draw(){
     same parameters — until a new shot or a new selection replaces it. */
  var done=!st.armed&&!!st.track&&(st.mode==='track'?st.s>=st.track.len-1e-9:st.expo>=1);
  st._againUI=done;
- /* enforced EVERY frame (text compared first, so no redundant DOM writes):
-    the shell rewrites the top button's label on every setPlaying call, so a
-    one-shot transition write gets stomped and the label sticks on Pause */
+ /* Fire button only; the top-bar button is handled by pausing on completion,
+    so it shows its native "Play" state (enforced per frame, write-guarded) */
  var fTxt=done?'↻ Play again':'▶ Fire';
  if(fireBtn.textContent!==fTxt){fireBtn.textContent=fTxt;fireBtn.classList.toggle('again',done);}
- var sp=document.getElementById('shell-play');
- if(sp){
-  var sTxt=done?'↻ Play again':((window.Shell&&Shell.playing)?'⏸ Pause':'▶ Play');
-  if(sp.textContent!==sTxt){sp.textContent=sTxt;sp.classList.toggle('again',done);}
- }
 }
 /* ---------- shell hooks ---------- */
 function betaAt(t,s){
@@ -1307,12 +1301,18 @@ function onFrame(dt){
  if(!st.track)fire('anim');
  var t=st.track;
  if(t){
+  var wasRunning=(st.mode==='photo')?st.expo<1:st.s<t.len;
   if(st.mode==='photo'){if(st.expo<1)st.expo=Math.min(1,st.expo+dt*1.2);st.s=t.len;}
   else{
    st.expo=1;
    /* head speed follows the LOCAL beta, so it slows after the plate */
    if(st.s<t.len)st.s=Math.max(0,Math.min(t.len,st.s+0.34*Math.max(0.05,betaAt(t,st.s))*dt));
   }
+  /* the motion just finished ON SCREEN (we watched it cross the finish, not a
+     scene that starts pre-completed): pause, so the top-bar button flips to
+     "Play" - clicking it (or "Play again") relaunches the same shot */
+  var nowDone=(st.mode==='photo')?st.expo>=1:st.s>=t.len-1e-9;
+  if(wasRunning&&nowDone&&window.Shell&&Shell.setPlaying)Shell.setPlaying(false);
  }
  for(var i=0;i<st.ghosts.length;i++){
   var g=st.ghosts[i];
