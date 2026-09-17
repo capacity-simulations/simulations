@@ -905,6 +905,7 @@ function record(th){
 /* incident alphas -> a physical fraction n*t*sigma(>1deg) actually scatters */
 function fireBatch(n){
   if(n<=0)return; var Ek=EkOf(st.p);
+  if(st.Nf===0) st.t0=st.t;   /* beam-on stamp: the screen glow waits one transit time from here */
   st.Nf+=n;
   var P1=NT*sigGT(THMIN,Ek); if(P1>0.95)P1=0.95;
   var k=poisson(n*P1,Math.random); if(k>n)k=n;
@@ -915,6 +916,7 @@ function fireBatch(n){
 function applyRun(p,N,seed){
   st.p=Math.min(PMAX,Math.max(PMIN,p||0.193));
   st.Nf=N; st.nScat=0; st.nBack=0; st.nAbs=0; st.acc=0; st.trAcc=0; st.t=0; st.bins.fill(0);
+  st.t0=-1;   /* snapshot runs are established mid-run: no arrival ramp (fireBatch re-stamps on a fresh beam) */
   dots.length=0; dotPtr=0; tracers.length=0; flashes.length=0;
   if(N>0){ var Ek=EkOf(st.p), rnd=mul32(seed||1), b, i;
     var absAcc=0;
@@ -1095,17 +1097,30 @@ function draw(){
      artifact). Wedge spans ±EXT90 (θ of 90% containment, 3.16°), fading out by
      ~1.6×EXT90 so the scintillation dots merge into it. Uses the C.glow/EXT90
      pair the changelog describes (they were defined but never drawn). */
-  if(hasData){
+  /* Scintillation is caused by arriving alpha ONLY: the glow ramps up with the
+     accumulated beam (full after ~8000 incident alpha, <1 s at the slow rate)
+     instead of snapping on - a lit screen before any alpha arrive would read
+     as a false detection (SME). Reset/empty runs (Nf=0) show no glow at all. */
+  var gI=Math.min(1,st.Nf/8000);
+  /* arrival gate: no scintillation before the first alpha can physically reach the
+     screen - one transit (source->foil->screen) at the SAME speed the tracers
+     animate (VPX), then a short fade-in. Snapshot runs (t0=-1) skip the ramp. */
+  if(gI>0 && st.t0>=0){
+    var gVPX=Math.max(120,R*9*st.p);
+    var gTr=((cx-exitX)+(R-5))/gVPX;
+    gI*=Math.max(0,Math.min(1,(st.t-st.t0-gTr)/0.5));
+  }
+  if(gI>0){
     X.save(); X.lineCap='butt';
     var gN=8, gHW=EXT90*1.6*D2R, gs;
     for(gs=0;gs<gN;gs++){
       var ga1=(gs/gN)*gHW, ga2=((gs+1)/gN)*gHW;
-      X.strokeStyle='rgba('+C.glow+','+(0.55*(1-gs/gN)*(1-gs/gN)).toFixed(3)+')';
+      X.strokeStyle='rgba('+C.glow+','+(gI*0.55*(1-gs/gN)*(1-gs/gN)).toFixed(3)+')';
       X.lineWidth=13;
       X.beginPath(); X.arc(cx,cy,R,ga1,ga2,false); X.stroke();
       X.beginPath(); X.arc(cx,cy,R,-ga2,-ga1,false); X.stroke();
     }
-    X.strokeStyle='rgba('+C.glow+',0.8)'; X.lineWidth=13;
+    X.strokeStyle='rgba('+C.glow+','+(gI*0.8).toFixed(3)+')'; X.lineWidth=13;
     X.beginPath(); X.arc(cx,cy,R,-0.25*EXT90*D2R,0.25*EXT90*D2R,false); X.stroke();
     X.restore();
   }
