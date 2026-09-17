@@ -1103,6 +1103,42 @@ function drawGhostSet(special){
   ctx.stroke();ctx.restore();
  });
 }
+/* ---------- frozen ghost-tag placement ----------
+   Each ghost's readout is placed ONCE, on the first frame it is drawn: a fixed
+   26px offset perpendicular to its OWN arc, with the along-track anchor and the
+   side chosen (once) to dodge the tags that are already frozen and stay
+   on-canvas. After that the tag is a pure function of the arc + stored choice,
+   so launching new particles NEVER moves a previous readout — the newcomer
+   does the dodging. Resize re-derives pixels from the same frozen choice, so
+   tags stay glued to their arcs. */
+function tagRectOf(g){
+ var n=g.pts.length,i=Math.max(0,Math.min(n-1,Math.floor(n*g.tagPos.f)));
+ var j=Math.min(n-1,i+4),p=g.pts[i],q=g.pts[j];
+ var ax=cx+(p.x+(g.slide||0))*scale,ay=cy-p.y*scale;
+ var dx=(q.x-p.x)*scale,dy=-(q.y-p.y)*scale,L=Math.hypot(dx,dy)||1;
+ var nx=-dy/L*g.tagPos.s,ny=dx/L*g.tagPos.s;
+ return chipRect(ax+nx*g.tagPos.d,ay+ny*g.tagPos.d-11,g.tag,'center');
+}
+function ensureTagPos(g,frozen){
+ if(g.tagPos)return;
+ var fr=g.rev?[0.12,0.28,0.05]:[0.55,0.72,0.38,0.86];
+ for(var fi=0;fi<fr.length;fi++)for(var si=0;si<2;si++){
+  g.tagPos={f:fr[fi],s:si===0?1:-1,d:26};
+  var r=tagRectOf(g),ok=r.X>=4&&r.Y>=4&&r.X+r.w<=W-4&&r.Y+r.h<=H-4;
+  if(ok)for(var k=0;k<frozen.length;k++)if(rectsHit(r,frozen[k],4)){ok=false;break;}
+  if(ok)return;
+ }
+ g.tagPos={f:fr[0],s:1,d:26};
+}
+function keptGhostTags(){
+ var gn=st.ghosts.length,out=[];
+ st.ghosts.forEach(function(g,gi){
+  if(!g.tag||!g.pts||g.pts.length<4)return;
+  if(!g.special&&gi<gn-2)return;
+  out.push(g);
+ });
+ return out;
+}
 function draw(){
  ctx.clearRect(0,0,W,H);
  ctx.fillStyle=themeCol('--surface','#0b1017');ctx.fillRect(0,0,W,H);
@@ -1190,6 +1226,10 @@ function draw(){
   chip(cx,cy-8,'\u25B6 Play (or Fire) to expose the photograph','center','#ffd479');
  }else{
   var energyBoxes=[];
+  /* register the frozen ghost-tag rects up front so the LIVE pill dodges them
+     (safe now: the tags never nudge, so no phantom feedback is possible) */
+  (function(){var gSeen=[];keptGhostTags().forEach(function(g){
+    ensureTagPos(g,gSeen);var gr=tagRectOf(g);gSeen.push(gr);energyBoxes.push(gr);});})();
   if(st.mode==='track'){
    /* direction cues are legitimate only once the plate can fix the direction */
    var ey=cy+HALF_H*scale;
@@ -1229,15 +1269,13 @@ function draw(){
   else stat='lead plate in';
   if(stat)chip(W-10,W<600?34:8,stat,'right',scol); /* drop below the DOM title band on narrow canvases */
  }
- /* ghost tags — newest two, plus every reveal overlay */
- var gn=st.ghosts.length,gBoxes=energyBoxes?energyBoxes.slice():[];
- st.ghosts.forEach(function(g,gi){
-  if(!g.tag||!g.pts||g.pts.length<4)return;
-  if(!g.special&&gi<gn-2)return;
-  var p=g.pts[Math.floor(g.pts.length*(g.rev?0.12:0.55))];
-  /* nudge each tag below any previously drawn ghost tag so they never overlap */
-  var gb=nudgeChipDown(chipRect(cx+(p.x+(g.slide||0))*scale,cy-p.y*scale-26,g.tag,'center'),gBoxes);
-  gBoxes.push(chip(gb.X+gb.w/2,gb.Y,g.tag,'center',g.col));
+ /* ghost tags — newest two, plus every reveal overlay; frozen placement (see
+    tagRectOf/ensureTagPos above): previous readouts never move on a new launch */
+ var gSeen2=[];
+ keptGhostTags().forEach(function(g){
+  ensureTagPos(g,gSeen2);
+  var gr=tagRectOf(g);gSeen2.push(gr);
+  chip(gr.X+gr.w/2,gr.Y,g.tag,'center',g.col);
  });
  if(st.sceneNoteT>0&&st.sceneNote)chip(cx,H-30,st.sceneNote,'center','#ffd479');
 }
