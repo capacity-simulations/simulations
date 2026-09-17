@@ -1035,9 +1035,33 @@ window.__audit = {
     ctx.beginPath(); ctx.moveTo(bx + bw / 2, by - 4); ctx.lineTo(bx + bw / 2, by + bh + 4); ctx.stroke();
     ctx.restore();
     var ly = Math.min(by + bh + fs + 6, py0 + ph - 5);
+    /* the fixed-size KaTeX card (top:87%) assumes a tall canvas: shrink it on
+       short panels so its bottom row is never clipped (threshold uses H only —
+       no measure-feedback loop), and if its rect still covers the percentage
+       row, print the percentages inside the bar instead of underneath it */
+    var eqEl = document.getElementById('chiralEq');
+    var eqFs = H < 430 ? '11px' : '';
+    if (eqEl && eqEl.style.fontSize !== eqFs) eqEl.style.fontSize = eqFs;
+    /* at the sim's own 240px canvas minimum even the 11px card clips: lift its
+       top just enough to stay on-canvas (never binds at 15px heights) */
+    var eqTop = H < 430 ? Math.min(0.87 * H, H - 42).toFixed(0) + 'px' : '';
+    if (eqEl && eqEl.style.top !== eqTop) eqEl.style.top = eqTop;
+    var inBar = false;
+    if (eqEl && eqEl.offsetParent){
+      var er = eqEl.getBoundingClientRect(), crc = cv.getBoundingClientRect();
+      var eTop = er.top - crc.top, eLft = er.left - crc.left, eRgt = er.right - crc.left;
+      inBar = (eTop < ly + 2) && (eLft < bx + 150 || eRgt > bx + bw - 150);
+    }
     ctx.font = '600 ' + fs + 'px ' + FONT;
-    ctx.fillStyle = COL_R; ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx, ly);
-    ctx.fillStyle = COL_L; ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw, ly);
+    if (inBar){
+      var lyB = by + bh / 2 + fs * 0.36;
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx + 8, lyB);
+      ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw - 8, lyB);
+    } else {
+      ctx.fillStyle = COL_R; ctx.textAlign = 'left'; ctx.fillText('R-chiral ' + pctS(d.fR), bx, ly);
+      ctx.fillStyle = COL_L; ctx.textAlign = 'right'; ctx.fillText('L-chiral ' + pctS(d.fL), bx + bw, ly);
+    }
     ctx.textAlign = 'left';
     /* chiral weights vs p and m render as KaTeX in #chiralEq, overlaid on the
        panel's empty bottom band (user request: proper rendering, not canvas text) */
