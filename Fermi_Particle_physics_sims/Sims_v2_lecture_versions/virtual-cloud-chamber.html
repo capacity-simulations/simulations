@@ -333,6 +333,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-rowflex{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
 .sim-check{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--text)}
 .sim-btn{font-size:14px;padding:4px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+/* armed Fire button: a new particle is selected and waiting for launch */
+@keyframes fireArm{0%,100%{box-shadow:0 0 0 0 var(--accent);}50%{box-shadow:0 0 12px 3px var(--accent);}}
+.sim-btn.armed{border-color:var(--accent);color:var(--accent);animation:fireArm 1.1s ease-in-out infinite;}
 .sim-btn:hover{border-color:var(--accent)}
 .sim-hint{margin:9px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-muted)}
 .sim-more{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
@@ -926,6 +929,8 @@ function rebuildGeometry(){
 /* ---------- firing / ghosts ---------- */
 function animMode(){return (performance.now()-st.lastFrame<200)?'anim':'full';}
 function fire(mode){
+ /* any launch (user, slider, inquiry scene, reset) consumes the armed state */
+ st.armed=false;if(fireBtn)fireBtn.classList.remove('armed');
  var key=st.mystery?st.mystery.key:st.pKey;
  var Ek=st.mystery?st.mystery.Ek:st.Ek;
  st.track=computeTrack(key,Ek,st.B,st.plate);
@@ -1367,6 +1372,11 @@ plateChk.addEventListener('change',function(){
 clearBtn.addEventListener('click',function(){st.ghosts=[];draw();});
 fireBtn.addEventListener('click',function(){
  if(st.mystery&&st.mystery.phase===1){/* keep the unknown running */}
+ if(st.armed){ /* launch the armed selection: ghost the old track now, not at pick time */
+  var hid=!!(st.mystery&&st.mystery.phase===1);
+  if(st.track&&!st.scrub)pushGhost(hid);
+  if(st.mystery)cancelMystery();
+ }
  st.scrub=false;fire('anim');
  if(window.Shell&&Shell.setPlaying)Shell.setPlaying(true);
 });
@@ -1375,10 +1385,13 @@ beamBox.addEventListener('click',function(e){
  var b=e.target.closest('.sim-chip');if(!b)return;
  var k=b.dataset.p;
  if(k==='?'){mysteryClick();return;}
- var hid=!!(st.mystery&&st.mystery.phase===1);
- if(st.track&&!st.scrub)pushGhost(hid);
- if(st.mystery)cancelMystery();
- st.scrub=false;st.pKey=k;setActive(k);st.probeSig='';st.anon=false;fire(animMode());
+ /* selecting a species no longer auto-fires (user request): it ARMS the shot —
+    the sim pauses and the Fire button blinks until the user launches it.
+    Ghosting of the current track is deferred to the actual launch. */
+ st.pKey=k;setActive(k);st.probeSig='';st.anon=false;
+ st.armed=true;fireBtn.classList.add('armed');
+ if(window.Shell&&Shell.setPlaying)Shell.setPlaying(false);
+ draw();
 });
 /* ---------- guided-inquiry cards (questions, not answers) ---------- */
 function syncInqText(){
