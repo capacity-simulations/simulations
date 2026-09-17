@@ -308,6 +308,8 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-chip:hover{border-color:var(--accent);}
 .sim-chip.sim-on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
 .sim-chip.sim-mini{min-width:60px;padding:5px 6px;}
+.sim-check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:var(--text);cursor:pointer;user-select:none;}
+.sim-check input{accent-color:var(--accent);margin:0;cursor:pointer;}
 .sim-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px;min-width:0;}
 .sim-flip + .sim-row{margin-top:2px;}
 .sim-flipnote .sim-lab{font-size:13px;}
@@ -510,10 +512,12 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <button class="sim-chip sim-mini" id="jMatch" type="button">ride along</button>
     <button class="sim-chip sim-mini" id="jOver" type="button">overtake</button>
   </div>
+  <label class="sim-check" for="chiralBarTgl"><input type="checkbox" id="chiralBarTgl" checked> Show chirality bar</label>
 </div>
 
 <div class="shell-panel sim-panel">
-  <div class="sim-h">Observer-frame readouts</div>
+  <div class="shell-panel-head"><h3>Observer-frame readouts</h3><span class="shell-caret">▾</span></div>
+  <div class="shell-panel-body">
   <table class="sim-read"><tbody>
     <tr><td>E′ energy</td><td id="rE">1.123 MeV</td></tr>
     <tr><td>p′ momentum</td><td id="rP">+1.00 MeV</td></tr>
@@ -521,6 +525,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <tr><td>speed in frame</td><td id="rV">0.890 c</td></tr>
     <tr><td>chirality R : L</td><td id="rC">94.5% · 5.5%</td></tr>
   </tbody></table>
+  </div>
 </div>
     </div>
   </aside>
@@ -806,6 +811,7 @@ window.__audit = {
   var pSlider = $('pSlider'), bSlider = $('bSlider'), pVal = $('pVal'), bVal = $('bVal');
   var flipTick = $('flipTick'), flipLab = $('flipLab');
   var rE = $('rE'), rP = $('rP'), rH = $('rH'), rV = $('rV'), rC = $('rC');
+  var chiralBarTgl = $('chiralBarTgl');
 
   // ---------- physics (same formulas as the audit hook) ----------
   function phys() {
@@ -930,7 +936,9 @@ window.__audit = {
     var my = yT + re * 0.85 * Math.sin(state.phase);
     var frontM = Math.cos(state.phase) >= 0;
     var mr = Math.max(2.5, re * 0.26);
-    if (!frontM) { ctx.fillStyle = rgba(COL_S, 0.45); ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+    /* (rear-half dot is drawn AFTER the ball body below — drawing it here put it
+       under the opaque ball, so the dot vanished for half of every revolution
+       and the rotation never read as complete) */
 
     // spin axis through the centre, along S. The curved arrow wraps the axle and
     // shows the rotation SENSE (right-hand rule: S along +x, front face sweeps
@@ -966,11 +974,19 @@ window.__audit = {
     ctx.beginPath(); ctx.arc(xe, yT, re, 0, 7); ctx.fill();
     ctx.strokeStyle = C.bg; ctx.lineWidth = 2; ctx.stroke();
 
-    // meridian ring (perpendicular to the axis) + circulating surface dot
-    ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(COL_S, 0.6); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(xe, yT, re * 0.34, re * 0.85, 0, 0, Math.PI * 2); ctx.stroke();
+    // meridian ring (perpendicular to the axis) + circulating surface dot.
+    // Depth cue: the NEAR half (cos t >= 0, same convention as frontM) is a solid
+    // stroke; the FAR half is dotted and dimmer — dotted = behind the plane.
+    ctx.save(); ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(COL_S, 0.45);
+    ctx.beginPath(); ctx.ellipse(xe, yT, re * 0.34, re * 0.85, 0, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+    ctx.setLineDash([]); ctx.strokeStyle = rgba(COL_S, 0.9);
+    ctx.beginPath(); ctx.ellipse(xe, yT, re * 0.34, re * 0.85, 0, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke();
     ctx.restore();
+    // the dot now survives the whole revolution: bright on the near half, dimmer
+    // and slightly smaller ghosted through the ball on the far half
     if (frontM) { ctx.fillStyle = COL_S; ctx.beginPath(); ctx.arc(mx, my, mr, 0, 7); ctx.fill(); }
+    else { ctx.fillStyle = rgba(COL_S, 0.45); ctx.beginPath(); ctx.arc(mx, my, mr * 0.8, 0, 7); ctx.fill(); }
 
     // spin arrow (never changes)
     var Ls = Math.max(60, Math.min(130, W * 0.09));
@@ -1021,6 +1037,14 @@ window.__audit = {
     else { t2 = short ? 'h = −½ħ' : 'h = −½ħ · spin against p′'; c2 = C.left; }
     chipBox(W - 12, 10, t2, c2, C, fsB, true);
 
+    var eqEl = document.getElementById('chiralEq');
+    var showBar = !chiralBarTgl || chiralBarTgl.checked;
+    if (eqEl) {
+      var eqDisp = showBar ? '' : 'none';
+      if (eqEl.style.display !== eqDisp) eqEl.style.display = eqDisp;
+    }
+    if (!showBar) return;
+
     // chirality panel (bottom band — L/R weights follow the electron's signed velocity in the observer frame)
     var px0 = W * 0.07, pwd = W * 0.86, py0 = H * 0.75, ph = H * 0.19;
     ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = C.surface; rr(px0, py0, pwd, ph, 10); ctx.fill(); ctx.restore();
@@ -1039,7 +1063,6 @@ window.__audit = {
        short panels so its bottom row is never clipped (threshold uses H only —
        no measure-feedback loop), and if its rect still covers the percentage
        row, print the percentages inside the bar instead of underneath it */
-    var eqEl = document.getElementById('chiralEq');
     var eqFs = H < 430 ? '11px' : '';
     if (eqEl && eqEl.style.fontSize !== eqFs) eqEl.style.fontSize = eqFs;
     /* at the sim's own 240px canvas minimum even the 11px card clips: lift its
@@ -1123,6 +1146,10 @@ window.__audit = {
   if (jLab) jLab.addEventListener('click', function () { restartAnim(); setBeta(0); });
   if (jMatch) jMatch.addEventListener('click', function () { restartAnim(); setBeta(Math.round(phys().bP / 0.0005) * 0.0005); });
   if (jOver) jOver.addEventListener('click', function () { restartAnim(); setBeta(0.9995); });
+  if (chiralBarTgl) chiralBarTgl.addEventListener('change', function () {
+    tick();
+    if (chiralBarTgl.checked) requestAnimationFrame(function () { tick(); });
+  });
 
   // ---------- KaTeX (guarded, retried) ----------
   var mathTries = 0;
