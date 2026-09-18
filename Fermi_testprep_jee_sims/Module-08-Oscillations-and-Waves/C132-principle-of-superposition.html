@@ -1001,11 +1001,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots of y_L + y_R as the pulses cross</span>
+                <span class="hero-label">Equal-time dots of the string's displacement y = y_L + y_R, with each pulse drawn faintly on its own, as two equal and opposite pulses close on each other</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Two pulses meet</span></h2>
-                <p class="welcome-blurb">Two pulses pass through each other; a rigid end sends one back inverted.</p>
+                <p class="welcome-blurb">Two opposite pulses meet on one string — what does the string do?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2976,55 +2976,181 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to two pulses meet.',
-    'Here two pulses travel toward each other on a string. They pass through unchanged, and a rigid end sends a pulse back inverted.',
+    'Here two pulses travel toward each other on a string. Watch what the string does at the instant the two lie on top of each other.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: y = y_L + y_R from this sim's Gaussians (open string).
-     EQUAL-TIME snapshots accumulate: pulses approach, cancel, re-emerge. */
+  /* Hero: y = y_L + y_R from this sim's own Gaussian pulses on an open string —
+     A_L = +1 m travelling right from x = 1.2, A_R = −1 m travelling left from
+     x = 8.8, v = 2, σ = 0.55, exactly the sim's numbers. EQUAL-TIME snapshots:
+     the faint blue and pink curves are the two pulses taken separately, the
+     amber dots are the string's actual displacement, their sum.
+
+     GATED CARD — the window now stops before the crossing. Card 2 is a
+     data-gate predict: "at the instant one pulse lies exactly on top of the
+     other, what is the displacement, and what happens after?" (answer: zero
+     everywhere, and both pulses carry on unchanged). The old hero ran
+     t ∈ [0.3, 3.5 s] straight through the coincidence at t = 1.9 s and left
+     the whole story — flat string, then two pulses re-emerging beyond it — on
+     screen, which handed that gated card its answer before it was asked. The
+     window is now t ∈ [0.3, 1.75 s], stopping 0.15 s short of coincidence. By
+     the last snapshot the peaks are 0.6 apart (1.09 σ) and the amber sum stands
+     at 0.774 against component peaks of 1.000 — a 22.6% collapse, so the SUM
+     rule (amber = blue + pink, visibly smaller than either pulse wherever they
+     overlap) is unmistakable; that rule is the ungated premise of card 1. The
+     coincidence itself, and everything after it, is left for the student: the
+     hero stops mid-collapse, which sets the question up without deciding
+     between "cancelled for good" and "both carry on" — precisely the choice
+     card 2 puts to them.
+     Note the amber sum is identically zero at mid-string at EVERY instant,
+     because the two pulses are equal, opposite and symmetric about x = 5; that
+     is a property of the pair, not the crossing, and it is visible from the
+     first frame.
+
+     BLURB / ART GAP, recorded not fixed. The blurb and the spoken script say
+     "a rigid end sends one back inverted", but this hero draws an OPEN string
+     with no boundary and no reflection. A rigid end cannot be added here:
+     card 4 ("A clamped end") is a data-gate predict whose answer is exactly
+     "an inverted pulse, a phase change of π", and card 5 gates the same
+     inversion for a heavier second string. Drawing a clamp with an inverted
+     reflected pulse would give both of them away. The gap is left in place
+     deliberately; closing it belongs to the blurb text, not to the art.
+
+     OVERDRAW. The old hero accumulated 65 snapshots × 65 x-samples × 3 series
+     ≈ 12.7k dots onto the canvas with no fade, so the .20–.26 alpha component
+     traces stacked into solid bands and swamped the amber sum they were meant
+     to frame. Each frame is now a FULL repaint of a fixed 13-snapshot ladder,
+     the components are thin continuous curves (not dot clouds) whose alpha
+     ramps from oldest to newest, and only the sum stays as dots — so the amber
+     sum is always the brightest, densest thing in the strip.
+
+     SIZING. The canvas carried fixed 1280×240 attributes while its box is one
+     viewport wide and 140 px tall, so the art arrived ~2:1 squashed. The
+     backing store is now taken from getBoundingClientRect()×devicePixelRatio
+     on every paint, the context is scaled by dpr, and all drawing is in CSS px.
+
+     INK SPAN. The whole string x ∈ [0, 10] is mapped to 25.5%…74.5% of the
+     displayed width, so every mark — baseline, both component curves, the
+     amber sum, the two labels — is inside the 22–78% opaque window. Nothing is
+     decorative-and-faded; the labels are measured and dropped rather than
+     allowed to run into the fade. */
   function gaussian(A, x, x0, v, t, sigma){
     const u = (x - x0 - v*t)/sigma;
     return A * Math.exp(-u*u);
   }
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  let heroToken = 0;                                   // one live hero animation at a time
+  function paintHero(ctx, W, H, u, LIGHT){
+    const rule = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
+    const soft = LIGHT ? 'rgba(15,23,42,.46)' : 'rgba(148,163,184,.62)';
+    const FAM  = (document.body && getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    // light / dark ink pair for every series
+    const cL  = LIGHT ? '2,132,199'  : '96,165,250';   // the +1 pulse, alone
+    const cR  = LIGHT ? '219,39,119' : '244,114,182';  // the −1 pulse, alone
+    const cS  = LIGHT ? '180,83,9'   : '251,191,36';   // their sum: the string
     ctx.clearRect(0,0,W,H);
     const L=10, SIG=0.55, V0=2, INSET=1.2, AL=1, AR=-1;
-    const x0=W*0.08, x1=W*0.92, yMid=H*0.55, yAmp=H*0.38;
+    // The whole string sits inside the 22–78% opaque window.
+    const x0=W*0.255, x1=W*0.745, yMid=H*0.52, yAmp=H*0.36;
     const X = x => x0 + (x/L)*(x1-x0);
     const Y = y => yMid - y*yAmp;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
+    const span = x1 - x0;
+
+    // the string at rest
+    ctx.strokeStyle = rule; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x0, yMid); ctx.lineTo(x1, yMid); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const t0=0.3, t1=3.5, dT=0.05, N=Math.ceil((t1-t0)/dT);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const t = t0 + k*dT;
-        for(let i=0;i<=64;i++){
-          const x = (i/64)*L;
-          const yL = gaussian(AL, x, INSET, V0, t, SIG);
-          const yR = gaussian(AR, x, L-INSET, -V0, t, SIG);
-          const px = X(x);
-          ctx.fillStyle = LIGHT ? 'rgba(2,132,199,.20)' : 'rgba(96,165,250,.26)';
-          ctx.beginPath(); ctx.arc(px, Y(yL), 1.5, 0, 7); ctx.fill();
-          ctx.fillStyle = LIGHT ? 'rgba(219,39,119,.20)' : 'rgba(244,114,182,.26)';
-          ctx.beginPath(); ctx.arc(px, Y(yR), 1.5, 0, 7); ctx.fill();
-          ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.94)';
-          ctx.beginPath(); ctx.arc(px, Y(yL+yR), 2.3, 0, 7); ctx.fill();
+
+    // Equal-time ladder, stopping short of the coincidence at t = 1.9 s.
+    const tA = 0.30, tB = 1.75, SNAPS = 13;
+    const shown = Math.max(0, Math.min(SNAPS-1, Math.round(u*(SNAPS-1))));
+    const tOf = j => tA + (j/(SNAPS-1))*(tB-tA);
+    const age = j => (shown ? j/shown : 1);            // 1 = the newest snapshot
+
+    // Pass 1: the two pulses taken separately, as thin continuous curves that
+    // fade with age — faint scaffolding, never a solid band.
+    const NC = 96;
+    for(let j = 0; j <= shown; j++){
+      const f = age(j), t = tOf(j);
+      const a = 0.07 + 0.19*f*f;
+      ctx.lineWidth = f > 0.999 ? 1.7 : 1.1;
+      for(let s = 0; s < 2; s++){
+        ctx.strokeStyle = 'rgba(' + (s ? cR : cL) + ',' + a.toFixed(3) + ')';
+        ctx.beginPath();
+        for(let i = 0; i <= NC; i++){
+          const x = (i/NC)*L;
+          const y = s ? gaussian(AR, x, L-INSET, -V0, t, SIG)
+                      : gaussian(AL, x, INSET,    V0, t, SIG);
+          if(i) ctx.lineTo(X(x), Y(y)); else ctx.moveTo(X(x), Y(y));
         }
+        ctx.stroke();
       }
-      if(k<=N) requestAnimationFrame(batch);
     }
-    batch();
+
+    // Pass 2: the string itself, y = y_L + y_R, as equal-time dots — drawn last
+    // so the sum is always the brightest, densest thing in the strip.
+    const ND = 36;
+    for(let j = 0; j <= shown; j++){
+      const f = age(j), t = tOf(j);
+      const a = 0.26 + 0.66*Math.pow(f, 1.4);
+      ctx.fillStyle = 'rgba(' + cS + ',' + a.toFixed(3) + ')';
+      const rad = f > 0.999 ? 2.7 : 2.2;
+      for(let i = 0; i <= ND; i++){
+        const x = (i/ND)*L;
+        const y = gaussian(AL, x, INSET, V0, t, SIG) + gaussian(AR, x, L-INSET, -V0, t, SIG);
+        ctx.beginPath(); ctx.arc(X(x), Y(y), rad, 0, 7); ctx.fill();
+      }
+    }
+
+    // Keys, right-aligned inside the plot box; dropped whole if they would not
+    // fit the opaque band rather than being allowed to run into the fade.
+    ctx.font = '12px '+FAM;
+    const k1 = 'y = y_L + y_R', k2 = 'each pulse alone';
+    const wKey = Math.max(ctx.measureText(k1).width, ctx.measureText(k2).width) + 14;
+    if(wKey < span*0.78){
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      const ky = H*0.11;
+      ctx.fillStyle = 'rgba(' + cS + ',.95)';
+      ctx.fillText(k1, x1 - 12, ky);
+      ctx.beginPath(); ctx.arc(x1 - 6, ky, 2.7, 0, 7); ctx.fill();
+      ctx.fillStyle = soft;
+      ctx.fillText(k2, x1 - 12, ky + 16);
+      ctx.fillStyle = 'rgba(' + cL + ',.45)';
+      ctx.beginPath(); ctx.arc(x1 - 6, ky + 16, 2.2, 0, 7); ctx.fill();
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;
+    function paint(u){
+      // Backing store from the DISPLAYED box, every paint: the markup's fixed
+      // 1280×240 was being stretched into a ~1500×140 box, halving the pulses.
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }                   // fast path: the finished plot
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                    // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;     // overlay dismissed: stop
+      // `now` can legitimately be 0 on the synchronous first call, so test the
+      // type rather than the truthiness — `now || Date.now()` would jump to u = 1.
+      const s = ((typeof now === 'number' ? now : Date.now()) - t0)/1000;
+      paint(Math.min(1, (s % 3.8)/2.4));            // 2.4 s to draw, 1.4 s to hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

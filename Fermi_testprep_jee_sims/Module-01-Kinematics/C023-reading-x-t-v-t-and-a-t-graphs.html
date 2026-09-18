@@ -793,6 +793,7 @@ Object.freeze(Engine);
 </head>
 <body>
 <!-- POLISH: [physics] H-CAPTION reworded step-5 "Any change restarts the run" — slider handlers redraw the curves but never reset t, so the run does not restart [UNVERIFIED: Any change restarts the run not found in this file]; new wording states what the code does (full curves redrawn for the new v₀, a) and keeps the honesty claim. J4/B3 eq4 integration dummy t\prime → t' (standard superscript prime). [pedagogy] H4/F4 CRITICAL: gateLocksPlay:true + gated first card disabled ▶ Play at boot until the prediction was answered (shell: "a gated first card locks ▶ at boot"); set gateLocksPlay:false — predict-first stays via autoplay:false (pause) and the data-gate Next button; autoplay:false, data-gate cards, and all readouts untouched. [visuals] D5 onReset now calls drawTrack/drawPlots — shell never calls onFrame while paused, so Reset under resumeOnReset:'pause' left stale curves against reset readouts; D2 turning-point label 10px→12px; D5 clamped turn-label x so it cannot clip at the canvas edge when t_turn is near 0 or 8 s. Deliberately kept: per-run fitted y-axes (prior K1 fix, quantised nice ranges with live tick labels), X_HALF_RANGE=25, card sequence and both sliders. -->
+<!-- HERO: canvas backing store now sized from getBoundingClientRect()×devicePixelRatio inside the paint routine (was a fixed 1280×240 squashed ~2:1 into 100vw×140px); heroToken rAF guard + resize→drawHero hook per C190 reference; prefers-reduced-motion paints the final frame. All three panels + labels compressed into the 24–76% band (CSS mask is only fully opaque 22–78% — old PW=340/GAP=70 put panels 1 and 3 in the faded fringes). SPOILER DECISIONS: gated card 1 asks WHERE on x–t the trolley is momentarily at rest — hero draws the default-run curves but marks nothing at the peak (no v=0 cue, no tangent, no annotation); gated card 3 is the sign-of-a misconception — hero makes no speeding-up/slowing-down claim. Curve shapes themselves are the sim's default view, not the gated answers. -->
 <div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title" data-no-reset>
     <div class="welcome-card">
         <div class="welcome-hero">
@@ -3181,50 +3182,84 @@ Shell.init({ onFrame, onReset, onResize, onStep, cfg: { autoplay: false, gateLoc
   /* Hero: the sim's own default run (v₀ = 4 m/s, a = −1 m/s²) drawn as the
      trio of linked curves — x–t, v–t and a–t side by side, dots accumulating
      at equal time steps in sync, so slope-of-one = value-of-the-next is the
-     picture itself. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+     picture itself.
+
+     The canvas backing store is sized to its OWN CSS box × devicePixelRatio on
+     every paint (was a fixed 1280×240 stretched into a 100vw×140px band — a
+     ~2:1 squash that flattened every slope). All three panels now live inside
+     the 24–76% band of the DISPLAYED width: the hero's CSS mask is only fully
+     opaque over 22–78%, and the old PW=340/GAP=70 layout pushed panels 1 and 3
+     into the faded fringes. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
     const v0 = 4, a = -1, T = 8;
-    const PW = 340, GAP = 70, X0 = (W - (3*PW + 2*GAP))/2, yTop = 26, yBot = 190;
+    // Everything essential inside 24%–76% of the displayed width
+    const bandL = W*0.24, bandW = W*0.52;
+    const GAP = Math.max(22, bandW*0.07);
+    const PW  = (bandW - 2*GAP)/3;
+    const yTop = 14, yBot = H - 34;
     const panels = [
-      { x: X0,            lo: -2,  hi: 10, f: t => v0*t + 0.5*a*t*t, label: 'x–t', dark:'rgba(96,165,250,.9)',  light:'rgba(37,99,235,.9)'  },
-      { x: X0+PW+GAP,     lo: -5,  hi: 5,  f: t => v0 + a*t,         label: 'v–t', dark:'rgba(52,211,153,.9)',  light:'rgba(5,150,105,.9)'  },
-      { x: X0+2*(PW+GAP), lo: -2,  hi: 2,  f: () => a,               label: 'a–t', dark:'rgba(244,114,182,.9)', light:'rgba(219,39,119,.9)' }
+      { x: bandL,            lo: -2, hi: 10, f: t => v0*t + 0.5*a*t*t, label: 'x–t', dark:'rgba(96,165,250,.9)',  light:'rgba(37,99,235,.9)'  },
+      { x: bandL+PW+GAP,     lo: -5, hi: 5,  f: t => v0 + a*t,         label: 'v–t', dark:'rgba(52,211,153,.9)',  light:'rgba(5,150,105,.9)'  },
+      { x: bandL+2*(PW+GAP), lo: -2, hi: 2,  f: () => a,               label: 'a–t', dark:'rgba(244,114,182,.9)', light:'rgba(219,39,119,.9)' }
     ];
     const yOf = (p, val) => yBot - (val - p.lo)/(p.hi - p.lo)*(yBot - yTop);
     // faint zero lines + panel labels
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)';
     ctx.lineWidth = 1;
-    ctx.font = '600 20px ' + getComputedStyle(document.body).fontFamily;
+    ctx.font = '600 13px ' + FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     panels.forEach(p => {
       const y0 = yOf(p, 0);
       ctx.beginPath(); ctx.moveTo(p.x, y0); ctx.lineTo(p.x + PW, y0); ctx.stroke();
       ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.75)' : 'rgba(148,163,184,.75)';
-      ctx.fillText(p.label, p.x + 4, H - 16);
+      ctx.fillText(p.label, p.x + 2, H - 12);
     });
-    // dots accumulate at EQUAL TIME STEPS, in sync across the three panels —
-    // one motion, differentiated twice
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 120; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const t = (k/(N-1))*T;
-        panels.forEach(p => {
-          ctx.fillStyle = LIGHT ? p.light : p.dark;
-          ctx.beginPath();
-          ctx.arc(p.x + (t/T)*PW, yOf(p, p.f(t)), 3.0, 0, 7);
-          ctx.fill();
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
+    // dots at EQUAL TIME STEPS, in sync across the three panels —
+    // one motion, differentiated twice; u ∈ [0,1] is how much has been drawn
+    const N = 80, K = Math.max(1, Math.round(N*u));
+    for(let k=0; k<K; k++){
+      const t = (k/(N-1))*T;
+      panels.forEach(p => {
+        ctx.fillStyle = LIGHT ? p.light : p.dark;
+        ctx.beginPath();
+        ctx.arc(p.x + (t/T)*PW, yOf(p, p.f(t)), 2.4, 0, 7);
+        ctx.fill();
+      });
     }
-    batch();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === "number" ? now : t0) - t0)/1000;
+      const u = Math.min(1, (s % 4.0)/2.6);         // 2.6 s of dots, 1.4 s dwell, loop
+      paint(u);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

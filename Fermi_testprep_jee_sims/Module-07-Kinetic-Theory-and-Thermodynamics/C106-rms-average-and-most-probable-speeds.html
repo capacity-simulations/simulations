@@ -852,11 +852,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-v dots on f(v) — vp, ⟨v⟩, vrms sit apart on one Maxwell–Boltzmann curve</span>
+            <span class="hero-label">One Maxwell–Boltzmann curve at 300 K — a skewed hill with a long high-speed tail</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Three speeds, one gas</span></h2>
-            <p class="welcome-blurb">A gas has no single speed — vp, ⟨v⟩ and vrms sit in a fixed ratio on one curve.</p>
+            <p class="welcome-blurb">One Maxwell–Boltzmann curve — where do vp, ⟨v⟩ and vrms sit on it?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2713,69 +2713,83 @@ Engine.kinetic = Object.freeze({
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to three speeds, one gas.',
-    'A Maxwell–Boltzmann gas has three standard speeds — most probable, mean, and r m s — sitting in a fixed ratio. Quadruple T and every speed doubles; the ratio never budges.',
+    'A Maxwell–Boltzmann gas has three standard speeds — most probable, mean, and r m s. You will find where each one sits on the curve, and what raising the temperature does to them.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: Maxwell–Boltzmann f(v) at 300 K and 1200 K (nitrogen).
-     Equal-v dots so the peak sits at v_p = √(2RT/M); the 1200 K curve is
-     twice as wide and half as tall. Three ticks mark v_p, ⟨v⟩, v_rms. */
+  /* Hero: ONE Maxwell–Boltzmann curve — f(v) for nitrogen at 300 K — drawn as
+     equal-v dots, matching the blurb ("one curve"). The x-range is keyed to
+     THIS curve (0 → 2.6·v_p, where f has fallen to ~2% of its peak), so the
+     skewed hill fills the opaque middle of the masked band: the curve spans
+     26–74% and its peak lands near 44%. Deliberately NO marker ticks and no
+     second temperature: gated card 1 asks the student to PREDICT whether
+     v_p, ⟨v⟩ and v_rms coincide or spread, and gated card 3 asks what
+     quadrupling T does — dashed ticks or a 1200 K twin would answer both
+     before they are asked. The curve's visible asymmetry (long high-speed
+     tail) is the premise, not the answer.
+
+     The canvas is sized to its OWN CSS box (getBoundingClientRect × DPR) and
+     drawn in CSS px — the authored 1280×240 backing store was being squashed
+     into a one-viewport-wide, 140px-tall band. */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const my = ++heroToken;                      // one live animation at a time
+    const r = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(r.width || 1280));
+    const H = Math.max(100, Math.round(r.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0,0,W,H);
-    const R = 8.314462618, M = 0.028014;
-    const Tlo = 300, Thi = 1200;
-    function f(v, T){
+    const R = 8.314462618, M = 0.028014, T = 300;
+    function f(v){
       if(window.Engine && Engine.kinetic && Engine.kinetic.maxwellBoltzmann){
         return Engine.kinetic.maxwellBoltzmann(v, T, M).probabilityDensity;
       }
       const a = M / (2 * Math.PI * R * T);
       return 4 * Math.PI * v * v * Math.pow(a, 1.5) * Math.exp(-M * v * v / (2 * R * T));
     }
-    function vp(T){ return Math.sqrt(2 * R * T / M); }
-    function vmean(T){ return Math.sqrt(8 * R * T / (Math.PI * M)); }
-    function vrms(T){ return Math.sqrt(3 * R * T / M); }
-    const vmax = vrms(Thi) * 1.85;
-    const fmax = f(vp(Tlo), Tlo);
-    const padL = W * 0.08, padR = W * 0.04, padT = H * 0.14, padB = H * 0.22;
-    const xOf = v => padL + (v / vmax) * (W - padL - padR);
+    const vpk = Math.sqrt(2 * R * T / M);   // most-probable speed of the 300 K curve
+    const vmax = vpk * 2.6;                 // x-range keyed to the drawn curve
+    const fmax = f(vpk);
+    const x0 = W * 0.26, x1 = W * 0.74;     // essentials inside the 24–76% opaque band
+    const padT = H * 0.14, padB = H * 0.22;
+    const xOf = v => x0 + (v / vmax) * (x1 - x0);
     const yOf = fv => padT + (1 - fv / fmax) * (H - padT - padB);
-    const inkLo = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.88)';
-    const inkHi = LIGHT ? 'rgba(180,83,9,.82)' : 'rgba(251,191,36,.82)';
+    const ink  = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.88)';
     const axis = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, H - padB); ctx.lineTo(W - padR, H - padB); ctx.stroke();
-    const marks = [
-      { v: vp(Tlo),    col: LIGHT ? '#d97706' : '#f59e0b' },
-      { v: vmean(Tlo), col: LIGHT ? '#059669' : '#34d399' },
-      { v: vrms(Tlo),  col: LIGHT ? '#db2777' : '#f472b6' }
-    ];
-    marks.forEach(m => {
-      const x = xOf(m.v), y = yOf(f(m.v, Tlo));
-      ctx.strokeStyle = m.col; ctx.globalAlpha = 0.55; ctx.setLineDash([3,3]);
-      ctx.beginPath(); ctx.moveTo(x, H - padB); ctx.lineTo(x, y); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = 1;
-    });
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 90; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
+    const N = 90;
+    const REVEAL = 1.5, PERIOD = REVEAL + 1.4;    // s: dots lay in, dwell on the whole curve, repeat
+    function paint(p){
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = axis; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, H - padB); ctx.lineTo(x1, H - padB); ctx.stroke();
+      const shown = Math.round(N * Math.max(0, Math.min(1, p)));
+      ctx.fillStyle = ink;
+      for(let k = 0; k < shown; k++){
         const v = (k / (N - 1)) * vmax;
-        ctx.fillStyle = inkLo;
-        ctx.beginPath(); ctx.arc(xOf(v), yOf(f(v, Tlo)), 2.4, 0, 7); ctx.fill();
-        ctx.fillStyle = inkHi;
-        ctx.beginPath(); ctx.arc(xOf(v), yOf(f(v, Thi)), 2.4, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(xOf(v), yOf(f(v)), 2.4, 0, 7); ctx.fill();
       }
-      if(k < N) requestAnimationFrame(batch);
     }
-    batch();
+    if(reduce){ paint(1); return; }               // single frame, the finished curve
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((((now || t0) - t0) / 1000) % PERIOD);
+      paint(Math.min(1, s / REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

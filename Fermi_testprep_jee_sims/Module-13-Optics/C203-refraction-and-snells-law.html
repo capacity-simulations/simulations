@@ -918,7 +918,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Rays crossing into a denser medium — each one bends at the surface</span>
+            <span class="hero-label">One water surface struck by beams at steadily steeper angles — each wavefront pivots as it crosses and the beam bends toward the dashed normal, the more so the more slanted its arrival</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Refraction &amp; Snell's law</span></h2>
@@ -3072,56 +3072,149 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to refraction and Snell’s law.',
-    'Here you watch a wavefront of light cross into a slower medium. One side is slowed before the other, the wavefront pivots, and the ray bends — and the same slowing makes a pool look shallower than it really is.',
+    'Here you watch a wavefront of light cross into a slower medium. One side is slowed before the other, the wavefront pivots, and the ray bends. A coin on the floor of a pool is waiting on the right.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: a fan of rays hitting one point on a flat interface, each refracted by
-     Snell's law (n₁ sinθ₁ = n₂ sinθ₂, n₂ = 1.33) — drawn as dots accumulating
-     along each path, so the kink toward the normal at the surface is the picture. */
+  /* Hero: one flat air→water surface spanning the whole visible band, struck by a row
+     of beams at growing incidence (15° → 70°), each refracted by Snell's law with
+     n₂ = 1.33. Every beam carries perpendicular WAVEFRONT bars — the sim's own visual
+     language, and the language of the audio script ("the wavefront pivots"): the bars
+     pivot at the surface and their spacing drops to λ/n₂ below it, so the mechanism is
+     the picture rather than an assertion. The old hero drew marching dots, which the
+     script never mentions.
+
+     GEOMETRY (the substantive repair). The backing store is now sized from
+     getBoundingClientRect()×devicePixelRatio and the scene is drawn in CSS px under
+     setTransform(dpr,…). The old hero drew into a fixed 1280×240 buffer that CSS then
+     stretched to 100vw×140 — a ~1.7–2.6× horizontal stretch depending on the window.
+     Every angle in a hero whose entire subject is ANGLES was therefore false: a drawn
+     70° incidence reached the eye at ~79° on a 1280-px window, and the visual Snell
+     relation was wrong by a viewport-dependent factor. With square pixels, a drawn θ
+     renders as θ at every width.
+
+     LAYOUT. The surface, its tint, the dashed normals and every beam live inside
+     26–74% of the DISPLAYED width (the mask is opaque 22–78%); the surface line and
+     tint span that band exactly, so the figure fills the opaque window instead of
+     huddling in ~14% of it as it used to. Beam count adapts to the band (3 narrow →
+     6 wide). Nothing decorative is left to fade — there is no ink outside the band.
+
+     GATES. Card 2 (data-gate) asks what happens at NORMAL incidence, so no 0° beam is
+     drawn: the shallowest is 15° and every beam visibly bends. Card 5 (data-gate) asks
+     why a sunken coin still looks raised once the bending has vanished, so the pool /
+     apparent-depth half of the welcome blurb is deliberately NOT depicted. KNOWN GAP:
+     the blurb promises "…and see why the pool looks shallower than it is" and the art
+     shows only the bending half. A second scene inside a 140-px strip masked to 48% of
+     the width would make both illegible, and the apparent-depth construction sits one
+     card away from a gated predict; the hidden .hero-label names only what is drawn. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const yInt = H*0.5, cx = W*0.5, n2 = 1.33;
-    // faint tint of the denser medium below the surface
-    ctx.fillStyle = LIGHT ? 'rgba(42,138,126,.08)' : 'rgba(59,155,143,.10)';
-    ctx.fillRect(W*0.10, yInt, W*0.80, H*0.44);
-    // interface line + dashed normal
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.30)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.10, yInt); ctx.lineTo(W*0.90, yInt); ctx.stroke();
-    ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(cx, H*0.06); ctx.lineTo(cx, H*0.94); ctx.stroke();
-    ctx.setLineDash([]);
-    const angles = [10, 25, 40, 55, 70].map(a => a*Math.PI/180);
-    const L = H*0.46;   // ray segment length either side of the surface
-    const inkIn  = LIGHT ? 'rgba(180,83,9,.85)'  : 'rgba(251,191,36,.85)';   // incident (amber)
-    const inkOut = LIGHT ? 'rgba(5,150,105,.9)'  : 'rgba(110,231,183,.9)';   // refracted (emerald)
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 70; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
-        const f = (k+1)/N;
-        angles.forEach(th1 => {
-          const th2 = Math.asin(Math.sin(th1)/n2);   // Snell: n1 sin th1 = n2 sin th2
-          // incident dot marches from upper-left toward the surface point
-          ctx.fillStyle = inkIn;
-          ctx.beginPath(); ctx.arc(cx - Math.sin(th1)*L*(1-f), yInt - Math.cos(th1)*L*(1-f), 2.6, 0, 7); ctx.fill();
-          // refracted dot grows outward below, bent toward the normal
-          ctx.fillStyle = inkOut;
-          ctx.beginPath(); ctx.arc(cx + Math.sin(th2)*L*f, yInt + Math.cos(th2)*L*f, 2.6, 0, 7); ctx.fill();
-        });
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);   // one live animation at a time
+    const n2 = 1.33;
+    const tint   = LIGHT ? 'rgba(42,138,126,.10)' : 'rgba(59,155,143,.13)';
+    const surf   = LIGHT ? 'rgba(15,23,42,.45)'   : 'rgba(148,163,184,.45)';
+    const norm   = LIGHT ? 'rgba(15,23,42,.22)'   : 'rgba(148,163,184,.28)';
+    const inkIn  = LIGHT ? 'rgba(180,83,9,.85)'   : 'rgba(251,191,36,.85)';   // incident (amber)
+    const inkOut = LIGHT ? 'rgba(5,150,105,.90)'  : 'rgba(110,231,183,.90)';  // refracted (emerald)
+    const barIn  = LIGHT ? 'rgba(180,83,9,.55)'   : 'rgba(251,191,36,.60)';
+    const barOut = LIGHT ? 'rgba(5,150,105,.60)'  : 'rgba(110,231,183,.65)';
+    function paint(t){                                   // t = seconds since start
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(320, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);                         // transparent: the overlay dim is the background
+      const x0 = W*0.26, x1 = W*0.74, band = x1 - x0;
+      const yI = H*0.44, topRoom = yI - 5, botRoom = H - yI - 5;
+      // beams: evenly spaced incidences from 15° to 70°, count set by the band width
+      const n = Math.max(3, Math.min(6, Math.round(band/130)));
+      const th1 = [], th2 = [];
+      for(let i=0;i<n;i++){
+        const a = (15 + 55*i/(n-1))*Math.PI/180;
+        th1.push(a);
+        th2.push(Math.asin(Math.sin(a)/n2));             // Snell: n₁ sinθ₁ = n₂ sinθ₂
       }
-      if(k < N) requestAnimationFrame(batch);
+      // one length for every beam: capped by the strip height, then by the band width.
+      // The wavefront bars stick out sideways from the end beams, so the usable band is
+      // inset by one bar half-length at each end — nothing may cross 26% / 74%.
+      let sum = 0; for(let i=0;i<n;i++) sum += Math.sin(th1[i]) + Math.sin(th2[i]);
+      const Lh = Math.min(topRoom/Math.cos(th1[0]), botRoom/Math.cos(th2[0]));
+      const L0 = Math.max(8, Math.min(Lh, band*0.90/sum));
+      const inset = Math.max(3, L0*0.16);
+      const usable = Math.max(20, band - 2*inset);
+      const L = Math.max(8, Math.min(Lh, usable*0.90/sum));
+      const gapX = (usable - L*sum)/(n - 1);             // ≥ 0 by the 0.90 cap above
+      // the surface and the denser medium below it, spanning the opaque band exactly
+      ctx.fillStyle = tint;
+      ctx.fillRect(x0, yI, band, H - yI);
+      ctx.strokeStyle = surf; ctx.lineWidth = 1.4; ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.moveTo(x0, yI); ctx.lineTo(x1, yI); ctx.stroke();
+      // wavefronts: same frequency either side, so λ and the speed both fall by n₂
+      const lam1 = Math.max(6, L/5.2), lam2 = lam1/n2;
+      const v1 = lam1*1.15, v2 = v1/n2;
+      const ph1 = ((t*v1) % lam1 + lam1) % lam1;
+      const ph2 = ((t*v2) % lam2 + lam2) % lam2;
+      const hb = Math.min(inset, Math.max(3, L*0.16));   // wavefront-bar half-length
+      let x = x0 + inset;
+      for(let i=0;i<n;i++){
+        const a1 = th1[i], a2 = th2[i];
+        const hx = x + L*Math.sin(a1), hy = yI;          // where this beam meets the surface
+        // dashed normal — angles are read from it
+        ctx.save();
+        ctx.strokeStyle = norm; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(hx, hy - L*0.66); ctx.lineTo(hx, hy + L*0.66); ctx.stroke();
+        ctx.restore();
+        // incident beam in air, arriving from the upper left at θ₁
+        ctx.lineCap = 'round'; ctx.lineWidth = 1.8;
+        ctx.strokeStyle = inkIn;
+        ctx.beginPath(); ctx.moveTo(hx - L*Math.sin(a1), hy - L*Math.cos(a1)); ctx.lineTo(hx, hy); ctx.stroke();
+        // refracted beam in water, bent toward the normal to θ₂
+        ctx.strokeStyle = inkOut;
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + L*Math.sin(a2), hy + L*Math.cos(a2)); ctx.stroke();
+        // wavefront bars, perpendicular to each beam and marching at the local speed
+        ctx.lineWidth = 1.1; ctx.lineCap = 'butt';
+        ctx.strokeStyle = barIn;
+        for(let s = lam1 - ph1; s < L - 1; s += lam1){
+          const px = hx - s*Math.sin(a1), py = hy - s*Math.cos(a1);
+          ctx.beginPath();
+          ctx.moveTo(px - hb*Math.cos(a1), py + hb*Math.sin(a1));
+          ctx.lineTo(px + hb*Math.cos(a1), py - hb*Math.sin(a1));
+          ctx.stroke();
+        }
+        ctx.strokeStyle = barOut;
+        for(let s = ph2; s < L - 1; s += lam2){
+          const px = hx + s*Math.sin(a2), py = hy + s*Math.cos(a2);
+          ctx.beginPath();
+          ctx.moveTo(px - hb*Math.cos(a2), py + hb*Math.sin(a2));
+          ctx.lineTo(px + hb*Math.cos(a2), py - hb*Math.sin(a2));
+          ctx.stroke();
+        }
+        x = hx + L*Math.sin(a2) + gapX;                  // next beam starts after this one
+      }
     }
-    batch();
+    if(reduce){ paint(0.35); return; }                   // static, mid-phase frame
+    let t0 = null;
+    (function loop(ts){
+      if(c.__heroGen !== gen) return;                    // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;        // overlay dismissed: stop
+      const now = (ts === undefined || ts === null)
+        ? ((window.performance && performance.now) ? performance.now() : Date.now())
+        : ts;                                            // ts === 0 is a real timestamp
+      if(t0 === null) t0 = now;
+      paint((now - t0)/1000);
+      requestAnimationFrame(loop);
+    })();
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

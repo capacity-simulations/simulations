@@ -521,7 +521,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Particles bouncing in a box</span>
+            <span class="hero-label">Ten particles bouncing inside a box, each wall hit flashing amber — the drumbeat that is pressure</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Ideal Gas Lab</span></h2>
@@ -2220,89 +2220,167 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time dots of hard-wall particles (this sim's kinetic picture).
-     Specular bounce in a box; denser wall ticks = higher pressure. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const x0 = W*0.24, x1 = W*0.58, y0 = H*0.16, y1 = H*0.86;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.32)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x0, y0, x1-x0, y1-y0);
+  /* Hero: hard-wall particles in a box, in the sim's own species colours
+     (purple heavy, orange light), with an amber flash at every wall hit.
+     Pressure IS that drumbeat — the caption says so and nothing else does.
+
+     SPOILER GATE (guided-inquiry cards read before drawing). Cards 1 and 3 are
+     both data-gate: card 1 asks what the PRESSURE GAUGE does when the particle
+     count doubles (answer P ∝ N), card 3 is Boyle's law on halving the volume.
+     So the hero deliberately shows NO gauge, no numbers and no PV = nRT, even
+     though the welcome blurb mentions gauges — a gauge here would answer card 1
+     before it is asked. The bare kinetic picture is safe: card 2 ("Watch the
+     drumbeat") is ungated and the particles are already in motion by then.
+
+     Sizing: the backing store is taken from the canvas's OWN CSS box
+     (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…), all drawing
+     in CSS px) instead of the 1280×240 authored in the markup. The band is
+     ≈10:1, so the old 5.3:1 store was squashed ~2:1 vertically and the 12 px
+     caption rendered as ~7 px of ink; it is now a true 12 px (11 px only if the
+     column is too narrow for two 12 px lines).
+
+     Composition: the band's mask is opaque only over 22–78% of the displayed
+     width, so ALL ink is kept inside 26–74%. The box used to start exactly at
+     0.24W — grazing the fade — and the 55-character caption ran from 0.58W to
+     about 0.85W, so its last words dissolved. The scene is now centred and
+     capped at 660 CSS px, and the caption is measured against its column and
+     wrapped onto a balanced second line (or dropped altogether, below ~100 px
+     of column) rather than allowed to run off. */
+  let heroRAF = 0;
+  const heroCap = 'every wall hit is a tiny push — that drumbeat is pressure';
+
+  // Pure layout: geometry follows the canvas's real CSS box at any width, and
+  // the caption is fitted by measureText rather than assumed to fit.
+  function heroLayout(ctx, W, H, font){
+    const L = W*0.26, R = W*0.74, CW = R - L, mid = (L + R)/2;
+    const compW = Math.min(CW, 660), cL = mid - compW/2, cR = mid + compW/2;
+    const y0 = H*0.16, y1 = H*0.86;
+    const pad = 7;                       // keeps the 7 px wall-hit flash inside
+    let boxW = Math.min(compW*0.46, 250);
+    let capX = cL + pad + boxW + 18, capMax = cR - capX;
+    let cap = null;
+    const fit = size => {
+      ctx.font = '600 ' + size + 'px ' + font;
+      if(ctx.measureText(heroCap).width <= capMax) return { lines:[heroCap], size };
+      const w = heroCap.split(' ');
+      let best = null;
+      for(let i=1;i<w.length;i++){
+        const a = w.slice(0,i).join(' '), b = w.slice(i).join(' ');
+        if(b.charAt(0) === '—') continue;          // never open a line on an em dash
+        const wa = ctx.measureText(a).width, wb = ctx.measureText(b).width;
+        const worst = Math.max(wa, wb);
+        if(worst <= capMax && (!best || worst < best.worst)) best = { lines:[a,b], size, worst };
+      }
+      return best;
+    };
+    if(capMax >= 100) cap = fit(12) || fit(11);
+    if(!cap){ boxW = compW - 2*pad; capX = null; capMax = 0; }   // no room: box only
+    return {
+      x0: cL + pad, x1: cL + pad + boxW, y0, y1,
+      capX, capMax, capLines: cap ? cap.lines : null, capSize: cap ? cap.size : 0
+    };
+  }
+
+  // Deterministic seed so the same band always opens on the same configuration.
+  function heroSeed(lay){
     const rng = (s) => { let x = s|0 || 1; return () => { x ^= x<<13; x ^= x>>>17; x ^= x<<5; return (x>>>0)/4294967296; }; };
     const rnd = rng(104);
+    const scale = Math.max(0.55, Math.min(1.1, (lay.x1 - lay.x0)/240));
     const parts = [];
     for(let i=0;i<10;i++){
       const heavy = i < 6;
       const ang = rnd()*Math.PI*2;
-      const sp = (heavy ? 2.1 : 3.6);
+      const sp = (heavy ? 2.1 : 3.6) * scale;
       parts.push({
-        x: x0 + 8 + rnd()*(x1-x0-16),
-        y: y0 + 8 + rnd()*(y1-y0-16),
+        x: lay.x0 + 8 + rnd()*(lay.x1 - lay.x0 - 16),
+        y: lay.y0 + 8 + rnd()*(lay.y1 - lay.y0 - 16),
         vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp,
         heavy
       });
     }
-    function bounce(p){
+    return { parts, flashes: [] };
+  }
+
+  function paintHero(ctx, W, H, lay, st, LIGHT, font){
+    const { x0, x1, y0, y1 } = lay;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.32)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0, y0, x1-x0, y1-y0);
+    st.parts.forEach(p => {
+      const bvx = p.vx, bvy = p.vy;
       p.x += p.vx; p.y += p.vy;
       if(p.x < x0+4){ p.x = x0+4; p.vx = Math.abs(p.vx); }
       if(p.x > x1-4){ p.x = x1-4; p.vx = -Math.abs(p.vx); }
       if(p.y < y0+4){ p.y = y0+4; p.vy = Math.abs(p.vy); }
       if(p.y > y1-4){ p.y = y1-4; p.vy = -Math.abs(p.vy); }
+      if(p.vx !== bvx) st.flashes.push({x: p.vx > 0 ? x0+4 : x1-4, y: p.y, a: 0});
+      if(p.vy !== bvy) st.flashes.push({x: p.x, y: p.vy > 0 ? y0+4 : y1-4, a: 0});
+    });
+    const flash = LIGHT ? '196,110,6' : '246,195,68';
+    for(let i = st.flashes.length - 1; i >= 0; i--){
+      const fl = st.flashes[i];
+      fl.a += 1/60;
+      if(fl.a > 0.3){ st.flashes.splice(i, 1); continue; }
+      const kk = 1 - fl.a/0.3;
+      ctx.fillStyle = 'rgba(' + flash + ',' + ((LIGHT?0.75:0.6)*kk).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(fl.x, fl.y, 3 + 4*(1-kk), 0, 7); ctx.fill();
     }
-    // Continuous loop in the sim's own species colours (purple heavy, orange
-    // light — the old blue/green trails contradicted the legend and froze
-    // into static scribbles). Wall hits flash: pressure IS the drumbeat.
-    const flashes = [];
-    function frame(){
-      ctx.clearRect(0,0,W,H);
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.32)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(x0, y0, x1-x0, y1-y0);
-      parts.forEach(p => {
-        const beforeVx = p.vx, beforeVy = p.vy;
-        bounce(p);
-        if(p.vx !== beforeVx) flashes.push({x: p.vx > 0 ? x0+4 : x1-4, y: p.y, a: 0});
-        if(p.vy !== beforeVy) flashes.push({x: p.x, y: p.vy > 0 ? y0+4 : y1-4, a: 0});
-      });
-      for(let i = flashes.length - 1; i >= 0; i--){
-        const fl = flashes[i];
-        fl.a += 1/60;
-        if(fl.a > 0.3){ flashes.splice(i, 1); continue; }
-        const kk = 1 - fl.a/0.3;
-        ctx.fillStyle = 'rgba(246,195,68,' + (0.6*kk).toFixed(3) + ')';
-        ctx.beginPath(); ctx.arc(fl.x, fl.y, 3 + 4*(1-kk), 0, 7); ctx.fill();
-      }
-      parts.forEach(p => {
-        ctx.fillStyle = p.heavy
-          ? (LIGHT ? 'rgba(93,88,220,.9)' : 'rgba(119,114,244,.95)')
-          : (LIGHT ? 'rgba(214,62,16,.9)' : 'rgba(232,78,32,.95)');
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.heavy ? 3.4 : 2.4, 0, 7); ctx.fill();
-      });
-      const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-      ctx.font = '600 12px ' + font;
+    st.parts.forEach(p => {
+      ctx.fillStyle = p.heavy
+        ? (LIGHT ? 'rgba(76,71,205,.92)' : 'rgba(119,114,244,.95)')
+        : (LIGHT ? 'rgba(194,52,10,.92)' : 'rgba(232,78,32,.95)');
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.heavy ? 3.4 : 2.4, 0, 7); ctx.fill();
+    });
+    if(lay.capLines){
+      ctx.font = '600 ' + lay.capSize + 'px ' + font;
       ctx.fillStyle = LIGHT ? '#475569' : '#94a3b8';
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText('every wall hit is a tiny push — that drumbeat is pressure', x1 + 18, (y0+y1)/2);
+      const lh = lay.capSize + 5, n = lay.capLines.length, cy = (y0+y1)/2;
+      lay.capLines.forEach((ln, i) => ctx.fillText(ln, lay.capX, cy - (n-1)*lh/2 + i*lh));
     }
+  }
+
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
     cancelAnimationFrame(heroRAF);
+    const isLight = () => document.documentElement.getAttribute('data-theme') === 'light'
+                       || document.body.classList.contains('light-theme');
+    let lay = null, st = null, key = '';
+    function paint(){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
+      const k = W + 'x' + H;
+      if(k !== key){ key = k; lay = heroLayout(ctx, W, H, font); st = heroSeed(lay); }
+      paintHero(ctx, W, H, lay, st, isLight(), font);
+    }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ frame(); return; }
+    if(reduce){ paint(); return; }   // static: one frame of the same scene
     const tick = () => {
       if(ov.classList.contains('hidden')) return;
-      frame();
+      paint();
       heroRAF = requestAnimationFrame(tick);
     };
     heroRAF = requestAnimationFrame(tick);
   }
-  let heroRAF = 0;
-  drawHero();
-  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
-    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
-  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
-    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+
+  // The hero is decoration: if it ever throws, the overlay must stay usable.
+  try {
+    drawHero();
+    // The band is sized to the viewport, so a resize changes its CSS box: repaint.
+    addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
+    new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+      .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+    new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+      .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  } catch(e) { /* hero failure = cosmetic only */ }
   const synth = window.speechSynthesis;
   let idx = 0, charAt = 0, playing = false, current = null, finished = false;
   function pickVoice(){

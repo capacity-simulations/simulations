@@ -720,7 +720,7 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Where repeated measurements land for the first four allowed states</span>
+                <span class="hero-label">A particle trapped between two hard walls, with the positions repeated measurements return</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Quantum Particle in a 1D Box</span></h2>
@@ -2421,18 +2421,24 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The box', text:'The infinite well from x = 0 to x = L, with the energy levels and the state drawn inside.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#startPause',    mode:'veil', title:'Start / Pause',      text:'Runs and freezes the time evolution.' },
-    { sel:'#reset',         mode:'veil', title:'Reset',              text:'Returns every control to its first-load value.' },
     { sel:'#boxN',          mode:'hide', title:'Quantum number n',   text:'Chooses the stationary state — n half-waves fit between the walls.' },
-    { sel:'#boxLength',     mode:'hide', title:'Box length L',       text:'The width of the well the particle is confined to.' },
-    { sel:'#boxOverride',   mode:'hide', title:'Override frequency', text:'Unlocks the speed slider instead of the true physical rate.' },
     { sel:'#speedControlRow',mode:'hide',title:'Animation speed',    text:'How fast the phase advances once override is on.' },
-    { sel:'#boxFreq',       mode:'hide', title:'Frequency readout',  text:'The oscillation rate of the current state.' },
     { sel:'#boxRate',       mode:'hide', title:'Measurement rate',   text:'How many position measurements are taken each second.' },
     { sel:'#histogramToggle',mode:'hide',title:'Show Histogram',     text:'Overlays accumulated measurements on the probability density.', also:['#clearHistogram'] },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#boxLength',     mode:'hide', title:'Box length L',       text:'The width of the well the particle is confined to.' },
+    { sel:'#boxOverride',   mode:'hide', title:'Override frequency', text:'Unlocks the speed slider instead of the true physical rate.' },
+    { sel:'#boxFreq',       mode:'hide', title:'Frequency readout',  text:'The oscillation rate of the current state.' },
     { sel:'#boxHistStats',  mode:'hide', title:'Measurement count',  text:'How many measurements are in the histogram so far.' },
     { sel:'#boxStats',      mode:'hide', title:'Live values',        text:'Time, energy, frequency, expectation values and the position spread.' },
     { sel:'#boxEigen',      mode:'hide', title:'Eigenstate card',    text:'The current wave\u2019s formula and its wavelength.' },
+    /* 6 · reset — recovery, once there is something to recover */
+    { sel:'#reset',         mode:'veil', title:'Reset',              text:'Returns every control to its first-load value.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the info tooltip and the theme toggle. */
   ];
@@ -2514,6 +2520,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2600,47 +2607,86 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: the real interference intensity, drawn as dots accumulating into fringes */
+      /* Hero: the APPARATUS only — two hard walls and the state the sim opens on.
+         SPOILER RULE: the gated cards ask for the hump count at n = 3 (card 3),
+         the node formula n − 1 (card 4) and the n² energy scaling (card 5). A
+         SERIES of n is what answers all three: four stacked bands let a student
+         read the whole node table straight off the picture. So exactly ONE n is
+         drawn — n = 1, the slider's own start value, which is already on screen
+         while cards 1–3 are being read. One case is apparatus; the series is the
+         answer. Nothing here is a distractor for any card: no classical
+         distribution is drawn (card 2), no second n, no energy ladder. */
+      let heroGen = 0;                                // generation token: only the newest chain paints
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-        ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        /* This sim's own stationary states: psi_n(x) = sin(n*pi*x) on [0,1], so the
-           measurement probability density is |psi_n|^2 = sin^2(n*pi*x). One band per
-           n = 1..4. Every dot is one position measurement, rejection-sampled from that
-           density, so dot DENSITY is the probability - and the nodes stay visibly bare. */
-        const NS = [1,2,3,4], BANDS = NS.length;
-        const pad = 12, bandH = (H - pad*2) / BANDS;
-        const DARK_COLS  = ['rgba(110,220,235,0.85)','rgba(94,226,196,0.85)','rgba(130,230,160,0.85)','rgba(190,230,120,0.85)'];
-        const LIGHT_COLS = ['rgba(17,94,112,0.85)','rgba(15,110,96,0.85)','rgba(32,110,64,0.85)','rgba(74,105,30,0.85)'];
-        const col = n => (LIGHT ? LIGHT_COLS : DARK_COLS)[n-1];
+        // Backing store from the real CSS box × dpr, then draw in CSS px, so one
+        // x unit and one y unit are the same length at every viewport width.
+        const r = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(360, Math.round(r.width  || 1280));
+        const H = Math.max(100, Math.round(r.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const gen = ++heroGen;                        // supersedes any chain already running
+        /* This sim's own ground state: psi_1(x) = sin(pi*u) on the box u in [0,1],
+           so the measurement density is |psi_1|^2 = sin^2(pi*u). Every dot is one
+           position measurement, rejection-sampled from that density. The hero mask
+           only fully clears 22–78% of the width, so the box spans 28–72%. */
+        const xL = W*0.28, xR = W*0.72, box = xR - xL;
+        const yFloor = H*0.60, yTopWall = H*0.07, amp = yFloor - H*0.11;
+        const bandTop = H*0.66, bandH = H*0.28;
+        const WALL = LIGHT ? 'rgba(15,23,42,0.45)' : 'rgba(226,232,240,0.42)';
+        const WAVE = LIGHT ? 'rgba(17,94,112,0.95)' : 'rgba(110,220,235,0.95)';
+        const DOTS = LIGHT ? 'rgba(15,110,96,0.85)' : 'rgba(94,226,196,0.85)';
+        function underlay(){                          // static under-layer, repainted each cycle
+          ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+          ctx.strokeStyle = WALL; ctx.lineWidth = 3; ctx.lineCap = 'round';
+          ctx.beginPath();                            // two hard walls and the floor between them
+          ctx.moveTo(xL, yTopWall); ctx.lineTo(xL, yFloor);
+          ctx.moveTo(xR, yTopWall); ctx.lineTo(xR, yFloor);
+          ctx.stroke();
+          ctx.beginPath(); ctx.lineWidth = 1.5;
+          ctx.moveTo(xL, yFloor); ctx.lineTo(xR, yFloor); ctx.stroke();
+          ctx.beginPath();                            // psi_1 standing in the box
+          for(let i=0;i<=box;i++){
+            const u = i/box, y = yFloor - Math.sin(Math.PI*u)*amp;
+            i === 0 ? ctx.moveTo(xL+i, y) : ctx.lineTo(xL+i, y);
+          }
+          ctx.strokeStyle = WAVE; ctx.lineWidth = 2.4; ctx.stroke();
+        }
+        underlay();
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const PER = 150, FRAMES = 40;
         let frame = 0;
         function batch(count){
-          for(let b=0;b<BANDS;b++){
-            const n = NS[b], yTop = pad + b*bandH, h = bandH - 5;
-            ctx.fillStyle = col(n);
-            for(let k=0;k<count;k++){
-              let x = 0.5;
-              for(let t=0;t<40;t++){                  // rejection-sample |psi_n|^2
-                x = Math.random();
-                const p = Math.sin(n*Math.PI*x);
-                if(Math.random() <= p*p) break;
-              }
-              ctx.fillRect(x*W, yTop + Math.random()*h, 2.0, 2.0);
+          ctx.fillStyle = DOTS;
+          for(let k=0;k<count;k++){
+            let u = 0.5;
+            for(let t=0;t<40;t++){                    // rejection-sample |psi_1|^2
+              u = Math.random();
+              const p = Math.sin(Math.PI*u);
+              if(Math.random() <= p*p) break;
             }
+            ctx.fillRect(xL + u*box, bandTop + Math.random()*bandH, 2.0, 2.0);
           }
         }
-        if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step);
+        if(reduce){ batch(PER*FRAMES); return; }      // exactly one frame under reduced motion
+        const DWELL = 80;                             // ~1.3 s hold, then the reveal replays
+        (function step(){                             // repeating cycle: reveal, dwell, wipe, repeat
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(frame < FRAMES) batch(PER);
+          frame++;
+          if(frame >= FRAMES + DWELL){ frame = 0; underlay(); }
+          requestAnimationFrame(step);
         })();
       }
       
 drawHero();
+      // The backing store is sized from the CSS box, so a width change must repaint
+      addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -1507,7 +1507,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">One source, three elements — dots mark each current at equal time steps</span>
+            <span class="hero-label">One source, three elements — the amber line is the source voltage, the dots are each current at equal time steps, and one dashed vertical runs through all three bands at the source crest</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">ELI the ICE Man</span></h2>
@@ -3474,51 +3474,109 @@ Shell.init({ onFrame, onReset, onResize, onStep });
      a dot crest and the amber crest is exactly the quarter-cycle shift. Each
      band is drawn at one common height — this picture is about the phase; the
      amplitudes are what the three panels compare.
-     PREDICT-GATE HYGIENE: the bands carry NO R / L / C letter. Card 2 asks the
-     student to predict which element's current lags and which leads; labelling
-     the bands here answered it on the landing page, before a mode was even
-     chosen. Three offset dot-trains still pose the question. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+
+     GEOMETRY. The band is one viewport wide and 140 px tall and is masked to
+     opaque only between 22% and 78% of that width, so the old 6%→94% window
+     threw roughly a third of the strip — including BOTH dot trains' leading
+     crests, the very marks a student compares against the amber crest — into
+     the fade. The window is now 26%→74% and carries 1.5 cycles instead of 2, so
+     each cycle occupies 32% of the width where it used to occupy 44% and every
+     crest that matters is inside the opaque plateau. The canvas is also sized
+     from its OWN CSS box × devicePixelRatio and drawn in CSS px; the authored
+     1280×240 backing store was previously stretched to ≈1 viewport × 140, a
+     ~2:1 anisotropic squash that flattened exactly the vertical axis a
+     phase-shift read depends on. Amplitude is now 0.125 H of real CSS pixels
+     (17.5 px at H = 140) against the 14 px the old squash actually delivered.
+
+     THE SHARED REFERENCE LINE. ωt is measured so that ωt = 0 — the source
+     crest — falls at mid-width, and one dashed vertical runs through all three
+     bands at exactly that x. Every band's amber crest sits ON the line; the
+     first train's dots crest on it too, the second's crest to the right of it
+     and the third's to the left. That poses the comparison ("is this current's
+     peak before or after the voltage's?") without stating an answer.
+
+     PREDICT-GATE HYGIENE. Card 2 (data-gate, "Predict the phase") asks which of
+     the inductor and the capacitor has its current lagging and which leading.
+     So: NO R / L / C letters on the bands, NO lead/lag words, NO arrows and no
+     ELI/ICE. The bands are deliberately anonymous — a student can see THAT one
+     train peaks early and one peaks late, which is what the sim itself shows,
+     but nothing here says which anonymous band is the inductor. Card 1 is
+     ungated and already states the resistor's current is in phase, so the
+     in-phase band giving itself away costs nothing. Card 3 (data-gate) is about
+     how the AMPLITUDES move with ω; this hero draws one fixed ω and gives every
+     band the same amplitude, so it says nothing about that either. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
     const bands = [
-      { phase: 0,          ink: LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(52,211,153,.95)' },
+      { phase: 0,          ink: LIGHT ? 'rgba(4,120,87,.95)'  : 'rgba(52,211,153,.95)' },
       { phase: -Math.PI/2, ink: LIGHT ? 'rgba(29,78,216,.95)' : 'rgba(96,165,250,.95)' },
       { phase: +Math.PI/2, ink: LIGHT ? 'rgba(190,24,93,.95)' : 'rgba(244,114,182,.95)' }
     ];
-    const vInk = LIGHT ? 'rgba(180,83,9,.8)' : 'rgba(245,158,11,.8)';
-    const CYC = 2, amp = H*0.10, x0 = W*0.06, x1 = W*0.94, span = x1 - x0;
-    const yc = i => H*(0.22 + i*0.29);
-    const xOf = u => x0 + u*span;            // u = fraction across the window
-    const wt  = u => u*CYC*2*Math.PI;        // ωt at that fraction (2 periods shown)
+    const vInk = LIGHT ? 'rgba(180,83,9,.85)'  : 'rgba(245,158,11,.85)';
+    const refI = LIGHT ? 'rgba(15,23,42,.52)'  : 'rgba(148,163,184,.60)';
+    const axI  = LIGHT ? 'rgba(15,23,42,.24)'  : 'rgba(148,163,184,.22)';
+    const CYC = 1.5, amp = H*0.125;
+    const x0 = W*0.26, x1 = W*0.74, span = x1 - x0;
+    const yc = i => H*(0.19 + i*0.31);       // 26.6 / 70 / 113.4 px at H = 140
+    const xOf = t => x0 + t*span;            // t = fraction across the window
+    const wt  = t => (t - 0.5)*CYC*2*Math.PI;// ωt, zero (source crest) at mid-width
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    // the shared vertical through the source crest, before the traces
+    const xRef = xOf(0.5);
+    ctx.strokeStyle = refI; ctx.lineWidth = 1.5; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(xRef, yc(0)-amp-4); ctx.lineTo(xRef, yc(2)+amp+4); ctx.stroke();
+    ctx.setLineDash([]);
     bands.forEach((b,i) => {
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.14)' : 'rgba(148,163,184,.14)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = axI; ctx.lineWidth = 1;   // zero line: decorative hairline
       ctx.beginPath(); ctx.moveTo(x0, yc(i)); ctx.lineTo(x1, yc(i)); ctx.stroke();
       ctx.strokeStyle = vInk; ctx.lineWidth = 2.5;
       ctx.beginPath();
-      for(let k=0;k<=320;k++){ const u = k/320, x = xOf(u), y = yc(i) - Math.cos(wt(u))*amp;
+      for(let k=0;k<=320;k++){ const t = k/320, x = xOf(t), y = yc(i) - Math.cos(wt(t))*amp;
         k===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); }
       ctx.stroke();
+      ctx.fillStyle = vInk;                        // the source crest, on the line
+      ctx.beginPath(); ctx.arc(xRef, yc(i)-amp, 2.8, 0, 7); ctx.fill();
     });
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 132; let k = 0;
-    function batch(){
-      const per = reduce ? N : 3;
-      for(let s=0;s<per && k<N;s++,k++){
-        const u = k/(N-1);
-        bands.forEach((b,i) => {
-          ctx.fillStyle = b.ink;
-          ctx.beginPath(); ctx.arc(xOf(u), yc(i) - Math.cos(wt(u) + b.phase)*amp, 3.0, 0, 7); ctx.fill();
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
+    // the three current trains, laid down at equal time steps
+    const N = 100, shown = Math.max(1, Math.round(u*N));
+    for(let k=0;k<shown;k++){
+      const t = k/(N-1);
+      bands.forEach((b,i) => {
+        ctx.fillStyle = b.ink;
+        ctx.beginPath(); ctx.arc(xOf(t), yc(i) - Math.cos(wt(t) + b.phase)*amp, 3.0, 0, 7); ctx.fill();
+      });
     }
-    batch();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // uniform: no phase-flattening squash
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    // looping: the three dot trains lay themselves down, hold, and lay down again
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // 2.8 s cycle: 1.4 s lay-down, 1.4 s dwell on the finished trains, then repeat
+      const s = (((now || t0) - t0)/1000) % 2.8;
+      paint(Math.min(1, s/1.4));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -1158,11 +1158,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-R₂ dots of R_series vs R_parallel at R₁ = 10 Ω</span>
+                <span class="hero-label">Two resistor circuit glyphs side by side, the same battery wired to two resistors in line round one loop on the left (series) and to two resistors bridging one pair of rails on the right (parallel)</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Series and parallel</span></h2>
-                <p class="welcome-blurb">Add a resistor in parallel and the total falls — you opened a second path.</p>
+                <p class="welcome-blurb">The same two resistors wired two ways — what does each total up to?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3213,58 +3213,215 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to series and parallel.',
-    'Here the same two resistors are wired two ways. Series adds; parallel opens a second path and the total falls.',
+    'Here the same two resistors are wired two ways: once in series, once in parallel. Your job is to work out what each wiring does to the total resistance, and how the current divides between the branches.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: R_s = R1+R2 and R_p = R1 R2/(R1+R2) from this sim, swept over R2 at
-     R1 = 10 Ω. BOTH curves share ONE y-axis (0..110 Ω) — plotting them on
-     separate scales drew R_parallel ABOVE R_series, i.e. the exact opposite of
-     what this sim teaches. On a common axis R_series climbs and R_parallel
-     stays pinned under 10 Ω, which IS the point. */
+  /* Hero — TWO WIRINGS, NO TOTALS. This sim is about two ways of joining the
+     same pair of resistors, so the picture is the two topologies themselves:
+     the same battery driving two resistors round one loop (series) on the
+     left, and driving two resistors that bridge one pair of rails (parallel)
+     on the right. Nothing in the band adds anything up.
+
+     SPOILER AUDIT — the gated cards (data-gate) were read before any drawing:
+       • Card 1 asks what 20 Ω in PARALLEL with 10 Ω totals to; the answer is
+         "falls to something under 10 Ω" and the live distractor is "stays at
+         10 Ω". The band therefore carries no R_series, no R_parallel, no axis,
+         no curve, no dot cloud, no height to compare and no number at all.
+         (The hero this replaces plotted both totals on one shared axis with
+         R_parallel visibly pinned below the series curve — that IS card 1's
+         answer, drawn, and relabelling the curve "R parallel" did not remove
+         it, because the geometry alone stated the verdict.)
+       • Card 2 asks which parallel branch carries more current. The two
+         resistors are drawn IDENTICALLY — same glyph, same size, same ink —
+         and no current arrow, flow dot or line weight distinguishes any
+         branch, so nothing here answers it either.
+     Naming the two wirings ("series", "parallel") is not answering "which one
+     wins": both arrangements are visible on the sim's own opening screen
+     before any question is asked, whereas the comparison the gates ask for is
+     never drawn. Same resolution as the capacitor sibling (C152).
+
+     INK: every essential mark sits inside 26 %–74 % of the DISPLAYED width at
+     every tested W (the band's edge mask fades the outer 22 % anyway) — the
+     loop pair is centred and capped in size, so it never reaches the mask.
+     Only the full-width ground wash may fade, and that is decorative.
+
+     SIZING: the backing store is rebuilt from the canvas's OWN CSS box ×
+     devicePixelRatio on every paint, and all drawing happens in CSS pixels.
+     The authored 1280×240 store was previously stretched into the real
+     100vw×140px band (1.71:1 anisotropy at a 1280 px viewport, 2.57:1 at
+     1920 px), which smeared every glyph sideways and squashed the 12 px type
+     to ~7 px tall. A resize listener re-paints so this survives a window
+     drag. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = (getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    const wire  = LIGHT ? 'rgba(15,23,42,.72)'  : 'rgba(226,232,240,.78)';
+    const batt  = LIGHT ? 'rgba(4,120,87,.95)'  : 'rgba(52,211,153,.94)';
+    const res   = LIGHT ? 'rgba(180,83,9,.94)'  : 'rgba(251,191,36,.95)';
+    const soft  = LIGHT ? 'rgba(15,23,42,.52)'  : 'rgba(148,163,184,.66)';
+
+    ctx.clearRect(0, 0, W, H);
+    // Decorative full-width wash (allowed to fade under the mask).
+    const wash = ctx.createLinearGradient(0, 0, 0, H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0, 0, W, H);
+
+    const loopW = Math.min(W * 0.21, 300);
+    const gap   = Math.min(W * 0.06, 90);
+    const total = 2 * loopW + gap;
+    const xS    = W / 2 - total / 2;            // series loop, left edge
+    const xP    = xS + loopW + gap;             // parallel loop, left edge
+    const yT    = H * 0.17, yB = H * 0.66;      // the two rails
+    const yM    = (yT + yB) / 2;
+    const hHalf = Math.min(loopW * 0.13, 30);           // resistor half-length, along a rail
+    const vHalf = Math.min((yB - yT) * 0.30, 18);       // resistor half-length, across the rails
+    const amp   = Math.max(2.4, Math.min(5.5, loopW * 0.032));
+    const blen  = Math.min(7.5, loopW * 0.055);
+
+    // One resistor glyph (zigzag), drawn along either axis. Both resistors in
+    // both networks use this same call with the same size — nothing about the
+    // drawing distinguishes one resistor, or one branch, from another.
+    function resistor(cx, cy, hl, vert){
+      const n = 6;
+      ctx.strokeStyle = res; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for(let i = 0; i <= n; i++){
+        const t = -hl + 2 * hl * (i / n);
+        const s = (i === 0 || i === n) ? 0 : (i % 2 ? amp : -amp);
+        const px = vert ? cx + s : cx + t;
+        const py = vert ? cy + t : cy + s;
+        if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    }
+
+    // One battery symbol, drawn on the left rail of a loop.
+    function battery(x){
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(x, yT); ctx.lineTo(x, yM - 4);
+      ctx.moveTo(x, yM + 4); ctx.lineTo(x, yB);
+      ctx.stroke();
+      ctx.strokeStyle = batt; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - blen, yM - 4);        ctx.lineTo(x + blen, yM - 4);
+      ctx.moveTo(x - blen * 0.55, yM + 4); ctx.lineTo(x + blen * 0.55, yM + 4);
+      ctx.stroke();
+    }
+
+    // Series: battery on the left rail, both resistors in line along the top
+    // rail, a plain wire down the right — one single path for the current.
+    const lxS = xS + loopW * 0.10, rxS = xS + loopW * 0.90;
+    const cA  = xS + loopW * 0.38, cB  = xS + loopW * 0.74;
+    function seriesNet(){
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(lxS, yT);        ctx.lineTo(cA - hHalf, yT);
+      ctx.moveTo(cA + hHalf, yT); ctx.lineTo(cB - hHalf, yT);
+      ctx.moveTo(cB + hHalf, yT); ctx.lineTo(rxS, yT);
+      ctx.moveTo(rxS, yT);        ctx.lineTo(rxS, yB);
+      ctx.moveTo(lxS, yB);        ctx.lineTo(rxS, yB);
+      ctx.stroke();
+      resistor(cA, yT, hHalf, false);
+      resistor(cB, yT, hHalf, false);
+      battery(lxS);
+    }
+
+    // Parallel: battery on the left rail, both resistors bridging the SAME two
+    // rails — two separate paths. The right branch is the right side of the
+    // loop, pulled in by the zigzag amplitude so the outermost ink of the two
+    // loops lands at the same fraction of the loop box and neither reaches the
+    // edge mask.
+    const lxP = xP + loopW * 0.10;
+    const bA  = xP + loopW * 0.50, bB = xP + loopW * 0.90 - amp;
+    function parallelNet(){
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(lxP, yT); ctx.lineTo(bB, yT);
+      ctx.moveTo(lxP, yB); ctx.lineTo(bB, yB);
+      [bA, bB].forEach(x => {
+        ctx.moveTo(x, yT); ctx.lineTo(x, yM - vHalf);
+        ctx.moveTo(x, yM + vHalf); ctx.lineTo(x, yB);
+      });
+      ctx.stroke();
+      resistor(bA, yM, vHalf, true);
+      resistor(bB, yM, vHalf, true);
+      battery(lxP);
+    }
+
+    seriesNet();
+    parallelNet();
+
+    // A decorative sheen sweeping left to right — motion with no physical
+    // claim attached (it crosses both loops at once, in one direction, so it
+    // cannot be read as current or as one network settling faster).
+    const gx = -0.2 * W + u * 1.4 * W;
+    const sh = ctx.createLinearGradient(gx - 0.16 * W, 0, gx + 0.16 * W, 0);
+    sh.addColorStop(0, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.5, LIGHT ? 'rgba(2,132,199,.30)' : 'rgba(224,242,254,.34)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.strokeStyle = sh; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(lxS, yT);        ctx.lineTo(cA - hHalf, yT);
+    ctx.moveTo(cA + hHalf, yT); ctx.lineTo(cB - hHalf, yT);
+    ctx.moveTo(cB + hHalf, yT); ctx.lineTo(rxS, yT);
+    ctx.moveTo(rxS, yT);        ctx.lineTo(rxS, yB);
+    ctx.moveTo(lxS, yB);        ctx.lineTo(rxS, yB);
+    ctx.moveTo(lxS, yT);        ctx.lineTo(lxS, yM - 4);
+    ctx.moveTo(lxS, yM + 4);    ctx.lineTo(lxS, yB);
+    ctx.moveTo(lxP, yT);        ctx.lineTo(bB, yT);
+    ctx.moveTo(lxP, yB);        ctx.lineTo(bB, yB);
+    ctx.moveTo(lxP, yT);        ctx.lineTo(lxP, yM - 4);
+    ctx.moveTo(lxP, yM + 4);    ctx.lineTo(lxP, yB);
+    [bA, bB].forEach(x => {
+      ctx.moveTo(x, yT); ctx.lineTo(x, yM - vHalf);
+      ctx.moveTo(x, yM + vHalf); ctx.lineTo(x, yB);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Name the two wirings. Nothing here says which one wins.
+    const fs = Math.max(11, Math.min(13, loopW / 7));   // never below the 11 px floor
+    ctx.font = fs + 'px ' + FAM;
+    ctx.fillStyle = soft; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('series',   xS + loopW / 2, H * 0.95);
+    ctx.fillText('parallel', xP + loopW / 2, H * 0.95);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const R1=10;
-    const Rs = R2 => R1 + R2;
-    const Rp = R2 => (R1*R2)/(R1+R2);
-    const x0=W*0.10, x1=W*0.90, y0=H*0.82, y1=H*0.18;
-    const X = u => x0 + u*(x1-x0);
-    const Y  = r => y0 - (r/110)*(y0-y1);   // ONE axis for both curves
-    const Ys = Y, Yp = Y;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
-    ctx.font = '600 12px "DM Sans",-apple-system,"Segoe UI",sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    // Each label sits just above its own curve (at R2 ≈ 55 Ω), not in a legend.
-    ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(52,211,153,.95)';
-    ctx.fillText('R series = R₁ + R₂', X(0.57), Y(76));
-    ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.95)' : 'rgba(251,191,36,.95)';
-    ctx.fillText('R parallel — never reaches 10 Ω', X(0.57), Y(19));
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dU=1/80, N=80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k*dU;
-        const R2 = 1 + 99*u;
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Ys(Rs(R2)), 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Yp(Rp(R2)), 2.6, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0.5); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0) / 1000;
+      paint((s / 5.0) % 1);                         // 5 s sheen sweep
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

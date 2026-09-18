@@ -1238,7 +1238,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">The axis steps away from the centre of mass — the shift term m·s² grows as s²</span>
+            <span class="hero-label">The axis steps away from the centre of mass — and the moment of inertia pays a rising price</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Parallel-axis theorem</span></h2>
@@ -3238,72 +3238,117 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the parallel axis theorem.',
-    'Here you drag a rotation axis away from a body’s centre of mass and watch what moving it costs: the moment of inertia grows by m s squared, and that price is the same for every shape.',
+    'Here you drag a rotation axis away from a body’s centre of mass and watch what moving it costs: the moment of inertia grows by m s squared, and you can change the offset, the mass and the shape to see how much.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's own physics. Left — the disc with its CM axis and the ★
-     offset axis sliding outward along a dashed track. Right — one stacked bar
-     of I = Icm + m·s² per axis position: the teal Icm band never changes while
-     the orange m·s² term grows with the SQUARE of the offset. Honestly drawn. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+  /* Hero: this sim's own physics, replanned to live inside the visible band.
+     Left — the disc (now genuinely ROUND: the backing store follows the CSS
+     box) centred at 32% W with its CM axis, and the ★ offset axis sliding out
+     along a dashed track. Right — one stacked bar of I = Icm + m·s² per axis
+     position: the teal Icm band identical in every bar, the amber shift band
+     rising as the axis moves out; the chart ends at 74% W so the tall bars —
+     the m·s² punchline — no longer fade out. The sweep is deliberately SHORT
+     (★ stops a little past half the track): guided-inquiry card 2 gates on
+     predicting that doubling s QUADRUPLES m·s², so the hero poses "moving the
+     axis out costs more and more" without sweeping far enough to read the ×4
+     law off the bars. This sim is parallel-axis only (per the document title),
+     so no perpendicular-axis content is staged here.
+
+     The canvas is sized to its OWN CSS box (getBoundingClientRect × dpr) every
+     paint and drawn in CSS px: the authored 1280×240 store stretched into a
+     one-viewport-wide, 140px band squashed the disc into a ~2:1 ellipse. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     const teal    = LIGHT ? 'rgba(42,138,126,.9)'  : 'rgba(110,231,183,.9)';
     const tealBar = LIGHT ? 'rgba(42,138,126,.8)'  : 'rgba(59,155,143,.8)';
     const tealSoft= LIGHT ? 'rgba(42,138,126,.14)' : 'rgba(59,155,143,.14)';
     const amber   = LIGHT ? 'rgba(217,119,6,.9)'   : 'rgba(251,191,36,.9)';
     const amberBar= LIGHT ? 'rgba(217,119,6,.8)'   : 'rgba(245,158,11,.8)';
     const faint   = LIGHT ? 'rgba(15,23,42,.28)'   : 'rgba(148,163,184,.28)';
-    // the disc and its CM axis
-    const dx = W*0.19, dy = H*0.50, R = H*0.33, track = R*1.7;
-    ctx.fillStyle = tealSoft; ctx.beginPath(); ctx.arc(dx, dy, R, 0, 7); ctx.fill();
-    ctx.strokeStyle = teal; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(dx, dy, R, 0, 7); ctx.stroke();
-    ctx.strokeStyle = teal; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(dx-11,dy); ctx.lineTo(dx+11,dy); ctx.moveTo(dx,dy-11); ctx.lineTo(dx,dy+11); ctx.stroke();
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    // the disc and its CM axis — centred at 32% W, fully inside the 24–76% window
+    const dxc = W*0.32, dy = H*0.50, R = H*0.33, track = R*1.6;
+    ctx.fillStyle = tealSoft; ctx.beginPath(); ctx.arc(dxc, dy, R, 0, 7); ctx.fill();
+    ctx.strokeStyle = teal; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(dxc, dy, R, 0, 7); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(dxc-11,dy); ctx.lineTo(dxc+11,dy); ctx.moveTo(dxc,dy-11); ctx.lineTo(dxc,dy+11); ctx.stroke();
     // dashed track the offset axis slides along
     ctx.save(); ctx.setLineDash([4,4]); ctx.strokeStyle = faint; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx+track, dy); ctx.stroke(); ctx.restore();
-    // bar chart geometry
-    const bx0 = W*0.40, bx1 = W*0.93, base = H*0.84, N = 42;
-    const bw = (bx1-bx0)/N * 0.62, hCM = H*0.20, hShMax = H*0.50;
+    ctx.beginPath(); ctx.moveTo(dxc, dy); ctx.lineTo(dxc+track, dy); ctx.stroke(); ctx.restore();
+    // bar chart geometry — baseline runs to 74% W; bars stop at SW of the range
+    const bx0 = W*0.44, bx1 = W*0.74, base = H*0.84, N = 42, SW = 0.58;
+    const bwid = (bx1-bx0)/N * 0.62, hCM = H*0.20, hShMax = H*0.50;
     ctx.strokeStyle = faint; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(bx0-8, base+0.5); ctx.lineTo(bx1+8, base+0.5); ctx.stroke();
-    function star(x, y, size){
-      ctx.beginPath();
-      for(let i=0;i<10;i++){
-        const r = i%2===0 ? size : size*0.45, a = -Math.PI/2 + i*Math.PI/5;
-        const px = x + Math.cos(a)*r, py = y + Math.sin(a)*r;
-        i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
-      }
-      ctx.closePath(); ctx.fillStyle = amber; ctx.fill();
+    // bars accumulate left to right as the axis slides out (0 … u·SW of the track)
+    const kMax = Math.round((N-1)*SW*u);
+    let lastX = bx0, lastTop = base - hCM;
+    for(let k=0; k<=kMax; k++){
+      const f = k/(N-1);
+      const x = bx0 + (bx1-bx0-bwid)*f;
+      // teal Icm band — identical in every bar (the shape never changed)
+      ctx.fillStyle = tealBar; ctx.fillRect(x, base-hCM, bwid, hCM);
+      // amber m·s² band — rising as the axis moves out (honestly drawn, cut
+      // short so the growth law stays the student's prediction to make)
+      const hSh = hShMax * f * f;
+      if(hSh > 0.5){ ctx.fillStyle = amberBar; ctx.fillRect(x, base-hCM-hSh, bwid, hSh); }
+      // the offset axis marker leaves its trail on the track
+      ctx.fillStyle = amber; ctx.beginPath(); ctx.arc(dxc + track*f, dy, 2.0, 0, 7); ctx.fill();
+      lastX = x; lastTop = base - hCM - hSh;
     }
-    // one orchestrated entrance: bars accumulate left to right as s grows
+    // the ★ offset axis rides the front of the sweep
+    const fNow = kMax/(N-1);
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const r = i%2===0 ? 9 : 9*0.45, a = -Math.PI/2 + i*Math.PI/5;
+      const px = dxc + track*fNow + Math.cos(a)*r, py = dy + Math.sin(a)*r;
+      i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fillStyle = amber; ctx.fill();
+    // 760, not 560: below ~735 px the 'Icm' label (right-aligned at 44% W − 12)
+    // runs into the ★ / disc, whose right edge is 0.32W + 0.309H + 9. Drop the
+    // label rather than collide — the bars still read without it.
+    if(u >= 1 && W > 760){
+      ctx.font = '600 12px '+FAM;
+      ctx.fillStyle = teal; ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText('Icm', bx0 - 12, base - hCM/2);
+      ctx.fillStyle = amber; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText('m·s²', lastX + bwid/2, lastTop - 5);
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let i=0;i<per && k<N;i++,k++){
-        const f = k/(N-1);
-        const x = bx0 + (bx1-bx0-bw)*f;
-        // teal Icm band — identical in every bar (the shape never changed)
-        ctx.fillStyle = tealBar; ctx.fillRect(x, base-hCM, bw, hCM);
-        // orange m·s² term — grows with the SQUARE of the offset
-        const hSh = hShMax * f * f;
-        if(hSh > 0.5){ ctx.fillStyle = amberBar; ctx.fillRect(x, base-hCM-hSh, bw, hSh); }
-        // the offset axis marker leaves its trail on the track
-        ctx.fillStyle = amber; ctx.beginPath(); ctx.arc(dx + track*f, dy, 2.0, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else star(dx + track, dy, 9);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }             // final frame, no animation
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((Math.max(0, now - t0))/1000) % 4.2;
+      const un = Math.min(1, s/2.8);                // 2.8 s sweep, 1.4 s dwell, repeat
+      paint(un*un*(3 - 2*un));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

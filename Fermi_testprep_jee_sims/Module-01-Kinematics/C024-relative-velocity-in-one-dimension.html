@@ -844,11 +844,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Two trains on parallel tracks — from the ground both race right; from train A, A sits still and B creeps at +8 m/s</span>
+            <span class="hero-label">Two trains on parallel tracks, shown twice side by side — from the ground both race right at 20 and 28 m/s; from a seat on train A, A sits still, the trackside poles stream backwards, and B's speed is left as the question</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Relative velocity in 1D</span></h2>
-            <p class="welcome-blurb">Two trains, both going right. From the ground they look fast. Ride train A — A freezes, and B is only 8 m/s quicker. Changing who you ride with subtracts velocities.</p>
+            <p class="welcome-blurb">Two trains on parallel tracks — how fast does one look from a seat on the other?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2804,35 +2804,103 @@ window.Engine.audit = window.Engine.audit || {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to relative velocity in one dimension.',
-    'Here two trains share parallel tracks. Watch them from the ground, then ride along with either one — changing frames subtracts the frame’s velocity from every velocity, so the same two trains can look completely different.',
+    'Here two trains share parallel tracks. Watch them from the ground, then ride along with either one — and see how the same two trains can look completely different from a moving seat.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the same two trains as the sim, side by side so the Galilean
-     subtraction is visible at a glance. Left: ground frame — A and B both
-     race right (20 and 28 m/s), poles sit still. Right: A's frame — A is
-     parked, B creeps at vB − vA = +8 m/s, poles stream backward. */
-  let heroRaf = 0;
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    cancelAnimationFrame(heroRaf);
-    const colA = LIGHT ? '#d97706' : '#f59e0b';
+  /* Hero: the same two trains as the sim, side by side, so the Galilean
+     subtraction is visible at a glance. Left: the ground frame — A and B both
+     race right (20 and 28 m/s) past fixed poles. Right: sit on A — A is parked,
+     YOU ride it, the poles stream backwards, and B is the open question.
+
+     ASPECT: sized to its OWN CSS box every frame (backing store = box × dpr,
+     all drawing in CSS px) instead of the markup's fixed 1280×240 store.
+
+     BAND: this file's .welcome-hero carries no CSS mask — it is the one hero in
+     the module with width:min(1100px,96vw) — so the strip used to end in a hard
+     rectangle while every sibling dissolves. The background wash (sky, the two
+     half tints, the rails and the poles) is now alpha-ramped to nothing over the
+     outer 14% at each end with a destination-out gradient, so the composition
+     fades at its own edges. The CSS rule is untouched.
+     INK-SPAN DEVIATION, stated deliberately: the fleet's 24–76% rule exists to
+     clear the 22/78 CSS mask, which this file does not have. A 24/76 ramp would
+     amputate the outer half of BOTH panels of a split-screen, so the ramp — and
+     with it the essential-ink budget — matches the composition's own edges:
+     titles, notes, trains, velocity arrows and the divider all sit inside
+     15–85%; the rails, poles and half tints are the decorative wash and are
+     deliberately allowed to dissolve past that.
+
+     SPOILER GATE: inquiry step 2 carries data-gate and asks what A's passenger
+     sees B doing; the correct choice is "B moves slowly forward at about 8 m/s".
+     The hero used to print "B  ·  only +8 m/s" on the right panel and the hidden
+     .hero-label said "B creeps at +8 m/s" — the gated number given away in the
+     art and to screen-readers. B's readout in A's frame is now "B  ·  ?" and the
+     panel note asks "how fast is B now?". B's true relative motion is still
+     animated, because the change of frame IS the sim's subject and the welcome
+     hero has to preview it; what is withheld is the quantity the card asks for.
+     A's own "at rest" reading is step 3 material (ungated) and stays. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, t, LIGHT){
+    const colA = LIGHT ? '#b45309' : '#f59e0b';
     const colB = LIGHT ? '#0e7490' : '#06b6d4';
     const ink  = LIGHT ? '#0f172a' : '#e2e8f0';
     const mute = LIGHT ? '#475569' : '#94a3b8';
     const rail = LIGHT ? '#94a3b8' : '#334155';
-    const sleeper = LIGHT ? '#cbd5e1' : '#1e293b';
+    const tie  = LIGHT ? '#cbd5e1' : '#1e293b';
     const pole = LIGHT ? '#64748b' : '#94a3b8';
-    const obs  = LIGHT ? '#b45309' : '#fef3c7';
-    const vA = 20, vB = 28, px = 1.35, cycle = 4.2;
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const obs  = LIGHT ? '#b45309' : '#fde68a';
+    const wheel= LIGHT ? '#1e293b' : '#0f172a';
+    const rim  = LIGHT ? 'rgba(255,255,255,.55)' : 'rgba(226,232,240,.55)';
+    const win  = LIGHT ? 'rgba(255,255,255,.88)' : 'rgba(8,20,24,.34)';
+    const nameInk = LIGHT ? '#ffffff' : '#08141a';
+    const FAM  = '"DM Sans", "Segoe UI", Arial, sans-serif';
+    const MONO = '"JetBrains Mono", Menlo, Consolas, monospace';
+    const vA = 20, vB = 28, cycle = 4.2;
 
+    // ---- layout: two panels inside the paint's own opaque zone ----
+    const pad = W * 0.15, gap = Math.max(10, W * 0.012), mid = W / 2;
+    const cw  = mid - gap / 2 - pad;          // content width of each half
+    const lx  = pad, rx = mid + gap / 2;
+    const pxs = cw * 0.0021;                  // m/s → px/s
+    const aSc = cw * 0.0042;                  // m/s → arrow px
+    const TH  = Math.max(14, Math.min(28, H * 0.125));
+    const TW  = Math.min(Math.max(44, TH * 3), cw * 0.30);
+    const wr  = Math.max(2.4, TH * 0.155);
+    const titleF = Math.max(10,  Math.min(15,   cw * 0.038));
+    const noteF  = Math.max(9,   Math.min(12.5, cw * 0.032));
+    const labF   = Math.max(9,   Math.min(12.5, TH * 0.46));
+    const nameF  = Math.max(8.5, Math.min(14,   TW * 0.17));
+    const yA = H * 0.38, yB = H * 0.70;
+    const poleGY = H * 0.95, poleH = H * 0.13;
+
+    function railLine(cy, cam, x0, w){
+      const y = cy + TH / 2 + wr * 2;
+      ctx.strokeStyle = tie; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke();
+      ctx.strokeStyle = rail; ctx.lineWidth = 1;
+      const sp = Math.max(18, cw * 0.09);
+      const off = -(((cam % sp) + sp) % sp);
+      for(let x = x0 + off; x < x0 + w; x += sp){
+        ctx.beginPath(); ctx.moveTo(x, y - 3); ctx.lineTo(x, y); ctx.stroke();
+      }
+    }
+    function poles(x0, w, camMetre, scale){
+      const c0 = x0 + w / 2;
+      const first = Math.floor((camMetre - (w * 0.5) / scale) / 80) - 1;
+      const last  = Math.ceil ((camMetre + (w * 0.5) / scale) / 80) + 1;
+      ctx.strokeStyle = ctx.fillStyle = pole;
+      ctx.lineWidth = Math.max(1.6, poleH * 0.12);
+      for(let i = first; i <= last; i++){
+        const p = c0 + (i * 80 - camMetre) * scale;
+        if(p < x0 - 10 || p > x0 + w + 10) continue;
+        ctx.beginPath(); ctx.moveTo(p, poleGY - poleH); ctx.lineTo(p, poleGY); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p, poleGY, Math.max(1.8, poleH * 0.11), 0, 7); ctx.fill();
+      }
+    }
     function train(cx, cy, color, label, observer){
-      const TW = 78, TH = 26, r = 6;
+      const r = Math.max(3, TH * 0.23);
       ctx.save();
       ctx.fillStyle = color;
       ctx.strokeStyle = 'rgba(0,0,0,.35)';
@@ -2848,139 +2916,142 @@ window.Engine.audit = window.Engine.audit || {
       ctx.lineTo(cx-TW/2, cy-TH/2+r);
       ctx.quadraticCurveTo(cx-TW/2, cy-TH/2, cx-TW/2+r, cy-TH/2);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,.78)';
-      for(let i=0;i<3;i++) ctx.fillRect(cx-TW/2+12+i*20, cy-7, 11, 10);
-      ctx.fillStyle = '#1a1a1a';
-      ctx.beginPath(); ctx.arc(cx-TW/2+14, cy+TH/2+4, 4, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx+TW/2-14, cy+TH/2+4, 4, 0, 7); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 13px "DM Sans", "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = win;
+      const ww = TW * 0.14, wh = TH * 0.38, w0 = TW * 0.155;
+      for(let i=0;i<3;i++) ctx.fillRect(cx-TW/2+w0+i*(ww*1.8), cy-wh*0.7, ww, wh);
+      ctx.fillStyle = wheel;
+      ctx.beginPath(); ctx.arc(cx-TW/2+TW*0.18, cy+TH/2+wr, wr, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx+TW/2-TW*0.18, cy+TH/2+wr, wr, 0, 7); ctx.fill();
+      ctx.strokeStyle = rim; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx-TW/2+TW*0.18, cy+TH/2+wr, wr, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx+TW/2-TW*0.18, cy+TH/2+wr, wr, 0, 7); ctx.stroke();
+      ctx.fillStyle = nameInk;
+      ctx.font = 'bold ' + nameF.toFixed(1) + 'px ' + FAM;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(label, cx, cy);
       if(observer){
-        ctx.strokeStyle = obs; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
-        ctx.strokeRect(cx-TW/2-4, cy-TH/2-4, TW+8, TH+12);
+        ctx.strokeStyle = obs; ctx.lineWidth = 1.8; ctx.setLineDash([4,3]);
+        ctx.strokeRect(cx-TW/2-4, cy-TH/2-4, TW+8, TH+8+wr*2);
         ctx.setLineDash([]);
         ctx.fillStyle = obs;
-        ctx.font = 'bold 12px "DM Sans", "Segoe UI", Arial, sans-serif';
-        ctx.textAlign = 'right';
+        ctx.font = 'bold ' + labF.toFixed(1) + 'px ' + FAM;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.fillText('YOU', cx-TW/2-8, cy);
       }
       ctx.restore();
     }
-    function tracks(y, cam){
-      ctx.strokeStyle = sleeper; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(0, y-5); ctx.lineTo(W, y-5);
-      ctx.moveTo(0, y+14); ctx.lineTo(W, y+14); ctx.stroke();
-      ctx.strokeStyle = rail; ctx.lineWidth = 1;
-      const off = -((cam % 36) + 36) % 36;
-      for(let x=off; x<W; x+=36){
-        ctx.beginPath(); ctx.moveTo(x, y-5); ctx.lineTo(x, y+14); ctx.stroke();
-      }
-    }
-    function poles(x0, w, groundY, camMetre, scale){
-      const cx = x0 + w/2;
-      const worldL = camMetre - (w*0.5)/scale;
-      const worldR = camMetre + (w*0.5)/scale;
-      const first = Math.floor(worldL/80)-1, last = Math.ceil(worldR/80)+1;
-      ctx.strokeStyle = ctx.fillStyle = pole;
-      ctx.lineWidth = 2.2;
-      for(let i=first;i<=last;i++){
-        const pxp = cx + (i*80 - camMetre)*scale;
-        if(pxp<x0-10 || pxp>x0+w+10) continue;
-        ctx.beginPath(); ctx.moveTo(pxp, groundY-22); ctx.lineTo(pxp, groundY+5); ctx.stroke();
-        ctx.beginPath(); ctx.arc(pxp, groundY+5, 2.4, 0, 7); ctx.fill();
-      }
-    }
-    function arrow(cx, y, vel, color, name){
-      const len = vel * 1.55;
+    function vArrow(cx, cy, vel, color, name, bx0){
+      const y = cy - TH / 2 - 6, len = vel * aSc;
       ctx.save();
       ctx.strokeStyle = ctx.fillStyle = color;
-      ctx.lineWidth = 2.6;
-      if(Math.abs(vel) < 0.5){
-        ctx.beginPath(); ctx.arc(cx, y, 4.5, 0, 7); ctx.fill();
-        ctx.font = 'bold 12px "JetBrains Mono", Menlo, Consolas, monospace';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText(name, cx, y - 8);
+      ctx.lineWidth = Math.max(1.8, TH * 0.10);
+      if(Math.abs(len) < 3){
+        ctx.beginPath(); ctx.arc(cx, y, Math.max(3, TH * 0.16), 0, 7); ctx.fill();
       } else {
-        const x1 = cx + len, dir = Math.sign(len);
+        const x1 = cx + len, dir = len > 0 ? 1 : -1, hh = Math.max(4.5, TH * 0.28);
         ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(x1, y); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(x1, y); ctx.lineTo(x1-dir*8, y-5); ctx.lineTo(x1-dir*8, y+5);
+        ctx.beginPath(); ctx.moveTo(x1, y);
+        ctx.lineTo(x1 - dir*hh*1.5, y - hh*0.6);
+        ctx.lineTo(x1 - dir*hh*1.5, y + hh*0.6);
         ctx.closePath(); ctx.fill();
-        ctx.font = 'bold 12px "JetBrains Mono", Menlo, Consolas, monospace';
-        ctx.textAlign = dir>0 ? 'left' : 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(name, x1 + dir*5, y - 5);
       }
+      ctx.font = 'bold ' + labF.toFixed(1) + 'px ' + MONO;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      // keep the readout inside its panel, so it never drifts into the ramp
+      const tw = ctx.measureText(name).width;
+      const lxm = Math.max(bx0 + tw/2, Math.min(bx0 + cw - tw/2, cx + len / 2));
+      ctx.fillText(name, lxm, y - 5);
       ctx.restore();
     }
-    function scene(x0, w, cam, title, note){
-      ctx.save();
-      ctx.beginPath(); ctx.rect(x0, 0, w, H); ctx.clip();
-      ctx.fillStyle = LIGHT ? 'rgba(248,250,252,.45)' : 'rgba(11,20,22,.45)';
-      ctx.fillRect(x0, 0, w, H);
-      ctx.fillStyle = ink;
-      ctx.font = '700 14px "DM Sans", "Segoe UI", Arial, sans-serif';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText(title, x0 + 16, 10);
+
+    const tt = ((t % cycle) + cycle) % cycle;
+    ctx.clearRect(0, 0, W, H);
+    // ---- background wash: full bleed, dissolved at both ends ----
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    if(LIGHT){ sky.addColorStop(0, '#e0f2fe'); sky.addColorStop(1, '#f1f5f9'); }
+    else     { sky.addColorStop(0, '#0b1922'); sky.addColorStop(1, '#060e11'); }
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = LIGHT ? 'rgba(248,250,252,.45)' : 'rgba(11,20,22,.45)';
+    ctx.fillRect(0, 0, mid - gap/2, H);
+    ctx.fillRect(mid + gap/2, 0, W - (mid + gap/2), H);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, mid - gap/2, H); ctx.clip();
+    railLine(yA, 0, 0, mid - gap/2); railLine(yB, 0, 0, mid - gap/2);
+    poles(0, mid - gap/2, 200, 1.7);
+    ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(mid + gap/2, 0, W - (mid + gap/2), H); ctx.clip();
+    railLine(yA, vA*pxs*tt, mid + gap/2, W - (mid + gap/2));
+    railLine(yB, vA*pxs*tt, mid + gap/2, W - (mid + gap/2));
+    poles(mid + gap/2, W - (mid + gap/2), vA*tt, 1.7);
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const fade = ctx.createLinearGradient(0, 0, W, 0);
+    fade.addColorStop(0,    'rgba(0,0,0,1)');
+    fade.addColorStop(0.14, 'rgba(0,0,0,0)');
+    fade.addColorStop(0.86, 'rgba(0,0,0,0)');
+    fade.addColorStop(1,    'rgba(0,0,0,1)');
+    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    // ---- essential ink, all inside the opaque zone ----
+    ctx.fillStyle = ink;
+    ctx.font = '700 ' + titleF.toFixed(1) + 'px ' + FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('From the ground', lx, H * 0.05);
+    ctx.fillText('Sitting on A',    rx, H * 0.05);
+    if(cw > 210){                              // no room for the notes below this
       ctx.fillStyle = mute;
-      ctx.font = '600 12px "DM Sans", "Segoe UI", Arial, sans-serif';
+      ctx.font = '600 ' + noteF.toFixed(1) + 'px ' + FAM;
       ctx.textAlign = 'right';
-      ctx.fillText(note, x0 + w - 16, 12);
-      const gY = H - 16;
-      poles(x0, w, gY, cam, 1.7);
-      ctx.restore();
+      ctx.fillText('both going right',   lx + cw, H * 0.055);
+      ctx.fillText('how fast is B now?', rx + cw, H * 0.055);
     }
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(226,232,240,.26)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mid, H*0.08); ctx.lineTo(mid, H*0.92); ctx.stroke();
 
+    // Left: the ground frame — both race right past fixed poles.
+    const xAg = lx + cw*0.16 + vA*pxs*tt, xBg = lx + cw*0.16 + vB*pxs*tt;
+    train(xAg, yA, colA, 'A', false);
+    vArrow(xAg, yA, vA, colA, 'A · 20 m/s', lx);
+    train(xBg, yB, colB, 'B', false);
+    vArrow(xBg, yB, vB, colB, 'B · 28 m/s', lx);
+
+    // Right: sit on A — A parked, the ground streams, B is the question.
+    const xAa = rx + cw*0.20, xBa = rx + cw*0.42 + (vB-vA)*pxs*tt;
+    train(xAa, yA, colA, 'A', true);
+    vArrow(xAa, yA, 0, colA, 'A · at rest', rx);
+    train(xBa, yB, colB, 'B', false);
+    vArrow(xBa, yB, vB-vA, colB, 'B · ?', rx);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
     function paint(t){
-      ctx.clearRect(0, 0, W, H);
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      if(LIGHT){ sky.addColorStop(0, '#e0f2fe'); sky.addColorStop(1, '#f1f5f9'); }
-      else { sky.addColorStop(0, '#0b1922'); sky.addColorStop(1, '#060e11'); }
-      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-
-      const mid = W / 2, gap = 14, leftW = mid - gap/2, rightX = mid + gap/2, rightW = W - rightX;
-      const yA = 100, yB = 168;
-
-      // Left: ground frame — both race right, poles sit still.
-      scene(0, leftW, 200, 'From the ground', 'both going right');
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, leftW, H); ctx.clip();
-      tracks(yA+18, 0); tracks(yB+18, 0);
-      const xAg = 160 + vA*px*t, xBg = 250 + vB*px*t;
-      train(xAg, yA, colA, 'A', false);
-      arrow(xAg, yA-26, vA, colA, 'A  ·  20 m/s');
-      train(xBg, yB, colB, 'B', false);
-      arrow(xBg, yB-26, vB, colB, 'B  ·  28 m/s');
-      ctx.restore();
-
-      // Divider
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.2)' : 'rgba(226,232,240,.28)';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(mid, 12); ctx.lineTo(mid, H-12); ctx.stroke();
-
-      // Right: sit on A — A frozen, B creeps +8, poles stream left.
-      scene(rightX, rightW, vA*t, 'Sitting on A', 'same two trains');
-      ctx.save(); ctx.beginPath(); ctx.rect(rightX, 0, rightW, H); ctx.clip();
-      tracks(yA+18, vA*px*t); tracks(yB+18, vA*px*t);
-      const xAa = rightX + 170, xBa = rightX + 260 + (vB-vA)*px*t;
-      train(xAa, yA, colA, 'A', true);
-      arrow(xAa, yA-26, 0, colA, 'A  ·  at rest');
-      train(xBa, yB, colB, 'B', false);
-      arrow(xBa, yB-26, vB-vA, colB, 'B  ·  only +8 m/s');
-      ctx.restore();
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1100));
+      const H = Math.max(100, Math.round(r.height || 210));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-
-    if(reduce){ paint(1.6); return; }
-    const t0 = performance.now();
-    function loop(now){
-      if(ov.classList.contains('hidden')) return;
-      paint(((now - t0)/1000) % cycle);
-      heroRaf = requestAnimationFrame(loop);
-    }
-    heroRaf = requestAnimationFrame(loop);
+    if(reduce){ paint(1.9); return; }             // static mid-run frame
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      paint(((typeof now === "number" ? now : t0) - t0) / 1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

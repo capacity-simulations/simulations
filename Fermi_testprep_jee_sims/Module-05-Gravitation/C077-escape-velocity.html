@@ -1844,7 +1844,7 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Two launches from Earth — which path comes back?</span>
+                <span class="hero-label">One launch point, two unlabelled speeds — one path arcs over and falls back to the planet, the other keeps going and never returns</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Escape velocity</span></h2>
@@ -3769,59 +3769,178 @@ if(themeBtn) themeBtn.addEventListener('click', () => {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: two radial launches from Earth's surface using this sim's
-     a = −μ r̂ / r² and E = ½v² − μ/r. 10.5 km/s (bound) vs 11.5 km/s
-     (unbound). EQUAL-TIME-STEP dots — bound dots bunch as it slows. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const mu = 3.986e14, R = 6371e3;
-    const accel = (x,y) => {
-      const r2 = x*x + y*y, r = Math.sqrt(r2), f = -mu / (r2 * r);
-      return { ax: f*x, ay: f*y };
-    };
-    function integrate(v0){
-      let x = 0, y = R, vx = 0, vy = v0;
-      const pts = [{x,y}];
-      const dt = 12;
-      for(let i = 0; i < 28; i++){
-        const a1 = accel(x,y);
-        const x2 = x + 0.5*dt*vx, y2 = y + 0.5*dt*vy;
-        const a2 = accel(x2,y2);
-        x += dt*(vx + 0.5*dt*a1.ax); y += dt*(vy + 0.5*dt*a1.ay);
-        vx += dt*a2.ax; vy += dt*a2.ay;
-        if(Math.sqrt(x*x+y*y) < R*0.999) break;
-        pts.push({x,y});
+  /* Hero: the blurb's fork, drawn honestly. ONE launch point on a planet
+     limb at lower-centre-left, TWO trajectories with the SAME launch angle
+     and different (deliberately unlabelled) speeds:
+       · sub-escape (0.84 v_esc) — rises, slows (equal-time dots bunch
+         toward apogee), arcs over ON SCREEN and falls back to the limb;
+       · super-escape (1.06 v_esc) — keeps going, dot spacing tending to a
+         constant, fading out through the top of the strip.
+     No numbers, no formula, no speed labels: the cards gate what the
+     threshold depends on; the art shows only the dichotomy the blurb
+     already states. Paths are ANALYTIC conics — r(θ) = p/(1 + e·cosθ) with
+     time from the elliptic/hyperbolic Kepler equation in units μ = R = 1 —
+     not a wall-clock integration (the old hero integrated 336 s of an
+     hours-long flight and both columns looked identical). The backing
+     store is resized to the canvas's own CSS box × devicePixelRatio on
+     every draw (the markup's 1280×240 painted into 100vw×140px squashed
+     everything ~2:1), and a generation token keeps exactly one reveal
+     animation alive across theme changes and resizes. */
+  let heroToken = 0;
+  const HERO = (function(){
+    // World units μ = 1, R = 1, so the surface escape speed is √2. One
+    // launch site, one launch direction; only the speed differs.
+    const BETA0 = -0.28;  // launch site angle from the planet's zenith
+    const TILT  = 0.50;   // velocity tilt from local vertical (both paths)
+    function conic(vFac){
+      const v = vFac*Math.SQRT2;
+      const rx = Math.sin(BETA0), ry = Math.cos(BETA0);
+      const da = BETA0 + TILT, vx = v*Math.sin(da), vy = v*Math.cos(da);
+      const vv = v*v, rv = rx*vx + ry*vy, En = vv/2 - 1;
+      const evx = (vv-1)*rx - rv*vx, evy = (vv-1)*ry - rv*vy;  // ecc. vector
+      const hz = rx*vy - ry*vx;                                // <0: sweeps rightward
+      const e = Math.hypot(evx, evy), p = hz*hz, om = Math.atan2(evx, evy);
+      const th0 = Math.acos(Math.max(-1, Math.min(1, (p-1)/e))); // outbound: (0,π)
+      const pts = [];
+      if(En < 0){ // ellipse: launch → apogee (θ = π) → back down to r = 1
+        const k = Math.pow(-1/(2*En), 1.5);
+        const Mof = th => {
+          let Ea = 2*Math.atan(Math.sqrt((1-e)/(1+e))*Math.tan(th/2));
+          if(th > Math.PI) Ea += 2*Math.PI;
+          return Ea - e*Math.sin(Ea);
+        };
+        const M0 = Mof(th0);
+        for(let i = 0; i <= 700; i++){
+          const th = th0 + (2*Math.PI - 2*th0)*i/700;
+          const r = p/(1 + e*Math.cos(th)), b = om + th;
+          pts.push({ t:(Mof(th)-M0)*k, x:r*Math.sin(b), y:r*Math.cos(b) });
+        }
+      } else {    // hyperbola: launch → toward θ∞, capped far off-screen
+        const k = Math.pow(1/(2*En), 1.5), thInf = Math.acos(-1/e);
+        const Fof = th => 2*Math.atanh(Math.sqrt((e-1)/(e+1))*Math.tan(th/2));
+        const F0 = Fof(th0), M0 = e*Math.sinh(F0) - F0;
+        for(let i = 0; i <= 700; i++){
+          const th = th0 + (thInf - 1e-4 - th0)*i/700;
+          const r = p/(1 + e*Math.cos(th));
+          if(r > 14) break;
+          const F = Fof(th), b = om + th;
+          pts.push({ t:(e*Math.sinh(F)-F-M0)*k, x:r*Math.sin(b), y:r*Math.cos(b) });
+        }
       }
       return pts;
     }
-    const bound = integrate(10500), free = integrate(11500);
-    const S = H * 0.22 / R;
-    const cx = W*0.50, cy = H*0.88;
-    ctx.fillStyle = LIGHT ? 'rgba(37,99,235,.55)' : 'rgba(96,165,250,.55)';
-    ctx.beginPath(); ctx.arc(cx, cy, R*S, 0, 7); ctx.fill();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = Math.max(bound.length, free.length);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k < N; sN++, k++){
-        if(bound[k]){
-          ctx.fillStyle = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
-          ctx.beginPath(); ctx.arc(cx + bound[k].x*S - 18, cy - (bound[k].y - R)*S - R*S, 3.1, 0, 7); ctx.fill();
-        }
-        if(free[k]){
-          ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.95)';
-          ctx.beginPath(); ctx.arc(cx + free[k].x*S + 18, cy - (free[k].y - R)*S - R*S, 3.1, 0, 7); ctx.fill();
-        }
+    const bound = conic(0.84), esc = conic(1.06);
+    const Tb = bound[bound.length-1].t;   // full up-and-back flight time
+    const dt = Tb/32;                     // ONE equal time step for BOTH paths
+    function dotsOf(pts){
+      const out = []; let j = 0;
+      for(let t = dt; t <= pts[pts.length-1].t; t += dt){
+        while(j < pts.length-1 && pts[j+1].t < t) j++;
+        if(j >= pts.length-1) break;
+        const A = pts[j], B = pts[j+1], f = (t - A.t)/((B.t - A.t) || 1);
+        out.push({ t, x:A.x + (B.x-A.x)*f, y:A.y + (B.y-A.y)*f });
       }
-      if(k < N) requestAnimationFrame(batch);
+      return out;
     }
-    batch();
+    return { bound, esc, dotsB: dotsOf(bound), dotsE: dotsOf(esc), Tb };
+  })();
+  function paintHero(ctx, W, H, tNow, LIGHT){
+    // Anisotropic mapping on purpose: a wide shallow limb reads as a planet
+    // horizon inside a 140px strip. Landmarks sit in the 24–76% opaque
+    // zone — fork ≈ 0.28 W, apogee ≈ 0.51 W, touchdown ≈ 0.45 W — and only
+    // the escaper's tail leaves through the top of the fade.
+    const ex0 = W*0.32, ey0 = H + 16, XS = W*0.14, YS = 48;
+    const X = q => ex0 + q.x*XS, Y = q => ey0 - q.y*YS;
+    const earth = LIGHT ? 'rgba(37,99,235,'      : 'rgba(96,165,250,';
+    const atmo  = LIGHT ? 'rgba(37,99,235,.26)'  : 'rgba(147,197,253,.30)';
+    const ink   = LIGHT ? 'rgba(15,23,42,.85)'   : 'rgba(226,232,240,.88)';
+    const pinkD = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
+    const pinkL = LIGHT ? 'rgba(219,39,119,.28)' : 'rgba(244,114,182,.32)';
+    const grnD  = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.95)';
+    const grn   = LIGHT ? 'rgba(5,150,105,'      : 'rgba(52,211,153,';
+    ctx.clearRect(0,0,W,H);
+    // planet limb with a soft atmosphere
+    ctx.beginPath(); ctx.ellipse(ex0, ey0, XS, YS, 0, 0, 7);
+    const g = ctx.createLinearGradient(0, ey0-YS, 0, ey0+8);
+    g.addColorStop(0, earth + (LIGHT ? '.55)' : '.50)'));
+    g.addColorStop(1, earth + (LIGHT ? '.22)' : '.16)'));
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = atmo; ctx.lineWidth = 6; ctx.stroke();
+    ctx.strokeStyle = earth + '.6)'; ctx.lineWidth = 1.4; ctx.stroke();
+    // the two paths, faint — one closes, one leaves
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1.6;
+    ctx.strokeStyle = pinkL;
+    ctx.beginPath();
+    HERO.bound.forEach((q,i)=> i ? ctx.lineTo(X(q),Y(q)) : ctx.moveTo(X(q),Y(q)));
+    ctx.stroke();
+    const lg = ctx.createLinearGradient(0, H*0.72, 0, -6);
+    lg.addColorStop(0,   grn + (LIGHT ? '.30)' : '.34)'));
+    lg.addColorStop(0.8, grn + (LIGHT ? '.20)' : '.24)'));
+    lg.addColorStop(1,   grn + '0)');
+    ctx.strokeStyle = lg;
+    ctx.beginPath();
+    for(let i = 0; i < HERO.esc.length; i++){
+      const q = HERO.esc[i], sx = X(q), sy = Y(q);
+      if(i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
+      if(sy < -24) break;   // one point past the top edge is enough
+    }
+    ctx.stroke();
+    // the shared launch site — the fork itself; no labels, no numbers
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(X(HERO.bound[0]), Y(HERO.bound[0]), 2.4, 0, 7); ctx.fill();
+    // equal-time dots, the same Δt on both paths: the bound ones bunch as
+    // it slows toward apogee, the escaper's spacing settles to a constant
+    ctx.fillStyle = pinkD;
+    for(const q of HERO.dotsB){
+      if(q.t > tNow) break;
+      ctx.beginPath(); ctx.arc(X(q), Y(q), 2.6, 0, 7); ctx.fill();
+    }
+    for(const q of HERO.dotsE){
+      if(q.t > tNow) break;
+      const sy = Y(q); if(sy < -4) break;
+      ctx.globalAlpha = Math.max(.15, Math.min(1, (sy+6)/46)); // melt into the top
+      ctx.fillStyle = grnD;
+      ctx.beginPath(); ctx.arc(X(q), sy, 2.8, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // touchdown ring once the bound flight has come all the way home
+    if(tNow >= HERO.Tb){
+      const L = HERO.bound[HERO.bound.length-1];
+      ctx.strokeStyle = pinkD; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(X(L), Y(L), 4.5, 0, 7); ctx.stroke();
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                    // one live reveal at a time
+    function paint(tNow){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, tNow, LIGHT);
+    }
+    if(reduce){ paint(Infinity); return; }     // reduced motion: finished frame
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const REVEAL = 2900;                       // ms for the full bound flight
+    const PERIOD = REVEAL + 1400;              // + a dwell on the finished frame, then repeat
+    (function frame(now){
+      if(my !== heroToken) return;             // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((now || t0) - t0) % PERIOD;   // cycle: reveal, dwell, reveal…
+      const f = Math.min(1, s/REVEAL);
+      paint(f*HERO.Tb + (f >= 1 ? 1 : 0));     // nudge past Tb → touchdown ring
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

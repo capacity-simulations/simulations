@@ -1192,7 +1192,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-energy dots on the heating curve — temperature versus heat supplied</span>
+            <span class="hero-label">Ice in a beaker over a lit burner with a thermometer beside it, and a heating curve climbing from −20 °C to the dashed 0 °C line</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The heating curve</span></h2>
@@ -3395,150 +3395,222 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: ice-warming climb only (Q up to m c ΔT). The melt plateau is the first predict. */
+  /* Hero: the APPARATUS and the run-up — ice in a beaker over a lit burner,
+     a thermometer climbing beside it, and the heating curve drawing itself from
+     −20 °C up to the dashed 0 °C line. It stops there. The burner stays lit.
+
+     SPOILER GATE (guided-inquiry cards read before drawing). Card 1 is
+     data-gate and asks, verbatim, "It reaches 0 °C — and the burner is still
+     on. What does the thermometer do next?", correct answer "Stops moving at
+     0 °C, even though the burner is still on". Card 3 is also data-gate and
+     asks for the LENGTH RATIO of plateau to climb (≈8:1). The hero as found
+     answered both: it ran the whole heating curve, drew the flat melt plateau
+     at full length, melted the ice to water in the beaker, and printed the
+     callout 'heat still flowing — temperature stuck'. Every one of those is
+     removed — this file's own original header comment ("ice-warming climb only
+     (Q up to m c ΔT). The melt plateau is the first predict.") described the
+     correct behaviour, and the art had drifted away from it. The loop now ends
+     at Q = m·c_ice·20 K and the closing callout states card 1's premise
+     ('0 °C — and the burner is still on') without ever answering it.
+
+     Thermometer: the welcome blurb says "watch the thermometer", and there was
+     no thermometer in the hero at all. One is added beside the beaker — bulb,
+     column and three unnumbered ticks. It carries NO readable scale, because
+     card 1 is exactly "what does the thermometer read while melting"; the
+     column only ever rises through the ice-warming climb and stops.
+
+     Sizing: the backing store is taken from the canvas's OWN CSS box
+     (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…), all drawing
+     in CSS px) instead of the 1280×240 authored in the markup — the band is
+     ≈10:1, so the old store was squashed ~2:1 and 12 px labels rendered ~7 px.
+
+     Composition: the band's mask is opaque only over 22–78% of the displayed
+     width, so ALL ink is kept inside 26–74%. The beaker used to sit at 0.20W
+     with its phase caption, and the '0 °C' axis label used to hang off the plot
+     at 0.83W — both inside the fade. The scene is now centred and capped at
+     640 CSS px, the 0 °C label lives inside the plot, and below 400 px of
+     usable width the plot is dropped and only the apparatus is drawn. */
   let heroRAF = 0;
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    // Miniature of the sim itself, looping one full heat-up: the beaker's ice
-    // melts while the heating curve draws — and the curve HOLDS flat at 0 °C
-    // exactly while the ice is melting. That plateau is the whole topic.
-    const m = 0.35, cIce = 2100, cW = 4186, L = 334000;
-    const T0 = -20, Tmax = 25;
-    const Q1 = m*cIce*(0-T0), Q2 = Q1 + m*L, Q3 = Q2 + m*cW*Tmax;
-    const sOf = Q => {
-      if(Q <= Q1) return { T: T0 + Q/(m*cIce), melt: 0, reg: 0 };
-      if(Q <= Q2) return { T: 0, melt: (Q-Q1)/(Q2-Q1), reg: 1 };
-      return { T: (Q-Q2)/(m*cW), melt: 1, reg: 2 };
-    };
-    function frame(tt){
-      const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-      ctx.clearRect(0,0,W,H);
-      const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-      const LOOP = 7.2, u = tt % LOOP;
-      const Q = Math.min(1, u/5.6) * Q3;
-      const s = sOf(Q);
-      const mute = LIGHT ? '#475569' : '#94a3b8';
-      const ink  = LIGHT ? '#0f172a' : '#e2e8f0';
-      const glass = LIGHT ? '#64748b' : '#94a3b8';
-      const cClimb = '#60a5fa', cMelt = '#f472b6', cWater = '#34d399';
+  // Ice-warming leg only: Q1 = m·c_ice·ΔT with the sim's own constants.
+  const heroM = 0.35, heroCIce = 2100, heroT0 = -20;
+  const heroQ1 = heroM * heroCIce * (0 - heroT0);
+  const heroLoop = 6.0;                 // s wall-clock: 4.4 s climb + hold + reset
 
-      // ---- left: mini beaker on burner
-      const bx = W*0.20, bw = 120, bh = 128;
-      const bBot = H*0.80, bTop = bBot - bh, bL = bx - bw/2, bR = bx + bw/2;
-      // burner + flames (clamped under the glass)
-      ctx.fillStyle = LIGHT ? '#94a3b8' : '#374151';
-      ctx.fillRect(bx - bw*0.62, bBot + 26, bw*1.24, 12);
-      for(let i=0;i<5;i++){
-        const fx = bL + 12 + i*( (bw-24)/4 );
-        const fh = 14 + Math.sin(tt*8 + i)*2.5;
-        const g = ctx.createLinearGradient(fx, bBot+26, fx, bBot+26-fh);
-        g.addColorStop(0,'#fbbf24'); g.addColorStop(1,'rgba(239,68,68,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(fx-5, bBot+26);
-        ctx.quadraticCurveTo(fx, bBot+26-fh, fx, bBot+26-fh);
-        ctx.quadraticCurveTo(fx, bBot+26-fh, fx+5, bBot+26);
-        ctx.closePath(); ctx.fill();
-      }
-      // glass
-      ctx.strokeStyle = glass; ctx.lineWidth = 2.5;
+  function paintHero(ctx, W, H, tt, LIGHT){
+    ctx.clearRect(0,0,W,H);
+    const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const u = tt % heroLoop;
+    const Q = Math.min(1, u/4.4) * heroQ1;
+    const T = heroT0 + Q/(heroM*heroCIce);
+    const atZero = Q >= heroQ1*0.97;
+    const mute   = LIGHT ? '#475569' : '#94a3b8';
+    const ink    = LIGHT ? '#0f172a' : '#e2e8f0';
+    const glass  = LIGHT ? '#475569' : '#94a3b8';
+    const metal  = LIGHT ? '#64748b' : '#374151';
+    const flame  = LIGHT ? '#d97706' : '#fbbf24';
+    const iceFil = LIGHT ? 'rgba(191,219,254,.95)' : 'rgba(219,234,254,.90)';
+    const iceStr = LIGHT ? 'rgba(37,99,235,.65)'   : 'rgba(147,197,253,.90)';
+    const merc   = LIGHT ? '#b91c1c' : '#f87171';
+    const cClimb = LIGHT ? '#2563eb' : '#60a5fa';
+    const cZero  = LIGHT ? '#db2777' : '#f472b6';
+    const cZeroD = LIGHT ? 'rgba(219,39,119,.55)' : 'rgba(244,114,182,.50)';
+    const axis   = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.32)';
+
+    // Safe window: every essential mark lives inside 26–74% of the shown width.
+    const L = W*0.26, R = W*0.74, CW = R - L, mid = (L + R)/2;
+    const compW = Math.min(CW, 640), cL = mid - compW/2, cR = mid + compW/2;
+    const roomy = CW >= 400;
+
+    // ---- apparatus cluster: burner + beaker of ice + thermometer
+    const bw = Math.max(46, Math.min(92, roomy ? compW*0.21 : (compW-40)*0.60));
+    const burnW = bw*1.24, thermGap = 10, thermW = 13, tickW = 5;
+    const cluster = burnW + thermGap + thermW + tickW;
+    const aL = roomy ? cL : (mid - cluster/2);
+    const bx = aL + burnW/2, tx = aL + burnW + thermGap + thermW/2;
+    const bBot = H*0.70, bh = Math.min(66, H*0.47), bTop = bBot - bh;
+    const bLx = bx - bw/2, bRx = bx + bw/2;
+    const burnY = bBot + 22;
+
+    // burner bar + flames (they stop short of the glass)
+    ctx.fillStyle = metal;
+    ctx.fillRect(aL, burnY, burnW, 7);
+    for(let i=0;i<5;i++){
+      const fx = bLx + 10 + i*((bw-20)/4);
+      const fh = 13 + Math.sin(tt*8 + i)*2.5;
+      const g = ctx.createLinearGradient(fx, burnY, fx, burnY-fh);
+      g.addColorStop(0, flame); g.addColorStop(1,'rgba(239,68,68,0)');
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(bL-5, bTop); ctx.lineTo(bL, bTop+8); ctx.lineTo(bL, bBot);
-      ctx.lineTo(bR, bBot); ctx.lineTo(bR, bTop+8); ctx.lineTo(bR+5, bTop);
-      ctx.stroke();
-      // contents: fixed amount (~70% of beaker), water rises as ice melts
-      const contH = bh*0.62, contBot = bBot - 3;
-      const waterH = contH * s.melt * 0.92;
-      const waterTop = contBot - waterH;
-      if(waterH > 0){
-        const wg = ctx.createLinearGradient(0, waterTop, 0, contBot);
-        wg.addColorStop(0,'rgba(96,165,250,.85)'); wg.addColorStop(1,'rgba(30,84,190,.96)');
-        ctx.fillStyle = wg;
-        ctx.fillRect(bL+3, waterTop, bw-6, waterH);
+      ctx.moveTo(fx-4.5, burnY);
+      ctx.quadraticCurveTo(fx, burnY-fh, fx, burnY-fh);
+      ctx.quadraticCurveTo(fx, burnY-fh, fx+4.5, burnY);
+      ctx.closePath(); ctx.fill();
+    }
+    // glass
+    ctx.strokeStyle = glass; ctx.lineWidth = 2.2; ctx.lineJoin='round';
+    ctx.beginPath();
+    ctx.moveTo(bLx-5, bTop); ctx.lineTo(bLx, bTop+7); ctx.lineTo(bLx, bBot);
+    ctx.lineTo(bRx, bBot); ctx.lineTo(bRx, bTop+7); ctx.lineTo(bRx+5, bTop);
+    ctx.stroke();
+    // contents: ice, and only ice — the melt is the gated predict
+    const contH = bh*0.60, contBot = bBot - 3, iceTop = contBot - contH;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bLx+3, bTop+5, bw-6, contBot-bTop-5); ctx.clip();
+    const cs = 14;
+    const nRow = Math.max(1, Math.ceil(contH/cs)), nCol = Math.max(1, Math.floor((bw-8)/cs));
+    for(let ri=0; ri<nRow; ri++){
+      for(let ci=0; ci<nCol; ci++){
+        const x = bLx + 4 + ci*cs + (ri%2)*4, y = iceTop + ri*cs;
+        if(y > contBot - 6) continue;
+        ctx.fillStyle = iceFil; ctx.strokeStyle = iceStr; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.rect(x, y, cs-3, cs-3); ctx.fill(); ctx.stroke();
       }
-      const iceH = contH * (1 - s.melt);
-      if(iceH > 2){
-        const iceTop = Math.max(bTop + 8, (waterH>0 ? waterTop - iceH*0.8 : contBot - iceH));
-        ctx.save();
-        ctx.beginPath(); ctx.rect(bL+3, bTop+6, bw-6, contBot-bTop-6); ctx.clip();
-        const cs2 = 15;
-        for(let ri=0; ri<Math.ceil(iceH/cs2); ri++){
-          for(let ci=0; ci<Math.floor((bw-8)/cs2); ci++){
-            const x = bL + 4 + ci*cs2 + (ri%2)*4, y = iceTop + ri*cs2;
-            if(y > contBot - 6) continue;
-            ctx.fillStyle = 'rgba(219,234,254,.9)';
-            ctx.strokeStyle = 'rgba(147,197,253,.9)'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.rect(x, y, cs2-3, cs2-3); ctx.fill(); ctx.stroke();
-          }
-        }
-        ctx.restore();
-      }
-      // phase word above the beaker (below it falls off the canvas)
-      ctx.fillStyle = s.reg===1 ? cMelt : mute;
-      ctx.font = '700 12px '+font; ctx.textAlign = 'center'; ctx.textBaseline='alphabetic';
-      ctx.fillText(s.reg===0 ? 'ice warming' : s.reg===1 ? 'melting — T holds at 0 °C' : 'water warming', bx, bTop - 12);
+    }
+    ctx.restore();
 
-      // ---- right: the heating curve drawing itself
-      const gx0 = W*0.42, gx1 = W*0.82, gy0 = H*0.80, gy1 = H*0.16;
-      const xOf = q => gx0 + (q/Q3)*(gx1-gx0);
-      const yOf = T => gy0 - ((T - T0)/(Tmax - T0))*(gy0-gy1);
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.25)' : 'rgba(148,163,184,.3)';
-      ctx.lineWidth = 1;
+    // thermometer: bulb, column, three UNNUMBERED ticks (no readable scale —
+    // "what does it read while melting" is card 1's gated predict)
+    const ty0 = bTop + 6, ty1 = bBot - 14, bulbY = bBot - 6, bulbR = 5.5;
+    const yTh = tC => ty1 - ((tC + 25)/30)*(ty1 - ty0);
+    ctx.strokeStyle = glass; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(tx - thermW/2 + 3, ty0); ctx.lineTo(tx - thermW/2 + 3, ty1);
+    ctx.moveTo(tx + thermW/2 - 3, ty0); ctx.lineTo(tx + thermW/2 - 3, ty1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(tx, ty0, thermW/2 - 3, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(tx, bulbY, bulbR, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = merc;
+    ctx.beginPath(); ctx.arc(tx, bulbY, bulbR - 1, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(tx - 2, yTh(T), 4, bulbY - yTh(T));
+    ctx.strokeStyle = axis; ctx.lineWidth = 1;
+    ctx.beginPath();
+    [-20,-10,0].forEach(tc => { ctx.moveTo(tx + thermW/2 - 3, yTh(tc)); ctx.lineTo(tx + thermW/2 - 3 + tickW, yTh(tc)); });
+    ctx.stroke();
+
+    // phase word above the beaker (below it there is only burner)
+    ctx.fillStyle = mute;
+    ctx.font = '700 12px '+font; ctx.textAlign = 'center'; ctx.textBaseline='alphabetic';
+    ctx.fillText('ice warming', bx, bTop - 11);
+
+    // ---- the heating curve drawing itself, ending ON the 0 °C line
+    if(roomy){
+      const gy0 = H*0.74, gy1 = H*0.22;
+      const gx1 = cR - 8, gw = Math.min(compW*0.52, 340), gx0 = gx1 - gw;
+      const xOf = q => gx0 + (q/heroQ1)*gw;
+      const yOf = tC => gy0 - ((tC + 25)/31)*(gy0 - gy1);
+      ctx.strokeStyle = axis; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy0); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx0, gy1); ctx.stroke();
-      // 0 °C reference
-      ctx.setLineDash([4,4]);
-      ctx.strokeStyle = 'rgba(244,114,182,.5)';
+      // 0 °C reference, labelled INSIDE the plot (it used to hang off gx1+8)
+      ctx.setLineDash([4,4]); ctx.strokeStyle = cZeroD;
       ctx.beginPath(); ctx.moveTo(gx0, yOf(0)); ctx.lineTo(gx1, yOf(0)); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = cMelt; ctx.font='600 12px '+font; ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText('0 °C', gx1 + 8, yOf(0));
-      // curve up to Q, colored by region
-      const segs = [ [0, Math.min(Q,Q1), cClimb], [Q1, Math.min(Q,Q2), cMelt], [Q2, Math.min(Q,Q3), cWater] ];
-      for(const [qa, qb, col] of segs){
-        if(qb <= qa) continue;
-        ctx.strokeStyle = col; ctx.lineWidth = 2.6;
-        ctx.beginPath();
-        for(let k=0;k<=40;k++){
-          const q = qa + (k/40)*(qb-qa);
-          const px = xOf(q), py = yOf(sOf(q).T);
-          if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-        }
-        ctx.stroke();
-      }
-      // live dot
-      ctx.fillStyle = s.reg===0 ? cClimb : s.reg===1 ? cMelt : cWater;
-      ctx.beginPath(); ctx.arc(xOf(Q), yOf(s.T), 4.5, 0, Math.PI*2); ctx.fill();
-      // plateau callout while melting
-      if(s.reg===1){
-        ctx.fillStyle = cMelt; ctx.font='700 12px '+font; ctx.textAlign='center';
-        ctx.fillText('heat still flowing — temperature stuck', (xOf(Q1)+xOf(Q2))/2, yOf(0) - 14);
+      ctx.fillStyle = cZero; ctx.font='600 12px '+font; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+      ctx.fillText('0 °C', gx0 + 5, yOf(0) - 4);
+      // the climb so far
+      ctx.strokeStyle = cClimb; ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.moveTo(xOf(0), yOf(heroT0)); ctx.lineTo(xOf(Q), yOf(T)); ctx.stroke();
+      ctx.fillStyle = cClimb;
+      ctx.beginPath(); ctx.arc(xOf(Q), yOf(T), 4.5, 0, Math.PI*2); ctx.fill();
+      // closing callout: card 1's PREMISE, never its answer. Longest variant
+      // that measures inside the plot column wins; none fits → say nothing.
+      if(atZero){
+        // Must clear the '0 °C' axis label sitting one line below it on the left:
+        // at ~1024 CSS px the longest variant reached back past it with ~1 px of
+        // vertical daylight. Both constraints are measured, not assumed.
+        ctx.font='600 12px '+font;
+        const zeroR = gx0 + 5 + ctx.measureText('0 °C').width + 8;
+        ctx.font='700 13px '+font; ctx.textAlign='center';
+        const said = ['0 °C — and the burner is still on', '0 °C — burner still on', '0 °C']
+          .find(s => ctx.measureText(s).width <= gw - 12
+                  && (gx0+gx1)/2 - ctx.measureText(s).width/2 >= zeroR);
+        if(said){ ctx.fillStyle = cZero; ctx.fillText(said, (gx0+gx1)/2, yOf(0) - 17); }
       }
       ctx.fillStyle = mute; ctx.font='600 12px '+font; ctx.textAlign='left';
       ctx.fillText('energy in →', gx0, gy0 + 16);
       ctx.save();
       ctx.translate(gx0 - 10, (gy0+gy1)/2); ctx.rotate(-Math.PI/2);
-      ctx.textAlign='center'; ctx.fillText('temperature', 0, 0);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('temperature', 0, 0);
       ctx.restore();
     }
+  }
+
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
     cancelAnimationFrame(heroRAF);
+    const isLight = () => document.documentElement.getAttribute('data-theme') === 'light'
+                       || document.body.classList.contains('light-theme');
+    function paint(tt){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bwPx = Math.round(W*dpr), bhPx = Math.round(H*dpr);
+      if(c.width !== bwPx || c.height !== bhPx){ c.width = bwPx; c.height = bhPx; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, tt, isLight());
+    }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ frame(3.4); return; }   // static frame: mid-melt, plateau visible
-    const t0 = performance.now();
+    if(reduce){ paint(4.4); return; }   // static: at 0 °C with the burner lit — the question
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
     const tick = now => {
       if(ov.classList.contains('hidden')) return;
-      frame((now - t0)/1000);
+      paint(((now || t0) - t0)/1000);
       heroRAF = requestAnimationFrame(tick);
     };
     heroRAF = requestAnimationFrame(tick);
   }
 
-  drawHero();
-  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
-    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
-  new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
-    .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  // The hero is decoration: if it ever throws, the overlay must stay usable.
+  try {
+    drawHero();
+    // The band is sized to the viewport, so a resize changes its CSS box: repaint.
+    addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
+    new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+      .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
+    new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
+      .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  } catch(e) { /* hero failure = cosmetic only */ }
   const synth = window.speechSynthesis;
   let idx = 0, charAt = 0, playing = false, current = null, finished = false;
   function pickVoice(){

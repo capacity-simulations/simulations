@@ -518,7 +518,7 @@ body.light-theme,html[data-theme="light"]{ --arrow:#0e6ea8; }
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Charge on the move: electrons (amber) and conventional current (green)</span>
+                <span class="hero-label">One loop: battery, resistor, ammeter — conventional current (green) circling one way, electrons (amber) creeping the other</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Ohm's law</span></h2>
@@ -1782,50 +1782,156 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to Ohm\'s law.',
-    'Here a battery and a resistor share one current. Double the voltage and I doubles; double the resistance and I halves.',
+    'Here a battery and a resistor share one current, and an ammeter reads it. Your job is to work out what that current does when you change the voltage, and when you change the resistance.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: charge drifting along a conductor.
-     This motif deliberately carries NO V- or R-dependence. The previous hero
-     plotted I vs V (linear) and I vs R (1/R) side by side, which handed the
-     student the answers to both gated inquiry predictions before the deck
-     even opened. */
+  /* Hero: the CIRCUIT, not the answer. One clean loop — battery (long + short
+     plates), zig-zag resistor on the top wire, an ammeter dial in the bottom
+     wire with its needle at an arbitrary unlabelled angle — and the current
+     made visible as a train of green conventional-current dots drifting
+     clockwise round the loop, with a few tiny amber electron dots creeping
+     the other way just inside the right-hand rail. It deliberately plots NO
+     I–V or I–R curve and shows NO numbers or doubling comparison: two gated
+     inquiry cards ask the student to predict I when V doubles and when R
+     doubles, and the original curve-pair hero handed both answers over
+     before the deck even opened. Its first replacement (two bare rows of
+     drifting marks over a baseline) avoided the spoiler but no longer showed
+     the subject; this one shows the apparatus itself — loop, source,
+     resistance, flowing charge — and keeps both predictions open.
+     The canvas is sized to its OWN CSS box (× devicePixelRatio) every draw
+     rather than to the 1280×240 authored in the markup, so nothing smears. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, drift, LIGHT){
+    const ink  = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
+    const soft = LIGHT ? 'rgba(15,23,42,.48)'  : 'rgba(148,163,184,.62)';
+    const batt = LIGHT ? 'rgba(4,120,87,.95)'  : 'rgba(52,211,153,.92)';
+    const res  = LIGHT ? 'rgba(185,28,28,.92)' : 'rgba(248,113,113,.90)';
+    const conv = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.92)';
+    const elec = LIGHT ? 'rgba(180,83,9,.80)'  : 'rgba(251,191,36,.80)';
+
+    ctx.clearRect(0,0,W,H);
+    // A whisper of ground, so the band reads as one object.
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // Whole loop kept inside 24%–76% of the band (the CSS mask fades the edges).
+    const cw = Math.min(W*0.52, 640), ox = (W-cw)/2;
+    const xL = ox, xR = ox+cw, yT = H*0.18, yB = H*0.80, cr = 10;
+    const yM = (yT+yB)/2, gap = Math.max(7, H*0.05);
+    const rw = Math.min(120, cw*0.30), rx0 = xL + cw*0.5 - rw/2, rx1 = rx0 + rw;
+    const za = Math.min(8, H*0.09);
+    const ax = xL + cw*0.5, aR = Math.min(14, H*0.11);
+
+    // wires with rounded corners (the rails ARE the battery leads)
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(xL, yM-gap);
+    ctx.lineTo(xL, yT+cr); ctx.arcTo(xL, yT, xL+cr, yT, cr); ctx.lineTo(rx0, yT);
+    ctx.moveTo(rx1, yT);
+    ctx.lineTo(xR-cr, yT); ctx.arcTo(xR, yT, xR, yT+cr, cr);
+    ctx.lineTo(xR, yB-cr); ctx.arcTo(xR, yB, xR-cr, yB, cr); ctx.lineTo(ax+aR, yB);
+    ctx.moveTo(ax-aR, yB);
+    ctx.lineTo(xL+cr, yB); ctx.arcTo(xL, yB, xL, yB-cr, cr); ctx.lineTo(xL, yM+gap);
+    ctx.stroke();
+
+    // battery: long thin plate above, short thick plate below
+    ctx.strokeStyle = batt; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(xL-14, yM-gap); ctx.lineTo(xL+14, yM-gap); ctx.stroke();
+    ctx.lineWidth = 4.5;
+    ctx.beginPath(); ctx.moveTo(xL-7, yM+gap); ctx.lineTo(xL+7, yM+gap); ctx.stroke();
+
+    // resistor: zig-zag in the top wire
+    ctx.strokeStyle = res; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(rx0, yT);
+    const zN = 6, zS = rw/zN;
+    for(let i=0;i<zN;i++){ ctx.lineTo(rx0+zS*i+zS*0.25, yT-za); ctx.lineTo(rx0+zS*i+zS*0.75, yT+za); }
+    ctx.lineTo(rx1, yT); ctx.stroke();
+
+    // ammeter: dial in the bottom wire, needle at an arbitrary unlabelled angle
+    ctx.strokeStyle = ink; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ax, yB, aR, 0, 7); ctx.stroke();
+    ctx.strokeStyle = soft; ctx.lineWidth = 2;
+    const na = -Math.PI*0.62;
+    ctx.beginPath(); ctx.moveTo(ax, yB); ctx.lineTo(ax + Math.cos(na)*aR*0.72, yB + Math.sin(na)*aR*0.72); ctx.stroke();
+    ctx.fillStyle = soft;
+    ctx.beginPath(); ctx.arc(ax, yB, 2, 0, 7); ctx.fill();
+
+    // direction arrowheads on the wire (they also carry the reduced-motion frame)
+    const arrow = (x, y, dx, dy, col, sc) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx)); ctx.scale(sc||1, sc||1);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(5.5,0); ctx.lineTo(-4,-4.5); ctx.lineTo(-4,4.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    };
+    arrow(xL + (rx0-xL)*0.5, yT,  1, 0, conv, 1);
+    arrow(ax + (xR-ax)*0.55, yB, -1, 0, conv, 1);
+
+    // conventional current: a train of dots drifting clockwise round the loop,
+    // hidden where a component symbol sits on the wire
+    const hSide = yB - yT, per = 2*(cw + hSide);
+    const P = s => {
+      s = ((s % per) + per) % per;
+      if(s < cw)    return [xL+s, yT];   s -= cw;
+      if(s < hSide) return [xR, yT+s];   s -= hSide;
+      if(s < cw)    return [xR-s, yB];   s -= cw;
+      return [xL, yB-s];
+    };
+    const hide = [
+      [rx0-xL-6, rx1-xL+6],                                              // resistor
+      [cw + hSide + (xR-ax-aR-5), cw + hSide + (xR-ax+aR+5)],            // ammeter
+      [2*cw + hSide + (yB-yM) - gap - 8, 2*cw + hSide + (yB-yM) + gap + 8] // battery
+    ];
+    ctx.fillStyle = conv;
+    const spacing = 26, nD = Math.ceil(per/spacing);
+    for(let i=0;i<nD;i++){
+      const s = ((i*spacing + drift) % per + per) % per;
+      if(hide.some(h => s > h[0] && s < h[1])) continue;
+      const p = P(s);
+      ctx.beginPath(); ctx.arc(p[0], p[1], 2.6, 0, 7); ctx.fill();
+    }
+
+    // electrons creep the other way: tiny amber dots just inside the right rail
+    const ey0 = yT+14, ey1 = yB-14, span = ey1-ey0, ex = xR-8;
+    ctx.fillStyle = elec;
+    for(let i=0;i<4;i++){
+      const y = ey1 - ((drift*0.55 + i*span/4) % span);
+      ctx.beginPath(); ctx.arc(ex, y, 1.8, 0, 7); ctx.fill();
+    }
+    arrow(ex, ey0-4, 0, -1, elec, 0.7);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const x0=W*0.10, x1=W*0.90, y0=H*0.82, y1=H*0.18;
-    const X = u => x0 + u*(x1-x0);
-    const Y = frac => y0 - frac*(y0-y1);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dU=1/80, N=80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k*dU;
-        if(k % 4 === 0){                       // electrons: evenly spaced drift
-          ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-          ctx.beginPath(); ctx.arc(X(u), Y(0.32), 3.0, 0, 7); ctx.fill();
-        }
-        if(k % 10 === 0){                      // conventional current, the other way
-          ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.92)';
-          const cx = X(u), cy = Y(0.68);
-          ctx.beginPath(); ctx.moveTo(cx+7, cy-6); ctx.lineTo(cx-5, cy); ctx.lineTo(cx+7, cy+6); ctx.closePath(); ctx.fill();
-        }
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(drift){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, drift, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0); return; }             // static frame: arrows give direction
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0)/1000;
+      paint(s*22);                                  // gentle drift, 22 px/s
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

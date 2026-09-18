@@ -1799,11 +1799,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — ISS laps fast; GPS crawls. v = √(GM/r), T² ∝ r³</span>
+                <span class="hero-label">Earth with two circular orbits drawn to scale — 400 km and 20 200 km — each marked at equal time steps</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Orbital velocity</span></h2>
-                <p class="welcome-blurb">Climb higher and you go slower — the orbit is bigger, so the period stretches even more.</p>
+                <p class="welcome-blurb">One satellite, one planet — what does raising the orbit do to speed and to period?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3654,50 +3654,166 @@ Shell.init({
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to orbital velocity.',
-    'Here a satellite circles a planet. Raise the orbit and speed falls as one over square root of r, while the period grows as r to the three halves.',
+    'Here a satellite circles a planet. You will raise the orbit and see what that does to its speed and to its period.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: two concentric Earth orbits — ISS (h=400 km) and GPS (h=20 200 km)
-     — using this sim's ω = √(μ/r³). EQUAL-TIME-STEP dots: ISS is faster so
-     its dots are sparser; GPS crawls and bunches. */
+  /* ===== Hero =====
+     Earth with two TRUE-CIRCLE orbits drawn to one scale — the ISS at
+     h = 400 km and a GPS satellite at h = 20 200 km — each carrying a trail of
+     equal-time marks. Every mark is one 800-second step of this sim's own
+     ω = √(μ/r³), so the spacing between marks IS the orbital speed, made
+     visible. The trail keeps marching for as long as the overlay is open, so
+     the device reads as a running clock rather than a frozen smear.
+
+     SPOILER LEDGER (inquiry cards read before drawing). Cards 2 and 3 carry
+     data-gate: "raise the orbit four times higher — what happens to the
+     SPEED?" (answer: slower) and "…and the PERIOD?" (answer: much longer,
+     T² ∝ r³). So this hero prints NO speed, NO period, NO "fast/slow" wording
+     and NO T² ∝ r³. The two rings are annotated by ALTITUDE ONLY — 400 km and
+     20 200 km — which is exactly the premise card 1 already states out loud.
+     The equal-time trail itself stays (it is the hero's whole mechanism) but it
+     is left unnarrated: nothing on the canvas tells the student what to
+     conclude from it, and no ring is ever named "faster" or "slower".
+
+     GEOMETRY. The canvas is sized to its OWN CSS box (getBoundingClientRect ×
+     devicePixelRatio) on every paint and drawn in CSS px, so the orbits are
+     round — x-radius : y-radius = 1.000. They used to be ≈2:1 ellipses, which
+     read as Kepler ellipses: the wrong physics for a circular-orbit sim, and
+     confusable with the Kepler siblings in this module. Because the two radii
+     differ by 3.92×, a ROUND outer orbit can never be wider than the band is
+     tall, so the figure is capped at 2 × 0.45 H ≈ 126 px however wide the
+     viewport gets; the altitude labels widen it further, and the rest of the
+     band is carried by a DECORATIVE star wash and ground gradient, which are
+     free to fade out under the 22 %/78 % mask. All essential ink — rings,
+     Earth, dots, altitude labels, caption — stays inside 24–76 % of the
+     DISPLAYED width at every width, and inside 0…H vertically. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, tSim, LIGHT){
+    const TAU = Math.PI * 2;
+    const FAM = (typeof getComputedStyle === 'function' && getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    ctx.clearRect(0, 0, W, H);
+
+    /* Decorative only: a whisper of ground and a sparse star wash so the wide
+       band reads as one object. Both may dissolve under the mask. */
+    const gw = ctx.createLinearGradient(0, 0, 0, H);
+    gw.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    gw.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gw; ctx.fillRect(0, 0, W, H);
+    let seed = 20200 >>> 0;
+    const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    ctx.fillStyle = LIGHT ? 'rgba(30,58,138,.14)' : 'rgba(226,232,240,.22)';
+    for(let i = 0; i < 110; i++){
+      const sx = rnd() * W, sy = rnd() * H, sr = 0.4 + rnd() * 1.1;
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, TAU); ctx.fill();
+    }
+
+    // Orbits, to one scale, from this sim's own constants.
+    const G = 6.6743e-11, ME = 5.972e24, mu = G * ME;
+    const Rk = 6378, r1k = 6378 + 400, r2k = 6378 + 20200;
+    const w1 = Math.sqrt(mu / Math.pow(r1k * 1000, 3));   // ISS  ω = √(μ/r³)
+    const w2 = Math.sqrt(mu / Math.pow(r2k * 1000, 3));   // GPS
+    const rOut = Math.min(H * 0.45, W * 0.21);
+    const S = rOut / r2k, rIn = r1k * S, rE = Rk * S;
+
+    /* Altitude labels only — never a speed or a period. Three tiers: both
+       labels plus the caption, labels alone, or nothing, chosen so the whole
+       block always fits inside 24–76 % of the displayed width. */
+    const fs = Math.max(11.5, Math.min(17, W * 0.0105));
+    ctx.font = fs.toFixed(1) + 'px ' + FAM;
+    const Lo = '20 200 km', Li = '400 km', Lc = 'equal time steps';
+    const wo = ctx.measureText(Lo).width, wi = ctx.measureText(Li).width, wc = ctx.measureText(Lc).width;
+    const run = Math.max(10, Math.min(46, W * 0.024));
+    const extR = rOut + run + 12 + Math.max(wo, wi);
+    const extL = rOut + run + 12 + wc;
+    let tier = 0, cx = W * 0.5;
+    if((extL + extR) / 2 <= W * 0.235){ tier = 2; cx = W * 0.5 + (extL - extR) / 2; }
+    else if((rOut + extR) / 2 <= W * 0.235){ tier = 1; cx = W * 0.5 - (extR - rOut) / 2; }
+    const cy = H * 0.50;
+
+    ctx.strokeStyle = LIGHT ? 'rgba(37,99,235,.42)' : 'rgba(96,165,250,.45)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, rOut, 0, TAU); ctx.stroke();
+    ctx.fillStyle = LIGHT ? 'rgba(37,99,235,.40)' : 'rgba(96,165,250,.38)';
+    ctx.beginPath(); ctx.arc(cx, cy, rE, 0, TAU); ctx.fill();
+    ctx.strokeStyle = LIGHT ? 'rgba(30,58,138,.78)' : 'rgba(147,197,253,.82)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.arc(cx, cy, rE, 0, TAU); ctx.stroke();
+
+    /* Equal-time marks: NT snapshots, DT seconds apart, newest brightest.
+       DT = 800 s puts 14.5 px between consecutive 400 km marks and 7.3 px
+       between 20 200 km marks, against a 4.4 px mark — the old dt = 80 s gave
+       1.2 px and 0.6 px, i.e. two solid arcs with the whole device invisible.
+       NT = 6 keeps the inner trail at 0.86 of a lap so its head never lands on
+       its own tail. */
+    const DT = 800, NT = 6;
+    function trail(r, w, head, tail){
+      for(let k = NT - 1; k >= 0; k--){
+        const a = (tSim - k * DT) * w;
+        const x = cx + r * Math.cos(a), y = cy - r * Math.sin(a);
+        ctx.globalAlpha = 0.30 + 0.70 * (1 - k / NT);
+        ctx.fillStyle = k ? tail : head;
+        ctx.beginPath(); ctx.arc(x, y, k ? 2.2 : 3.0, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    trail(rIn,  w1, LIGHT ? 'rgba(157,23,77,1)' : 'rgba(251,207,232,1)',
+                    LIGHT ? 'rgba(219,39,119,.92)' : 'rgba(244,114,182,.95)');
+    trail(rOut, w2, LIGHT ? 'rgba(4,120,87,1)' : 'rgba(209,250,229,1)',
+                    LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.95)');
+
+    if(tier >= 1){
+      const soft = LIGHT ? 'rgba(15,23,42,.42)' : 'rgba(148,163,184,.58)';
+      const ink  = LIGHT ? 'rgba(15,23,42,.80)' : 'rgba(226,232,240,.86)';
+      const xe = cx + rOut + run, yo = cy - rOut * 0.46, yi = cy + rOut * 0.46;
+      ctx.strokeStyle = soft; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + rOut * Math.cos(0.48), cy - rOut * Math.sin(0.48));
+      ctx.lineTo(xe, yo); ctx.lineTo(xe + 6, yo);
+      ctx.moveTo(cx + rIn * Math.cos(-0.48), cy - rIn * Math.sin(-0.48));
+      ctx.lineTo(xe, yi); ctx.lineTo(xe + 6, yi);
+      ctx.stroke();
+      ctx.fillStyle = ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(Lo, xe + 12, yo);
+      ctx.fillText(Li, xe + 12, yi);
+    }
+    if(tier === 2){
+      ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.58)' : 'rgba(148,163,184,.78)';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(Lc, cx - rOut - run - 12, cy);
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const G = 6.6743e-11, M = 5.972e24, mu = G * M;
-    const R = 6378e3, rIss = (6378 + 400) * 1000, rGps = (6378 + 20200) * 1000;
-    const wIss = Math.sqrt(mu / (rIss * rIss * rIss));
-    const wGps = Math.sqrt(mu / (rGps * rGps * rGps));
-    const S = (H * 0.38) / rGps;
-    const cx = W * 0.50, cy = H * 0.52;
-    ctx.strokeStyle = LIGHT ? 'rgba(37,99,235,.35)' : 'rgba(96,165,250,.35)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(cx, cy, rIss * S, 0, 7); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, rGps * S, 0, 7); ctx.stroke();
-    ctx.fillStyle = LIGHT ? 'rgba(37,99,235,.55)' : 'rgba(96,165,250,.55)';
-    ctx.beginPath(); ctx.arc(cx, cy, R * S, 0, 7); ctx.fill();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 36, dt = 80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k < N; sN++, k++){
-        const t = k * dt;
-        const aIss = t * wIss, aGps = t * wGps;
-        ctx.fillStyle = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
-        ctx.beginPath(); ctx.arc(cx + rIss * S * Math.cos(aIss), cy - rIss * S * Math.sin(aIss), 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.95)';
-        ctx.beginPath(); ctx.arc(cx + rGps * S * Math.cos(aGps), cy - rGps * S * Math.sin(aGps), 2.6, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(tSim){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, tSim, LIGHT);
     }
-    batch();
+    if(reduce){ paint(6 * 800); return; }         // static, full trail
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0) / 1000;        // falsy ts ⇒ frame zero, never wall-clock
+      paint(6 * 800 + s * 2000);                    // 2 000 orbit-seconds per real second
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

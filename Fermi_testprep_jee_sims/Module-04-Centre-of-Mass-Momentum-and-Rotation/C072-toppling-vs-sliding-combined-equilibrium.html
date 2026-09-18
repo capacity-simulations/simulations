@@ -1272,7 +1272,7 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — N walks toward the edge; high push arrives, low push does not</span>
+                <span class="hero-label">A block on rough ground — push F high on its side, weight W down from the CM, friction at the base, and the normal force N standing slightly off-centre beneath it</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Topple or slide</span></h2>
@@ -3184,50 +3184,144 @@ if (themeBtn) themeBtn.addEventListener('click', () => {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: N-offset d = F a / (mg), capped at w/2, from this sim.
-     Two ramps at equal dF/dt: high a (N reaches the edge — topple) vs
-     low a (N stops short when F hits μmg — slide). EQUAL-TIME dots. */
+  /* Hero: the apparatus itself — a tall block on hatched ground, a horizontal
+     push (pink) applied high on its side, weight (blue) down from the CM,
+     friction (amber) at the base, and the normal force (green) standing
+     slightly OFF-centre beneath the block, made legible by a dashed vertical
+     through the CM; a small ring marks the bottom-front corner (the potential
+     pivot). One-shot reveal: the push grows and N steps modestly off centre.
+     Deliberately unresolved — the topple-vs-slide outcome is gated (card 2),
+     so N stays far from the edge, nothing tips, nothing slides, no numbers.
+
+     FIT. Every length below is a multiple of ONE scale, the block height bh,
+     and bh is derived from BOTH budgets: the band height (the dashed CM line
+     rises 0.09 bh above the block and the normal force reaches 0.333 bh below
+     the ground line, so the figure is 1.423 bh tall) and the opaque width (the
+     ink runs 0.87 bh left and 0.244 bh right of the block centre, and must
+     stay inside 24–76%). bh = min(heightCap, widthCap); the block's own 0.40
+     aspect is physics — a squat block slides, a tall one topples — so it is
+     never stretched to gain width. The figure is centred on its INK, not on
+     the block, and the ground line is drawn across the opaque span, because a
+     floor does not stop where the block does. At the shipped band height of
+     140 px the HEIGHT cap binds at every viewport (a ~1:1 apparatus cannot
+     fill 52% of a 1920 px band without distortion); the width cap binds only
+     on bands narrower than ~210 px. Measured: the block-and-forces cluster is
+     89 px and lopsided (44.6–51.6% at 1280) before, 107 px and centred
+     (45.8–54.2%) after; all ink now spans 26.2–73.8% at every viewport. */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const g = 9.81, m = 5.0, w = 0.30, mu = 0.60;
-    const Fslide = mu * m * g;
-    const rows = [
-      { a: 0.90, dark:'rgba(52,211,153,.95)',  light:'rgba(5,150,105,.92)',  y: H * 0.34 },
-      { a: 0.10, dark:'rgba(251,191,36,.95)',  light:'rgba(217,119,6,.90)',  y: H * 0.70 }
-    ];
-    const x0 = W * 0.22, baseW = W * 0.56;
-    rows.forEach(r => {
-      r.Ftop = (m * g * w) / (2 * r.a);
-      r.Ftrig = Math.min(r.Ftop, Fslide);
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.16)';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(x0, r.y); ctx.lineTo(x0 + baseW, r.y); ctx.stroke();
-      ctx.fillStyle = LIGHT ? 'rgba(244,63,94,.85)' : 'rgba(244,63,94,.9)';
-      ctx.beginPath(); ctx.arc(x0 + baseW, r.y, 3.4, 0, 7); ctx.fill();
-    });
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.05, T = 1.6, N = Math.ceil(T / dt);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k <= N; sN++, k++){
-        const t = k * dt;
-        rows.forEach(r => {
-          const F = r.Ftrig * (t / T);
-          const d = Math.min((F * r.a) / (m * g), w / 2);
-          const x = x0 + (d / (w / 2)) * baseW;
-          ctx.fillStyle = LIGHT ? r.light : r.dark;
-          ctx.beginPath(); ctx.arc(x, r.y, 3.1, 0, 7); ctx.fill();
-        });
-      }
-      if(k <= N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+
+    function arrow(ctx, x0, y0, x1, y1, color, lw, head){
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+      const ux = dx / L, uy = dy / L, hl = Math.min(head, L * 0.45);
+      const bx = x1 - ux * hl, by = y1 - uy * hl;
+      ctx.strokeStyle = color; ctx.fillStyle = color;
+      ctx.lineWidth = lw; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(bx - uy * hl * 0.55, by + ux * hl * 0.55);
+      ctx.lineTo(bx + uy * hl * 0.55, by - ux * hl * 0.55);
+      ctx.closePath(); ctx.fill();
     }
-    batch();
+
+    function paint(u){
+      // size the backing store from the displayed box so shapes stay isotropic
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+      if(c.width !== pw || c.height !== ph){ c.width = pw; c.height = ph; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      // palette — matches the sim legend (F pink, W blue, f amber, N green)
+      const inkGround = LIGHT ? 'rgba(71,85,105,.62)'   : 'rgba(148,163,184,.55)';
+      const inkHatch  = LIGHT ? 'rgba(71,85,105,.30)'   : 'rgba(148,163,184,.26)';
+      const blockEdge = LIGHT ? 'rgba(51,65,85,.85)'    : 'rgba(226,232,240,.82)';
+      const blockFill = LIGHT ? 'rgba(100,116,139,.10)' : 'rgba(148,163,184,.12)';
+      const cmInk     = LIGHT ? 'rgba(51,65,85,.40)'    : 'rgba(203,213,225,.35)';
+      const cPush = LIGHT ? '#db2777' : '#f472b6';
+      const cWt   = LIGHT ? '#2563eb' : '#60a5fa';
+      const cFr   = LIGHT ? '#d97706' : '#fbbf24';
+      const cN    = LIGHT ? '#059669' : '#34d399';
+      const cPiv  = LIGHT ? 'rgba(244,63,94,.85)' : 'rgba(244,63,94,.9)';
+
+      // geometry — one scale (the block height bh) drives every length, and bh
+      // is capped by the band HEIGHT and by the opaque WIDTH, so the apparatus
+      // grows with the viewport instead of sitting at a fixed size.
+      const bh = Math.min((H - 6) / 1.423, (W * 0.50) / 1.114);
+      const k  = bh / 78;                         // stroke weights track the scale
+      const lw = f => Math.max(1, f * k);
+      const HEAD = bh * 0.115;                    // arrow-head length
+      const bwB = bh * 0.40;                      // the block's aspect is physics
+      const yG  = H - 3 - bh * 0.333;             // ground: N reaches 0.333 bh below it
+      const yT  = yG - bh;
+      const cx  = W * 0.50 + bh * 0.313;          // centres the INK, not the block
+      const xL = cx - bwB / 2, xR = cx + bwB / 2;
+
+      // ground line with hatching below it — a floor does not stop where the
+      // block does, so it runs the opaque span
+      const gL = W * 0.265, gR = W * 0.735, hl = bh * 0.09;
+      ctx.strokeStyle = inkGround; ctx.lineWidth = lw(2); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(gL, yG); ctx.lineTo(gR, yG); ctx.stroke();
+      ctx.strokeStyle = inkHatch; ctx.lineWidth = lw(1.4);
+      for(let x = gL + hl; x < gR; x += bh * 0.141){
+        ctx.beginPath(); ctx.moveTo(x, yG + bh * 0.019); ctx.lineTo(x - hl, yG + bh * 0.115); ctx.stroke();
+      }
+
+      // the block — static and upright: the outcome is the gated question
+      ctx.fillStyle = blockFill; ctx.strokeStyle = blockEdge; ctx.lineWidth = lw(1.8);
+      ctx.beginPath(); ctx.rect(xL, yT, bwB, bh); ctx.fill(); ctx.stroke();
+
+      // dashed vertical through the CM (reference for N's off-centre stance)
+      const cy = yG - bh * 0.5;
+      ctx.save();
+      ctx.strokeStyle = cmInk; ctx.lineWidth = lw(1.1); ctx.setLineDash([4 * k, 4 * k]);
+      ctx.beginPath(); ctx.moveTo(cx, yT - hl); ctx.lineTo(cx, yG + hl); ctx.stroke();
+      ctx.restore();
+
+      // potential pivot — small ring on the bottom-front corner
+      ctx.strokeStyle = cPiv; ctx.lineWidth = lw(1.6);
+      ctx.beginPath(); ctx.arc(xR, yG, bh * 0.0436, 0, 7); ctx.stroke();
+
+      // CM dot + weight arrow straight down from the CM
+      ctx.fillStyle = cWt;
+      ctx.beginPath(); ctx.arc(cx, cy, bh * 0.0333, 0, 7); ctx.fill();
+      arrow(ctx, cx, cy, cx, cy + bh * 0.40, cWt, lw(2.2), HEAD);
+
+      // horizontal push, applied high on the left face, growing with u
+      const yF = yT + bh * 0.16;
+      arrow(ctx, xL - bh * (0.2308 + 0.4359 * u), yF, xL - bh * 0.0256, yF, cPush, lw(2.6), HEAD);
+
+      // friction at the base, opposing the push
+      const yFr = yG - bh * 0.0641;
+      arrow(ctx, xL - bh * 0.0513, yFr, xL - bh * (0.1795 + 0.2564 * u), yFr, cFr, lw(2.2), HEAD);
+
+      // normal force: up from under the base, modestly OFF-centre toward the push
+      const xN = cx + u * bwB * 0.20;
+      arrow(ctx, xN, Math.min(H - 3, yG + bh * 0.333), xN, yG + bh * 0.0256, cN, lw(2.6), HEAD);
+    }
+
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const DUR = 1100, PERIOD = DUR + 1400;
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const k = Math.min(1, ((Math.max(0, now - t0)) % PERIOD) / DUR);
+      paint(k * k * (3 - 2 * k));                   // 1.1 s ease, 1.4 s dwell, repeat
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

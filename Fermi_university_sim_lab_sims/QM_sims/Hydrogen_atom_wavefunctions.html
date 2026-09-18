@@ -124,7 +124,7 @@ if(typeof THREE==='undefined'){
   <div class="welcome-card">
     <div class="welcome-hero">
       <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-      <span class="hero-label">Positions sampled from |ψ|² for the 1s, 2s, 2p and 3d states</span>
+      <span class="hero-label">Positions sampled from |ψ|² for the ground state of hydrogen</span>
     </div>
     <div class="welcome-body">
       <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Hydrogen Atom Wavefunctions</span></h2>
@@ -1499,17 +1499,22 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The orbital cloud', text:'A three-dimensional point cloud of the electron\'s probability density for the chosen ψₙₗₘ.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#resetBtn',            mode:'veil', title:'Reset',              text:'Returns the orbital and the camera to the first-load 1s view.' },
     { sel:'#qnBox',               mode:'hide', title:'Quantum numbers',    text:'Picks the state: shell n, orbital shape l, orientation m.' },
-    { sel:'#presetsBox',          mode:'hide', title:'Presets',            text:'Jumps straight to a named orbital such as 1s, 2p or 3d.' },
-    { sel:'#modeBox',             mode:'hide', title:'Visualization mode', text:'Switches between the 3D point cloud and a flat 2D slice.' },
     { sel:'#cloudControls',       mode:'hide', title:'Points / Resolution',text:'Sets how many cloud points, or how fine the slice grid is.', also:['#sliceControls'] },
     { sel:'#brightnessSliderRow', mode:'hide', title:'Brightness',         text:'Dims or lifts the colour of the dots and the slice.' },
     { sel:'#axesBox',             mode:'hide', title:'View axes',          text:'Shows or hides the X, Y and Z reference axes.' },
+    { sel:'#viewResetBtn',        mode:'veil', title:'Reset camera',       text:'Restores the default viewing angle after you drag or scroll.' },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#presetsBox',          mode:'hide', title:'Presets',            text:'Jumps straight to a named orbital such as 1s, 2p or 3d.' },
+    { sel:'#modeBox',             mode:'hide', title:'Visualization mode', text:'Switches between the 3D point cloud and a flat 2D slice.' },
     { sel:'#notationBox',         mode:'hide', title:'State label',        text:'Names the orbital being drawn and its three quantum numbers.' },
     { sel:'#statsBox',            mode:'hide', title:'Orbital properties', text:'Energy, angular momentum, mean radius, node counts and shell degeneracy.' },
     { sel:'#plotLegend',          mode:'veil', title:'Legend',             text:'Explains the two dot colours and the empty nodal surfaces.' },
-    { sel:'#viewResetBtn',        mode:'veil', title:'Reset camera',       text:'Restores the default viewing angle after you drag or scroll.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped: the info tooltip (#infoIcon) is meta-UI, and the 3D view
        itself is the display surface — its drag/zoom is covered by the
@@ -1593,6 +1598,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -1681,30 +1687,43 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: this sim's own orbitals. Positions are rejection-sampled from
-         |psi_nlm|^2 r^2 sin(theta) — exactly the sim's point-cloud sampler —
-         for 1s, 2s, 2p_z and 3d_z2, then projected onto the x-z plane. Dot
-         density IS the probability density; colour is the sign of psi. */
+      /* Hero: this sim's own orbital — ONE of them. Positions are
+         rejection-sampled from |psi_nlm|^2 r^2 sin(theta), exactly the sim's
+         point-cloud sampler, then projected onto the x-z plane; dot density IS
+         the probability density and colour is the sign of psi.
+         The old hero drew four panels — 1s, 2s, 2p_z, 3d_z2 — side by side,
+         and that row answered three gated cards at a glance: card 2 (where the
+         ground state's dots land), card 3 (count the nodal spheres: the four
+         cases together give the n - l - 1 rule away) and card 4 (which
+         orbitals reach the proton: s dense at the centre beside p and d hollow
+         there IS the answer). The comparison is the answer, so only one case
+         is drawn, and the case chosen is the one the sim itself already puts
+         on screen at load — the ground state n = 1, l = 0, m = 0 (QN's initial
+         value). Nothing is disclosed that the student is not already looking
+         at, and nothing is faked: the cloud is the true |psi_100|^2 sample. */
+      let heroGen = 0;                                 // a re-entry cancels the running chain
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+        /* The canvas is laid out at 100vw x 140px, so a fixed 1280x240 backing
+           store stretched every drawing by viewport/747 — the old hand-tuned
+           ASPECT only made the clouds round at one viewport width. Size the
+           backing store from the element's real box x dpr and draw in CSS
+           pixels: circles are then round at every width. */
+        const rect = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(280, Math.round(rect.width  || 1280));
+        const H = Math.max(80,  Math.round(rect.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
         const POS = LIGHT ? 'rgba(29,78,216,0.80)'  : 'rgba(96,165,250,0.85)';
         const NEG = LIGHT ? 'rgba(190,24,93,0.80)'  : 'rgba(244,114,182,0.85)';
-        // Unnormalised hydrogen wavefunctions in units of a0; u = cos(theta).
-        const STATES = [
-          { ext: 6.5,  f: (r,u) => Math.exp(-r) },                               // 1s
-          { ext: 14.0, f: (r,u) => (2-r)*Math.exp(-r/2) },                       // 2s
-          { ext: 14.0, f: (r,u) => r*Math.exp(-r/2)*u },                         // 2p_z
-          { ext: 26.5, f: (r,u) => r*r*Math.exp(-r/3)*(3*u*u-1) }                // 3d_z2
-        ];
-        // The band is masked to fade outside 22-78% of its width, and the
-        // canvas is displayed at 100vw x 140px (so canvas-y reads ~half as
-        // tall as canvas-x): keep all four panels inside the clear band and
-        // stretch y to keep the orbitals round on screen.
-        const N = STATES.length, panelW = W*0.44/N, LEFT = W*0.28, ASPECT = 1.9;
-        STATES.forEach(s => {                          // peak of |psi|^2 r^2 sets the acceptance scale
+        // Unnormalised hydrogen wavefunction in units of a0; u = cos(theta).
+        const S = { ext: 6.5, f: (r,u) => Math.exp(-r) };                        // 1s
+        (function(s){                                  // peak of |psi|^2 r^2 sets the acceptance scale
           let pk = 0;
           for(let i=0;i<240;i++){
             const r = (i+0.5)/240*s.ext;
@@ -1715,39 +1734,42 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
             }
           }
           s.pk = pk*1.02 || 1e-10;
-          s.scale = (panelW*0.46)/s.ext;
-        });
-        const PER_STATE_X = b => LEFT + (b+0.5)*panelW;
+          s.scale = (H*0.46)/s.ext;                    // the cloud fills the band's height
+        })(S);
+        const CX = W*0.5, CY = H*0.5;                 // centred, well inside the mask's 22%-78%
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const PER = 110, FRAMES = 40;
+        const PER = 110, FRAMES = 40, DWELL = 84;  // ~0.67 s reveal + ~1.4 s dwell
         let frame = 0;
         function batch(count){
-          for(let b=0;b<N;b++){
-            const s = STATES[b], cx = PER_STATE_X(b), cy = H/2;
-            for(let k=0;k<count;k++){
-              let r=0, u=0, v=0, hit=false;
-              for(let t=0;t<80;t++){
-                r = Math.random()*s.ext;
-                u = 2*Math.random()-1;
-                v = s.f(r,u);
-                if(Math.random() <= Math.min(1, v*v*r*r/s.pk)){ hit = true; break; }
-              }
-              if(!hit) continue;
-              const ph = Math.random()*2*Math.PI, st = Math.sqrt(Math.max(0,1-u*u));
-              const x = r*st*Math.cos(ph), z = r*u;
-              ctx.fillStyle = v >= 0 ? POS : NEG;
-              ctx.fillRect(cx + x*s.scale, cy - z*s.scale*ASPECT, 1.8, 3.2);
+          const s = S;
+          for(let k=0;k<count;k++){
+            let r=0, u=0, v=0, hit=false;
+            for(let t=0;t<80;t++){
+              r = Math.random()*s.ext;
+              u = 2*Math.random()-1;
+              v = s.f(r,u);
+              if(Math.random() <= Math.min(1, v*v*r*r/s.pk)){ hit = true; break; }
             }
+            if(!hit) continue;
+            const ph = Math.random()*2*Math.PI, st = Math.sqrt(Math.max(0,1-u*u));
+            const x = r*st*Math.cos(ph), z = r*u;
+            ctx.fillStyle = v >= 0 ? POS : NEG;        // sign of psi, as the sim colours it
+            ctx.fillRect(CX + x*s.scale, CY - z*s.scale, 1.9, 1.9);
           }
         }
         if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step);
+        const gen = ++heroGen;
+        let dwell = 0;
+        (function step(){                             // accumulate, hold, then clear and replay
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(frame < FRAMES){ batch(PER); frame++; }
+          else if(++dwell > DWELL){ ctx.clearRect(0,0,W,H); frame = 0; dwell = 0; }
+          requestAnimationFrame(step);
         })();
       }
 
 drawHero();
+      addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

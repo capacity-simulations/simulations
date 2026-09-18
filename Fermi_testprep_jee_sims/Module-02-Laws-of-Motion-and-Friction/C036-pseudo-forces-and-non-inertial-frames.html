@@ -565,11 +565,11 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">One release drawn twice — the ground camera&#8217;s straight path and the rotating camera&#8217;s spiral</span>
+            <span class="hero-label">A spinning carousel carrying a ball held by a backstop — the picture stops at the instant of release, before any flight path is drawn</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Centrifugal force</span></h2>
-            <p class="welcome-blurb">One released ball, two cameras: a straight line from the ground, an outward fling from the spinning deck.</p>
+            <p class="welcome-blurb">One released ball, two cameras — does each one see the same path?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2667,60 +2667,148 @@ else{
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to centrifugal force — a ball on a merry-go-round.',
-    'A backstop holds a ball on a spinning carousel. Release it: the ground camera sees a straight line at constant speed, while the rotating camera sees it swept outward — by a force no object exerts.',
+    'A backstop holds a ball on a spinning carousel. Release it, then watch the very same flight from the ground camera and from the rotating one — two cameras, two very different stories.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: ONE release, two descriptions — the ground frame's straight tangent
-     (cyan, equal-time dots) and the SAME points rotated by −ωt into carousel
-     coordinates (orange spiral). r′(t) = R(−ωt) r(t): honestly drawn. */
+  /* Hero: the sim's apparatus and its ONE experiment, stopped at the instant of
+     release. A backstop rides the spinning deck and carries the ball round the
+     dashed hold circle at r₀; the eight spokes turn with it, so the carry is
+     honest — ball and deck share one angular velocity while the backstop holds.
+     The sweep ends exactly at the release angle, rings the release point, and
+     asks its question in words. The flight itself is never drawn.
+
+     SPOILER DECISION (gated card re-read before this rewrite): card 2 is the
+     gated predict — "after the backstop lets go, what path does the ball
+     take?", correct answer "a straight line along the tangent, at constant
+     speed", distractors "straight out along the spoke" and "an outward spiral
+     that keeps curving". The previous hero plotted BOTH post-release trails:
+     the cyan ground-frame straight tangent — card 2's answer, drawn — and the
+     orange rotating-frame spiral, which is the SHAPE of distractor C. Its
+     licence was that the overlay's own narration said aloud "the ground camera
+     sees a straight line at constant speed, while the rotating camera sees it
+     swept outward"; that narration has since been rewritten and now promises
+     only "two cameras, two very different stories", so the licence is gone and
+     the old comment here was stale. The welcome-blurb ("does each one see the
+     same path?") asks rather than answers too.
+     FIX = fix-hierarchy tier 3, TRUNCATE THE REVEAL IN TIME: the animation now
+     ends at the release instant, before either description of the flight
+     exists. Nothing false replaces it — the circular carry drawn here is what
+     really happens while the backstop holds the ball, it is not one of card 2's
+     three options, and it is explicitly terminated by the release ring, so no
+     distractor is taught and no anti-cue is introduced. The apparatus (deck,
+     spokes, hub, hold circle, backstop, ball) is untouched, so the strip still
+     reads unmistakably as THIS merry-go-round sim.
+
+     Geometry: composition centred at 50% of the strip (the CSS mask fades
+     everything outside 22–78%); deck radius is height-bounded AND width-bounded
+     so rim, backstop and caption all sit inside 24–76% of the displayed width
+     at every width. Backing store is sized every draw from
+     getBoundingClientRect()×devicePixelRatio and drawn in CSS px (no squash);
+     heroToken keeps exactly one animation alive at a time; the reveal+dwell
+     cycle loops; prefers-reduced-motion paints exactly one frame. */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const cx = W*0.32, cy = H*0.56, RD = H*0.42, r0 = RD*0.62, om = 1.35;
-    // carousel deck: rim, spokes, hub, dashed hold circle
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.32)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(cx, cy, RD, 0, 7); ctx.stroke();
-    ctx.lineWidth = 1; ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.14)' : 'rgba(148,163,184,.14)';
-    for(let k=0;k<8;k++){ ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+RD*Math.cos(k*Math.PI/4), cy+RD*Math.sin(k*Math.PI/4)); ctx.stroke(); }
-    ctx.setLineDash([3,5]); ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)';
-    ctx.beginPath(); ctx.arc(cx, cy, r0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.4)' : 'rgba(148,163,184,.45)';
-    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 7); ctx.fill();
-    // release point + equal-time samples of the two paths
-    const a0 = -1.9;                                     // release angle on the hold circle
-    const q = { x: r0*Math.cos(a0), y: r0*Math.sin(a0) };
-    const u = { x: -Math.sin(a0), y: Math.cos(a0) };     // tangential unit — v = ωr₀, constant
-    const v0 = om*r0;
-    const N = 110, dt = 0.028;
-    const CYAN   = LIGHT ? 'rgba(8,145,178,.9)'  : 'rgba(103,232,249,.9)';
-    const ORANGE = LIGHT ? 'rgba(194,65,12,.9)'  : 'rgba(251,146,60,.9)';
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const t = k*dt;
-        const gx = q.x + u.x*v0*t, gy = q.y + u.y*v0*t;          // ground frame: straight line
-        if(cx+gx > -8 && cx+gx < W+8 && cy+gy > -8 && cy+gy < H+8){
-          ctx.fillStyle = CYAN; ctx.beginPath(); ctx.arc(cx+gx, cy+gy, 3.0, 0, 7); ctx.fill();
-        }
-        const th = -om*t, co = Math.cos(th), si = Math.sin(th);  // rotating frame: R(−ωt) of the SAME point
-        const rx = gx*co - gy*si, ry = gx*si + gy*co;
-        if(Math.hypot(rx,ry) < RD*2.1 && cy+ry > -8 && cy+ry < H+8){
-          ctx.fillStyle = ORANGE; ctx.beginPath(); ctx.arc(cx+rx, cy+ry, 3.0, 0, 7); ctx.fill();
+    const my = ++heroToken;                       // one live animation at a time
+    const rct = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(rct.width || 1280));
+    const H = Math.max(100, Math.round(rct.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cx = W*0.50, cy = H*0.52;               // centred in the visible band, caption above
+    const RD = Math.min(H*0.34, W*0.20);          // deck radius: height- AND width-bounded
+    const r0 = RD*0.62;                           // the backstop's hold circle
+    const FAM    = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const RIM    = LIGHT ? 'rgba(15,23,42,.32)'  : 'rgba(148,163,184,.32)';
+    const SPOKE  = LIGHT ? 'rgba(15,23,42,.14)'  : 'rgba(148,163,184,.14)';
+    const HOLD   = LIGHT ? 'rgba(15,23,42,.22)'  : 'rgba(148,163,184,.22)';
+    const HUB    = LIGHT ? 'rgba(15,23,42,.4)'   : 'rgba(148,163,184,.45)';
+    const CYAN   = LIGHT ? 'rgba(8,145,178,.95)' : 'rgba(103,232,249,.95)';
+    const ORANGE = LIGHT ? 'rgba(194,65,12,.95)' : 'rgba(251,146,60,.95)';
+    const INK    = LIGHT ? 'rgba(15,23,42,.95)'  : 'rgba(241,245,249,.95)';
+    const MUT    = LIGHT ? 'rgba(51,65,85,.88)'  : 'rgba(170,182,198,.88)';
+    const a0 = -1.9;                              // release angle on the hold circle (unchanged)
+    const SWEEP = 2.6;                            // radians of carry drawn before the release instant
+    const N = 44;                                 // equal-time samples of the carry
+    // the question, in words: no arrow, no "?" placed in space — a "?" put
+    // outward would whisper the radial-fling distractor, one put along the
+    // tangent would whisper the answer, so the ask is text at top centre.
+    const ASKS = ['a backstop carries the ball round — which path when it lets go?',
+                  'carried by the backstop — which path when it lets go?',
+                  'which path when the backstop lets go?',
+                  'which path after release?',
+                  'which path now?'];
+    function caption(){
+      for(let i = 0; i < ASKS.length; i++){
+        for(let s = 14; s >= 11; s--){
+          ctx.font = '600 ' + s + 'px ' + FAM;
+          if(ctx.measureText(ASKS[i]).width <= W*0.46){
+            ctx.fillStyle = MUT; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.fillText(ASKS[i], cx, 3);
+            return;
+          }
         }
       }
-      if(k < N) requestAnimationFrame(batch);
-      else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx+q.x, cy+q.y, 4.5, 0, 7); ctx.fill(); }  // the release point
     }
-    batch();
+    function scene(kk){
+      ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+      const th = a0 - SWEEP + SWEEP*(kk/N);
+      // carousel deck: rim, spokes turning with the ball, hub, dashed hold circle
+      ctx.strokeStyle = RIM; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, RD, 0, 7); ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = SPOKE;
+      for(let j=0;j<8;j++){
+        const a = th + j*Math.PI/4;
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+RD*Math.cos(a), cy+RD*Math.sin(a)); ctx.stroke();
+      }
+      ctx.setLineDash([3,5]); ctx.strokeStyle = HOLD;
+      ctx.beginPath(); ctx.arc(cx, cy, r0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = HUB; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 7); ctx.fill();
+      // equal-time samples of the carry so far — held on the deck, so a circle
+      ctx.fillStyle = CYAN;
+      for(let i=0;i<=kk;i++){
+        const a = a0 - SWEEP + SWEEP*(i/N);
+        ctx.globalAlpha = 0.14 + 0.5*(i/N);
+        ctx.beginPath(); ctx.arc(cx + r0*Math.cos(a), cy + r0*Math.sin(a), 2.4, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // the release point, marked from the start so the stop reads as deliberate
+      ctx.strokeStyle = (kk >= N) ? INK : HOLD; ctx.lineWidth = (kk >= N) ? 1.8 : 1;
+      ctx.beginPath(); ctx.arc(cx + r0*Math.cos(a0), cy + r0*Math.sin(a0), 9, 0, 7); ctx.stroke();
+      // the backstop — a short wall just outside the ball, riding with the deck
+      ctx.strokeStyle = ORANGE; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy, r0 + 6, th - 0.30, th + 0.30); ctx.stroke();
+      ctx.lineCap = 'butt'; ctx.lineWidth = 1;
+      // the ball
+      ctx.fillStyle = CYAN;
+      ctx.beginPath(); ctx.arc(cx + r0*Math.cos(th), cy + r0*Math.sin(th), 4.5, 0, 7); ctx.fill();
+      caption();
+    }
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ scene(N); return; }               // exactly one frame: the release instant
+    let k = 0;
+    function frame(){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      scene(k);
+      if(k < N){ k++; requestAnimationFrame(frame); }
+      else setTimeout(() => {                       // dwell on the release instant, then replay
+        if(my !== heroToken) return;                // a newer drawHero took over
+        if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+        drawHero();
+      }, 1400);
+    }
+    frame();
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

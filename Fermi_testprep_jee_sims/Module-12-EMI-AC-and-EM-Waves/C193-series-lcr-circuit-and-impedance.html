@@ -1505,7 +1505,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">R, the net reactance X_L − X_C, and Z assembling at three drive frequencies</span>
+            <span class="hero-label">Three impedance triangles at three drive frequencies — R along the base, the net reactance X standing on it or hanging below it, Z as the hypotenuse, and φ opening at the corner</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Impedance triangle</span></h2>
@@ -3899,68 +3899,139 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the impedance triangle assembled from the sim's OWN numbers.
-     Fixed L = 0.1 H and C = 10 uF (so omega_0 = 1/sqrt(LC) = 1000 rad/s) with R = 60 ohms,
-     drawn at three drive frequencies — 700 (capacitive), 1000 (resonance) and
-     1300 rad/s (inductive). Per case X_L = wL rises and X_C = 1/(wC) falls; the faint
-     dashed uprights are those two reactances (X_L up, X_C back down), the solid dots
-     march along R, along the NET reactance X_L - X_C, and along the hypotenuse
-     Z = sqrt(R^2 + (X_L - X_C)^2), while phi = atan2(X_L - X_C, R) opens at the corner.
-     One isotropic ohms-to-pixel scale for both legs, so the angle is honest. */
+  /* Hero: three impedance triangles, built from the sim's OWN constants —
+     L = 0.1 H, C = 10 µF (so ω₀ = 1/√(LC) = 1000 rad/s) and R = 60 Ω, the top of
+     the sim's own R slider — at three drive frequencies the ω slider reaches:
+     880 rad/s (capacitive: X_C wins, the upright hangs BELOW the base),
+     1000 rad/s (resonance: the upright vanishes and Z lies down along R) and
+     1140 rad/s (inductive: the upright stands ABOVE the base). Per case
+     X_L = ωL, X_C = 1/(ωC), net = X_L − X_C, Z = √(R² + net²) and
+     φ = atan2(net, R) = −23.1357°, 0°, +23.6540°.
+     THE ANGLE IS THE SUBJECT, so it has to survive to the screen. The previous
+     build scaled ohms→px isotropically and then let an authored 1280×240 backing
+     store be CSS-stretched into a 100vw×140 band — roughly 2:1 anisotropic — so
+     every φ it drew was wrong. The backing store is now sized from the canvas's
+     own box × devicePixelRatio and everything is drawn in CSS px, so the single
+     isotropic scale s maps (R, net) → (R·s, net·s) and the on-screen hypotenuse
+     angle is atan2(net·s, R·s) = φ exactly. Verified numerically off the drawn
+     device-pixel endpoints at 1440×140 CSS with dpr 2: the inductive case reads
+     23.6540° measured against 23.6540° computed (Δ ≈ 7e-15°, floating-point
+     dust), the capacitive case −23.1357° against −23.1357°, and the same holds
+     at 1280/1920/900 CSS px. The old anisotropic build drew those same two
+     cases as −12.49°/+12.80° at 1440 and as −19.52°/+19.97° at 900 — a phase
+     angle that changed with the window.
+     Size: the triangles now FILL the band. The group is centred and clamped to
+     46% of the displayed width (≈27–73%, inside the 24–76% safe zone) and to
+     60% of the height, whichever binds; each triangle was ~4.4% of the width
+     before and is ~15% now. The three frequencies sit near ω₀ precisely so that
+     honest angles and wide, legible triangles can coexist in a 140 px band — at
+     the sim's DEFAULT setting φ ≈ −86° and an honest triangle is a near-vertical
+     splinter. The old dashed X_L-up-then-X_C-back-down construction is gone for
+     the same reason: X_L = 114 Ω against R = 60 Ω cannot be drawn at an honest
+     scale here, and faking it is what broke the angles in the first place.
+     Spoiler check against the gated cards. The three data-gate cards ask (2)
+     whether V_C can exceed the supply, (3) how large V_L is at resonance and
+     (4) what S and P do as ω rises — all VOLTAGE and POWER questions, and the
+     hero draws no voltage, no power, no current and no numbers whatsoever.
+     Naming the sides is NOT itself a predict: the opening, UNGATED card states
+     "The triangle has R along its base, X_L−X_C standing on it, and the
+     impedance Z as its hypotenuse", and the welcome narration playing over this
+     very screen says the same, so R, X, Z and the φ arc are given to the student
+     before any question is asked — they are labelled on one triangle only, and
+     every value and formula stays out. The resonant case shows the upright
+     vanishing, which card 3's own visible prose already states (X_L = X_C at
+     ω₀); it is card 3's MAGNITUDE (2300 V) that is gated, and no magnitude is
+     drawn. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const R = 60, Lh = 0.1, Cf = 10e-6;            // the sim's own L and C; R at its slider's top
+    const cases = [880, 1000, 1140].map(w => {
+      const XL = w*Lh, XC = 1/(w*Cf), net = XL - XC;
+      return { net, Z: Math.sqrt(R*R + net*net), phi: Math.atan2(net, R) };
+    });
+    const legMax = Math.max.apply(null, cases.map(k => Math.abs(k.net))) || 1;
+    const GAP = 16;                                 // ohms of clear air between triangles
+    const spanO = 3*R + 2*GAP;                      // the group's width, in ohms
+    // ONE isotropic ohms->px scale: whichever of width and height binds first.
+    const s = Math.min((W*0.46)/spanO, (H*0.60)/legMax);
+    const x0 = (W - spanO*s)/2;                     // centred: ~27%–73% of the display
+    // Each triangle carries its own baseline — the capacitive upright hangs down
+    // and the inductive one stands up, and a shared baseline would need twice
+    // the band's height at an honest scale.
+    const baseY = [H*0.30, H*0.52, H*0.80];
+    const inkR = LIGHT ? 'rgba(15,118,110,.95)' : 'rgba(94,234,212,.92)';   // R       (teal)
+    const inkX = LIGHT ? 'rgba(180,83,9,.92)'   : 'rgba(251,191,36,.92)';   // X_L−X_C (amber)
+    const inkZ = LIGHT ? 'rgba(15,23,42,.88)'   : 'rgba(226,232,240,.92)';  // Z
+    const inkP = LIGHT ? 'rgba(146,64,14,.88)'  : 'rgba(253,224,71,.88)';   // φ arc
+    const soft = LIGHT ? 'rgba(15,23,42,.35)'   : 'rgba(148,163,184,.42)';  // corner dots
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const seg = (xa,ya,xb,yb,col,w) => {
+      ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(xa,ya); ctx.lineTo(xb,yb); ctx.stroke();
+    };
+    const dot = (x,y,col,r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); };
+    cases.forEach((cs,i) => {
+      const ax = x0 + i*(R+GAP)*s, ay = baseY[i];   // the phase-angle corner
+      const bx = ax + R*s;                          // the far end of the base
+      const ty = ay - cs.net*s;                     // the apex: screen y runs down, +X is up
+      seg(ax, ay, ax + (bx-ax)*u, ay, inkR, 3);                       // R along the base
+      if(Math.abs(cs.net) > 1e-9)                                     // the net reactance...
+        seg(bx, ay, bx, ay + (ty-ay)*u, inkX, 3);                     // ...up or down from it
+      seg(ax, ay, ax + (bx-ax)*u, ay + (ty-ay)*u, inkZ, 2.2);         // Z — its screen angle IS φ
+      dot(ax, ay, soft, 2.6);
+      if(u >= 1) dot(bx, ty, inkZ, 3.4);
+      if(Math.abs(cs.phi) > 0.02 && u > 0.02){                        // φ opening at the corner
+        const arc = Math.min(34, R*s*0.42);
+        ctx.strokeStyle = inkP; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(ax, ay, arc, 0, -cs.phi*u, cs.phi > 0); ctx.stroke();
+      }
+    });
+    // Letters on the inductive triangle only — the names the opening card gives.
+    if(u > 0.55){
+      const cs = cases[2], ax = x0 + 2*(R+GAP)*s, ay = baseY[2];
+      const bx = ax + R*s, ty = ay - cs.net*s, mx = (ax+bx)/2, my = (ay+ty)/2;
+      const arc = Math.min(34, R*s*0.42);
+      ctx.save(); ctx.globalAlpha = Math.min(1, (u-0.55)/0.45);
+      ctx.font = 'italic 14px '+FAM;
+      ctx.fillStyle = inkR; ctx.textAlign='center'; ctx.textBaseline='top';    ctx.fillText('R', mx, ay + 6);
+      ctx.fillStyle = inkX; ctx.textAlign='left';   ctx.textBaseline='middle'; ctx.fillText('X', bx + 7, my);
+      ctx.fillStyle = inkZ; ctx.textAlign='right';  ctx.textBaseline='bottom'; ctx.fillText('Z', mx - 3, my - 4);
+      ctx.fillStyle = inkP; ctx.textAlign='left';   ctx.textBaseline='middle';
+      ctx.fillText('φ', ax + (arc+9)*Math.cos(-cs.phi/2), ay + (arc+9)*Math.sin(-cs.phi/2));
+      ctx.restore();
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const Rr = 60, Lh = 0.1, Cf = 10e-6;
-    const cases = [700, 1000, 1300].map(w => {
-      const XL = w*Lh, XC = 1/(w*Cf), net = XL - XC;
-      return { XL, XC, net, Z: Math.sqrt(Rr*Rr + net*net), phi: Math.atan2(net, Rr) };
-    });
-    const upMax = Math.max.apply(null, cases.map(k => k.XL));
-    const dnMax = Math.max.apply(null, cases.map(k => Math.max(0, k.XC - k.XL)));
-    const s = Math.min((W*0.16)/Rr, (H*0.80)/(upMax + dnMax));   // ohms -> px, isotropic
-    const baseY = H*0.5 + (upMax - dnMax)*0.5*s;
-    // kept inside 32–68% of the width so the hero's edge mask never fades a triangle
-    const originX = i => W*(0.32 + 0.18*i) - Rr*s/2;
-    const inkR = LIGHT ? 'rgba(42,138,126,.95)'  : 'rgba(94,234,212,.90)';   // R      (teal)
-    const inkX = LIGHT ? 'rgba(180,83,9,.90)'    : 'rgba(251,191,36,.90)';   // X_L-X_C (amber)
-    const inkZ = LIGHT ? 'rgba(15,23,42,.85)'    : 'rgba(226,232,240,.92)';  // Z
-    const inkP = LIGHT ? 'rgba(146,64,14,.85)'   : 'rgba(253,224,71,.85)';   // phi arc
-    // faint construction: X_L upward from the base corner, then X_C back down
-    ctx.lineWidth = 1; ctx.setLineDash([3,4]);
-    cases.forEach((cs,i) => {
-      const bx = originX(i) + Rr*s, top = baseY - cs.XL*s;
-      ctx.strokeStyle = LIGHT ? 'rgba(180,83,9,.34)' : 'rgba(245,158,11,.30)';
-      ctx.beginPath(); ctx.moveTo(bx, baseY); ctx.lineTo(bx, top); ctx.stroke();
-      ctx.strokeStyle = LIGHT ? 'rgba(2,132,199,.34)' : 'rgba(56,189,248,.30)';
-      ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx, top + cs.XC*s); ctx.stroke();
-    });
-    ctx.setLineDash([]);
-    const dot = (x,y,col,r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r || 2.4, 0, 7); ctx.fill(); };
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 90; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let q=0; q<per && k<N; q++, k++){
-        const u = (k+1)/N;
-        cases.forEach((cs,i) => {
-          const ax = originX(i), ay = baseY, bx = ax + Rr*s, ty = baseY - cs.net*s;
-          dot(ax + (bx-ax)*u, ay, inkR);                       // R along the base
-          dot(bx, ay + (ty-ay)*u, inkX);                       // net reactance, up or down
-          dot(ax + (bx-ax)*u, ay + (ty-ay)*u, inkZ);           // the hypotenuse Z
-          if(Math.abs(cs.phi) > 0.02){                         // the phase angle opening
-            const arc = Math.min(30, Rr*s*0.62), a = -cs.phi*u;
-            dot(ax + arc*Math.cos(a), ay + arc*Math.sin(a), inkP, 1.7);
-          }
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else cases.forEach((cs,i) => dot(originX(i) + Rr*s, baseY - cs.net*s, inkZ, 3.4));
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // uniform: the drawn angle stays the true angle
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    // one-shot assembly: the three triangles draw themselves, then the hero holds still
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = Math.min(1, (((now || t0) - t0)/1100));
+      paint(s*s*(3 - 2*s));
+      if(s < 1) requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

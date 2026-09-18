@@ -1289,11 +1289,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — a rim point pauses at the ground and races over the top</span>
+                <span class="hero-label">A wheel rolling along the ground through one full turn, a marked point on its rim joined to the hub by a radius line, laying a trail of equal-time dots from one ground contact to the next</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Rolling without slip</span></h2>
-                <p class="welcome-blurb">Watch a rim point trace a cycloid — rest at the ground, twice as fast at the top.</p>
+                <p class="welcome-blurb">Watch a rim point trace a cycloid — which part of the wheel moves fastest?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3225,59 +3225,152 @@ if(themeBtn) themeBtn.addEventListener('click', () => {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to rolling without slipping.',
-    'Here a wheel rolls without sliding. A point on the rim pauses each time it touches the ground and races over the top, and the body\'s shape alone sets how much energy is spinning.',
+    'Here a wheel rolls without sliding. Follow a single point on the rim as it traces its looping path, and watch how the kinetic energy divides between rolling along and spinning around.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: rim-point cycloid from this sim — θ += v dt / r, x = rθ + r cosθ,
-     y = r − r sinθ. EQUAL-TIME-STEP dots: dense at the cusp (v_contact = 0),
-     sparse at the top (2v). Two arches at v = 2.5 m/s, r = 0.30 m. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: the WHEEL, not just the curve. A disc of radius r rolls along a
+     ground line through exactly ONE full turn; one marked point on its rim,
+     joined to the hub by a radius line, lays down a trail at EQUAL TIME STEPS.
+     Because one turn is drawn, both cusps — the two moments the marked point is
+     down at the road — are on screen and inside the safe window, and the arch
+     is drawn at true proportions (height exactly 2r, width exactly 2πr), so the
+     vertical squash of the old version is gone.
+
+     Geometry is the sim's own rolling constraint, ω = v/r, in cycloid form with
+     the cusp at φ = 0:   x = xA + r(φ − sin φ),  y = gy − r(1 − cos φ),
+     hub at (xA + rφ, gy − r), marked rim point at hub + r(−sin φ, cos φ), and
+     the wheel's ground contact directly below the hub. Equal time steps are
+     equal steps in φ (ω is constant), which is exactly why the trail crowds at
+     the cusps and stretches over the top.
+
+     GATED-CARD DECISIONS (both data-gate cards read before drawing):
+       • Card 2 (gate): "which point on the rim has the greatest speed?"
+         (correct: the top, at 2v). The hero adds NO velocity arrows, NO speed
+         labels, NO "v", "2v" or "at rest" text, and does NOT single out the top
+         or the contact point with any annotation — the contact is marked only
+         by a plain, unlabelled ground tick, which is geometry (the wheel has to
+         touch the road somewhere). The trail spacing is the sim's own core
+         representation and is announced in words on this very screen: the
+         welcome blurb reads "rest at the ground, twice as fast at the top" and
+         ungated card 1 says "watch it sweep forward fastest over the top and
+         pause at the bottom" — both precede the gate, so the picture discloses
+         nothing the student has not already been handed.
+       • Card 3 (gate): hoop vs solid sphere, which stores more KE in spinning.
+         The hero draws ONE neutral wheel with no mass distribution cue, no
+         shape picker, no energy bar and no c value, so that gate is untouched.
+
+     Fixes in this pass: the old hero drew two arches from x₀ = 0.08 W, putting
+     cusps at 8%, 52.7% and 97.5% — two of the three ground contacts sat in the
+     mask fade; it drew no wheel at all, so the curve read as an abstract wave;
+     and it squashed the arches vertically. Radius is now bounded by BOTH the
+     band height and the safe window (r ≤ 0.056 W keeps even the wheel's own
+     far edge, xA − r … xB + r, inside 26%–74%).
+
+     Engineering: backing store = getBoundingClientRect() × dpr every paint,
+     drawn in CSS px; heroToken guard so only one roll is ever live; resize
+     redraws; prefers-reduced-motion parks the wheel at the closing cusp with
+     the whole trail laid. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const gndC  = LIGHT ? 'rgba(15,23,42,.32)'  : 'rgba(148,163,184,.36)';
+    const pathC = LIGHT ? 'rgba(190,24,93,.26)' : 'rgba(244,114,182,.28)';
+    const rimC  = LIGHT ? 'rgba(190,24,93,.92)' : 'rgba(244,114,182,.94)';
+    const whlC  = LIGHT ? 'rgba(51,65,85,.58)'  : 'rgba(203,213,225,.52)';
+    const spkC  = LIGHT ? 'rgba(51,65,85,.26)'  : 'rgba(203,213,225,.24)';
+    const hubC  = LIGHT ? 'rgba(15,23,42,.80)'  : 'rgba(226,232,240,.82)';
+    const capC  = LIGHT ? 'rgba(51,65,85,.88)'  : 'rgba(170,182,198,.90)';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const rM = 0.30, v = 2.5;            // allowed slider values; two arches ≈ 1.5 s
-    const r = Math.min(H * 0.38, W / (2 * Math.PI * 2.15));
-    const gy = H * 0.78;
-    const x0 = W * 0.08;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.16)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
-    const dark = 'rgba(244,114,182,.95)', light = 'rgba(219,39,119,.92)';
-    // faint cycloid path for two arches (θ from π/2 to π/2 + 4π)
-    ctx.strokeStyle = LIGHT ? 'rgba(219,39,119,.28)' : 'rgba(244,114,182,.28)';
-    ctx.lineWidth = 1.5;
+    const gy = H*0.80;
+    const r  = Math.min(H*0.30, W*0.056);      // height-bounded AND window-bounded
+    const xA = W*0.5 - Math.PI*r, xB = W*0.5 + Math.PI*r;   // the two cusps
+    const P  = ph => [xA + r*(ph - Math.sin(ph)), gy - r*(1 - Math.cos(ph))];
+    // ---- ground, clipped to the safe window ----
+    const g0 = Math.max(W*0.265, xA - r - 5), g1 = Math.min(W*0.735, xB + r + 5);
+    ctx.strokeStyle = gndC; ctx.lineWidth = 1.2; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(g0, gy + 0.5); ctx.lineTo(g1, gy + 0.5); ctx.stroke();
+    // ---- the arch the rim point will trace, faint ----
+    ctx.strokeStyle = pathC; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    const th0 = Math.PI / 2;
-    for(let i = 0; i <= 160; i++){
-      const th = th0 + (4 * Math.PI) * (i / 160);
-      const x = x0 + (th - th0) * r + r * Math.cos(th);
-      const y = gy - (r - r * Math.sin(th));
-      if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for(let i = 0; i <= 120; i++){
+      const p = P(2*Math.PI*i/120);
+      if(i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
     }
     ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const omega = v / rM;                 // sim constraint ω = v/r
-    const dt = 0.05, T = 4 * Math.PI / omega, N = Math.ceil(T / dt);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k <= N; sN++, k++){
-        const t = k * dt;
-        const th = th0 + omega * t;
-        const x = x0 + (th - th0) * r + r * Math.cos(th);
-        const y = gy - (r - r * Math.sin(th));
-        ctx.fillStyle = LIGHT ? light : dark;
-        ctx.beginPath(); ctx.arc(x, y, 3.1, 0, 7); ctx.fill();
-      }
-      if(k <= N) requestAnimationFrame(batch);
+    // ---- the wheel itself, one full turn across u ----
+    const phi = 2*Math.PI*u, hx = xA + r*phi, hy = gy - r;
+    ctx.strokeStyle = gndC; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hx, gy - 3); ctx.lineTo(hx, gy + 4); ctx.stroke();   // contact tick, unlabelled
+    ctx.strokeStyle = whlC; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, 7); ctx.stroke();
+    const al = phi + Math.PI/2;                       // canvas angle of the marked rim point
+    ctx.strokeStyle = spkC; ctx.lineWidth = 1.4;
+    for(let s = 1; s <= 2; s++){
+      const a = al + s*2*Math.PI/3;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + r*Math.cos(a), hy + r*Math.sin(a)); ctx.stroke();
     }
-    batch();
+    // ---- equal-time trail of the marked rim point ----
+    const N = 32, kMax = Math.max(0, Math.min(N, Math.floor(N*u + 1e-9)));
+    ctx.fillStyle = rimC;
+    for(let k = 0; k <= kMax; k++){
+      const p = P(2*Math.PI*k/N);
+      ctx.beginPath(); ctx.arc(p[0], p[1], 2.6, 0, 7); ctx.fill();
+    }
+    // ---- the radius line to the marked point, and the point ----
+    const px = hx + r*Math.cos(al), py = hy + r*Math.sin(al);
+    ctx.strokeStyle = rimC; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(px, py); ctx.stroke();
+    ctx.fillStyle = hubC; ctx.beginPath(); ctx.arc(hx, hy, 3, 0, 7); ctx.fill();
+    ctx.fillStyle = rimC; ctx.beginPath(); ctx.arc(px, py, 4.6, 0, 7); ctx.fill();
+    // ---- one caption, fitted to the safe window or dropped ----
+    const caps = ['one point on the rim of a rolling wheel, at equal time steps',
+                  'a rim point on a rolling wheel, at equal time steps',
+                  'a rim point on a rolling wheel', 'a point on a rolling rim'];
+    for(let i = 0; i < caps.length; i++){
+      let done = false;
+      for(let s = 13; s >= 10; s--){
+        ctx.font = '600 ' + s + 'px ' + FAM;
+        if(ctx.measureText(caps[i]).width <= W*0.44){
+          ctx.fillStyle = capC; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(caps[i], W*0.5, H - 6); done = true; break;
+        }
+      }
+      if(done) break;
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live roll at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }             // parked at the closing cusp
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = (Math.max(0, now - t0))/1000;
+      // 3.8 s of uniform rolling — equal time steps must stay equal — then a
+      // 1.4 s rest on the closing cusp before the turn repeats
+      paint(Math.min(1, (s % 5.2)/3.8));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

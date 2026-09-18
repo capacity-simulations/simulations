@@ -894,11 +894,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-angle dots of U(θ) = −pE cos θ</span>
+            <span class="hero-label">A dipole tilted across uniform parallel field lines, with the equal and opposite forces qE and −qE drawn where they act on the two charges</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Dipole in a field</span></h2>
-            <p class="welcome-blurb">In a uniform field a dipole feels no net force — only a couple that turns it.</p>
+            <p class="welcome-blurb">A dipole released in a uniform field — does it turn, drift, or sit still?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3092,44 +3092,141 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to a dipole in a uniform field.',
-    'Here equal and opposite forces on plus q and minus q form a couple. The net force is exactly zero, so the centre never moves — only the angle does. Torque is p E sine theta; energy is minus p E cosine theta.',
+    'Here a uniform field pulls on plus q one way and on minus q the other. Release the dipole and watch what its centre does, and what its angle does. Torque is p E sine theta; energy is minus p E cosine theta.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim’s U(θ) = −pE cos θ. Equal-angle dots from −π to π.
-     Minimum at θ=0 (stable), maxima at ±π (unstable). */
+  /* Hero: the PREMISE, not the answer. The title is “All Torque, No Force”
+     and the blurb states the field exerts no net force — only a couple — so
+     the band shows exactly that apparatus: a dipole tilted at 40° inside
+     faint uniform parallel E-field lines, with the equal-and-opposite forces
+     (qE on +q, −qE on −q) drawn where they act, the perpendicular lever sense
+     readable from the geometry. The old hero was an unlabelled U(θ) cosine —
+     no dipole, no field, no couple — with its ±π maxima sitting inside the
+     10%/92% mask fade. SPOILER DECISIONS: guided-inquiry card 3 (data-gate)
+     asks “where does the dipole want to settle?” on the shape of U(θ), so the
+     energy curve is DROPPED entirely (couple scene only); card 1 (data-gate)
+     asks what happens on release, so no rotation-direction arrow and no
+     stable/unstable annotation is drawn — the couple is the blurb’s stated
+     premise, the outcome stays a question. Everything essential sits inside
+     24–76% of the band width. Backing store follows getBoundingClientRect ×
+     devicePixelRatio and drawing is in CSS px (C190 idiom). */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, pulse, LIGHT){
+    const soft = LIGHT ? 'rgba(15,23,42,.30)'   : 'rgba(148,163,184,.40)';
+    const capt = LIGHT ? 'rgba(15,23,42,.50)'   : 'rgba(148,163,184,.65)';
+    const arm  = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.92)';
+    const inkP = LIGHT ? 'rgba(185,28,28,.95)'  : 'rgba(248,113,113,.95)';
+    const inkN = LIGHT ? 'rgba(37,99,235,.95)'  : 'rgba(96,165,250,.95)';
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);
+    function arrow(x0,y0,x1,y1,head){
+      const a = Math.atan2(y1-y0, x1-x0);
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x1 + head*Math.cos(a), y1 + head*Math.sin(a));
+      ctx.lineTo(x1 - head*Math.cos(a-0.5), y1 - head*Math.sin(a-0.5));
+      ctx.lineTo(x1 - head*Math.cos(a+0.5), y1 - head*Math.sin(a+0.5));
+      ctx.closePath(); ctx.fill();
+    }
+    // The uniform field: identical parallel lines, all pointing the same way.
+    const fx0 = W*0.27, fx1 = W*0.73;
+    ctx.strokeStyle = soft; ctx.fillStyle = soft; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    [0.16, 0.39, 0.61, 0.84].forEach(f => {
+      const y = H*f;
+      ctx.beginPath(); ctx.moveTo(fx0, y); ctx.lineTo(fx1, y); ctx.stroke();
+      [0.35, 0.75].forEach(u => {
+        const x = fx0 + (fx1-fx0)*u;
+        ctx.beginPath();
+        ctx.moveTo(x+5, y); ctx.lineTo(x-4, y-4); ctx.lineTo(x-4, y+4);
+        ctx.closePath(); ctx.fill();
+      });
+    });
+    ctx.fillStyle = capt; ctx.font = 'italic 13px '+FAM;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('E', fx0 - 10, H*0.16);
+    // The dipole, tilted at 40° to E: rod from −q to +q, p along the rod.
+    const cx = W*0.5, cy = H*0.52;
+    const th = 40*Math.PI/180;
+    // Vertical budget: the rod tip reaches cy ± (L/2)·sin θ, then the charge dot
+    // (r = 7), then the ±q label (11 px offset + a 12 px glyph box). That is 30 px
+    // below the tip, so the half-extent may not exceed (H − 2·31)/2 — the old
+    // (H−46) allowance let the "−q" label hang ~3 px off the bottom of the band.
+    const L = Math.min(150, W*0.16, (H-62)/Math.sin(th));
+    const ux = Math.cos(th), uy = -Math.sin(th);          // p direction: up-right
+    const pxq = cx + ux*L/2, pyq = cy + uy*L/2;           // +q end
+    const nxq = cx - ux*L/2, nyq = cy - uy*L/2;           // −q end
+    ctx.strokeStyle = arm; ctx.fillStyle = arm; ctx.lineWidth = 3;
+    arrow(nxq, nyq, pxq - ux*16, pyq - uy*16, 7);         // head stops short of the +q dot
+    ctx.font = 'italic 13px '+FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('p', cx + uy*13, cy - ux*13);            // perpendicular offset off the rod
+    // The couple: equal and opposite forces, drawn where they act.
+    const F = Math.min(52, W*0.055) * pulse;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = inkP; ctx.fillStyle = inkP;
+    arrow(pxq + 9, pyq, pxq + 9 + F, pyq, 7);             // qE on +q, along E
+    ctx.strokeStyle = inkN; ctx.fillStyle = inkN;
+    arrow(nxq - 9, nyq, nxq - 9 - F, nyq, 7);             // −qE on −q, against E
+    ctx.font = '12px '+FAM; ctx.textAlign = 'center';
+    ctx.fillStyle = inkP; ctx.textBaseline = 'bottom';
+    ctx.fillText('qE', pxq + 9 + F/2, pyq - 7);
+    ctx.fillStyle = inkN; ctx.textBaseline = 'top';
+    ctx.fillText('−qE', nxq - 9 - F/2, nyq + 7);
+    // Charge dots with their signs, on top of the rod.
+    ctx.fillStyle = inkP; ctx.beginPath(); ctx.arc(pxq, pyq, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = inkN; ctx.beginPath(); ctx.arc(nxq, nyq, 7, 0, 7); ctx.fill();
+    ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.95)' : 'rgba(15,23,42,.9)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(pxq-3.5, pyq); ctx.lineTo(pxq+3.5, pyq);
+    ctx.moveTo(pxq, pyq-3.5); ctx.lineTo(pxq, pyq+3.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(nxq-3.5, nyq); ctx.lineTo(nxq+3.5, nyq); ctx.stroke();
+    ctx.font = '12px '+FAM; ctx.textAlign = 'center';
+    ctx.fillStyle = inkP; ctx.textBaseline = 'bottom'; ctx.fillText('+q', pxq, pyq - 11);
+    ctx.fillStyle = inkN; ctx.textBaseline = 'top';    ctx.fillText('−q', nxq, nyq + 11);
+    // Caption: the premise the blurb already states — nothing about outcomes.
+    // Measured against the field-line span and shortened, then dropped, rather
+    // than allowed to run left past the mask edge on a narrow viewport.
+    ctx.fillStyle = capt; ctx.font = '12px '+FAM;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    // Room stops at the field-line span AND short of the "−q" label, which sits
+    // on the same baseline band (y ≈ 123…135) at the bottom-left of the dipole.
+    const room = Math.min(fx1 - fx0, fx1 - (nxq + 26));
+    let cap = 'equal and opposite — zero net force, a pure couple';
+    if(ctx.measureText(cap).width > room) cap = 'zero net force, a pure couple';
+    if(ctx.measureText(cap).width <= room) ctx.fillText(cap, fx1, H - 5);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const pE = 1;
-    const thMin = -Math.PI, thMax = Math.PI;
-    const uMin = -pE*1.15, uMax = pE*1.15;
-    const padL = W*0.10, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = th => padL + ((th-thMin)/(thMax-thMin))*(padR-padL);
-    const yOf = U => padB - ((U-uMin)/(uMax-uMin))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, yOf(0)); ctx.lineTo(padR, yOf(0)); ctx.stroke();
-    const ink = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(110,231,183,.95)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const th = thMin + (n/(N-1))*(thMax-thMin);
-        const U = -pE*Math.cos(th);
-        ctx.fillStyle = ink;
-        ctx.beginPath(); ctx.arc(xOf(th), yOf(U), 2.6, 0, 7); ctx.fill();
-      }
-      if(n < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(pulse){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, pulse, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }               // reduced motion: static, full-length forces
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      // Gentle EQUAL breathing of both force arrows (0.9…1) — keeps “equal and
+      // opposite” alive without ever rotating the dipole (that answer is gated).
+      paint(0.95 + 0.05*Math.sin(2*Math.PI*s/3));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

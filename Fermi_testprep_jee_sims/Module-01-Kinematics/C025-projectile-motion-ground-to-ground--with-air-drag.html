@@ -514,15 +514,16 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
 </style>
 </head>
 <body>
+<!-- HERO: same 45°, 29 m/s shot flown twice — vacuum vs linear drag (this sim's closed forms) — replanned into the 24–76% band so BOTH landings are visible with flags (the range gap is the message; the old layout put the launch at 12% and the vacuum landing at 88%, both faded by the CSS mask, and nothing named the curves). Tiny "no drag"/"with drag" labels now identify the arcs. Backing store sized from getBoundingClientRect()×devicePixelRatio per paint (kills the 1280×240→100vw×140px ~2:1 squash that hid the drag arc's steep-descent asymmetry); heroToken rAF guard + resize hook per C190 reference; reduced-motion paints the final frame. SPOILER DECISIONS: gated card 2 asks for the best launch angle under drag (below 45° is the gated verdict) — hero shows ONE angle only, no angle sweep, no optimum ★, no 45°-rule statement; curve identity and shorter-range/steeper-descent are premise (ungated card 1 and the welcome narration state them openly). -->
     <div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title">
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — vacuum vs linear drag from the same launch</span>
+                <span class="hero-label">One launch flown twice — the no-drag arc lands far, the with-drag arc falls steep and short</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Projectile with drag</span></h2>
-                <p class="welcome-blurb">Watch the same shot in vacuum and with drag — range shortens and the peak slides below 45°.</p>
+                <p class="welcome-blurb">Fire the same shot in vacuum and in air — which launch angle now carries farthest?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2258,7 +2259,7 @@ window.__audit = {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to projectile motion with air drag.',
-    'Here you fire the same shot in vacuum and with air drag. Drag shortens the range, makes the descent steeper than the ascent, and moves the longest shot below 45 degrees.',
+    'Here you fire the same shot in vacuum and with air drag. Drag shortens the range and makes the descent steeper than the ascent — and it leaves you to work out which angle now carries farthest.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -2266,11 +2267,19 @@ window.__audit = {
   ];
   /* Hero: one launch (v0=29 m/s, θ=45°) flown twice — vacuum (cyan) and
      linear drag F=−b v (amber) — as EQUAL-TIME-STEP dots from this sim's
-     closed forms. Spacing shows speed; the drag path is shorter and steeper down. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+     closed forms. Spacing shows speed; the drag path is shorter and steeper
+     down. Tiny "no drag"/"with drag" labels name the two curves, and both
+     landings carry a flag: the range gap is the message.
+
+     The canvas backing store is sized to its OWN CSS box × devicePixelRatio on
+     every paint (was a fixed 1280×240 stretched ~2:1 into a 100vw×140px band —
+     the squash hid the drag arc's steep-descent asymmetry). Everything
+     essential sits inside 24–76% of the displayed width — the hero CSS mask is
+     only fully opaque over 22–78%, and the old layout faded the vacuum landing
+     (88%) and launch point (12%). */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
     const g = 9.81, v0 = 29, th = Math.PI/4, b = 0.30, m = 1.0;
     const vx0 = v0*Math.cos(th), vy0 = v0*Math.sin(th);
@@ -2292,11 +2301,12 @@ window.__audit = {
     for(let i=0;i<80;i++){ const mid = 0.5*(lo+hi); if(drag.y(mid) > 0) lo = mid; else hi = mid; }
     drag.T = 0.5*(lo+hi);
     const Rmax = vac.x(vac.T), Hmax = (vy0*vy0)/(2*g);
-    const x0 = W*0.12, gy = H-22;
-    const sx = (W*0.76)/Rmax, sy = (gy-18)/Hmax;
+    // Launch at 25%, vacuum landing at 75% of the DISPLAYED width
+    const x0 = W*0.25, gy = H-24;
+    const sx = (W*0.50)/Rmax, sy = (gy-26)/Hmax;
     const X = x => x0 + x*sx, Y = y => gy - y*sy;
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.05, gy+0.5); ctx.lineTo(W*0.95, gy+0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W*0.24, gy+0.5); ctx.lineTo(W*0.76, gy+0.5); ctx.stroke();
     [vac, drag].forEach(s => {
       ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.14)' : 'rgba(148,163,184,.14)';
       ctx.beginPath();
@@ -2307,21 +2317,64 @@ window.__audit = {
     });
     ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA';
     ctx.beginPath(); ctx.arc(x0, gy, 4, 0, 7); ctx.fill();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.08, N = Math.ceil(vac.T/dt); let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const t = k*dt;
-        [vac, drag].forEach(s => { if(t > s.T) return;
-          ctx.fillStyle = LIGHT ? s.light : s.dark;
-          ctx.beginPath(); ctx.arc(X(s.x(t)), Y(Math.max(0, s.y(t))), 3, 0, 7); ctx.fill(); });
-      }
-      if(k <= N) requestAnimationFrame(batch);
+    // equal-time dots on one shared clock; u ∈ [0,1] is progress through vac.T
+    const dt = 0.08, N = Math.ceil(vac.T/dt), K = Math.max(1, Math.round(N*u));
+    for(let k=0; k<=Math.min(K,N); k++){
+      const t = Math.min(k*dt, vac.T);
+      [vac, drag].forEach(s => { if(t > s.T) return;
+        ctx.fillStyle = LIGHT ? s.light : s.dark;
+        ctx.beginPath(); ctx.arc(X(s.x(t)), Y(Math.max(0, s.y(t))), 3, 0, 7); ctx.fill(); });
     }
-    batch();
+    // landing flags — the range gap between them is the point
+    [vac, drag].forEach(s => {
+      if(u*vac.T < s.T) return;                 // flag appears once that shot has landed
+      const Rx = X(s.x(s.T));
+      ctx.fillStyle = LIGHT ? s.light : s.dark;
+      ctx.beginPath(); ctx.moveTo(Rx, gy); ctx.lineTo(Rx-5, gy-9); ctx.lineTo(Rx+5, gy-9);
+      ctx.closePath(); ctx.fill();
+    });
+    // name the curves (identity is premise — card 1; the gated card is the
+    // best-ANGLE question, so no second angle and no optimum appear here)
+    ctx.font = '600 12px ' + FAM; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = LIGHT ? vac.light : vac.dark;
+    ctx.textAlign = 'left';
+    const tv = 0.72*vac.T;
+    ctx.fillText('no drag', X(vac.x(tv)) + 10, Y(vac.y(tv)) - 4);
+    ctx.fillStyle = LIGHT ? drag.light : drag.dark;
+    ctx.textAlign = 'center';
+    const tdA = 0.45*drag.T;                    // near the drag apex
+    ctx.fillText('with drag', X(drag.x(tdA)), Y(drag.y(tdA)) + 20);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === "number" ? now : t0) - t0)/1000;
+      const u = Math.min(1, (s % 4.2)/2.8);         // 2.8 s race, 1.4 s dwell, loop
+      paint(u);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

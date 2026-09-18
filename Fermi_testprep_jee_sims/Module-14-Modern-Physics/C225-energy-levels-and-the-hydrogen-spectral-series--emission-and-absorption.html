@@ -794,7 +794,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-n dots of Balmer λ (n → 2)</span>
+                <span class="hero-label">An emission strip of bright lines above a continuous spectrum crossed by dark absorption lines, at stylised wavelengths</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Hydrogen spectrum</span></h2>
@@ -2886,38 +2886,117 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: Balmer wavelengths λ = hc / 13.6(1/4 − 1/n²) from this sim.
-     EQUAL-n dots n = 3…18: lines crowd toward the 365 nm series limit. */
+  /* Hero: the emission/absorption contrast — this sim's differentiator.
+     TOP: a dark strip where a handful of bright coloured emission lines pop in.
+     BOTTOM: a continuous rainbow with dark absorption gaps at the SAME x
+     positions. Same positions, opposite presentation = the premise itself.
+     SPOILER CHOICES (checked against the gated inquiry cards):
+       - Line positions are STYLISED (5 near-even fractions), deliberately NOT
+         the real Balmer/Lyman wavelengths — card 2 gates predicting where a
+         specific jump lands.
+       - No UV/IR band hints anywhere — card 4 teaches why Lyman is invisible.
+       - Jump-direction arrows (↑ absorption / ↓ emission) are OMITTED —
+         cards 5–6 gate exactly that mapping ("same gap, two arrows").
+     Backing store re-sized from getBoundingClientRect × devicePixelRatio each
+     paint (the authored 1280×240 otherwise stretches to the 100vw × 140px CSS
+     box); drawing is in CSS px. heroToken kills superseded rAF loops. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    ctx.clearRect(0,0,W,H);
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const ink  = LIGHT ? 'rgba(15,23,42,.78)'   : 'rgba(226,232,240,.85)';
+    const soft = LIGHT ? 'rgba(15,23,42,.45)'   : 'rgba(148,163,184,.60)';
+    const edge = LIGHT ? 'rgba(15,23,42,.35)'   : 'rgba(148,163,184,.38)';
+    const x0 = W*0.24, x1 = W*0.76, sw = x1 - x0;          // inside the mask fade
+    const sh = Math.min(34, H*0.24);
+    const yT = H*0.16, yB = H*0.60;                        // strip tops
+    // Stylised, unlabelled positions — near-even, no real-λ crowding.
+    const P = [0.13, 0.31, 0.50, 0.69, 0.87];
+    const hue = p => 268 - 268*p;                          // violet → red
+    const ease = t => { t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
+
+    // TOP — emission: defined dark rectangle (so it reads on the light overlay)
+    ctx.fillStyle = '#0c1424';
+    ctx.fillRect(x0, yT, sw, sh);
+    // BOTTOM — absorption: continuous rainbow
+    const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    for(let i = 0; i <= 10; i++) g.addColorStop(i/10, 'hsl(' + hue(i/10) + ',85%,' + (LIGHT?52:58) + '%)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, yB, sw, sh);
+
+    // Emission lines fade in one by one; the matching dark gaps follow.
+    for(let i = 0; i < P.length; i++){
+      const x = x0 + P[i]*sw;
+      const aE = ease((u - (0.10 + 0.11*i)) / 0.14);       // bright line i
+      const aA = ease((u - (0.42 + 0.11*i)) / 0.14);       // dark gap i
+      if(aE > 0){
+        const col = 'hsl(' + hue(P[i]) + ',95%,64%)';
+        ctx.save();
+        ctx.globalAlpha = aE*0.35; ctx.strokeStyle = col; ctx.lineWidth = 7;   // glow
+        ctx.beginPath(); ctx.moveTo(x, yT+2); ctx.lineTo(x, yT+sh-2); ctx.stroke();
+        ctx.globalAlpha = aE;      ctx.lineWidth = 2.6;                        // core
+        ctx.beginPath(); ctx.moveTo(x, yT+1); ctx.lineTo(x, yT+sh-1); ctx.stroke();
+        ctx.restore();
+      }
+      if(aA > 0){
+        ctx.save();
+        ctx.globalAlpha = aA;
+        ctx.fillStyle = '#0c1424';
+        ctx.fillRect(x - 2.2, yB, 4.4, sh);
+        ctx.restore();
+      }
+    }
+    // Frames on both strips so each reads as one object in either theme.
+    ctx.strokeStyle = edge; ctx.lineWidth = 1;
+    ctx.strokeRect(x0+0.5, yT+0.5, sw-1, sh-1);
+    ctx.strokeRect(x0+0.5, yB+0.5, sw-1, sh-1);
+
+    // Labels (no arrows — the direction↔line-type mapping is gated).
+    ctx.font = '600 11px ' + FAM;
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = ink;
+    ctx.textAlign = 'left';
+    ctx.fillText('EMISSION', x0, yT - 5);
+    ctx.fillText('ABSORPTION', x0, yB - 5);
+    ctx.fillStyle = soft;
+    ctx.textAlign = 'right';
+    ctx.fillText('bright lines', x1, yT - 5);
+    // "— same places" removed: it stated card 5's gated answer (the absorbed photon
+    // must match the emission energy exactly) in words, and at the 360 px floor the
+    // 24-char caption overran 'ABSORPTION' at the other end of the same strip.
+    ctx.fillText('dark lines', x1, yB - 5);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const hc = 1239.8; // eV·nm
-    const Ry = 13.6;
-    const lam = n => hc / (Ry * (1/4 - 1/(n*n)));
-    const L3 = lam(3), LIM = hc / (Ry * 0.25);
-    const x0=W*0.10, x1=W*0.90, yMid=H*0.55;
-    const X = L => x0 + ((L3-L)/(L3-LIM))*(x1-x0);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, yMid+28); ctx.lineTo(x1, yMid+28); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const n0 = 3, n1 = 18, N = n1-n0;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const n = n0 + k;
-        const L = lam(n);
-        ctx.fillStyle = LIGHT ? 'rgba(37,99,235,.88)' : 'rgba(96,165,250,.92)';
-        ctx.beginPath(); ctx.arc(X(L), yMid, 3.1, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // continuous cycle: 2.4 s reveal, 1.6 s dwell on the finished frame, repeat.
+      // (It used to be a one-shot that rested for good once the 2.4 s were up.)
+      const REVEAL = 2.4, PERIOD = REVEAL + 1.6;
+      const s = (((typeof now === 'number' ? now : t0) - t0)/1000) % PERIOD;
+      paint(Math.min(1, s/REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

@@ -508,11 +508,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — x(t) for α = 0.6, 3, 6; critical reaches rest first</span>
+                <span class="hero-label">Equal-time dots of x(t) for α = 0.6, 3 and 6 rad/s, all three released together from x₀ over the first 1.25 s</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Damped oscillator</span></h2>
-                <p class="welcome-blurb">Light rings, critical settles fastest, heavy crawls — λ peaks at α = ω₀.</p>
+                <p class="welcome-blurb">Three dampings, one release — which mass reaches rest first?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1999,14 +1999,53 @@ if(Shell.totalSteps > 0) onStep(Shell.step);
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the damped oscillator.',
-    'Here one mass returns to rest under three dampings. Light rings, critical settles fastest, and heavy crawls — lambda peaks at alpha equals omega nought.',
+    'Here one mass returns to rest under three dampings. Release all three together and watch which lane settles into the rest band first.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: exact x(t) for α = 0.6, 3, 6 (this sim's closed forms).
-     EQUAL-TIME dots so density shows how fast each mass returns. */
+  /* Hero: this sim's own x(t) for α = 0.60, 3 and 6 rad/s (ω₀ = 3, x₀ = 1 m),
+     drawn as EQUAL-TIME dots, so dot spacing reads as speed. The closed forms
+     below are the sim's own — under-, critically- and over-damped — untouched.
+
+     WINDOW. The old hero ran t ∈ [0, 4 s] across x = 10%…90% of the band, and
+     the band is masked outside 22–78%. Two things went wrong. t = 0 — the
+     COMMON RELEASE at x₀ = 1 m, the thing that makes the three lanes a race
+     between identical starts — sat deep in the fade and was invisible; and the
+     opaque middle opened at t ≈ 0.6 s with two of the three traces already
+     collapsed onto the axis. It now runs t ∈ [0, 1.25 s] across 26.5%…73.5%:
+     the shared release is the first thing you see, and the 3.2× horizontal
+     magnification turns the α = 0.60 ringing — the clearest regime marker —
+     from a shallow ripple into a full swing through the axis and back up.
+
+     GATED CARD. Card 1 is a data-gate predict — "which reaches rest first?",
+     answer α = 3 (critical). So the hero names no winner: no flags, no ±2 cm
+     band, no settle times, no "light"/"critical"/"heavy" regime names, only
+     the three α values in a legend. The window also closes at 1.25 s, while
+     α = 3 is still at x ≈ 0.13 and α = 6 at x ≈ 0.41 — before any lane has
+     visibly finished. Card 3's "will it cross x = 0?" is an OBSERVE card (no
+     data-gate, no choices), so the light trace is free to cross here.
+     NOTE, outside this pass's remit (hero art only): the welcome BLURB and the
+     spoken script still say "critical settles fastest", which hands gated
+     card 1 over in words even though the art no longer does.
+
+     TEXT/ART GAP. The blurb's "λ peaks at α = ω₀" belongs to the sim's separate
+     decay-rate plot (inquiry card 6). The hero deliberately does not draw λ(α):
+     it would need a second, unrelated pair of axes inside a 140 px strip, and
+     that peak is the resolution of the same gated card 1.
+
+     SIZING. The canvas carried fixed 1280×240 attributes while its box is one
+     viewport wide and 140 px tall, so the art arrived ~2:1 squashed and the
+     equal-time dots were ellipses. The backing store is now taken from
+     getBoundingClientRect()×devicePixelRatio on every paint, the context is
+     scaled by dpr, and all drawing is done in CSS px.
+
+     DECORATIVE, allowed to fade: nothing. Every mark — axis rule, release
+     marker, three traces, caption, legend — lies inside 26.5%…73.5% of the
+     displayed width. The caption and the legend are drawn only when they
+     measure short enough to stay inside that band, so on a narrow viewport
+     they are dropped rather than pushed into the fade. */
   function xOfT(a,t){
     const W0=3, X0=1;
     if(t<=0) return X0;
@@ -2019,40 +2058,114 @@ if(Shell.totalSteps > 0) onStep(Shell.step);
     const c1=-r2/(r1-r2), c2=r1/(r1-r2);
     return X0*(c1*Math.exp(r1*t)+c2*Math.exp(r2*t));
   }
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  let heroToken = 0;                                   // one live hero animation at a time
+  function paintHero(ctx, W, H, u, LIGHT){
+    const rule = LIGHT ? 'rgba(15,23,42,.16)' : 'rgba(148,163,184,.18)';
+    const ink  = LIGHT ? 'rgba(15,23,42,.78)' : 'rgba(226,232,240,.82)';
+    const soft = LIGHT ? 'rgba(15,23,42,.46)' : 'rgba(148,163,184,.62)';
+    const FAM  = (document.body && getComputedStyle(document.body).fontFamily) || 'sans-serif';
     ctx.clearRect(0,0,W,H);
     const traces = [
-      { a: 0.6, dark:'rgba(125,211,252,.95)', light:'rgba(2,132,199,.92)' },
-      { a: 3.0, dark:'rgba(52,211,153,.95)',  light:'rgba(5,150,105,.92)' },
-      { a: 6.0, dark:'rgba(251,191,36,.95)',  light:'rgba(217,119,6,.90)' }
+      { a: 0.6, lab:'α = 0.6', dark:'rgba(125,211,252,.95)', light:'rgba(2,132,199,.92)' },
+      { a: 3.0, lab:'α = 3',   dark:'rgba(52,211,153,.95)',  light:'rgba(5,150,105,.92)' },
+      { a: 6.0, lab:'α = 6',   dark:'rgba(251,191,36,.95)',  light:'rgba(217,119,6,.90)' }
     ];
-    const tMax = 4.0, x0 = W*0.10, x1 = W*0.90, yMid = H*0.55, yAmp = H*0.38;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.16)' : 'rgba(148,163,184,.16)';
-    ctx.lineWidth = 1;
+    // Plot box: t = 0 lands at 26.5% and t = tMax at 73.5% of the DISPLAYED
+    // width, so the whole race sits inside the 22–78% opaque window.
+    const tMax = 1.25;
+    const x0 = W*0.265, x1 = W*0.735, yMid = H*0.56, yAmp = H*0.40;
+    const PX = t => x0 + (t/tMax)*(x1-x0);
+    const PY = x => yMid - x*yAmp;
+    const span = x1 - x0;
+
+    // x = 0 reference line
+    ctx.strokeStyle = rule; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x0, yMid); ctx.lineTo(x1, yMid); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.05, N = Math.ceil(tMax / dt);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k <= N; sN++, k++){
-        const t = k * dt;
-        traces.forEach(r => {
-          const x = xOfT(r.a, t);
-          const px = x0 + (t / tMax) * (x1 - x0);
-          const py = yMid - x * yAmp;
-          ctx.fillStyle = LIGHT ? r.light : r.dark;
-          ctx.beginPath(); ctx.arc(px, py, 3.1, 0, 7); ctx.fill();
-        });
+
+    // The common release: a dashed drop from x₀ = 1 m to the axis, so the eye
+    // reads "all three start here, together" before the traces separate.
+    ctx.save();
+    ctx.strokeStyle = soft; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(x0, PY(1)); ctx.lineTo(x0, yMid); ctx.stroke();
+    ctx.restore();
+
+    // Equal-time dots. The count follows the pixel width so the spacing stays
+    // legible as dots (never a solid line) from 360 px to 1920 px.
+    const N = Math.max(26, Math.min(72, Math.round(span/9)));
+    const shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    for(let k = 0; k <= shown; k++){
+      const t = (k/N)*tMax;
+      for(let i = 0; i < traces.length; i++){
+        const r = traces[i];
+        ctx.fillStyle = LIGHT ? r.light : r.dark;
+        ctx.beginPath(); ctx.arc(PX(t), PY(xOfT(r.a, t)), 3.0, 0, 7); ctx.fill();
       }
-      if(k <= N) requestAnimationFrame(batch);
     }
-    batch();
+
+    // Release marker, drawn over the dots
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x0, PY(1), 5.4, 0, 7); ctx.stroke();
+
+    // Caption: only when there is clear room to the right of the release point
+    // before the light trace dives past the axis (it crosses at t = 0.60 s,
+    // i.e. 48% of the window), so the words never land on a trace.
+    ctx.font = '12px '+FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    const cap = 'released together from x₀';
+    if(span > 360 && x0 + 9 + ctx.measureText(cap).width < x1){
+      ctx.fillStyle = soft; ctx.fillText(cap, x0 + 9, yMid + 12);
+    }
+
+    // Legend: the three α values only — no regime names, no winner (gated card 1)
+    ctx.font = '12px '+FAM; ctx.textBaseline = 'middle';
+    const gap = 16, sw = 7, pad = 6;
+    let total = 0;
+    for(let i = 0; i < traces.length; i++) total += sw + pad + ctx.measureText(traces[i].lab).width + (i ? gap : 0);
+    if(total <= span*0.96){
+      let lx = W/2 - total/2;
+      const ly = H - 11;
+      for(let i = 0; i < traces.length; i++){
+        const r = traces[i];
+        ctx.fillStyle = LIGHT ? r.light : r.dark;
+        ctx.beginPath(); ctx.arc(lx + sw/2, ly, sw/2, 0, 7); ctx.fill();
+        ctx.fillStyle = soft; ctx.textAlign = 'left';
+        ctx.fillText(r.lab, lx + sw + pad, ly);
+        lx += sw + pad + ctx.measureText(r.lab).width + gap;
+      }
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;
+    function paint(u){
+      // Backing store from the DISPLAYED box, every paint: the markup's fixed
+      // 1280×240 was being stretched into a ~1500×140 box and squashing the art.
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }                   // fast path: the finished plot
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                    // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;     // overlay dismissed: stop
+      // `now` can legitimately be 0 on the synchronous first call, so test the
+      // type rather than the truthiness — `now || Date.now()` would jump to u = 1.
+      const s = ((typeof now === 'number' ? now : Date.now()) - t0)/1000;
+      paint(Math.min(1, (s % 3.6)/2.2));            // 2.2 s to draw, 1.4 s to hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

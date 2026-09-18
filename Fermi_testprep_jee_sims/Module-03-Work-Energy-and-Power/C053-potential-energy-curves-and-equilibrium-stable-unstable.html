@@ -521,11 +521,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots in the valley — dense at the turning points, sparse across the fast floor</span>
+            <span class="hero-label">The cubic energy landscape V(x) = x³/3 − x. A marble trapped under the dashed E line traces equal-time dots in the right-hand valley — dense at both turning points, sparse across the valley floor — while a second marble balances on the unstable crest at x = −1, with dashed ghosts slipping off each side.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Motion in a potential</span></h2>
-            <p class="welcome-blurb">A ball rides an energy landscape — trapped in a valley, escaping over the barrier, or balanced on its edge.</p>
+            <p class="welcome-blurb">A ball rides an energy landscape — what decides whether it stays trapped or gets out?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2149,7 +2149,7 @@ window.__audit={
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to motion in a potential.',
-    'Here a ball rides an energy landscape. Whether it stays trapped in a valley, escapes over the barrier, or creeps forever toward the crest is decided by the height of its total energy line — not by the local slope.',
+    'Here a ball rides an energy landscape. You can raise or lower the height of its total energy line, release the ball anywhere along the curve, and watch where it is allowed to go.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -2158,16 +2158,36 @@ window.__audit={
   /* Hero: the sim's own cubic landscape V(x) = x³/3 − x. A marble oscillates in
      the right-hand well as EQUAL-TIME dots — dense near the turning points where
      it moves slowly, sparse across the fast valley floor — while a second marble
-     balances on the unstable hump at x = −1. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+     balances on the unstable hump at x = −1, with dashed ghosts slipping off each
+     side. (This is the welcome overlay's own drawHero, inside this IIFE; the sim's
+     main energy-diagram renderer of the same name lives near the top of the file
+     and is untouched.)
+
+     FRAMING — x is mapped so that BOTH turning points of the E = 0.2 line
+     (x ≈ −0.20 and x ≈ +1.82, exactly where the equal-time dots bunch up) and
+     both ends of the dashed E line sit inside 26–74% of the displayed width, well
+     clear of the hero's 22%/78% fade. The drawn slice of the curve is x ∈
+     [−1.35, +1.95] — it ends at the band edges rather than running on into the
+     fade, so nothing essential is lost to the mask.
+
+     SPOILER GUARD — the welcome blurb promises three states (trapped / escaping
+     over the barrier / balanced), but the hero deliberately draws only TWO of
+     them: the bound marble at E = 0.2 < V_b and the balanced one on the crest.
+     Inquiry card 4 is a data-gate predict — "raise E above V_b: what happens?",
+     correct answer "it crosses the barrier and escapes to −∞" — so drawing a
+     second, higher E line with a marble clearing the hump would put that answer
+     on the welcome screen before the student is asked. The blurb keeps the word
+     "escaping" (it is the sim's promise, and the art never contradicts it); the
+     art stops short of it on purpose. Card 2's gated answer (fastest at the valley
+     floor) is not drawn either — the dots show the spacing, they are not labelled. */
+  let heroToken = 0;
+  // u = how much of the well's traverse has been laid down (0 → 1); full repaint per frame.
+  function paintHero(ctx, W, H, LIGHT, u){
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
     const V = x => x*x*x/3 - x, Vp = x => x*x - 1;      // s = 1 landscape
-    const X0 = -1.92, X1 = 2.22, VLO = -0.78, VHI = 1.42;
-    const xw = x => W*0.14 + (x - X0)/(X1 - X0) * W*0.72;
-    const yw = v => H*0.10 + (VHI - v)/(VHI - VLO) * H*0.82;
+    const X0 = -1.35, X1 = 1.95, VLO = -0.85, VHI = 0.95;
+    const xw = x => W*0.26 + (x - X0)/(X1 - X0) * W*0.48;
+    const yw = v => H*0.12 + (VHI - v)/(VHI - VLO) * H*0.76;
     // the landscape curve
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.5)' : 'rgba(203,213,225,.5)';
     ctx.lineWidth = 2;
@@ -2178,10 +2198,11 @@ window.__audit={
     const E0 = 0.2;
     const bis = (a,b) => { for(let i=0;i<50;i++){ const m=(a+b)/2; ((V(a)-E0<0)===(V(m)-E0<0)) ? a=m : b=m; } return (a+b)/2; };
     const xL = bis(1,-1), xR = bis(1,3);
+    const pad = W*0.012;
     ctx.setLineDash([7,5]);
     ctx.strokeStyle = LIGHT ? 'rgba(8,145,178,.75)' : 'rgba(34,211,238,.75)';
     ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(xw(xL)-26, yw(E0)); ctx.lineTo(xw(xR)+26, yw(E0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xw(xL)-pad, yw(E0)); ctx.lineTo(xw(xR)+pad, yw(E0)); ctx.stroke();
     ctx.setLineDash([]);
     // the unstable hump marble (x = −1) — teetering: dashed ghosts slip down each side
     const ux = -1, uy = yw(V(-1));
@@ -2193,23 +2214,55 @@ window.__audit={
     ctx.fillStyle = LIGHT ? 'rgba(220,38,38,.9)' : 'rgba(248,113,113,.9)';
     ctx.beginPath(); ctx.arc(xw(ux), uy-9, 8, 0, 7); ctx.fill();
     // equal-time dots: leapfrog in the real potential, starting at the right turning point
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const DT = 0.038, N = 132;
-    let mx = xR - 1e-4, mv = 0, k = 0;
-    const ink = LIGHT ? 'rgba(5,150,105,.85)' : 'rgba(110,231,183,.85)';
-    function batch(){
-      const per = reduce ? N : 3;
-      ctx.fillStyle = ink;
-      for(let s2=0;s2<per && k<N;s2++,k++){
-        ctx.beginPath(); ctx.arc(xw(mx), yw(V(mx))-8, 3.1, 0, 7); ctx.fill();
-        for(let j=0;j<10;j++){ mv += -Vp(mx)*DT/10; mx += mv*DT/10; }
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(xw(mx), yw(V(mx))-8, 4.5, 0, 7); ctx.fill(); }
+    const shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    let mx = xR - 1e-4, mv = 0;
+    ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.85)' : 'rgba(110,231,183,.85)';
+    for(let k=0;k<shown;k++){
+      ctx.beginPath(); ctx.arc(xw(mx), yw(V(mx))-8, 3.1, 0, 7); ctx.fill();
+      for(let j=0;j<10;j++){ mv += -Vp(mx)*DT/10; mx += mv*DT/10; }
     }
-    batch();
+    if(shown >= N){   // the marble itself, at the head of its own trail (theme-paired)
+      ctx.fillStyle   = LIGHT ? '#047857' : '#ecfdf5';
+      ctx.strokeStyle = LIGHT ? '#064e3b' : '#34d399';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(xw(mx), yw(V(mx))-8, 4.5, 0, 7); ctx.fill(); ctx.stroke();
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const token = ++heroToken;          // any re-entry (theme flip, resize) kills the old chain
+    const dpr = window.devicePixelRatio || 1;
+    const box = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+    const W = Math.max(2, Math.round((box && box.width)  || c.clientWidth  || 1280));
+    const H = Math.max(2, Math.round((box && box.height) || c.clientHeight || 140));
+    if(c.width !== Math.round(W*dpr) || c.height !== Math.round(H*dpr)){
+      c.width = Math.round(W*dpr); c.height = Math.round(H*dpr);
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);               // draw in CSS px
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ paintHero(ctx, W, H, LIGHT, 1); return; }   // static: the whole traverse at once
+    const RUN = 1600, DWELL = 1400, PERIOD = RUN + DWELL;   // lay the trail, hold, repeat
+    let t0 = null;
+    paintHero(ctx, W, H, LIGHT, 0);
+    // One clock only: every entry comes from rAF, so `ts` is always the frame
+    // timestamp (never mixed with Date.now(), and ts = 0 is handled).
+    function frame(ts){
+      if(token !== heroToken) return;                       // superseded — stop
+      if(ov.classList.contains('hidden')) return;           // overlay dismissed: stop
+      const now = (typeof ts === 'number') ? ts
+                : ((window.performance && performance.now) ? performance.now() : Date.now());
+      if(t0 === null) t0 = now;
+      const u = Math.min(1, (Math.max(0, now - t0) % PERIOD) / RUN);
+      paintHero(ctx, W, H, LIGHT, u);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

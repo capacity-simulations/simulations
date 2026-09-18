@@ -1235,11 +1235,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">The same force applied further from the pivot — the torque arc swells with r and sin θ</span>
+            <span class="hero-label">A beam at rest on two supports, a load parked off-centre — how do the two supports share its weight?</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The beam that will not turn</span></h2>
-            <p class="welcome-blurb">Slide a load along a supported beam and watch torque decide how the two supports share its weight.</p>
+            <p class="welcome-blurb">Slide a load along a beam on two supports — what decides how they share its weight?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3101,101 +3101,121 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the beam that will not turn.',
-    'Here a beam rests on two supports while a load slides along it. Balancing the forces fixes only the total the supports carry — it is torque, force times lever arm, that decides how they share it.',
+    'Here a beam rests on two supports while a load slides along it. Move the load along the span, change how heavy it is, and watch what each of the two supports reads.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: one rod on a pivot, the SAME force F applied at a growing distance r —
-     and once at an angle, with its lever arm r·sinθ dashed in. The torque arc at
-     the pivot swells with r and sinθ: τ = r F sinθ, drawn live from the geometry. */
+  /* Hero: the APPARATUS this sim actually stages — a horizontal beam resting on
+     TWO triangular supports, with a load block parked off-centre on top and its
+     weight arrow drawn straight down. The beam stays horizontal at all times:
+     this is "the beam that will NOT turn". It deliberately draws NO reaction
+     arrows at the supports (only two equal, unlabelled stubs with ? marks):
+     the first guided-inquiry card gates on predicting how the two supports
+     SHARE the load's weight, and a hero that drew N_L taller than N_R would
+     hand that answer over before the question. The block glides gently along
+     the span (echoing "slide a load along a supported beam"); under
+     prefers-reduced-motion it parks statically at x/S ≈ 0.39, the card-1 setup.
+
+     The canvas is sized to its OWN CSS box (getBoundingClientRect × dpr) every
+     paint and drawn in CSS px: the authored 1280×240 store stretched into a
+     one-viewport-wide, 140px band squashed everything ~2:1. Essentials are
+     kept inside the 24%–76% window so the edge fade never eats them. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const ink   = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
+    const soft  = LIGHT ? 'rgba(15,23,42,.45)'  : 'rgba(148,163,184,.55)';
+    const beamC = LIGHT ? 'rgba(51,65,85,.9)'   : 'rgba(203,213,225,.8)';
+    const supC  = LIGHT ? 'rgba(71,85,105,.5)'  : 'rgba(148,163,184,.42)';
+    const loadC = LIGHT ? 'rgba(180,83,9,.92)'  : 'rgba(251,191,36,.92)';
+    const wC    = LIGHT ? 'rgba(185,28,28,.92)' : 'rgba(248,113,113,.92)';
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const bx0 = W*0.26, bx1 = W*0.74;            // beam ends
+    const sxL = W*0.28, sxR = W*0.72;            // the two supports, near the ends
+    const beamY = H*0.40, beamT = Math.max(6, Math.round(H*0.055));
+    const supH = H*0.22, supW = Math.max(18, H*0.17);
+    const gy = beamY + beamT/2 + supH;           // ground line
+    // ground
+    ctx.strokeStyle = soft; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx0 - 20, gy+0.5); ctx.lineTo(bx1 + 20, gy+0.5); ctx.stroke();
+    // two triangular supports, apex seated under the beam
+    ctx.fillStyle = supC;
+    [sxL, sxR].forEach(sx => {
+      ctx.beginPath();
+      ctx.moveTo(sx, beamY + beamT/2);
+      ctx.lineTo(sx - supW/2, gy);
+      ctx.lineTo(sx + supW/2, gy);
+      ctx.closePath(); ctx.fill();
+    });
+    // two DELIBERATELY EQUAL, unlabelled reaction stubs — the sharing is the
+    // gated card-1 prediction, so neither support may look like it carries more
+    ctx.strokeStyle = soft; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    [sxL, sxR].forEach(sx => {
+      const sy1 = beamY - beamT/2 - 4, sy0 = sy1 + H*0.10;
+      ctx.beginPath(); ctx.moveTo(sx, sy0); ctx.lineTo(sx, sy1); ctx.stroke();
+      ctx.fillStyle = soft;
+      ctx.beginPath(); ctx.moveTo(sx, sy1-6); ctx.lineTo(sx-4.5, sy1+2); ctx.lineTo(sx+4.5, sy1+2); ctx.closePath(); ctx.fill();
+      ctx.font = '600 14px '+FAM; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText('?', sx, sy1 - 9);
+    });
+    // the beam — horizontal at every frame: the beam that will NOT turn
+    ctx.fillStyle = beamC;
+    ctx.fillRect(bx0, beamY - beamT/2, bx1 - bx0, beamT);
+    // the load block, off-centre, gliding with u (u = 0.5 → x/S ≈ 0.39, card 1's setup)
+    const p  = 0.22 + 0.34*u;
+    const lx = sxL + (sxR - sxL)*p;
+    const bs = Math.max(16, H*0.15);
+    ctx.fillStyle = loadC;
+    ctx.fillRect(lx - bs/2, beamY - beamT/2 - bs, bs, bs);
+    ctx.fillStyle = ink; ctx.font = '600 13px '+FAM;
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('load', lx, beamY - beamT/2 - bs - 5);
+    // its weight, straight down from under the beam (stops well above the ground)
+    const ay0 = beamY + beamT/2 + 3, ay1 = ay0 + H*0.17;
+    ctx.strokeStyle = wC; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lx, ay0); ctx.lineTo(lx, ay1 - 6); ctx.stroke();
+    ctx.fillStyle = wC;
+    ctx.beginPath(); ctx.moveTo(lx, ay1); ctx.lineTo(lx-5.5, ay1-9); ctx.lineTo(lx+5.5, ay1-9); ctx.closePath(); ctx.fill();
+    ctx.font = '600 15px '+FAM; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('W', lx + 10, (ay0+ay1)/2);
+    if(W > 640){
+      ctx.fillStyle = soft; ctx.font = '12px '+FAM;
+      ctx.textAlign='right'; ctx.textBaseline='bottom';
+      ctx.fillText('two supports, one load — who carries more?', bx1, H - 5);
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const px = W*0.38, py = H*0.45, rodLen = W*0.20;
-    // rod + pivot
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(203,213,225,.6)';
-    ctx.lineWidth = 5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px+rodLen, py); ctx.stroke();
-    ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.85)' : 'rgba(148,163,184,.85)';
-    ctx.beginPath(); ctx.moveTo(px, py+4); ctx.lineTo(px-15, py+30); ctx.lineTo(px+15, py+30); ctx.closePath(); ctx.fill();
-    // the same F three times: r growing, the last one at an angle
-    const apps = [
-      { r:0.36, a:Math.PI/2 },            // straight down, small r
-      { r:0.68, a:Math.PI/2 },            // straight down, bigger r
-      { r:1.00, a:Math.PI*0.75 },         // angled: only F·sinθ twists
-    ];
-    const Lf = H*0.30, tauMax = 0.71;
-    const inkF   = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';    // force arrows (amber)
-    const inkTau = LIGHT ? 'rgba(5,150,105,.9)'  : 'rgba(110,231,183,.9)';   // torque arcs (emerald)
-    const inkArm = LIGHT ? 'rgba(15,23,42,.45)'  : 'rgba(148,163,184,.5)';   // dashed lever arm
-    function arrowHead(x,y,ang,col){
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(x,y);
-      ctx.lineTo(x-9*Math.cos(ang-Math.PI/6), y-9*Math.sin(ang-Math.PI/6));
-      ctx.lineTo(x-9*Math.cos(ang+Math.PI/6), y-9*Math.sin(ang+Math.PI/6));
-      ctx.closePath(); ctx.fill();
-    }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 70; let k = 0;
-    function frame(){
-      k = reduce ? N : k+1;
-      const f = k/N;
-      // repaint the animated layer only (arrows + arcs) over a cleared canvas
-      ctx.clearRect(0,0,W,H);
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(203,213,225,.6)';
-      ctx.lineWidth = 5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px+rodLen, py); ctx.stroke();
-      ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.85)' : 'rgba(148,163,184,.85)';
-      ctx.beginPath(); ctx.moveTo(px, py+4); ctx.lineTo(px-15, py+30); ctx.lineTo(px+15, py+30); ctx.closePath(); ctx.fill();
-      apps.forEach((ap, i) => {
-        const X = px + ap.r*rodLen, Y = py;
-        const dx = Math.cos(ap.a), dy = Math.sin(ap.a);
-        const len = Lf * f;
-        // force arrow pushing on the rod (tip at the application point)
-        ctx.strokeStyle = inkF; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(X - dx*len, Y - dy*len); ctx.lineTo(X - dx*len*0.12, Y - dy*len*0.12); ctx.stroke();
-        if(f > 0.15) arrowHead(X, Y, ap.a, inkF);
-        if(f > 0.5){
-          ctx.fillStyle = inkF; ctx.font = '600 19px ' + getComputedStyle(document.body).fontFamily;
-          ctx.fillText('F', X - dx*Lf - 14, Y - dy*Lf - 4);
-        }
-        // dashed lever arm for the angled force: perpendicular from the pivot
-        // to the force's line of action, r·sinθ long
-        if(i === 2 && f > 0.55){
-          const t = (px - X)*dx;                    // foot of the perpendicular
-          const qx = X + t*dx, qy = Y + t*dy;
-          ctx.save(); ctx.setLineDash([5,4]);
-          ctx.strokeStyle = inkArm; ctx.lineWidth = 1.6;
-          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(qx, qy); ctx.stroke();
-          ctx.restore();
-          ctx.fillStyle = inkArm; ctx.font = '600 16px ' + getComputedStyle(document.body).fontFamily;
-          ctx.fillText('r sin θ', (px+qx)/2 - 8, (py+qy)/2 - 8);
-        }
-        // torque arc at the pivot — sweep proportional to τ = r F sinθ
-        const tau = ap.r * Math.abs(Math.sin(ap.a)) / tauMax;
-        const sweep = tau * Math.PI * 0.85 * f;
-        const rr = 24 + i*13;
-        ctx.strokeStyle = inkTau; ctx.lineWidth = 2.4;
-        ctx.beginPath(); ctx.arc(px, py, rr, 0.10, 0.10 + sweep, false); ctx.stroke();
-        if(f >= 1){
-          const ea = 0.10 + sweep;
-          arrowHead(px + rr*Math.cos(ea), py + rr*Math.sin(ea), ea + Math.PI/2, inkTau);
-        }
-      });
-      if(f >= 1){
-        ctx.fillStyle = inkTau; ctx.font = '600 20px ' + getComputedStyle(document.body).fontFamily;
-        ctx.fillText('τ = r F sin θ', px + 34, py + 74);
-      }
-      if(k < N) requestAnimationFrame(frame);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    frame();
+    if(reduce){ paint(0.5); return; }           // static, off-centre — nothing lost
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = (Math.max(0, now - t0))/1000;
+      // 5.2 s round trip with a dwell at each end (smoothstep on a cosine)
+      const raw = 0.5 - 0.5*Math.cos(2*Math.PI*s/5.2);
+      paint(raw*raw*(3 - 2*raw));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

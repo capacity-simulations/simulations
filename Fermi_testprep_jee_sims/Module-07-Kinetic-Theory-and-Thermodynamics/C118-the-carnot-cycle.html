@@ -1235,7 +1235,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A heat engine between two reservoirs</span>
+            <span class="hero-label">The closed Carnot loop on the PV plane — a red-ish hot isotherm, a blue-ish cold isotherm, two adiabats between</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Carnot cycle</span></h2>
@@ -3138,13 +3138,34 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
   /* Hero: this sim’s Carnot PV cycle (same corners as drawPVDiagram).
-     V1=1, V2=3, γ=5/3, T_H=600 K, T_C=300 K.
+     V1=1, V2=3, γ=5/3, T_H=600 K, T_C=300 K → V4≈2.83, V3≈8.49.
      Four equal-duration legs, equal-time dots — density is uniform along
-     each leg because the sim parameterizes each by volume fraction. */
+     each leg because the sim parameterizes each by volume fraction.
+     The T_H isotherm is drawn red-ish and the T_C isotherm blue-ish — the
+     two reservoirs are the sim's stated premise (card 1 introduces them
+     openly); η and the Q/W bookkeeping stay out of the hero (gated).
+     The V→x mapping is compressed so the WHOLE loop, corners included, sits
+     in the opaque 24–76% window of the edge mask: with the plot band at
+     25–75% of W, Vlo = 0.92·V1 and Vhi = 1.03·V3, the four corners land at
+     x ≈ 25.5% (V1), 38.3% (V2), 73.4% (V3), 37.2% (V4) — the old
+     12–90% band put V1 at 13% and V3 at 86%, both inside the fades, so the
+     loop never visibly closed.
+     Canvas is sized to its OWN CSS box (getBoundingClientRect × DPR) and
+     drawn in CSS px — the authored 1280×240 store was squashed into the
+     viewport-wide 140px band. */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const my = ++heroToken;                      // one live animation at a time
+    const r = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(r.width || 1280));
+    const H = Math.max(100, Math.round(r.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0,0,W,H);
     const Th = 600, Tc = 300, g = 5/3, nR = 1;
     const V1 = 1, V2 = 3;
@@ -3152,18 +3173,16 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
     const V4 = V1 * Math.pow(Th / Tc, 1/(g-1));
     const P1 = nR * Th / V1;
     const P3 = nR * Tc / V3;
-    const Vlo = V1 * 0.9, Vhi = V3 * 1.05;
+    const Vlo = V1 * 0.92, Vhi = V3 * 1.03;
     const Plo = P3 * 0.4, Phi = P1 * 1.05;
-    const padL = W*0.12, padR = W*0.90, padT = H*0.16, padB = H*0.86;
+    const padL = W*0.25, padR = W*0.75, padT = H*0.16, padB = H*0.86;
     const xOf = V => padL + ((V-Vlo)/(Vhi-Vlo))*(padR-padL);
     const yOf = P => padB - ((P-Plo)/(Phi-Plo))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padB); ctx.lineTo(padR, padB); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padB); ctx.stroke();
+    const axisInk = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.25)';
+    // leg inks: hot isotherm warm/red-ish, adiabats violet, cold isotherm cool/blue-ish
     const inks = LIGHT
-      ? ['rgba(217,119,6,.9)','rgba(124,58,237,.85)','rgba(2,132,199,.9)','rgba(124,58,237,.85)']
-      : ['rgba(251,191,36,.92)','rgba(196,181,253,.9)','rgba(56,189,248,.9)','rgba(196,181,253,.9)'];
+      ? ['rgba(185,28,28,.9)','rgba(124,58,237,.85)','rgba(37,99,235,.9)','rgba(124,58,237,.85)']
+      : ['rgba(248,113,113,.92)','rgba(196,181,253,.9)','rgba(96,165,250,.92)','rgba(196,181,253,.9)'];
     function stateAt(phase){
       const leg = Math.floor(phase * 4) % 4;
       const t = (phase * 4) - leg;
@@ -3175,19 +3194,36 @@ document.getElementById('shell-theme')?.addEventListener('click', () => {
       return {V, P, leg};
     }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const st = stateAt(k/(N-1));
+    const N = 64;
+    const REVEAL = 0.55, PERIOD = REVEAL + 1.35;  // s: trace the loop, dwell on it, repeat
+    function paint(p){
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle = axisInk; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, padB); ctx.lineTo(padR, padB); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padB); ctx.stroke();
+      const shown = Math.round(N * Math.max(0, Math.min(1, p)));
+      for(let k=0;k<shown;k++){
+        // phase sweeps [0,1) — k/(N-1) would reach exactly 1, and stateAt(1)
+        // falls through to leg 0 with t = 4, putting a stray dot at V = 9
+        // (x ≈ 76.7%, outside the mask's opaque window). The loop still closes:
+        // phase 0 is corner V1 and the last sample sits one step short of it.
+        const st = stateAt(k/N);
         ctx.fillStyle = inks[st.leg];
         ctx.beginPath(); ctx.arc(xOf(st.V), yOf(st.P), 2.6, 0, 7); ctx.fill();
       }
-      if(k < N) requestAnimationFrame(batch);
     }
-    batch();
+    if(reduce){ paint(1); return; }               // single frame, the closed loop
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((((now || t0) - t0) / 1000) % PERIOD);
+      paint(Math.min(1, s / REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

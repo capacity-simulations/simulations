@@ -1657,7 +1657,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">One lap in equal time steps — sparse at the bottom (fast), crowded at the top (slow); the inward arrows are the string's pull</span>
+            <span class="hero-label">One lap of a vertical circle in equal time steps — the dots spread out at the bottom, where the ball is fast, and crowd at the top, where it is slow. The short equal-length ticks show the string always pulling toward the centre.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The vertical circle</span></h2>
@@ -3819,7 +3819,7 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the vertical circle.',
-    'Here you swing a ball on a string around a vertical loop. The string strains hardest at the bottom, barely pulls at the top — and if the ball is too slow, the string goes slack and the ball leaves the circle.',
+    'Here you swing a ball on a string around a vertical loop. The pull in the string changes all the way round — and if the ball is too slow, the string goes slack and the ball leaves the circle.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -3827,59 +3827,138 @@ return {
   ];
   /* Hero: one lap of the vertical circle at just above the critical speed,
      drawn as EQUAL-TIME dots — sparse at the bottom (fast), crowding toward the
-     top (slow) — with the inward string-tension arrows shrinking toward the top.
-     T(θ) = v(θ)²/r + g·cosθ with v² = v_bot² − 2gr(1 − cosθ): the sim's own physics. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+     top (slow). v(θ)² = v_bot² − 2gr(1 − cosθ) with v_bot = 1.02·√(5gr): the
+     sim's own physics, so the lap is honest (the ball only just makes the top).
+
+     ROUNDNESS — the backing store is now sized from the element's own box ×
+     devicePixelRatio and every coordinate is CSS px, so one x-unit = one y-unit
+     and the loop is a circle by construction. The old hand-tuned SX = 64 /
+     SY = 100 pre-stretch (a fix for the 1280×240 attribute canvas being squashed
+     into a 140 px strip) is gone; radius_x / radius_y is now exactly 1.
+
+     SPOILER GUARD — inquiry card 1 is a data-gate predict: "where is the string
+     closest to snapping?", correct answer "at the bottom". The earlier hero sized
+     each inward arrow by T(θ) = v²/r + g·cosθ, i.e. it drew that answer on the
+     welcome screen before the student was asked. The arrows are now equal-length
+     ticks: they say only that the string always pulls toward the CENTRE, which no
+     card asks. Dot spacing (fast at the bottom, slow at the top) is kept — card 1
+     states both of those facts in its own option text, so it is a premise, not the
+     answer. Card 3's invariant (T_bot − T_top = 6mg) is never drawn either.
+     (The welcome read-aloud script still says "strains hardest at the bottom";
+     that lives in the narration layer, outside this hero's remit.) */
+  let heroToken = 0, heroSamples = null;
+  function heroLap(){                 // one lap, sampled at equal time steps
+    if(heroSamples) return heroSamples;
     const g = 9.81, r = 1, vb = 1.02*Math.sqrt(5*g*r);   // just makes it round the top
-    // Vertical radius pre-stretched: the 1280×240 canvas renders in a wide,
-    // short band, so the on-screen figure comes out roughly circular.
-    const cx = W*0.5, cy = H*0.5, SX = 64, SY = 100;
-    const pos = th => ({ x: cx + SX*Math.sin(th), y: cy + SY*Math.cos(th) });   // th = 0 at the bottom
-    // faint guide ellipse + pivot
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1; ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.ellipse(cx, cy, SX, SY, 0, 0, 2*Math.PI); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = LIGHT ? '#334155' : '#cbd5e1';
-    ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, 7); ctx.fill();
-    // equal-time samples of one lap: integrate dθ/dt = v(θ)/r, then resample uniformly in time
     const speed = th => Math.sqrt(Math.max(1e-4, vb*vb - 2*g*r*(1 - Math.cos(th))));
     const dt = 0.0008, thetas = [];
     for(let th = 0; th < 2*Math.PI; th += speed(th)/r*dt) thetas.push(th);
-    const N = 46, samples = [];
-    for(let i=0;i<N;i++) samples.push(thetas[Math.floor(i*thetas.length/N)]);
-    const tension = th => Math.max(0, speed(th)*speed(th)/r + g*Math.cos(th));   // per unit mass
-    const Tmax = tension(0);
+    const N = 46, out = [];
+    for(let i=0;i<N;i++) out.push(thetas[Math.floor(i*thetas.length/N)]);
+    heroSamples = out;
+    return out;
+  }
+  // u = how much of the lap has been laid down (0 → 1). One full repaint per frame.
+  function paintHero(ctx, W, H, LIGHT, u){
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const samples = heroLap(), N = samples.length;
+    const cx = W*0.5, cy = H*0.5;
+    const R = Math.max(14, Math.min(H*0.40, W*0.105));   // round, and it fits the strip
+    const pos = th => ({ x: cx + R*Math.sin(th), y: cy + R*Math.cos(th) });   // th = 0 at the bottom
+    const font = (typeof getComputedStyle === 'function' && document.body
+                  ? getComputedStyle(document.body).fontFamily : '') || 'DM Sans, sans-serif';
+    // faint guide circle + pivot
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)';
+    ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2*Math.PI); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = LIGHT ? '#334155' : '#cbd5e1';
+    ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, 7); ctx.fill();
     const dotInk   = LIGHT ? 'rgba(217,119,6,.9)'   : 'rgba(253,224,171,.9)';
-    const arrowInk = LIGHT ? 'rgba(15,118,110,.85)' : 'rgba(94,234,212,.8)';
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
-        const th = samples[k], p = pos(th);
-        if(k % 4 === 1){   // a few tension arrows: inward, length tracking T — shrinking toward the top
-          const len = 8 + 40*tension(th)/Tmax;
-          const ux = cx - p.x, uy = cy - p.y, d = Math.hypot(ux,uy)||1;
-          ctx.strokeStyle = arrowInk; ctx.lineWidth = 1.6;
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + ux/d*len, p.y + uy/d*len); ctx.stroke();
-        }
-        ctx.fillStyle = dotInk;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, 7); ctx.fill();
+    const tickInk  = LIGHT ? 'rgba(15,118,110,.85)' : 'rgba(94,234,212,.8)';
+    const shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    const tick = Math.max(8, R*0.30);   // equal-length: direction only, never magnitude
+    for(let k=0;k<shown;k++){
+      const th = samples[k], p = pos(th);
+      if(k % 4 === 1){                  // the string's pull — inward, same length everywhere
+        const ux = cx - p.x, uy = cy - p.y, d = Math.hypot(ux,uy) || 1;
+        ctx.strokeStyle = tickInk; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + ux/d*tick, p.y + uy/d*tick); ctx.stroke();
       }
-      if(k < N) requestAnimationFrame(batch);
-      else {   // the ball, resting at the bottom where the lap began
-        const p = pos(0);
-        ctx.fillStyle = '#f59e0b'; ctx.strokeStyle = LIGHT ? '#78350f' : '#fbbf24'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill(); ctx.stroke();
-      }
+      ctx.fillStyle = dotInk;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, 7); ctx.fill();
     }
-    batch();
+    if(shown >= N){   // the ball, resting at the bottom where the lap began
+      const p = pos(0);
+      ctx.fillStyle = '#f59e0b'; ctx.strokeStyle = LIGHT ? '#78350f' : '#fbbf24'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    // Flanking captions. They are what carries the figure out toward the 26–74%
+    // band in a 100vw strip — a round loop can never be wider than the 140px
+    // height allows. Shrink-to-fit; dropped entirely when the strip is too narrow
+    // to hold them inside the band (the loop alone stays essential ink there).
+    const gap = 14, room = W*0.25 - R - gap;   // captions never start before 25%
+    const capL = 'the string pulls to the centre';
+    const capT = 'slow at the top — dots crowd';
+    const capB = 'fast at the bottom — dots spread';
+    let fs = Math.min(13, Math.max(9, Math.round(H*0.092)));
+    const widest = () => { ctx.font = '600 '+fs+'px '+font;
+      return Math.max(ctx.measureText(capL).width, ctx.measureText(capT).width, ctx.measureText(capB).width); };
+    while(fs > 9 && widest() > room) fs--;
+    if(widest() <= room){
+      ctx.font = '600 '+fs+'px '+font;
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + R*0.72, cy - R*0.70); ctx.lineTo(cx + R + gap - 4, cy - R*0.62);
+      ctx.moveTo(cx + R*0.72, cy + R*0.70); ctx.lineTo(cx + R + gap - 4, cy + R*0.62);
+      ctx.moveTo(cx - R*0.80, cy);          ctx.lineTo(cx - R - gap + 4, cy);
+      ctx.stroke();
+      ctx.fillStyle = LIGHT ? '#0f172a' : '#e2e8f0';
+      ctx.textAlign = 'left';
+      ctx.fillText(capT, cx + R + gap, cy - R*0.62);
+      ctx.fillText(capB, cx + R + gap, cy + R*0.62);
+      ctx.fillStyle = LIGHT ? '#0f766e' : '#5eead4';
+      ctx.textAlign = 'right';
+      ctx.fillText(capL, cx - R - gap, cy);
+      ctx.textAlign = 'left';
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const token = ++heroToken;          // any re-entry (theme flip, resize) kills the old chain
+    const dpr = window.devicePixelRatio || 1;
+    const box = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+    const W = Math.max(2, Math.round((box && box.width)  || c.clientWidth  || 1280));
+    const H = Math.max(2, Math.round((box && box.height) || c.clientHeight || 140));
+    if(c.width !== Math.round(W*dpr) || c.height !== Math.round(H*dpr)){
+      c.width = Math.round(W*dpr); c.height = Math.round(H*dpr);
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);               // draw in CSS px
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ paintHero(ctx, W, H, LIGHT, 1); return; }   // static: the whole lap at once
+    const LAP = 1400;                                       // ms to lay the lap down
+    let t0 = null;
+    paintHero(ctx, W, H, LIGHT, 0);
+    // One clock only: every entry comes from rAF, so `ts` is always the frame
+    // timestamp (never mixed with Date.now(), and ts = 0 is handled).
+    function frame(ts){
+      if(token !== heroToken) return;                       // superseded — stop
+      if(ov.classList.contains('hidden')) return;           // overlay dismissed: stop
+      const now = (typeof ts === 'number') ? ts
+                : ((window.performance && performance.now) ? performance.now() : Date.now());
+      if(t0 === null) t0 = now;
+      const CYCLE = LAP + 1400;                             // lap, then a dwell on the full loop
+      const u = Math.max(0, Math.min(1, ((now - t0) % CYCLE) / LAP));
+      paintHero(ctx, W, H, LIGHT, u);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
