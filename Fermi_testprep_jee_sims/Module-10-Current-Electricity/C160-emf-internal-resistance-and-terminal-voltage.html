@@ -1649,11 +1649,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-log-R dots of V = ε R/(R+r) and Ir = ε r/(R+r)</span>
+                <span class="hero-label">Two unlabelled traces over a logarithmic load sweep, one rising to a dashed ε ceiling and one falling away, ringed where they cross, above a cell glyph with its EMF and internal resistance inside a dashed box driving a load R</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Sagging battery</span></h2>
-                <p class="welcome-blurb">The voltmeter reads V = ε − Ir — the nameplate sags as the load draws more current.</p>
+                <p class="welcome-blurb">A real cell has resistance inside it — what does the voltmeter read as R falls?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3567,47 +3567,229 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the sagging battery.',
-    'Here a battery has an internal resistance. Dial the load down and the terminal voltage falls below the nameplate.',
+    'Here a battery carries a resistance of its own, hidden inside it, and a voltmeter sits across its terminals. Your job is to work out what that voltmeter reads as you dial the load resistance up and down.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: V = ε R/(R+r) and Ir = ε r/(R+r) from this sim, ε=9, r=0.5.
-     EQUAL-log-R dots: V rises toward ε; Ir falls toward 0. */
+  /* ===== Hero: the sagging cell =====
+
+     FIXED (remapped and re-identified), not regenerated — the two traces are
+     the right picture for this sim, they were simply framed so that every
+     diagnostic feature fell in the fade.
+
+     What was wrong. The sweep ran R = 0.1 … 1000 Ω across x = 10 % … 90 % of
+     the band while the mask only reaches full opacity between 22 % and 78 %.
+     So (a) the V → ε plateau — the "nameplate" the blurb names — sat at the
+     right-hand end, inside the fade; (b) the deepest sag sat at the left-hand
+     end, also inside the fade; and (c) worst, the V/Ir crossover at R = r =
+     0.5 Ω landed at x ≈ 24 %, right on the mask's opaque edge, where the
+     gradient has only just reached full alpha — and that crossing is the
+     single most diagnostic point on the plot.
+
+     What changed. The sweep is now R = 0.1 … 100 Ω (both ends inside the load
+     range this sim actually offers — card 5 pins the minimum at ≈ 0.1 Ω) drawn
+     across x = 26.8 % … 73.2 %. That puts the crossover at x = 37.6 % of the
+     displayed width, the deep sag (V = 0.167 ε) at 26.8 % and the ≥ 99 %-of-ε
+     plateau running from 68.5 % to 73.2 % — all three comfortably inside the
+     opaque window. The crossing is ringed so it reads as a landmark, and a probe
+     sweeps the two traces so the trade is animated rather than merely plotted.
+
+     Identity. Unlabelled green-rising/amber-falling traces could equally be
+     read as the C156 or C159 motif in this same module, so a cell glyph now
+     sits under the plot: an EMF and an internal resistance inside a dashed
+     box, terminals, and a load R. That is this sim's subject and nobody
+     else's.
+
+     SPOILER AUDIT — gated cards (data-gate) read before any drawing:
+       • card 2 asks what happens to the terminal voltage when the load is
+         lowered (answer: V falls below ε);
+       • card 4 asks when the voltmeter reads the full EMF (answer: R ≫ r);
+       • card 5 asks what limits the short-circuit current (answer: r alone).
+     So the two traces stay UNLABELLED: nothing on the canvas says which is the
+     terminal voltage and which is the internal drop, and there is no arrow, no
+     legend and no "falls"/"rises" annotation. Both traces approach the ceiling
+     — one at each end — so position alone cannot identify them either. The one
+     label on the plot is "ε" on the ceiling line, which names a constant of
+     the cell, not a behaviour, and the glyph's ε/r/R name components of a
+     circuit that the FIRST, UNGATED card already describes in full. No gate is
+     answered.
+
+     INK: every essential mark lies inside 26.5 %–73.5 % of the DISPLAYED width
+     — measured over W = 360/900/1280/1920, dpr 1/2/3, both themes and the
+     whole u sweep. The only thing allowed to fade is the full-width ground
+     wash, which is decorative.
+
+     The canvas is sized to its OWN CSS box on every paint rather than to the
+     1280×240 authored in the markup — the band is one viewport wide and 140 px
+     tall, so the authored 5.3:1 backing store was being stretched to ≈10:1. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM  = (getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    const axis = LIGHT ? 'rgba(15,23,42,.20)'  : 'rgba(148,163,184,.22)';
+    const ceil = LIGHT ? 'rgba(15,23,42,.42)'  : 'rgba(148,163,184,.50)';
+    const inkA = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.94)';
+    const inkB = LIGHT ? 'rgba(180,83,9,.92)'  : 'rgba(251,191,36,.94)';
+    const wire = LIGHT ? 'rgba(15,23,42,.70)'  : 'rgba(226,232,240,.76)';
+    const soft = LIGHT ? 'rgba(15,23,42,.50)'  : 'rgba(148,163,184,.64)';
+
+    ctx.clearRect(0, 0, W, H);
+    // Decorative full-width wash (allowed to fade under the mask).
+    const wash = ctx.createLinearGradient(0, 0, 0, H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0, 0, W, H);
+
+    const emf = 9, rInt = 0.5, Rlo = 0.1, Rhi = 100;
+    const lgLo = Math.log(Rlo) / Math.LN10, lgHi = Math.log(Rhi) / Math.LN10;
+    const padL = W * 0.268, padR = W * 0.732;
+    const yB = H * 0.62, yT = H * 0.16;
+    const X = t => padL + t * (padR - padL);
+    const Y = v => yB - (v / emf) * (yB - yT);
+    const Rof = t => Math.pow(10, lgLo + t * (lgHi - lgLo));
+
+    // Baseline and the ε ceiling.
+    ctx.strokeStyle = axis; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, yB); ctx.lineTo(padR, yB); ctx.stroke();
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = ceil; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(padL, yT); ctx.lineTo(padR, yT); ctx.stroke();
+    ctx.restore();
+    const fsP = Math.max(9, Math.min(12, W / 110));
+    ctx.font = fsP + 'px ' + FAM;
+    ctx.fillStyle = soft; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('ε', padL + 2, yT - 3);
+
+    // The two traces. Deliberately unlabelled — see the spoiler audit above.
+    const NS = 96;
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = inkA;
+    ctx.beginPath();
+    for (let i = 0; i <= NS; i++){
+      const t = i / NS, R = Rof(t), y = Y(emf * R / (R + rInt));
+      if (i === 0) ctx.moveTo(X(t), y); else ctx.lineTo(X(t), y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = inkB;
+    ctx.beginPath();
+    for (let i = 0; i <= NS; i++){
+      const t = i / NS, R = Rof(t), y = Y(emf * rInt / (R + rInt));
+      if (i === 0) ctx.moveTo(X(t), y); else ctx.lineTo(X(t), y);
+    }
+    ctx.stroke();
+
+    // The crossing at R = r, ringed as a landmark (no text, no claim).
+    const tX = ((Math.log(rInt) / Math.LN10) - lgLo) / (lgHi - lgLo);
+    ctx.strokeStyle = soft; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(X(tX), Y(emf / 2), 4.6, 0, Math.PI * 2); ctx.stroke();
+
+    // A probe sweeping the pair, so the trade is shown rather than stated.
+    // Inset by 3 % of the sweep so the probe's own disc never reaches the mask.
+    const tp = 0.03 + 0.94 * u;
+    const Rp = Rof(tp), xp = X(tp);
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = axis; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xp, yT); ctx.lineTo(xp, yB); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = inkA;
+    ctx.beginPath(); ctx.arc(xp, Y(emf * Rp / (Rp + rInt)), 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = inkB;
+    ctx.beginPath(); ctx.arc(xp, Y(emf * rInt / (Rp + rInt)), 3.2, 0, Math.PI * 2); ctx.fill();
+
+    // ---- The cell: EMF + internal resistance in a dashed box, driving R. ----
+    const gw = Math.min(W * 0.30, 340), gx = W / 2 - gw / 2;
+    const gy = H * 0.68, gh = H * 0.30;
+    const lx = gx + gw * 0.08, rx = gx + gw * 0.92;
+    const ty = gy + gh * 0.22, by = gy + gh * 0.88;
+    const ym = (ty + by) / 2;
+    const zx0 = gx + gw * 0.24, zx1 = gx + gw * 0.40;   // internal resistance
+    const boxR = gx + gw * 0.48;                         // the cell's right edge
+    const bl = Math.min(7, gw * 0.045);
+
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = soft; ctx.lineWidth = 1;
+    ctx.strokeRect(gx, gy, boxR - gx, gh);
+    ctx.restore();
+
+    ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(lx, ty);        ctx.lineTo(zx0, ty);      // top rail, left of r
+    ctx.moveTo(zx1, ty);       ctx.lineTo(rx, ty);       // top rail, right of r
+    ctx.moveTo(lx, by);        ctx.lineTo(rx, by);       // bottom rail
+    ctx.moveTo(lx, ty);        ctx.lineTo(lx, ym - 4);   // left rail above cell
+    ctx.moveTo(lx, ym + 4);    ctx.lineTo(lx, by);       // left rail below cell
+    ctx.moveTo(rx, ty);        ctx.lineTo(rx, ym - 6);   // right rail above load
+    ctx.moveTo(rx, ym + 6);    ctx.lineTo(rx, by);       // right rail below load
+    ctx.stroke();
+
+    // internal resistance r, as a zigzag on the top rail inside the box
+    const zn = 6, zh = Math.min(4, gh * 0.14);
+    ctx.beginPath(); ctx.moveTo(zx0, ty);
+    for (let i = 0; i < zn; i++){
+      const xa = zx0 + ((i + 0.5) / zn) * (zx1 - zx0);
+      ctx.lineTo(xa, ty + (i % 2 ? zh : -zh));
+    }
+    ctx.lineTo(zx1, ty); ctx.stroke();
+
+    // the EMF
+    ctx.strokeStyle = inkA; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(lx - bl, ym - 4);        ctx.lineTo(lx + bl, ym - 4);
+    ctx.moveTo(lx - bl * 0.55, ym + 4); ctx.lineTo(lx + bl * 0.55, ym + 4);
+    ctx.stroke();
+
+    // the load R
+    ctx.strokeStyle = wire; ctx.lineWidth = 1.5;
+    ctx.strokeRect(rx - 4, ym - 6, 8, 12);
+
+    // the two terminals, where the cell's box meets the rails
+    ctx.fillStyle = soft;
+    ctx.beginPath(); ctx.arc(boxR, ty, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(boxR, by, 2, 0, Math.PI * 2); ctx.fill();
+
+    const fsG = Math.max(8, Math.min(11, gw / 28));
+    ctx.font = fsG + 'px ' + FAM; ctx.fillStyle = soft;
+    ctx.textAlign = 'left';  ctx.textBaseline = 'middle';
+    ctx.fillText('ε', lx + bl + 3, ym);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('r', (zx0 + zx1) / 2, ty + zh + 1);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('R', rx - 7, ym);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const emf=9, r=0.5;
-    const x0=W*0.10, x1=W*0.90, y0=H*0.82, y1=H*0.18;
-    const X = u => x0 + u*(x1-x0);
-    const Y = v => y0 - (v/emf)*(y0-y1);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x0, Y(emf)); ctx.lineTo(x1, Y(emf)); ctx.stroke();
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dU=1/80, N=80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k*dU;
-        const R = Math.pow(10, -1 + 4*u); // 0.1 Ω → 1000 Ω (this sim's log load)
-        const V = emf * R/(R+r);
-        const Ir = emf * r/(R+r);
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Y(V), 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Y(Ir), 2.6, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0.216); return; }         // static: probe parked on the crossing
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0) / 1000;
+      const raw = 0.5 - 0.5 * Math.cos(2 * Math.PI * s / 6.6);   // 6.6 s there and back
+      paint(raw * raw * (3 - 2 * raw));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

@@ -999,11 +999,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots on expanding fronts — a moving source bunches λ ahead and spreads it behind</span>
+            <span class="hero-label">Expanding wavefronts from a moving source — bunched ahead, spread behind — with a listener waiting in the sound ahead</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The Doppler effect</span></h2>
-            <p class="welcome-blurb">A moving source and a moving observer are not the same — only the source compresses λ in the air.</p>
+            <p class="welcome-blurb">Move the source, then the listener, at the same speed — the same pitch shift?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2806,51 +2806,104 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the Doppler effect.',
-    'For sound, a moving source and a moving observer are not the same. Only the source bunches the wavefronts in the air. Same closing speed, different pitch.',
+    'For sound, move the source toward the listener, then instead move the listener toward the source, at the very same speed. Compare what the listener hears.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: circular wavefronts from a source moving at vs = 90 m/s through
-     air (v = 343 m/s). Equal-time dots on each front — bunched ahead, spread behind. */
+  /* Hero: steady-state wavefront pattern of a source moving right at
+     vs/v = 0.35 (≈120 m/s in 343 m/s air — comfortably subsonic), drawn in
+     the frame that keeps the source at mid-band: each circle stays centred
+     on its emission point, which slides back relative to the source as the
+     front ages. Circles are ISOTROPIC (the old 0.72 y-squash compensated the
+     1280×240-store stretch, gone now) and the gap ratio is the honest
+     (v−vs):(v+vs) ≈ 1:2.1 — bunched ahead, spread behind, no crossing.
+     FIT (verified): R = min(0.44·H, 0.14·W), so the largest front spans
+     y ∈ [0.06H, 0.94H]; leftmost extent xs − (1+vs/v)·R ≥ 0.31W; rightmost
+     xs + (1−vs/v)·R ≤ 0.60W; listener at ≤0.53W — everything inside the
+     24–76% safe zone (the mask fades at 22%/78%). The old build anchored the
+     path at x = 0.22W with radii up to ~700px on a 240px store: the pattern's
+     centre of mass sat in the fade and every big front clipped to slivers.
+     Note: the audited "path from 38% to 58% of width" is geometrically
+     incompatible with height-capped true circles — travel 0.20W > R forces
+     fronts to cross, which is supersonic geometry — so the subsonic pattern
+     is kept compact and centred instead.
+     The stationary listener AHEAD of the source is PRESENCE ONLY — no note,
+     no pitch cue, no numbers: source-motion vs observer-motion pitch is the
+     gated prediction in the inquiry cards.
+     Backing store = CSS box × devicePixelRatio; all drawing in CSS px. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const m = 0.35;                 // vs/v — subsonic, well-nested pattern
+    const nF = 7;                   // fronts alive at any instant
+    const ink    = LIGHT ? 'rgba(5,150,105,.82)' : 'rgba(52,211,153,.82)';
+    const inkSrc = LIGHT ? 'rgba(180,83,9,.95)'  : 'rgba(251,191,36,.95)';
+    const inkObs = LIGHT ? 'rgba(51,65,85,.88)'  : 'rgba(203,213,225,.88)';
+    ctx.clearRect(0,0,W,H);
+    const R  = Math.min(0.44*H, 0.14*W);   // largest front fits the band
+    const xs = W*0.50, y0 = H*0.50;
+    // Front k has age fraction f = (k+u)/nF of the oldest: radius R·f, centre
+    // m·R·f behind the source. At u→1 front k becomes front k+1's start and
+    // the oldest fades out as it reaches full size — a seamless loop.
+    ctx.fillStyle = ink;
+    for(let k=0;k<nF;k++){
+      const f = (k + u)/nF;
+      const r = R*f, xc = xs - m*R*f;
+      let a = 0.92 - 0.35*f;
+      if(f > 0.9) a *= (1 - f)/0.1;        // fade the departing oldest front
+      ctx.globalAlpha = Math.max(0, a);
+      const nDots = 26;                    // equal-time dots on each front
+      for(let i=0;i<nDots;i++){
+        const th = (i/nDots)*Math.PI*2;
+        ctx.beginPath(); ctx.arc(xc + r*Math.cos(th), y0 + r*Math.sin(th), 1.7, 0, 7); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    // the source (amber), with a small arrow for its direction of motion
+    ctx.fillStyle = inkSrc;
+    ctx.beginPath(); ctx.arc(xs, y0, 3.4, 0, 7); ctx.fill();
+    ctx.strokeStyle = inkSrc; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(xs + 6, y0); ctx.lineTo(xs + 14, y0);
+    ctx.moveTo(xs + 10.5, y0 - 3.2); ctx.lineTo(xs + 14, y0); ctx.lineTo(xs + 10.5, y0 + 3.2);
+    ctx.stroke();
+    // stationary listener ahead, inside the sound field — presence only
+    // (no annotation: which motion raises the pitch more is a gated predict)
+    const xo = xs + 0.78*(1 - m)*R;
+    ctx.fillStyle = inkObs;
+    ctx.beginPath(); ctx.arc(xo, y0 - 5, 2.7, 0, 7); ctx.fill();          // head
+    ctx.strokeStyle = inkObs; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(xo, y0 - 1.5); ctx.lineTo(xo, y0 + 6.5); ctx.stroke();  // body
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const v = 343, vs = 90, T = 0.16, nFront = 8;
-    const tMax = nFront * T;
-    const x0 = W * 0.22, y0 = H * 0.52, scale = (W * 0.55) / (v * tMax);
-    const ink = LIGHT ? 'rgba(5,150,105,.82)' : 'rgba(52,211,153,.82)';
-    const inkSrc = LIGHT ? 'rgba(180,83,9,.95)' : 'rgba(251,191,36,.95)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 72; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
-        const t = (k+1)/N * tMax;
-        const xs = x0 + vs * t * scale;
-        ctx.fillStyle = inkSrc;
-        ctx.beginPath(); ctx.arc(xs, y0, 3.2, 0, 7); ctx.fill();
-        ctx.fillStyle = ink;
-        for(let n=0;n<nFront;n++){
-          const te = n * T;
-          if(te >= t) continue;
-          const r = v * (t - te) * scale;
-          const xc = x0 + vs * te * scale;
-          const nDots = 28;
-          for(let i=0;i<nDots;i++){
-            const th = (i / nDots) * Math.PI * 2;
-            ctx.beginPath(); ctx.arc(xc + r*Math.cos(th), y0 + r*Math.sin(th)*0.72, 1.7, 0, 7); ctx.fill();
-          }
-        }
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0.5); return; }           // static mid-cycle snapshot
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;              // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      paint((s/1.4) % 1);                       // one emission interval per 1.4 s — seamless loop
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

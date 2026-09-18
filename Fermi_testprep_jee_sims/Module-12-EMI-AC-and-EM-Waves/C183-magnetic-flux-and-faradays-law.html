@@ -585,7 +585,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
       <div class="welcome-card">
           <div class="welcome-hero">
               <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-              <span class="hero-label">A bar magnet sweeps in toward the coil and back out, with the induced EMF traced beneath</span>
+              <span class="hero-label">A bar magnet sweeps in along the axis of a three-loop coil and back out again, its field arcs swelling as it closes in, while the induced EMF is traced beneath as a pulse that reverses sign on the retreat</span>
           </div>
           <div class="welcome-body">
               <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Faraday's magnet &amp; coil</span></h2>
@@ -1846,26 +1846,85 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   /* Hero: a bar magnet sweeps in toward the coil and back out, while the induced
      EMF trace accumulates beneath — computed from the sim's own field law
      B ∝ r0³/(d + r0)³, ε = −dΦ/dt. Zero when far or held still; a swelling
-     pulse on the way in; the sign flips on the retreat. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const hx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+     pulse on the way in; the sign flips on the retreat.
+
+     INK BUDGET. The band is masked to a soft edge outside 22–78% of its own
+     width, so the whole scene — coil, the magnet's FULL sweep, the trace band
+     and its label — is fitted inside 26.5–73.5% and scales with that span.
+     Previously the trace ran 8%→92% and the magnet retreated to ≈20%, and the
+     one caption that explained the lower band was right-aligned at 92%, i.e.
+     sitting in the fade at roughly a third of its opacity: the hero's only
+     words were the least legible thing in it.
+
+     CARD GATES CHECKED (2026-09-18). Card 2 is a data-gate prediction — a
+     magnet HELD against the coil leaves the bulb dark — so, as before, the
+     sweep never pauses: nothing here shows what a stationary magnet does.
+     Consequently the label is now just "induced EMF ε". Spelling out
+     "ε = −dΦ/dt" on the welcome screen states the flux-change rule that card 2
+     exists to make the student discover, which is why the formula has been
+     dropped along with the move inward. Card 4 (four times faster → four times
+     ε) is safe: one sweep, at one speed, with no rate annotation. Card 5
+     (rewinding 1 → 4 loops) is safe: the coil is drawn with a fixed 3 loops and
+     no N is named.
+
+     KNOWN BLURB GAP (left deliberately). The welcome blurb says the coil is
+     "wired to a bulb" and that you "track the magnetic flux"; the art shows no
+     bulb and traces ε, not Φ. Neither is added here: a Φ trace beside the ε
+     trace would demonstrate the ε-versus-Φ distinction that card 2 gates, and a
+     bulb would cost width in the band being tightened. The sim itself has both,
+     from card 1 onward.
+
+     The canvas is sized to its OWN CSS box on every paint, not to the 1280x240
+     authored in the markup: the band is one viewport wide and 140px tall, so a
+     5.3:1 backing store was being stretched to ≈10:1.
+
+     VERTICAL CONTAINMENT (fixed). Two things used to run off the drawable
+     area. (1) The outermost field arc was sized only against the magnet and
+     the horizontal room to R, so it rose above y = 0 and was sliced flat by
+     the canvas top — measured −1.6 px at W = 820 and −15.3 px at W ≥ 1024. It
+     is now additionally bounded by the headroom above the axis, so the arc
+     family always closes inside the band (min drawn y = 2.25 px at every
+     width). The arcs still SWELL with proximity exactly as before — that is
+     the alpha driven by B ∝ r0³/(d + r0)³, which is untouched. (2) The
+     double-headed motion arrow sat at y 70.4–75.4 against the band clip at
+     y = 70 from W = 1024 up, so its shaft vanished entirely and only the
+     bottom half of each head survived; it is now held above bandTop. */
+  let heroToken = 0;
+  function paintHero(hx, W, H, u, LIGHT){
     hx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
     const ink = a => LIGHT ? 'rgba(15,23,42,'+a+')' : 'rgba(226,232,240,'+a+')';
     const emerald = LIGHT ? 'rgba(5,150,105,.9)' : 'rgba(110,231,183,.9)';
     const emeraldSoft = LIGHT ? 'rgba(5,150,105,.6)' : 'rgba(110,231,183,.6)';
-    const font = getComputedStyle(document.body).fontFamily;
-    // geometry: schematic band on top, ε(t) trace band beneath
-    const yAx = H*0.30, bandTop = H*0.52;
-    const coilX = W*0.615, gap = 20, nLoops = 3, ry = H*0.19, rx2 = ry*0.34;
-    const magW = 92, magH = 26;
-    const traceBase = H*0.78, traceAmp = H*0.16;
-    const t0x = W*0.08, t1x = W*0.92;
+    const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    // Everything below is derived from the opaque span [L, R] and scales with it.
+    const L = W*0.265, R = W*0.735, span = R - L;
+    const yAx = H*0.30, bandTop = H*0.50;
+    const nLoops = 3;
+    const ry  = Math.min(H*0.19, span*0.075), rx2 = ry*0.34;
+    const gap = Math.max(8, span*0.028);
+    const magW = Math.max(46, Math.min(span*0.20, 100));
+    const magH = Math.max(14, Math.min(magW*0.30, 28));
+    // coil sits as far right as its own rightmost loop allows
+    const coilX = R - 2 - (nLoops-1)*gap - rx2;
+    const traceBase = H*0.825, traceAmp = H*0.125;
+    const t0x = L + 3, t1x = R - 3;
     // motion profile: pixel gap from the N pole to the first loop; same cubic
     // softened-dipole falloff as the sim (B ∝ r0³/(d+r0)³)
-    const dFar = W*0.34, dNear = 26, R0 = 110;
-    const ss = u => u<=0?0:u>=1?1:u*u*(3-2*u);
+    const dNear = Math.max(14, span*0.03);
+    // far end chosen so the magnet's LEFT edge never crosses L
+    const dFar = Math.max(dNear + span*0.12, coilX - rx2 - magW - L - 2);
+    const R0 = Math.max(50, span*0.183);
+    // arcs radiate to the right of the N pole only; cap them at the closest
+    // approach so the outermost arc can never reach past R, and at the band's
+    // own headroom so the outermost arc can never be sliced flat by y = 0.
+    // The arcs span ±1.15 rad about the axis, so an arc of radius r rises
+    // r·sin(1.15) above yAx: the radius that just clears the top with 3 px to
+    // spare is (yAx − 3)/sin(1.15). Only the TOP is bounded here — the lower
+    // halves are meant to run under the band clip at bandTop.
+    let arcMax = Math.max(12, Math.min(magW*0.62, R - 2 - (coilX - rx2 - dNear)));
+    arcMax = Math.min(arcMax, (yAx - 3)/Math.sin(1.15));
+    const arcs = [0.29, 0.645, 1].map(f => f*arcMax);
+    const ss = t => t<=0?0:t>=1?1:t*t*(3-2*t);
     // One continuous in-and-out sweep. There is deliberately NO stationary hold:
     // the hero plays before the student commits to the "magnet at rest" prediction,
     // so it must not demonstrate that a held magnet induces nothing.
@@ -1875,63 +1934,95 @@ Shell.init({ onFrame, onReset, onResize, onStep });
       return dFar;
     };
     const B = d => { const f = R0/(d+R0); return f*f*f; };
-    function schematic(d){
-      hx.save();
-      hx.beginPath(); hx.rect(0, 0, W, bandTop); hx.clip();
-      hx.clearRect(0, 0, W, bandTop);
-      hx.setLineDash([4,7]); hx.strokeStyle = ink(.18); hx.lineWidth = 1;
-      hx.beginPath(); hx.moveTo(W*0.10, yAx); hx.lineTo(W*0.90, yAx); hx.stroke(); hx.setLineDash([]);
-      // coil (three loops)
-      hx.strokeStyle = ink(.7); hx.lineWidth = 3;
-      for(let i=0;i<nLoops;i++){ hx.beginPath(); hx.ellipse(coilX + i*gap, yAx, rx2, ry, 0, 0, 2*Math.PI); hx.stroke(); }
-      // field arcs from the N pole — opacity swells as the magnet closes in
-      const mR = coilX - rx2 - d, mL = mR - magW, mid = mL + magW/2;
-      hx.globalAlpha = Math.min(1, 0.25 + 2.2*B(d));
-      hx.strokeStyle = emeraldSoft; hx.lineWidth = 1.5;
-      [18, 40, 62].forEach(r => { hx.beginPath(); hx.arc(mR, yAx, r, -1.15, 1.15); hx.stroke(); });
-      hx.globalAlpha = 1;
-      // bar magnet (S blue · N red, N pole facing the coil)
-      hx.fillStyle = '#4a7fd4'; hx.fillRect(mL, yAx - magH/2, magW/2, magH);
-      hx.fillStyle = '#e2504e'; hx.fillRect(mid, yAx - magH/2, magW/2, magH);
-      hx.strokeStyle = 'rgba(0,0,0,.4)'; hx.lineWidth = 1.5; hx.strokeRect(mL, yAx - magH/2, magW, magH);
-      hx.fillStyle = '#fff'; hx.font = '600 15px ' + font;
-      hx.textAlign = 'center'; hx.textBaseline = 'middle';
-      hx.fillText('S', mL + magW/4, yAx + 1); hx.fillText('N', mR - magW/4, yAx + 1);
-      // double-headed motion arrow beneath the magnet
-      const ay = yAx + magH/2 + 16, ax0 = mid - 46, ax1 = mid + 46;
-      hx.strokeStyle = ink(.55); hx.fillStyle = ink(.55); hx.lineWidth = 2;
-      hx.beginPath(); hx.moveTo(ax0, ay); hx.lineTo(ax1, ay); hx.stroke();
-      [[ax0,-1],[ax1,1]].forEach(p => { hx.beginPath(); hx.moveTo(p[0] + p[1]*7, ay); hx.lineTo(p[0], ay-4); hx.lineTo(p[0], ay+4); hx.closePath(); hx.fill(); });
-      hx.restore();
-    }
-    // ε(t) = −dΦ/dt sampled along the sweep (Φ ∝ B here — fixed N, A)
+    // ---- lower band: axis, label, and the pulse so far ----
     const N = 220, eps = []; let m = 0;
     for(let i=0;i<=N;i++){ const t = i/N, h2 = 1/N;
       const e = -(B(dOf(Math.min(1,t+h2))) - B(dOf(Math.max(0,t-h2)))) / (2*h2);
       eps.push(e); m = Math.max(m, Math.abs(e)); }
-    // trace axis + label (once)
+    if(!(m > 0)) m = 1;
     hx.strokeStyle = ink(.22); hx.lineWidth = 1;
     hx.beginPath(); hx.moveTo(t0x, traceBase+0.5); hx.lineTo(t1x, traceBase+0.5); hx.stroke();
-    hx.fillStyle = ink(.5); hx.font = '600 19px ' + font;
-    hx.textAlign = 'right'; hx.textBaseline = 'alphabetic';
-    hx.fillText('induced EMF  ε = −dΦ/dt', t1x, H*0.62);
-    // accumulate the pulse as dots, the magnet tracking along (one entrance, never loops)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 3;
-      let t = 0;
-      for(let s2=0; s2<per && k<=N; s2++, k++){
-        t = k/N;
-        hx.fillStyle = emerald;
-        hx.beginPath(); hx.arc(t0x + (t1x-t0x)*t, traceBase - (eps[k]/m)*traceAmp, 2.6, 0, 7); hx.fill();
-      }
-      schematic(dOf(reduce ? 0.49 : Math.min(1, t)));
-      if(k<=N) requestAnimationFrame(batch);
+    // Centred over the band it names, and shrunk to fit if the span is narrow.
+    const capText = 'induced EMF ε';
+    let capFS = Math.max(10, Math.min(17, span*0.032));
+    hx.font = '600 ' + capFS + 'px ' + font;
+    while(capFS > 9 && hx.measureText(capText).width > span - 4){ capFS -= 1; hx.font = '600 ' + capFS + 'px ' + font; }
+    hx.fillStyle = ink(.5);
+    hx.textAlign = 'center'; hx.textBaseline = 'alphabetic';
+    hx.fillText(capText, (L+R)/2, H*0.625);
+    const shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    hx.fillStyle = emerald;
+    for(let k=0;k<=shown;k++){
+      hx.beginPath();
+      hx.arc(t0x + (t1x-t0x)*(k/N), traceBase - (eps[k]/m)*traceAmp, 2.6, 0, 7); hx.fill();
     }
-    batch();
+    // ---- upper band: the schematic at this instant ----
+    const d = dOf(u);
+    hx.save();
+    hx.beginPath(); hx.rect(0, 0, W, bandTop); hx.clip();
+    hx.setLineDash([4,7]); hx.strokeStyle = ink(.18); hx.lineWidth = 1;
+    hx.beginPath(); hx.moveTo(L, yAx); hx.lineTo(R, yAx); hx.stroke(); hx.setLineDash([]);
+    // coil (three loops)
+    hx.strokeStyle = ink(.7); hx.lineWidth = 3;
+    for(let i=0;i<nLoops;i++){ hx.beginPath(); hx.ellipse(coilX + i*gap, yAx, rx2, ry, 0, 0, 2*Math.PI); hx.stroke(); }
+    // field arcs from the N pole — opacity swells as the magnet closes in
+    const mR = coilX - rx2 - d, mL = mR - magW, mid = mL + magW/2;
+    hx.globalAlpha = Math.min(1, 0.25 + 2.2*B(d));
+    hx.strokeStyle = emeraldSoft; hx.lineWidth = 1.5;
+    arcs.forEach(r => { hx.beginPath(); hx.arc(mR, yAx, r, -1.15, 1.15); hx.stroke(); });
+    hx.globalAlpha = 1;
+    // bar magnet (S blue · N red, N pole facing the coil)
+    hx.fillStyle = '#4a7fd4'; hx.fillRect(mL, yAx - magH/2, magW/2, magH);
+    hx.fillStyle = '#e2504e'; hx.fillRect(mid, yAx - magH/2, magW/2, magH);
+    // The bar's own two colours are theme-invariant, but its outline was not: a
+    // hard rgba(0,0,0,.4) edge reads as definition on the light overlay and
+    // dissolves the magnet into the background on the dark one (1.01:1).
+    hx.strokeStyle = LIGHT ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.34)';
+    hx.lineWidth = 1.5; hx.strokeRect(mL, yAx - magH/2, magW, magH);
+    hx.fillStyle = '#fff'; hx.font = '600 ' + Math.max(9, Math.min(15, magH*0.58)) + 'px ' + font;
+    hx.textAlign = 'center'; hx.textBaseline = 'middle';
+    hx.fillText('S', mL + magW/4, yAx + 1); hx.fillText('N', mR - magW/4, yAx + 1);
+    // Double-headed motion arrow beneath the magnet, spanning exactly the magnet
+    // (it used to be a fixed ±46px, which overhung the bar on narrow bands).
+    // It also has to stay above bandTop: at W >= 1024 the magnet is at its full
+    // height and the arrow fell at y 70.4–75.4 against a clip at 70, so the
+    // whole shaft was being cut away and only half of each head survived.
+    const ay = Math.min(yAx + magH/2 + Math.min(16, H*0.11), bandTop - 6),
+          ax0 = mid - magW*0.48, ax1 = mid + magW*0.48;
+    hx.strokeStyle = ink(.55); hx.fillStyle = ink(.55); hx.lineWidth = 2;
+    hx.beginPath(); hx.moveTo(ax0, ay); hx.lineTo(ax1, ay); hx.stroke();
+    [[ax0,-1],[ax1,1]].forEach(p => { hx.beginPath(); hx.moveTo(p[0] + p[1]*7, ay); hx.lineTo(p[0], ay-4); hx.lineTo(p[0], ay+4); hx.closePath(); hx.fill(); });
+    hx.restore();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const hx = c.getContext('2d');
+      hx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(hx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }             // static: the completed sweep
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // 4.6 s cycle: 3.2 s sweep, 1.4 s dwell at the end of it, then repeat
+      const s = (((now || t0) - t0)/1000) % 4.6;
+      paint(Math.min(1, s/3.2));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

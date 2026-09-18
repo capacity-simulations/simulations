@@ -1082,7 +1082,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A mass on a spring, strobed at equal time steps</span>
+            <span class="hero-label">A charged capacitor wired straight across a coil — the switch has just closed</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">LC oscillations</span></h2>
@@ -3376,81 +3376,166 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the MECHANICAL twin of this circuit, drawn from its own equation
-     x(t) = A cos(omega t) and sampled at EQUAL TIME STEPS. Equal dt means the
-     dots crowd where the mass turns around and spread where it is moving
-     fastest. Deliberately NOT the circuit's own charge or current: the first
-     prediction in the inquiry asks what the charge does after the switch
-     closes, and a hero that drew q(t) would answer it before the student had
-     committed to anything. The mapping between the two systems is the
-     inquiry's closing card, so nothing here is given away either. */
+  /* Hero: the LC loop exactly as the blurb states it — a charged capacitor
+     (a row of + facing a row of −, a small field hint in the gap) wired
+     straight across a multi-turn coil, with the switch drawn at the instant
+     it seats. The loop IS the blurb's stated premise, so it spoils nothing;
+     what stays deliberately WITHHELD is any q(t)/i(t) trace, energy bar or
+     period formula — card 2's first prediction is what the charge does after
+     the switch closes, and even a current-hint arrow is omitted because
+     "stays put — nothing drives it" is one of that card's choices. The
+     mass-on-a-spring twin that used to live here is the inquiry's CLOSING
+     card, so it must not lead. Backing store follows the C190 idiom: sized
+     to the canvas's own CSS box × devicePixelRatio on every draw (the
+     authored 1280×240 was being squashed ~2:1 into a ~10:1 band), drawn in
+     CSS px, looping switch-closing reveal guarded by heroToken with a
+     static reduced-motion fallback. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    // u: 0 = switch open, 1 = switch seated (the resting state of the hero)
+    const ink  = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
+    const soft = LIGHT ? 'rgba(15,23,42,.48)'  : 'rgba(148,163,184,.62)';
+    const cap  = LIGHT ? 'rgba(180,83,9,.95)'  : 'rgba(251,191,36,.95)';
+    const fld  = LIGHT ? 'rgba(180,83,9,.55)'  : 'rgba(251,191,36,.55)';
+    const coil = LIGHT ? 'rgba(190,24,93,.92)' : 'rgba(244,114,182,.90)';
+    const glow = LIGHT ? 'rgba(180,83,9,.15)'  : 'rgba(251,191,36,.14)';
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+
+    ctx.clearRect(0,0,W,H);
+    // a whisper of ground so the band reads as one object
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // Loop kept inside the 24%–76% band of the display and capped in width,
+    // or on a wide viewport it stretches past reading as a circuit at all.
+    const cw = Math.min(W*0.44, 640), ox = (W - cw)/2;
+    const xA = ox, xB = ox + cw;                 // left rail: capacitor, right rail: coil
+    const yT = H*0.18, yB = H*0.80, midY = (yT+yB)/2;
+    const gap = Math.max(7, H*0.065);            // capacitor half-gap
+    const pl  = Math.min(26, W*0.03);            // plate half-length
+    const iy0 = yT + (yB-yT)*0.14, iy1 = yT + (yB-yT)*0.86;   // coil span
+    const xP  = xA + cw*0.34;                    // switch pivot on the bottom wire
+    const xK  = xP + Math.min(64, cw*0.16);      // switch contact
+    const roomy = W > 640;
+
+    // faint halo once the loop is closed — "one closed loop", not a current
+    if(u > 0){
+      ctx.save();
+      ctx.globalAlpha = u;
+      ctx.strokeStyle = glow; ctx.lineWidth = 12; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(xA, yT); ctx.lineTo(xB, yT); ctx.lineTo(xB, yB);
+      ctx.lineTo(xA, yB); ctx.lineTo(xA, yT);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // wires, broken at the plates and at the switch throw
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(xA, yT); ctx.lineTo(xB, yT);                    // top wire
+    ctx.moveTo(xB, yT); ctx.lineTo(xB, iy0);                   // right rail, to the coil
+    ctx.moveTo(xB, iy1); ctx.lineTo(xB, yB);
+    ctx.moveTo(xB, yB); ctx.lineTo(xK, yB);                    // bottom wire, to the contact
+    ctx.moveTo(xP, yB); ctx.lineTo(xA, yB);                    // pivot back to the corner
+    ctx.moveTo(xA, yB); ctx.lineTo(xA, midY+gap);              // left rail, to the plates
+    ctx.moveTo(xA, midY-gap); ctx.lineTo(xA, yT);
+    ctx.stroke();
+
+    // capacitor — two horizontal plates on the left rail, already charged
+    ctx.strokeStyle = cap; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(xA-pl, midY-gap); ctx.lineTo(xA+pl, midY-gap);
+    ctx.moveTo(xA-pl, midY+gap); ctx.lineTo(xA+pl, midY+gap);
+    ctx.stroke();
+    // literal + and − rows (never colour alone), skipping the rail line itself
+    // The glyph size and the gap between glyphs BOTH come off the plate: at a
+    // fixed 12 px the four marks were spaced pl*0.45 apart, which on a 360 px
+    // band is 4.9 px against a ~7 px advance — the row rendered as a smear.
+    const pmFS = Math.max(9, Math.min(12, pl*0.5));
+    ctx.fillStyle = cap; ctx.font = '700 ' + pmFS + 'px '+FAM;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    [-2,-1,1,2].forEach(k=>{
+      const x = xA + k*Math.max(pmFS*0.62, Math.min(11, pl*0.45));
+      ctx.fillText('+', x, midY-gap-9);
+      ctx.fillText('−', x, midY+gap+9);
+    });
+    // small E-field hint in the gap: two short arrows from + plate to − plate
+    ctx.strokeStyle = fld; ctx.fillStyle = fld; ctx.lineWidth = 1.5;
+    [-1,1].forEach(k=>{
+      const x = xA + k*Math.min(12, pl*0.5);
+      ctx.beginPath(); ctx.moveTo(x, midY-gap+3); ctx.lineTo(x, midY+gap-6); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, midY+gap-2); ctx.lineTo(x-3, midY+gap-7); ctx.lineTo(x+3, midY+gap-7);
+      ctx.closePath(); ctx.fill();
+    });
+
+    // coil — the family's inductor bumps, on the right rail
+    ctx.strokeStyle = coil; ctx.lineWidth = 2;
+    ctx.beginPath();
+    const nL = 4, lS = (iy1-iy0)/nL;
+    for(let k=0;k<nL;k++){
+      const yc = iy0+(k+0.5)*lS;
+      ctx.moveTo(xB, yc-lS/2); ctx.arc(xB, yc, lS/2, -Math.PI/2, Math.PI/2, false);
+    }
+    ctx.stroke();
+
+    // the switch: pivot, contact, and a blade that has just swung shut
+    ctx.fillStyle = ink;
+    [[xP,yB],[xK,yB]].forEach(p=>{ ctx.beginPath(); ctx.arc(p[0], p[1], 3.6, 0, 7); ctx.fill(); });
+    const Lb = xK - xP, th0 = 0.85, th = th0*(1-u);
+    // dashed ghost of the open position it came from
+    ctx.strokeStyle = soft; ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(xP, yB);
+    ctx.lineTo(xP + Lb*Math.cos(th0), yB - Lb*Math.sin(th0)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = ink; ctx.lineWidth = 3.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(xP, yB);
+    ctx.lineTo(xP + Lb*Math.cos(th), yB - Lb*Math.sin(th)); ctx.stroke();
+
+    // names — words before symbols, kept off the wires; hidden when cramped
+    if(roomy){
+      ctx.font = '13px '+FAM; ctx.textBaseline='top';
+      ctx.fillStyle = cap;  ctx.textAlign='center'; ctx.fillText('capacitor C', xA, yB+7);
+      ctx.fillStyle = coil; ctx.fillText('coil L', xB, yB+7);
+      ctx.fillStyle = soft; ctx.fillText('switch', (xP+xK)/2, yB+7);
+      ctx.font = '12px '+FAM; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText('no resistor anywhere in the loop', W/2, yT-7);
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.body.classList.contains('light-theme') ||
                   document.documentElement.getAttribute('data-theme') === 'light';
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    // The 1280x240 strip is painted into a ~1500x140 box, so it is squeezed to
-    // about 55% vertically. Everything below is therefore drawn TALL and kept
-    // horizontally compact, or it would arrive as a flat smear.
-    const ink    = LIGHT ? 'rgba(15,23,42,.45)'  : 'rgba(148,163,184,.45)';
-    const inkSoft= LIGHT ? 'rgba(15,23,42,.26)'  : 'rgba(148,163,184,.26)';
-    const spring = LIGHT ? 'rgba(109,40,217,.9)' : 'rgba(167,139,250,.9)';
-    const dotClr = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';
-    const label  = LIGHT ? 'rgba(42,138,126,.95)': 'rgba(110,231,183,.92)';
-    const wallX = W*0.26, eqX = W*0.50, amp = W*0.20;
-    const ySpring = H*0.30, yLine = H*0.72;
-    const massX = eqX + amp, massW = 23, massH = 32;
-    // wall + hatching
-    ctx.strokeStyle = ink; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(wallX, ySpring-52); ctx.lineTo(wallX, ySpring+52); ctx.stroke();
-    ctx.lineWidth = 2;
-    for(let y=ySpring-52; y<=ySpring+48; y+=13){
-      ctx.beginPath(); ctx.moveTo(wallX-12, y+13); ctx.lineTo(wallX, y); ctx.stroke();
-    }
-    // spring, drawn out to the right-hand turning point
-    ctx.strokeStyle = spring; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(wallX, ySpring);
-    const zN = 13;
-    for(let k=1;k<=zN;k++){
-      const u = k/zN;
-      ctx.lineTo(wallX + u*((massX-massW)-wallX), ySpring + (k%2===0 ? -24 : 24));
-    }
-    ctx.lineTo(massX-massW, ySpring); ctx.stroke();
-    ctx.fillStyle = spring;
-    ctx.fillRect(massX-massW, ySpring-massH, massW*2, massH*2);
-    // line of motion + the equilibrium and turning-point ticks
-    ctx.strokeStyle = inkSoft; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(eqX-amp-34, yLine); ctx.lineTo(eqX+amp+34, yLine); ctx.stroke();
-    ctx.strokeStyle = ink; ctx.lineWidth = 3;
-    [eqX-amp, eqX, eqX+amp].forEach(x=>{
-      ctx.beginPath(); ctx.moveTo(x, yLine-26); ctx.lineTo(x, yLine+26); ctx.stroke();
-    });
-    ctx.fillStyle = label; ctx.font = '700 24px ' + getComputedStyle(document.body).fontFamily;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText('x = 0', eqX, yLine+30);
-    // dotted connector: the mass belongs to the line below it
-    ctx.strokeStyle = inkSoft; ctx.lineWidth = 2; ctx.setLineDash([5,6]);
-    ctx.beginPath(); ctx.moveTo(massX, ySpring+massH); ctx.lineTo(massX, yLine-28); ctx.stroke();
-    ctx.setLineDash([]);
-    // The strobe: x(t) = A cos(omega t) sampled at EQUAL TIME STEPS over two
-    // cycles, so the marks crowd at the turning points and spread through the
-    // middle. Nothing about the circuit is asserted here.
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 66, CYCLES = 2; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s2=0; s2<per && k<N; s2++, k++){
-        const ph = (k/(N-1))*CYCLES*2*Math.PI;     // EQUAL time steps
-        const x = eqX + amp*Math.cos(ph);
-        ctx.fillStyle = dotClr;
-        ctx.fillRect(x-1.8, yLine-9, 3.6, 18);     // a tall mark survives the squeeze
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    // looping reveal: the blade swings shut, holds, and swings shut again
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // 2.3 s cycle: 0.9 s swing, 1.4 s dwell with the blade shut, then repeat
+      const s = Math.min(1, ((((now || t0) - t0)/1000) % 2.3)/0.9);
+      paint(s*s*(3 - 2*s));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

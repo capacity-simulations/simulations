@@ -504,6 +504,7 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
 </head>
 <body>
 <!-- POLISH: [physics] H-CAPTION: info-modal prose overclaimed a runnable "⚠ Coupled" model (the physics-model box ships hidden and setMode() locks mode=real) — reworded Source, Misconception, E1/J2/J5, D6/D7 and H1/H2 rows to match the shipped sim (myth = prediction choice A + dashed falsified equation in Formal); dropped the unreachable naive θ=0 glide claim and the nonexistent "Fit" button mention; corrected the Hide Text tooltip (registry is not empty). Deliberately did NOT unhide the coupled-model UI (build hid it; unhiding = adding UI) and did NOT remove the hidden mode buttons / naive data rows (live handlers in onReset/checkSteps/applyInquiryScene reference them). [pedagogy] NO FINDINGS — data-gate has data-correct, no control locked at load, card numbers match step configs. [visuals] D2: in-flight ball letter labels bumped bold 11px -> 12px; no other composition/clipping defects. Shell CSS, shell runtime and physics untouched. -->
+<!-- HERO: redesigned from range-vs-angle (off-message — the sim/title/blurb are about x–y INDEPENDENCE — and mask-clipped: launch at 14%, 45° landing at 86%, shared flags at 76.3%) to the classic independence picture: one 25 m/s, 40° arc (the sim's default launch) as equal-time dots plus its two shadows — uniform x-steps along the ground, free-fall-spaced y-steps on a wall — with dashed guides tying ball to shadows. Backing store now getBoundingClientRect()×dpr per paint (kills the 1280×240→100vw×140px ~2:1 squash); heroToken rAF guard + resize hook per C190; reduced-motion paints the final frame. All essential content in 24–76%. SPOILER DECISIONS: gated card 2 is the twin-race predict ("projectile vs ball tossed straight up — who lands first?") — hero deliberately draws NO second ball, NO tie-line, NO simultaneous landing flags; the shadows show only this one ball's decomposition, which is premise (title, blurb and card 1 state it openly). Cards 4–5 (ungated) discuss 45°/complementary ranges — hero shows a single angle and no range comparison. -->
 <div id="shell" class="hide-formal">
 
   <div id="shell-info-modal" class="shell-modal-backdrop">
@@ -574,11 +575,11 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots along three launches at 25 m/s — 30°, 45° and 60°</span>
+                <span class="hero-label">One flight, two shadows — equal steps along the ground, free-fall steps up the wall</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Projectile motion</span></h2>
-                <p class="welcome-blurb">Launch a cannonball and see its horizontal and vertical motions run independently.</p>
+                <p class="welcome-blurb">Launch a cannonball, toss a twin straight up — which one lands first?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2342,67 +2343,105 @@ window.__audit = {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to projectile motion.',
-    'Here you fire a cannonball and watch its two motions run separately: steady velocity sideways, free fall vertically. A twin ball tossed straight up stays level with it and lands at the same instant.',
+    'Here you fire a cannonball and watch what its sideways motion and its vertical motion each do. A twin ball tossed straight up with the same vertical speed races it to the ground.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three launches from one cannon at 25 m/s — 30°, 45°, 60° — drawn as
-     EQUAL-TIME-STEP dots, so spacing honestly shows speed (dense at the apex,
-     sparse near launch and landing). 30° and 60° land on the same spot. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: the independence picture the sim is actually about — ONE projectile
+     (the sim's default launch, v₀ = 25 m/s, θ = 40°) drawn as equal-time dots,
+     together with its two shadows: the x-projection marching in UNIFORM steps
+     along the ground, and the y-projection stacking FREE-FALL-spaced steps on
+     a wall at the left. Dashed guides tie the ball to both shadows.
+
+     The canvas backing store is sized to its OWN CSS box × devicePixelRatio on
+     every paint (was a fixed 1280×240 stretched ~2:1 into a 100vw×140px band).
+     Everything essential sits inside 24–76% of the displayed width — the hero
+     CSS mask is only fully opaque over 22–78%. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const g = 9.81, v0 = 25, D2R = Math.PI/180;
-    const shots = [
-      { deg:30, dark:'rgba(253,224,171,.92)', light:'rgba(217,119,6,.92)' },
-      { deg:45, dark:'rgba(110,231,183,.95)', light:'rgba(5,150,105,.95)' },
-      { deg:60, dark:'rgba(125,211,252,.92)', light:'rgba(2,132,199,.92)' }
-    ];
-    shots.forEach(s => { const th = s.deg*D2R;
-      s.vx = v0*Math.cos(th); s.vy = v0*Math.sin(th);
-      s.T = 2*s.vy/g; s.R = s.vx*s.T; });
-    const Rmax = v0*v0/g;                                  // 45° range, ~63.7 m
-    const Hmax = Math.pow(v0*Math.sin(60*D2R),2)/(2*g);    // 60° apex, ~23.9 m
-    const x0 = W*0.14, gy = H-24;
-    const sx = (W*0.72)/Rmax, sy = (gy-16)/Hmax;
+    const g = 9.81, D2R = Math.PI/180, v0 = 25, th = 40*D2R;
+    const vx = v0*Math.cos(th), vy = v0*Math.sin(th);
+    const T = 2*vy/g, R = vx*T, Hm = vy*vy/(2*g);
+    // Layout: wall at 25%, arc from 29% to 75% of the DISPLAYED width
+    const xw = W*0.25, x0 = W*0.29, gy = H - 26;
+    const sx = (W*0.75 - x0)/R, sy = (gy - 22)/Hm;
     const X = x => x0 + x*sx, Y = y => gy - y*sy;
-    // ground line + launch point
+    const ball  = LIGHT ? 'rgba(217,119,6,.95)' : 'rgba(251,191,36,.95)';
+    const xSh   = LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(52,211,153,.95)';
+    const ySh   = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(125,211,252,.95)';
+    const soft  = LIGHT ? 'rgba(51,65,85,.70)'  : 'rgba(148,163,184,.75)';
+    const faint = LIGHT ? 'rgba(15,23,42,.14)'  : 'rgba(148,163,184,.14)';
+    // ground line + wall
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.06, gy+0.5); ctx.lineTo(W*0.94, gy+0.5); ctx.stroke();
-    // faint trajectory outlines
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.14)' : 'rgba(148,163,184,.14)';
-    shots.forEach(s => { ctx.beginPath();
-      for(let i=0;i<=90;i++){ const t = s.T*i/90;
-        const px = X(s.vx*t), py = Y(Math.max(0, s.vy*t - 0.5*g*t*t));
-        i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
-      ctx.stroke(); });
+    ctx.beginPath(); ctx.moveTo(W*0.24, gy+0.5); ctx.lineTo(W*0.76, gy+0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xw+0.5, gy); ctx.lineTo(xw+0.5, Y(Hm)-8); ctx.stroke();
+    // faint trajectory outline
+    ctx.strokeStyle = faint; ctx.beginPath();
+    for(let i=0;i<=90;i++){ const t = T*i/90;
+      const px = X(vx*t), py = Y(Math.max(0, vy*t - 0.5*g*t*t));
+      i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
+    ctx.stroke();
+    // launch point
     ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA';
     ctx.beginPath(); ctx.arc(x0, gy, 4, 0, 7); ctx.fill();
-    // equal-time dots: one shared clock for all three shots (accumulates ~1 s; one frame under reduced motion)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.07, N = Math.ceil(shots[2].T/dt); let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const t = k*dt;
-        shots.forEach(s => { if(t > s.T) return;
-          ctx.fillStyle = LIGHT ? s.light : s.dark;
-          ctx.beginPath(); ctx.arc(X(s.vx*t), Y(Math.max(0, s.vy*t - 0.5*g*t*t)), 3, 0, 7); ctx.fill(); });
-      }
-      if(k <= N) requestAnimationFrame(batch);
-      else shots.forEach((s,i) => {           // landing flags — 30° and 60° share one spot
-        ctx.fillStyle = LIGHT ? s.light : s.dark;
-        const fw = 6 - i;                      // nested sizes keep the shared flag visible
-        ctx.beginPath(); ctx.moveTo(X(s.R), gy); ctx.lineTo(X(s.R)-fw, gy-9); ctx.lineTo(X(s.R)+fw, gy-9);
-        ctx.closePath(); ctx.fill(); });
+    // equal-time dots: ball on the arc, uniform shadow on the ground,
+    // free-fall shadow on the wall — one shared clock; u ∈ [0,1] is progress
+    const dt = 0.09, N = Math.ceil(T/dt), K = Math.max(1, Math.round(N*u));
+    for(let k=0; k<=Math.min(K,N); k++){
+      const t = Math.min(k*dt, T);
+      const bx = X(vx*t), by = Y(Math.max(0, vy*t - 0.5*g*t*t));
+      ctx.fillStyle = xSh; ctx.beginPath(); ctx.arc(bx, gy, 2.6, 0, 7); ctx.fill();
+      ctx.fillStyle = ySh; ctx.beginPath(); ctx.arc(xw, by, 2.6, 0, 7); ctx.fill();
+      ctx.fillStyle = ball; ctx.beginPath(); ctx.arc(bx, by, 3, 0, 7); ctx.fill();
     }
-    batch();
+    // dashed guides tying the ball to both shadows — at the leading dot while
+    // animating, parked mid-ascent once the flight is complete
+    const tg = (u < 1 ? Math.min(K*dt, T) : 0.38*T);
+    const gx = X(vx*tg), gyb = Y(Math.max(0, vy*tg - 0.5*g*tg*tg));
+    ctx.strokeStyle = soft; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(gx, gyb); ctx.lineTo(gx, gy); ctx.moveTo(gx, gyb); ctx.lineTo(xw, gyb); ctx.stroke();
+    ctx.setLineDash([]);
+    // labels — premise only (the title/blurb already announce independence)
+    ctx.fillStyle = soft; ctx.font = '600 12px ' + FAM;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('equal steps sideways', (x0 + W*0.75)/2, H - 8);
+    ctx.textAlign = 'left';
+    ctx.fillText('free-fall steps', xw + 8, Y(Hm) - 2);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === "number" ? now : t0) - t0)/1000;
+      const u = Math.min(1, (s % 4.2)/2.8);         // 2.8 s flight, 1.4 s dwell, loop
+      paint(u);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

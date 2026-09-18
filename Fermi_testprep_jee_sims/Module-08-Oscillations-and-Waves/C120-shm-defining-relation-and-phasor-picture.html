@@ -537,11 +537,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots of two SHM traces, same ω, different A</span>
+            <span class="hero-label">Two balls resting in the same ½kx² spring well, one pulled twice as far as the other, beside one period of each ball's equal-time x(t) trace</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Harmonic oscillator</span></h2>
-            <p class="welcome-blurb">Period depends on mass and spring constant — never on how far you pull.</p>
+            <p class="welcome-blurb">Two balls, one spring well — which finishes a cycle first?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2127,56 +2127,162 @@ window.__audit={ at(x){ return { period: Tspring() }; } }; // 2π√(m/k) at cur
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the harmonic oscillator.',
-    'Here a mass on a spring follows x of t equals A cosine omega t, with omega equals square root of k over m. The period does not depend on amplitude — pull farther and the clock still ticks the same.',
+    'Here a mass on a spring follows x of t equals A cosine omega t, with omega equals square root of k over m. Pull two balls back by different amounts, release them together, and watch the clock.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim’s SHM, x = A cos(ωt), ω = √(k/m), k=20, m=0.5.
-     Two traces A=0.30 m and A=0.60 m. Equal-time dots — dense at turning
-     points (slow), sparse at x=0 (fast). Same ω ⇒ they stay in phase. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    /* Size the backing store from the displayed box. The fixed 1280×240
-       attributes were being stretched into a 1500×140 box (object-fit:fill),
-       squashing the traces by 2× vertically and turning the equal-time dots
-       into ellipses. Layout is derived from W/H, so this is scale-safe. */
-    const box = c.getBoundingClientRect();
-    if(box.width > 0 && box.height > 0){
-      const dpr = window.devicePixelRatio || 1;
-      const bw = Math.round(box.width*dpr), bh = Math.round(box.height*dpr);
-      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
-    }
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: this sim's own opening scene — the ½kx² spring well with BOTH balls
+     at rest at their release points (ball 1 at A₁ = 0.30 m, ball 2 twice as
+     far at A₂ = 0.60 m, k = 20 N/m, m = 0.50 kg) — beside their equal-time
+     x = A cos ωt traces, ω = √(k/m). Equal-time dots bunch at the turning
+     points and thin out through x = 0.
+
+     Framing: the traces now show exactly ONE period with t = 0 pinned at the
+     left edge of the trace panel, so BOTH amplitude maxima (t = 0 and t = T)
+     — the whole point of the blurb, "never on how far you pull" — sit inside
+     26%–74% of the DISPLAYED width. The old layout ran t = 0 to t = T across
+     8%→92%, which left the 22%/78% mask fading out both maxima and showed
+     only the lower turning point at T/2.
+
+     SPOILER AUDIT — gated cards read before drawing. Card 2 IS the
+     amplitude-independence predict ("Released together … which ball completes
+     one full cycle first?", correct answer "Dead heat"), and card 4 asks what
+     does move T. So this hero draws NO shared period marker, no common-T
+     guide line, no zero-crossing rule, no T or ω annotation and no time axis
+     — the brief's suggested "shared vertical marker at the common period" is
+     deliberately NOT drawn. The only thing the legend names is the one
+     quantity the student is told up front and which the sim's own card 1
+     states: the two amplitudes. (The two traces themselves are kept because
+     they are the sim's real content, the pre-existing hero, and the overlay's
+     own spoken line already says the period does not depend on amplitude;
+     what stays behind the gate is any annotation that reads the periods off.)
+
+     Differentiation from C123 (series/parallel springs), whose hero used to be
+     the same picture — two cosine dot traces on a midline with the same amber
+     second ink: C123 now draws the two spring ARRANGEMENTS at rest and no
+     traces at all, and this hero gains the parabolic well with its two resting
+     balls, which is this sim's signature object and appears nowhere in C123.
+
+     Sizing: backing store from the canvas's own CSS box every paint
+     (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…), drawing in
+     CSS px) — the old code did this only on redraw, so a resize left the band
+     stretched until a theme change; there is now a resize hook. A generation
+     token stops the two theme observers from stacking rAF loops on top of each
+     other, and prefers-reduced-motion paints the final frame once.
+
+     The well glyph is the one element that is dropped below 860 CSS px, where
+     the 26%–74% band is too narrow to hold both panels; the traces, which are
+     essential, stay at every width. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const soft = LIGHT ? 'rgba(15,23,42,.60)' : 'rgba(203,213,225,.68)';
+    const hair = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.24)';
+    const bowl = LIGHT ? 'rgba(15,23,42,.42)' : 'rgba(148,163,184,.50)';
+    // same two ball inks as the sim's .b1 / .b2 text classes
+    const inks = LIGHT ? ['rgba(8,145,178,.95)','rgba(180,83,9,.95)']
+                       : ['rgba(34,211,238,.95)','rgba(251,191,36,.95)'];
+
     ctx.clearRect(0,0,W,H);
+    const wash = ctx.createLinearGradient(0,0,0,H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0,0,W,H);
+
+    const x0 = W*0.26, x1 = W*0.74, inner = x1 - x0;
+    const roomy = W >= 860;
+    const wellW = roomy ? Math.min(150, inner*0.24) : 0;
+    const tx0 = (roomy ? x0 + wellW + inner*0.05 : x0) + 4;
+    const tx1 = x1 - 4;
+    const panelT = H*0.17, panelB = H*0.74;
+    const mid = (panelT+panelB)/2, half = (panelB-panelT)/2;
+
     const k = 20, m = 0.5, w = Math.sqrt(k/m), T = 2*Math.PI/w;
     const A1 = 0.30, A2 = 0.60, Amax = 0.70;
-    const padL = W*0.08, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = t => padL + (t/T)*(padR-padL);
-    const yOf = x => (padT+padB)/2 - (x/Amax)*((padB-padT)/2);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, (padT+padB)/2); ctx.lineTo(padR, (padT+padB)/2); ctx.stroke();
-    const inks = LIGHT ? ['rgba(8,145,178,.9)','rgba(180,83,9,.9)'] : ['rgba(34,211,238,.92)','rgba(251,191,36,.92)'];
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const t = (n/(N-1))*T;
-        const xs = [A1*Math.cos(w*t), A2*Math.cos(w*t)];
-        xs.forEach((x,i)=>{
-          ctx.fillStyle = inks[i];
-          ctx.beginPath(); ctx.arc(xOf(t), yOf(x), 2.6, 0, 7); ctx.fill();
-        });
+    const xOf = t => tx0 + (t/T)*(tx1-tx0);
+    const yOf = x => mid - (x/Amax)*half;
+
+    // the well: V = ½kx², with both balls parked on the right flank
+    if(roomy){
+      const wcx = x0 + wellW/2, hw = wellW/2, wyB = panelB, wyT = panelT;
+      const yWell = f => wyB - (wyB-wyT)*f*f;
+      ctx.strokeStyle = hair; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(wcx-hw, wyB); ctx.lineTo(wcx+hw, wyB); ctx.stroke();
+      ctx.strokeStyle = bowl; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for(let i=0;i<=40;i++){
+        const f = -1 + 2*i/40;
+        const px = wcx + f*hw, py = yWell(f);
+        if(i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
       }
-      if(n < N) requestAnimationFrame(batch);
+      ctx.stroke();
+      [A1, A2].forEach((A,i)=>{
+        const f = (A/Amax)*0.95;
+        ctx.fillStyle = inks[i];
+        ctx.beginPath(); ctx.arc(wcx + f*hw, yWell(f) - 4.4, 4.4, 0, 7); ctx.fill();
+      });
+      ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('V = ½kx²', wcx, wyB+6);
     }
-    batch();
+
+    // one full period of each trace, t = 0 at the left edge of the panel
+    ctx.strokeStyle = hair; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tx0, mid); ctx.lineTo(tx1, mid); ctx.stroke();
+    const N = roomy ? 56 : 36, R = roomy ? 2.6 : 2.1;
+    for(let n=0;n<N;n++){
+      const f = n/(N-1);
+      if(f > u) break;
+      const t = f*T;
+      [A1, A2].forEach((A,i)=>{
+        ctx.fillStyle = inks[i];
+        ctx.beginPath(); ctx.arc(xOf(t), yOf(A*Math.cos(w*t)), R, 0, 7); ctx.fill();
+      });
+    }
+
+    // legend: amplitudes only — nothing about the period
+    const lgFs = roomy ? 12 : 11;   // 11 px floor for canvas text (verified: the
+                                    // narrow pair still ends inside tx1 at W = 360)
+    const cw = (tx1-tx0)/2;
+    ctx.font = lgFs+'px '+FAM; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ['A₁ = 0.30 m','A₂ = 0.60 m'].forEach((s,i)=>{
+      const lx = tx0 + i*cw, ly = panelB + 15;
+      ctx.fillStyle = inks[i];
+      ctx.beginPath(); ctx.arc(lx+4, ly, 3.2, 0, 7); ctx.fill();
+      ctx.fillStyle = soft; ctx.fillText(s, lx+12, ly);
+    });
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      paint(Math.min(1, (s % 5.4)/2.7));            // 2.7 s to write, 2.7 s to hold
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

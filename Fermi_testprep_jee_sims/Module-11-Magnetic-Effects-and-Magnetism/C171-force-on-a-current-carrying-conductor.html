@@ -835,11 +835,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-angle samples of F = BIL sin θ as the wire turns toward the field</span>
+            <span class="hero-label">One field, three wires at falling angles across it, each with the force it feels drawn above it</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Force on a wire</span></h2>
-            <p class="welcome-blurb">Only the current that cuts across the field feels a force — line them up and F vanishes.</p>
+            <p class="welcome-blurb">A current-carrying wire in a magnetic field — what does the angle between them do?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2723,51 +2723,192 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to force on a wire.',
-    'Only the current that cuts across the field feels a force. Line them up and F vanishes.',
+    'Here a straight wire carries a current through a uniform magnetic field, and you can turn the wire to any angle you like. Your job is to work out how the force on it depends on that angle.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-angle samples of F = BIL sin θ as the wire turns from 90° to 0°.
-     Force-arrow tips accumulate — length shrinks with sin θ and vanishes when aligned. */
+  /* Hero: THREE stations in ONE field. The same horizontal B lines run right
+     across the band; three wires sit in them at θ = 90°, 55° and 25° to the
+     field, each carrying the same current (arrowhead along the wire) and each
+     with its own force arrow rising out of the plane — full length, ~0.82 of
+     it, ~0.42 of it. The sweep deliberately stops short of θ = 0° (see the
+     spoiler note below). The oldest hero drew 24 accumulated orientations with
+     every force segment stacked on the SAME x, so the union was one solid
+     maximum-length bar and the sin θ story was invisible. Three separated
+     stations make the comparison the whole point of the picture. Each station also carries a
+     faint dashed ellipse — the (foreshortened) circle the wire turns in — so
+     the wire is plainly the same LENGTH at every angle and only its direction
+     changes; the far half of each wire is dimmed as a depth cue, which is the
+     sim's own 3-D staging (wire in a horizontal plane, F straight up).
+
+     SPOILER DECISIONS — the gated cards were read first:
+       • Card 1 [data-gate] asks what happens to F as θ → 0°, correct answer
+         "exactly zero". The band therefore STOPS SHORT OF θ = 0°: the three
+         stations are 90°, 55° and 25°, all with a real force arrow, lengths
+         1.00 / 0.82 / 0.42 of the maximum. The student sees the force falling
+         as the wire swings toward the field and is left to say where it ends —
+         the apparatus and the trend are shown, the outcome is withheld.
+         (An earlier hero drew a θ = 0° station with no arrow at all, an empty
+         ring. That was card 1's answer, drawn. It was defended on the grounds
+         that the welcome blurb beneath the band stated it verbatim; that blurb
+         now POSES the question instead — "what does the angle between them
+         do?" — so the art would have been the only channel giving it away.)
+         The fix is a withholding, never an inversion: no arrow is invented at
+         θ = 0° to disguise the answer, because a non-zero force along B is
+         false physics and is card 1's own distractor.
+       • Card 2 [data-gate] compares θ = 30° with θ = 150°. No obtuse angle is
+         drawn anywhere and no two stations share a force length, so the
+         sin θ = sin(180° − θ) pairing is untouched.
+       • Card 3 [data-gate] asks whether cranking B or I up rescues the force at
+         θ = 0°. One single field strength and one single current are drawn,
+         and θ = 0° is never drawn at all, so nothing here answers it.
+       • No numbers, no formula, no angle labels, no force values — only the
+         letter B naming the field, which card 1 already names in words ("Blue
+         lines are the field").
+     The canvas backing store is re-sized from its OWN CSS box × devicePixelRatio
+     on every paint (the authored 1280×240 stretched into the 100vw×140px band
+     skewed every angle); all drawing is in CSS pixels, and the station geometry
+     is scaled off the band WIDTH — the old `half` keyed to min(W,H) collapsed
+     the apparatus to ~10% of the strip. */
+  let heroToken = 0;
+  const HERO_FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  function paintHero(ctx, W, H, u, LIGHT){
+    const fld  = LIGHT ? 'rgba(37,99,235,.38)'  : 'rgba(96,165,250,.38)';
+    const fldK = LIGHT ? 'rgba(37,99,235,.78)'  : 'rgba(96,165,250,.80)';
+    const wire = LIGHT ? 'rgba(180,83,9,.92)'   : 'rgba(251,191,36,.94)';
+    const wireF= LIGHT ? 'rgba(180,83,9,.32)'   : 'rgba(251,191,36,.34)';
+    const frc  = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.94)';
+    const soft = LIGHT ? 'rgba(15,23,42,.20)'   : 'rgba(148,163,184,.26)';
+    ctx.clearRect(0,0,W,H);
+    const stage = (a,b)=>{ const t=Math.min(1,Math.max(0,(u-a)/(b-a))); return t*t*(3-2*t); };
+    const aFld = stage(0.00,0.30), aPln = stage(0.14,0.52),
+          aWir = stage(0.32,0.72), aFrc = stage(0.56,1.00);
+
+    // Everything essential lives inside 24%–76% of the displayed width (the
+    // band's edge mask fades the outer 22% anyway); all sizes come off S.
+    const L = W*0.24, S = W*0.52, cell = S/3;
+    const hl  = Math.min(cell*0.30, 40);          // wire half-length (constant)
+    const ry  = hl*0.42;                          // foreshortening of the plane
+    const cyW = H*0.76;                           // the plane the wire lies in
+    const Fmx = Math.min(H*0.40, 48);             // force arrow at θ = 90°
+    const head = (x, y, dx, dy, s, col)=>{
+      const nx = -dy, ny = dx;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(x + dx*s, y + dy*s);
+      ctx.lineTo(x - dx*s*0.4 + nx*s*0.55, y - dy*s*0.4 + ny*s*0.55);
+      ctx.lineTo(x - dx*s*0.4 - nx*s*0.55, y - dy*s*0.4 - ny*s*0.55);
+      ctx.closePath(); ctx.fill();
+    };
+
+    // One field, shared by all three stations: horizontal B lines spanning the
+    // whole band, so nothing suggests the field differs from station to station.
+    if(aFld > 0){
+      ctx.save(); ctx.globalAlpha = aFld;
+      ctx.strokeStyle = fld; ctx.lineWidth = 1.3;
+      for(let k=-2;k<=2;k++){
+        const y = cyW + ry*(k/2);
+        ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + S, y); ctx.stroke();
+        if(k === 0) head(L + S - 6, y, 1, 0, 5.5, fld);
+      }
+      ctx.fillStyle = fldK;
+      ctx.font = `600 13px ${HERO_FONT}`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('B', L + 4, cyW - ry - 7);
+      ctx.restore();
+    }
+
+    // The three stations STOP SHORT of θ = 0°. See the spoiler note above: the
+    // sweep is 90° → 55° → 25°, so the falling trend is plain but the picture
+    // never reaches — and never asserts — the vanishing point card 1 asks for.
+    const thetas = [Math.PI/2, 55*Math.PI/180, 25*Math.PI/180];
+    // The turning plane, drawn once per station: the wire is a diameter of this
+    // circle at every angle, so its LENGTH never changes — only its direction.
+    if(aPln > 0){
+      ctx.save(); ctx.globalAlpha = aPln*0.9;
+      ctx.strokeStyle = soft; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+      for(let i=0;i<3;i++){
+        const sx = L + cell*(i+0.5);
+        ctx.beginPath(); ctx.ellipse(sx, cyW, hl, ry, 0, 0, 2*Math.PI); ctx.stroke();
+      }
+      ctx.setLineDash([]); ctx.restore();
+    }
+
+    // The three wires: same length, same current, different angle to B.
+    // Handedness matters and is checked: the plane is drawn in projection with
+    // screen-right = +x (B's direction) and screen-UP = away from the viewer, so
+    // the current must run from the FAR end to the NEAR end — I = cosθ x̂ − sinθ ŷ
+    // — for I L × B to come OUT of the plane (the upward arrow drawn below).
+    // The receding wire the old hero drew would have given a downward force,
+    // which is the same handedness slip the scene's POLISH pass repaired.
+    if(aWir > 0){
+      ctx.save(); ctx.globalAlpha = aWir;
+      ctx.lineCap = 'round';
+      for(let i=0;i<3;i++){
+        const sx = L + cell*(i+0.5), th = thetas[i];
+        const dx = Math.cos(th), dy = Math.sin(th)*0.42;
+        const ax = sx - hl*dx, ay = cyW - hl*dy;            // far end (into the page)
+        const bx = sx + hl*dx, by = cyW + hl*dy;            // near end (toward us)
+        ctx.strokeStyle = wireF; ctx.lineWidth = 2.6;       // far half, dimmed
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(sx, cyW); ctx.stroke();
+        ctx.strokeStyle = wire;  ctx.lineWidth = 3.0;       // near half
+        ctx.beginPath(); ctx.moveTo(sx, cyW); ctx.lineTo(bx, by); ctx.stroke();
+        const ux = bx - ax, uy = by - ay, un = Math.hypot(ux, uy) || 1;
+        head(ax + (bx-ax)*0.70, ay + (by-ay)*0.70, ux/un, uy/un, 6, wire); // current
+      }
+      ctx.restore();
+    }
+
+    // The force at each station: length ∝ sin θ — TRUE at every angle drawn.
+    // Every station carries a real arrow, because every station is at a real
+    // non-zero angle; the shortest is ~0.42 of the longest, which shows the
+    // force shrinking with θ without claiming where (or whether) it ends.
+    // Nothing is ever drawn at θ = 0°, so nothing has to be faked there — no
+    // arrow is invented at zero (that would be false physics and would teach
+    // card 1's own distractor), and no "it vanishes" glyph is drawn either.
+    if(aFrc > 0){
+      ctx.save(); ctx.globalAlpha = aFrc;
+      ctx.lineCap = 'round';
+      for(let i=0;i<3;i++){
+        const sx = L + cell*(i+0.5), len = Fmx*Math.sin(thetas[i]);
+        ctx.fillStyle = frc;
+        ctx.beginPath(); ctx.arc(sx, cyW, 2.6, 0, 7); ctx.fill();
+        ctx.strokeStyle = frc; ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.moveTo(sx, cyW); ctx.lineTo(sx, cyW - len); ctx.stroke();
+        head(sx, cyW - len, 0, -1, 6.5, frc);
+      }
+      ctx.restore();
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const inkB    = LIGHT ? 'rgba(37,99,235,.40)' : 'rgba(96,165,250,.40)';
-    const inkWire = LIGHT ? 'rgba(180,83,9,.90)' : 'rgba(251,191,36,.90)';
-    const inkF    = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.90)';
-    const cx = W*0.50, cy = H*0.72;
-    const half = Math.min(W, H)*0.28;
-    ctx.strokeStyle = inkB; ctx.lineWidth = 1.4;
-    for(let k=-3;k<=3;k++){
-      const y = H*0.42 + k*10;
-      ctx.beginPath(); ctx.moveTo(W*0.18, y); ctx.lineTo(W*0.82, y); ctx.stroke();
-    }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 24; let i = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && i<N;s++,i++){
-        const t = (i+1)/N;
-        const theta = (Math.PI/2) * (1-t); // 90° → 0°
-        const wx = half * Math.cos(theta), wy = half * Math.sin(theta) * 0.42;
-        ctx.strokeStyle = inkWire; ctx.lineWidth = 2.4;
-        ctx.beginPath(); ctx.moveTo(cx-wx, cy+wy); ctx.lineTo(cx+wx, cy-wy); ctx.stroke();
-        const F = Math.sin(theta);
-        const fy = F * H * 0.42;
-        ctx.strokeStyle = inkF; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy-fy); ctx.stroke();
-        ctx.fillStyle = inkF;
-        ctx.beginPath(); ctx.arc(cx, cy-fy, 3.0, 0, 7); ctx.fill();
-      }
-      if(i < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                        // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                 // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;  // overlay dismissed: stop
+      const u = Math.min(1, ((now || t0) - t0)/1800);  // 1.8 s reveal
+      paint(u);
+      if(u < 1) requestAnimationFrame(frame);      // one-shot: settle and stop
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

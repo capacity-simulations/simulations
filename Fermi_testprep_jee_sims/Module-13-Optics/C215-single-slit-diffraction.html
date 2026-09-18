@@ -1344,11 +1344,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-a dots of W = 2λL/a and a shadow width ∝ a</span>
+            <span class="hero-label">Plane waves meet a single narrow slit, fan out, and land as a wide soft band on the screen</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Single-slit pattern</span></h2>
-            <p class="welcome-blurb">Narrow the slit and the bright band gets wider — squeeze a wave in space and it spreads in angle.</p>
+            <p class="welcome-blurb">A single slit, a screen behind it — what decides how wide the bright band spreads?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3341,47 +3341,96 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to single-slit diffraction.',
-    'Here a wave squeezed through a narrow slit fans out on a screen. The central bright band width is two lambda L over a — narrower slit, wider pattern.',
+    'Here a wave squeezed through a narrow slit fans out on a screen. You will narrow the slit, change the wavelength, and work out what sets the width of that central bright band.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-a dots of W = 2λL/a (grows as a shrinks) vs a naive
-     shadow width ∝ a (shrinks). λ = 550 nm, L = 1 m, a from 300 µm to 25 µm. */
+  /* Hero = the APPARATUS: plane wavefronts meeting a barrier with ONE narrow
+     slit, secondary wavelets fanning out beyond it onto a screen that carries
+     a WIDE soft central band — single-slit spreading, the title's premise.
+     The old hero plotted W = 2λL/a dots against a "geometric shadow" line
+     whose 0.12 m scale sat off-canvas for most of the range (and, where
+     visible, above the diffraction curve — the opposite of the point), and
+     the W(a) blow-up is verbatim the answer to gated card 1 ("what does
+     halving a do to the central band?"). Spoiler check: card 1 gates the
+     CHANGE under halving a; one slit at one fixed width, with no second
+     width and no W(a) trend drawn, leaves that prediction unanswered — safe.
+     Deliberately distinct from C213's hero (point source, circular fronts,
+     TWO slits, blank screen): here the fronts are plane, the slit is single,
+     and the screen shows the wide soft spread. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const lam = 550e-9, L = 1.0, a0 = 300e-6, a1 = 25e-6;
-    const Wdiff = a => 2 * lam * L / a;           // metres
-    const Wshad = a => 0.12 * (a / a0);           // arbitrary shadow scale, same plot
-    const ymax = Wdiff(a1);
-    const padL = W*0.10, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = a => padL + ((a0-a)/(a0-a1))*(padR-padL);  // left = wide slit, right = narrow
-    const yOf = w => padB - (w / (ymax*1.08))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padB); ctx.lineTo(padR, padB); ctx.stroke();
-    const inkD = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(110,231,183,.95)';
-    const inkS = LIGHT ? 'rgba(217,119,6,.90)' : 'rgba(251,191,36,.95)';
+    const ink   = LIGHT ? 'rgba(5,150,105,.85)'  : 'rgba(110,231,183,.85)';
+    const solid = LIGHT ? 'rgba(71,85,105,.85)'  : 'rgba(148,163,184,.75)';
+    const glow  = LIGHT ? '217,119,6'            : '251,191,36';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 48; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const a = a0 + (n/(N-1))*(a1-a0);
-        ctx.fillStyle = inkD;
-        ctx.beginPath(); ctx.arc(xOf(a), yOf(Wdiff(a)), 2.5, 0, 7); ctx.fill();
-        ctx.fillStyle = inkS;
-        ctx.beginPath(); ctx.arc(xOf(a), yOf(Wshad(a)), 2.5, 0, 7); ctx.fill();
+    // one live loop only: the theme observers + resize re-enter drawHero
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);
+    function frame(t){
+      // backing store from the CSS box × devicePixelRatio; draw in CSS px
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0,0,W,H);
+      // essentials kept inside the 24%–76% edge-fade window
+      const x0 = W*0.25, barX = W*0.46, scrX = W*0.74, midY = H/2;
+      const half = H*0.40, g = H*0.055;   // wall half-height, slit half-gap
+      // incident PLANE wavefronts: straight vertical lines marching right
+      ctx.strokeStyle = ink; ctx.lineWidth = 1.6;
+      const span = barX - x0;
+      for(let i=0;i<6;i++){
+        const d = ((t*34 + i*26) % span);
+        if(d < 4 || d > span-4) continue;
+        ctx.beginPath(); ctx.moveTo(x0+d, midY-half); ctx.lineTo(x0+d, midY+half); ctx.stroke();
       }
-      if(n < N) requestAnimationFrame(batch);
+      // secondary wavelets fanning out from the ONE slit
+      const reach = scrX - barX;
+      for(let i=0;i<6;i++){
+        const rr = ((t*34 + i*30) % reach);
+        if(rr < 6) continue;
+        ctx.beginPath(); ctx.arc(barX, midY, rr, -Math.PI/2.4, Math.PI/2.4); ctx.stroke();
+      }
+      // barrier: two slabs, so the single slit reads as a gap
+      ctx.fillStyle = solid;
+      ctx.fillRect(barX-5, midY-half, 10, half-g);
+      ctx.fillRect(barX-5, midY+g, 10, half-g);
+      // screen carrying a WIDE soft central band (much wider than the slit)
+      ctx.fillStyle = LIGHT ? 'rgba(148,163,184,.35)' : 'rgba(30,41,59,.95)';
+      ctx.fillRect(scrX-6, midY-half, 12, half*2);
+      const bandHalf = H*0.26;
+      const lg = ctx.createLinearGradient(0, midY-bandHalf, 0, midY+bandHalf);
+      lg.addColorStop(0,   'rgba('+glow+',0)');
+      lg.addColorStop(0.5, 'rgba('+glow+',0.9)');
+      lg.addColorStop(1,   'rgba('+glow+',0)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(scrX-6, midY-bandHalf, 12, bandHalf*2);
+      ctx.strokeStyle = solid; ctx.lineWidth = 2;
+      ctx.strokeRect(scrX-6, midY-half, 12, half*2);
     }
-    batch();
+    let t0 = null;
+    function loop(ts){
+      // Guard BEFORE the paint. Evaluated after frame(), a superseded chain — the
+      // one a theme swap or a resize re-entry has already replaced — laid down one
+      // more frame in the OLD palette (ink/solid/glow are closed over per call)
+      // before bailing out, so the band flashed the previous theme's colours.
+      if(c.__heroGen !== gen) return;               // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      if(t0 === null) t0 = ts;
+      frame((ts-t0)/1000);
+      if(!reduce) requestAnimationFrame(loop);
+    }
+    if(reduce) frame(1.6); else requestAnimationFrame(loop);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

@@ -804,11 +804,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A boat aimed straight across a flowing river — its heading, the current, and the track it actually follows</span>
+            <span class="hero-label">A boat aimed straight across a flowing river, with the velocity triangle labelled v_bw for its heading, v_c for the current and v_bg for the resultant, and a dotted ground track ending on a landing point downstream of the aim</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">River-boat crossing</span></h2>
-            <p class="welcome-blurb">Steer a boat across a flowing river — the current decides where you land, never when.</p>
+            <p class="welcome-blurb">Steer a boat across a flowing river — what does the current change, and what not?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3133,70 +3133,217 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to river-boat crossing.',
-    'Here you steer a boat across a flowing river. The boat’s velocity and the current add as vectors — the across component alone sets how long the crossing takes, while the current only drags the landing point downstream.',
+    'Here you steer a boat across a flowing river. The boat’s velocity and the current add as vectors — and it is up to you to pick the heading that lands you where you want to be.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the velocity triangle drawn honestly — a boat aimed straight across a
-     flowing river. Its heading v_bw points at the far bank, the current v_c drags
-     it downstream, and the accumulating dotted track is the resultant v_bg. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const yNear = H*0.88, yFar = H*0.12, xL = W*0.10, xR = W*0.90;
-    // water tint between the banks
-    ctx.fillStyle = LIGHT ? 'rgba(2,132,199,.10)' : 'rgba(96,165,250,.09)';
-    ctx.fillRect(xL, yFar, xR-xL, yNear-yFar);
-    // bank lines
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.30)';
-    ctx.lineWidth = 1;
-    [yNear, yFar].forEach(y => { ctx.beginPath(); ctx.moveTo(xL, y); ctx.lineTo(xR, y); ctx.stroke(); });
-    const x0 = W*0.40;                                   // start point on the near bank
-    // dashed line straight across — where the boat is AIMED
-    ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(x0, yNear); ctx.lineTo(x0, yFar); ctx.stroke();
-    ctx.setLineDash([]);
-    // the velocity triangle at the start: v_bw across, v_c downstream, v_bg the resultant
-    const inkBw = LIGHT ? 'rgba(2,132,199,.9)'  : 'rgba(96,165,250,.9)';    // heading (blue)
-    const inkC  = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';    // current (amber)
-    const inkBg = LIGHT ? 'rgba(5,150,105,.95)' : 'rgba(110,231,183,.95)';  // resultant (emerald)
-    const vbw = (yNear-yFar)*0.42, vc = vbw*0.62;        // triangle legs in px
-    const arrow = (x1,y1,x2,y2,color) => {
-      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.2;
-      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      const a = Math.atan2(y2-y1, x2-x1), h = 8;
-      ctx.beginPath(); ctx.moveTo(x2,y2);
-      ctx.lineTo(x2-h*Math.cos(a-0.4), y2-h*Math.sin(a-0.4));
-      ctx.lineTo(x2-h*Math.cos(a+0.4), y2-h*Math.sin(a+0.4));
+  /* Hero: the river-boat velocity triangle drawn honestly — a boat aimed
+     straight across a flowing river (heading 0°, v_bw = 5 m/s), the current
+     (v_c = 2 m/s) dragging it downstream, and the dotted ground track it
+     actually follows, ending on the landing point.
+
+     ASPECT: the canvas is sized to its OWN CSS box every frame (backing store =
+     box × devicePixelRatio, all drawing in CSS px). The markup's fixed 1280×240
+     store was being squashed into a 100vw × 140px box — an anisotropic ~2:1
+     stretch that ROTATED the resultant, so the triangle on screen was not the
+     triangle in the code. With the transform isotropic the drawn v_bg angle is
+     exactly atan(v_c / v_bw) = 21.80° off the across-direction, which the
+     harness now checks against the computed value.
+
+     BAND: the CSS mask is opaque only 22–78%. The banks used to run 10%→90%,
+     straight into the fade, so the river read as cut off while the triangle
+     huddled in 40–49% and left the opaque band ~90% empty. The banks now run
+     26%→74% with their ends faded out inside the stroke itself, the water tint
+     is alpha-ramped to match, and the composition is centred with a labelled
+     v_bw / v_c / v_bg legend on the right so the opaque zone is actually used.
+     The triangle's own legs are bounded by the 140px band height — with the
+     sim's true 2:5 speed ratio a full-width triangle is geometrically
+     impossible in a 10:1 strip — so the river, the legend and the bank labels
+     carry the width and the vectors stay true instead of being stretched.
+     The current chevrons drifting along the water are decorative wash and are
+     deliberately allowed to dissolve into the mask at both ends.
+
+     LANDING DOT: was hard-coded '#fff' — invisible on the light overlay, and it
+     is the payoff of the whole picture. It is now a theme-paired disc with a
+     contrasting ring.
+
+     SPOILER GATE: this is inquiry step 1 (ungated) — aim straight across, watch
+     the ground trail, see where it lands. Neither gated card's answer is shown:
+     step 2's upstream ferry angle arcsin(v_c/v_bw) is not drawn (the hero never
+     angles the bow), and step 4's "the current cannot change the crossing time"
+     is not depicted either (only one current, one crossing). */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const VBW = 5, VC = 2;                       // the sim's own defaults
+    const xL = W*0.26, xR = W*0.74;              // banks live inside the mask
+    const yNear = H*0.86, yFar = H*0.16, span = yNear - yFar;
+    const drift = span * (VC / VBW);
+    const xS = W*0.50 - drift*0.5 - W*0.02;      // start point on the near bank
+    const xLand = xS + drift;
+    const inkBw = LIGHT ? 'rgba(2,132,199,.95)'  : 'rgba(125,211,252,.95)';  // heading
+    const inkC  = LIGHT ? 'rgba(180,83,9,.95)'   : 'rgba(251,191,36,.95)';   // current
+    const inkBg = LIGHT ? 'rgba(5,150,105,.98)'  : 'rgba(110,231,183,.98)';  // resultant
+    const mute  = LIGHT ? 'rgba(15,23,42,.66)'   : 'rgba(148,163,184,.78)';
+    const dotFill = LIGHT ? '#0f172a' : '#f8fafc';
+    const dotRing = LIGHT ? '#ecfdf5' : '#064e3b';
+    const bankRGB = LIGHT ? '15,23,42' : '148,163,184';
+    const waterRGB = LIGHT ? '2,132,199' : '96,165,250';
+    const FAM = '"DM Sans", "Segoe UI", Arial, sans-serif';
+    const f = Math.max(9.5, Math.min(12.5, W * 0.0092));
+
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background
+    // ---- water, alpha-ramped so it dissolves into the mask ----
+    const wat = ctx.createLinearGradient(xL, 0, xR, 0);
+    wat.addColorStop(0,    'rgba('+waterRGB+',0)');
+    wat.addColorStop(0.12, 'rgba('+waterRGB+',.13)');
+    wat.addColorStop(0.88, 'rgba('+waterRGB+',.13)');
+    wat.addColorStop(1,    'rgba('+waterRGB+',0)');
+    ctx.fillStyle = wat; ctx.fillRect(xL, yFar, xR - xL, span);
+    // ---- banks, ends faded so they never read as cut off ----
+    const bgr = ctx.createLinearGradient(xL, 0, xR, 0);
+    bgr.addColorStop(0,    'rgba('+bankRGB+',0)');
+    bgr.addColorStop(0.10, 'rgba('+bankRGB+',.55)');
+    bgr.addColorStop(0.90, 'rgba('+bankRGB+',.55)');
+    bgr.addColorStop(1,    'rgba('+bankRGB+',0)');
+    ctx.strokeStyle = bgr; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(xL, yNear); ctx.lineTo(xR, yNear); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xL, yFar);  ctx.lineTo(xR, yFar);  ctx.stroke();
+    ctx.fillStyle = mute;
+    ctx.font = '600 ' + f.toFixed(1) + 'px ' + FAM;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('far bank', xR - 6, yFar - 4);
+    ctx.textBaseline = 'top';
+    ctx.fillText('near bank', xR - 6, yNear + 4);
+    // ---- the current, drifting downstream (decorative wash) ----
+    const cy = yFar + span*0.20;
+    const stepX = Math.max(34, W*0.05);
+    const ph = ((u * stepX * 2.2) % stepX + stepX) % stepX;
+    ctx.save();
+    ctx.strokeStyle = inkC; ctx.globalAlpha = 0.40; ctx.lineWidth = 1.6;
+    for(let x = xL + 6 + ph; x < xR - 2; x += stepX){
+      ctx.beginPath();
+      ctx.moveTo(x - 5, cy - 4); ctx.lineTo(x, cy); ctx.lineTo(x - 5, cy + 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- aim line: where the bow points ----
+    ctx.save();
+    ctx.strokeStyle = mute; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(xS, yNear); ctx.lineTo(xS, yFar); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = mute; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(xS, yFar, Math.max(3, f*0.34), 0, 7); ctx.stroke();
+
+    // ---- the velocity triangle: v_bw across, v_c downstream, v_bg the resultant ----
+    function arrow(x1, y1, x2, y2, color, lw){
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      const a = Math.atan2(y2 - y1, x2 - x1), h = Math.max(7, f*0.72);
+      ctx.beginPath(); ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - h*Math.cos(a - 0.4), y2 - h*Math.sin(a - 0.4));
+      ctx.lineTo(x2 - h*Math.cos(a + 0.4), y2 - h*Math.sin(a + 0.4));
       ctx.closePath(); ctx.fill();
-    };
-    arrow(x0, yNear, x0, yNear-vbw, inkBw);              // v_bw: aimed straight across
-    arrow(x0, yNear-vbw, x0+vc, yNear-vbw, inkC);        // v_c: tip-to-tail downstream
-    arrow(x0, yNear, x0+vc, yNear-vbw, inkBg);           // v_bg closes the triangle
-    // the ground track accumulating dot by dot — the drift builds with the crossing
-    const drift = (vc/vbw)*(yNear-yFar);
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 90; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const f = (k+0.5)/N;
-        ctx.fillStyle = inkBg;
-        ctx.beginPath(); ctx.arc(x0 + drift*f, yNear - (yNear-yFar)*f, 2.6, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else { // the landing point — downstream of where the boat was aimed
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(x0 + drift, yFar, 4, 0, 7); ctx.fill();
+    }
+    arrow(xS, yNear, xS, yFar, inkBw, 2.4);              // aimed straight across
+    arrow(xS, yFar, xLand, yFar, inkC, 2.4);             // current, tip to tail
+    arrow(xS, yNear, xLand, yFar, inkBg, 2.6);           // v_bg closes the triangle
+
+    // ---- the ground track, filling in as the crossing proceeds ----
+    const N = 34;
+    ctx.fillStyle = inkBg;
+    for(let k = 0; k < N; k++){
+      const fr = (k + 0.5) / N;
+      if(fr > u) break;
+      ctx.beginPath();
+      ctx.arc(xS + drift*fr, yNear - span*fr, Math.max(1.8, f*0.21), 0, 7);
+      ctx.fill();
+    }
+    // the boat itself, hull pointing along v_bw (straight across) as in the sim
+    {
+      const bx = xS + drift*u, by = yNear - span*u;
+      const L = Math.max(9, f*1.05), B = L*0.46;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.fillStyle = inkBw;
+      ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.85)' : 'rgba(8,20,26,.85)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -L*0.62);
+      ctx.lineTo(B*0.5, L*0.2);
+      ctx.lineTo(0, L*0.42);
+      ctx.lineTo(-B*0.5, L*0.2);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // the landing point — theme-paired, downstream of where the boat was aimed
+    if(u > 0.985){
+      ctx.fillStyle = dotFill;
+      ctx.beginPath(); ctx.arc(xLand, yFar, Math.max(3.4, f*0.38), 0, 7); ctx.fill();
+      ctx.strokeStyle = dotRing; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(xLand, yFar, Math.max(3.4, f*0.38), 0, 7); ctx.stroke();
+    }
+
+    // ---- vector labels, and a legend that puts the opaque band to work ----
+    ctx.font = '700 ' + f.toFixed(1) + 'px ' + FAM;
+    ctx.fillStyle = inkBw; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('v_bw', xS - 7, (yNear + yFar) / 2);
+    ctx.fillStyle = inkC; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('v_c', xS + drift/2, yFar - 6);
+    ctx.fillStyle = inkBg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('v_bg', xLand + 10, (yNear + yFar) / 2);
+
+    const rows = [
+      [inkBw, 'v_bw  aimed straight across'],
+      [inkC,  'v_c  the current'],
+      [inkBg, 'v_bg  the track it follows']
+    ];
+    ctx.font = '600 ' + f.toFixed(1) + 'px ' + FAM;
+    let maxw = 0;
+    for(let i = 0; i < rows.length; i++) maxw = Math.max(maxw, ctx.measureText(rows[i][1]).width);
+    const legX = W*0.73 - maxw;
+    if(legX > xLand + 34 + f*2.2){
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      for(let i = 0; i < rows.length; i++){
+        const ry = H/2 + (i - 1) * f * 1.45;
+        ctx.strokeStyle = rows[i][0]; ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.moveTo(legX - 20, ry); ctx.lineTo(legX - 6, ry); ctx.stroke();
+        ctx.fillStyle = mute;
+        ctx.fillText(rows[i][1], legX, ry);
       }
     }
-    batch();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }               // static: the completed crossing
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = (((typeof now === "number" ? now : t0) - t0) / 1000) % 5.4;
+      paint(Math.max(0, Math.min(1, s / 4.0)));   // cross in 4 s, dwell 1.4 s
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

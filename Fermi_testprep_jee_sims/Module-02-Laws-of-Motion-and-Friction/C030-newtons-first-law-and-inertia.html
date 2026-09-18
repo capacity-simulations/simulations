@@ -517,7 +517,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Newton’s first law</span></h2>
-            <p class="welcome-blurb">Push nothing and the puck keeps its speed forever — motion needs no force to continue, only to change.</p>
+            <p class="welcome-blurb">A puck on frictionless ice, nothing pushing it — what happens to its speed?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2979,7 +2979,7 @@ window.__audit={ at(x){ return { accel: newtonAccel(P[2].F, P[2].m) }; } };
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to Newton’s first law.',
-    'A puck coasts on frictionless ice. With zero net force its velocity never changes — that persistence is inertia, and it is the whole first law.',
+    'A puck coasts on frictionless ice with zero net force on it. What its velocity does from there is the whole of the first law — and the property we call inertia.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -2987,11 +2987,33 @@ window.__audit={ at(x){ return { accel: newtonAccel(P[2].F, P[2].m) }; } };
   ];
   /* Hero: one puck launched at the same speed on three ever-smoother tracks,
      drawn as EQUAL-TIME dots — friction packs the dots closer until the puck
-     stops; the frictionless track runs dot-even forever (Galileo's limit). */
+     stops; the frictionless track runs dot-even forever (Galileo's limit).
+     Spoiler check (gated card 2 asks what v does when F_net = 0): KEPT — the
+     welcome script's own second line already narrates "with zero net force
+     its velocity never changes", and card 1 orients on this same setup, so
+     the hero reveals nothing the overlay text does not already say.
+     Layout: the overlay mask fades the band outside 22%–78%, so every
+     essential (track labels, stopped pucks, the t = T frictionless dot at
+     75%) sits inside 24%–76% of the DISPLAYED width; only the frictionless
+     trail deliberately continues INTO the right fade — dissolving into the
+     mask is the "never stops" reading, with dots still fully opaque at
+     74–76%. The backing store is sized from getBoundingClientRect ×
+     devicePixelRatio and all drawing is in CSS px (the authored 1280×240
+     attributes, stretched into a 100vw × 140px box, squashed the art ~2:1). */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                            // one live animation at a time
+    const r = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(r.width || 1280));
+    const H = Math.max(100, Math.round(r.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
     const N = 46, T = 1, v0 = 1;                       // normalized: total time T, launch speed v0
     const tracks = [                                    // a = v0/t_stop (constant friction deceleration)
@@ -2999,18 +3021,21 @@ window.__audit={ at(x){ return { accel: newtonAccel(P[2].F, P[2].m) }; } };
       { a:v0/(0.85*T), y:H*0.50, lab:'smoother' },
       { a:0,           y:H*0.76, lab:'frictionless' }
     ];
-    const X0 = W*0.07, SPAN = W*0.86;
+    const X0 = W*0.24, SPAN = W*0.51;                  // t = T lands at 75%, inside the mask's clear band
     const xAt = (tr,t) => { const ts = tr.a>0 ? Math.min(t, v0/tr.a) : t; return v0*ts - 0.5*tr.a*ts*ts; };
-    // faint track lines + labels
+    // faint track lines + labels (only the frictionless line runs into the fade)
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.18)'; ctx.lineWidth = 1;
-    tracks.forEach(tr => { ctx.beginPath(); ctx.moveTo(X0, tr.y+8.5); ctx.lineTo(X0+SPAN, tr.y+8.5); ctx.stroke(); });
+    tracks.forEach(tr => { const xe = tr.a>0 ? W*0.76 : W*0.96;
+      ctx.beginPath(); ctx.moveTo(X0, tr.y+7); ctx.lineTo(xe, tr.y+7); ctx.stroke(); });
     ctx.fillStyle = LIGHT ? 'rgba(71,85,105,.85)' : 'rgba(148,163,184,.75)';
-    ctx.font = '600 15px ' + getComputedStyle(document.body).fontFamily;
-    tracks.forEach(tr => ctx.fillText(tr.lab, X0, tr.y - 14));
+    ctx.font = '600 12px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    tracks.forEach(tr => ctx.fillText(tr.lab, X0, tr.y - 10));
     // equal-time dots accumulating along each track (one orchestrated entrance)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let k = 0;
     function batch(){
+      if(my !== heroToken) return;                     // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;      // overlay dismissed: stop
       const per = reduce ? N : 2;
       for(let s=0;s<per && k<N;s++,k++){
         const t = (k/(N-1))*T;
@@ -3023,15 +3048,31 @@ window.__audit={ at(x){ return { accel: newtonAccel(P[2].F, P[2].m) }; } };
         });
       }
       if(k < N) requestAnimationFrame(batch);
-      else tracks.forEach(tr => {                       // the pucks: two at rest, one still coasting
-        const x = X0 + xAt(tr,T)*SPAN;
-        ctx.fillStyle = LIGHT ? '#0F172A' : '#fff';
-        ctx.beginPath(); ctx.arc(x, tr.y, 4.6, 0, 7); ctx.fill();
-      });
+      else {
+        // the frictionless trail keeps its equal-time spacing straight into
+        // the right fade — the mask dissolves it: "never stops"
+        const d = SPAN/(N-1);
+        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.9)' : 'rgba(110,231,183,.9)';
+        for(let x = X0 + SPAN + d; x < W*0.965; x += d){
+          ctx.beginPath(); ctx.arc(x, tracks[2].y, 3.2, 0, 7); ctx.fill();
+        }
+        tracks.forEach(tr => {                          // the pucks: two at rest, one still coasting
+          const x = X0 + xAt(tr,T)*SPAN;
+          ctx.fillStyle = LIGHT ? '#0F172A' : '#F4F7FA';
+          ctx.beginPath(); ctx.arc(x, tr.y, 4.6, 0, 7); ctx.fill();
+        });
+        // dwell on the finished frame, then replay the same entrance from scratch
+        if(!reduce) setTimeout(() => {
+          if(my !== heroToken) return;                  // a newer drawHero took over
+          if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+          drawHero();
+        }, 1400);
+      }
     }
     batch();
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

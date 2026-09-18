@@ -1210,11 +1210,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-C₂ dots of C_s and C_p</span>
+            <span class="hero-label">Two capacitor circuit glyphs side by side, the same battery wired to two capacitors stacked in one loop on the left (series) and to two capacitors bridging one pair of rails on the right (parallel)</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Series vs parallel</span></h2>
-            <p class="welcome-blurb">Capacitors in series give less than either one alone — the opposite of resistors.</p>
+            <p class="welcome-blurb">Two capacitors, one battery, wired two ways — which network stores more?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3333,47 +3333,213 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to capacitors in series and parallel.',
-    'Here the same two capacitors are wired two ways across one battery. Parallel adds plate area so C grows. Series stacks the gap so C shrinks below the smaller capacitor.',
+    'Here the same two capacitors are wired two ways across one battery, side by side and stacked. Watch which network draws more charge from the supply.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: C_s = 1/(1/C1+1/C2) vs C_p = C1+C2.
-     Equal-C₂ dots, C₁ = 2 µF, C₂ from 0.5 to 6.0 µF. */
+  /* ===== Hero: the two wirings themselves =====
+
+     REGENERATED, not patched. The old hero plotted pink C_s and blue C_p dots
+     against C₂ on one shared axis. The shared axis was the right call — the
+     physics read correctly — but with no labels it was pixel-for-pixel the
+     same "two curves diverging from a common left edge" motif as its Module-10
+     sibling C159-resistors-in-series-and-parallel, where the identical shapes
+     carry the OPPOSITE meaning (series ADDS for resistors, parallel adds for
+     capacitors). A student flipping between the two modules got no
+     differentiation cue at all, and an actively misleading one.
+
+     What it draws now: the two ARRANGEMENTS as circuit glyphs — the same
+     battery wired to two capacitors stacked in one loop (series, left) and to
+     two capacitors bridged across one pair of rails (parallel, right). Plate
+     glyphs are unmistakably capacitors, so the resistor sim can never be
+     confused for this one, and the two topologies are exactly what the sim's
+     main canvas draws.
+
+     SPOILER AUDIT — gated cards (data-gate) read before any drawing:
+       • card 1 asks which network draws MORE total charge from the same
+         supply; the answer is "parallel".
+       • card 3 asks how the series value compares with C₁ and C₂ themselves;
+         the answer is "smaller than the smaller one".
+     So the curves are GONE — there is no C_s, no C_p, no shared axis, no
+     height to compare, no Q, no charge shading and no number anywhere. The
+     hero names the two wirings ("series", "parallel") and stops. Naming a
+     topology is not answering "which one wins": the arrangements are visible
+     on the sim's opening screen before any question is asked, whereas the
+     comparison the gates ask for is never drawn.
+
+     INK: every essential mark sits inside 26.7 %–72.3 % of the DISPLAYED width
+     — measured over W = 360/900/1280/1920, dpr 1/2/3, both themes and the
+     whole u sweep (both loops are centred as a pair and capped in size so they
+     never sprawl into the mask). The only thing allowed to fade is the
+     full-width ground wash, which is decorative.
+
+     The canvas is sized to its OWN CSS box on every paint rather than to the
+     1280×240 authored in the markup — the band is one viewport wide and 140 px
+     tall, so the authored 5.3:1 backing store was being stretched to ≈10:1. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = (getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    const wire  = LIGHT ? 'rgba(15,23,42,.72)'  : 'rgba(226,232,240,.78)';
+    const batt  = LIGHT ? 'rgba(4,120,87,.95)'  : 'rgba(52,211,153,.94)';
+    const plate = LIGHT ? 'rgba(2,132,199,.92)' : 'rgba(125,211,252,.95)';
+    const soft  = LIGHT ? 'rgba(15,23,42,.52)'  : 'rgba(148,163,184,.66)';
+
+    ctx.clearRect(0, 0, W, H);
+    // Decorative full-width wash (allowed to fade under the mask).
+    const wash = ctx.createLinearGradient(0, 0, 0, H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0, 0, W, H);
+
+    const loopW = Math.min(W * 0.21, 300);
+    const gap   = Math.min(W * 0.06, 90);
+    const total = 2 * loopW + gap;
+    const xS    = W / 2 - total / 2;            // series loop, left edge
+    const xP    = xS + loopW + gap;             // parallel loop, left edge
+    const yT    = H * 0.17, yB = H * 0.66;      // the two rails
+    const yM    = (yT + yB) / 2;
+    const half  = Math.max(2.4, loopW * 0.024); // half the plate separation
+    const plen  = Math.min(15, (yB - yT) * 0.40);
+    const blen  = Math.min(7.5, loopW * 0.055);
+
+    // One battery symbol, drawn on the left rail of a loop.
+    function battery(x){
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(x, yT); ctx.lineTo(x, yM - 4);
+      ctx.moveTo(x, yM + 4); ctx.lineTo(x, yB);
+      ctx.stroke();
+      ctx.strokeStyle = batt; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - blen, yM - 4);       ctx.lineTo(x + blen, yM - 4);
+      ctx.moveTo(x - blen * 0.55, yM + 4); ctx.lineTo(x + blen * 0.55, yM + 4);
+      ctx.stroke();
+    }
+
+    // Series: battery on the left rail, two capacitors stacked along the top
+    // rail, a plain wire down the right.
+    function seriesNet(){
+      const lx = xS + loopW * 0.10, rx = xS + loopW * 0.90;
+      const cA = xS + loopW * 0.42, cB = xS + loopW * 0.71;
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(lx, yT);          ctx.lineTo(cA - half, yT);
+      ctx.moveTo(cA + half, yT);   ctx.lineTo(cB - half, yT);
+      ctx.moveTo(cB + half, yT);   ctx.lineTo(rx, yT);
+      ctx.moveTo(rx, yT);          ctx.lineTo(rx, yB);
+      ctx.moveTo(lx, yB);          ctx.lineTo(rx, yB);
+      ctx.stroke();
+      ctx.strokeStyle = plate; ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      [cA, cB].forEach(x => {
+        ctx.moveTo(x - half, yT - plen / 2); ctx.lineTo(x - half, yT + plen / 2);
+        ctx.moveTo(x + half, yT - plen / 2); ctx.lineTo(x + half, yT + plen / 2);
+      });
+      ctx.stroke();
+      battery(lx);
+    }
+
+    // Parallel: battery on the left rail, two capacitors bridging the same two
+    // rails. The right-hand branch IS the right side of the loop, so nothing
+    // shorts the plates.
+    function parallelNet(){
+      const lx = xP + loopW * 0.10;
+      // The right branch's plates stick out by plen/2, so the branch wire is
+      // pulled in by that much: the outermost ink of both loops then lands at
+      // the same fraction of the loop box, and neither reaches the mask.
+      const bA = xP + loopW * 0.52, bB = xP + loopW * 0.90 - plen / 2;
+      ctx.strokeStyle = wire; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(lx, yT); ctx.lineTo(bB, yT);
+      ctx.moveTo(lx, yB); ctx.lineTo(bB, yB);
+      [bA, bB].forEach(x => {
+        ctx.moveTo(x, yT); ctx.lineTo(x, yM - half);
+        ctx.moveTo(x, yM + half); ctx.lineTo(x, yB);
+      });
+      ctx.stroke();
+      ctx.strokeStyle = plate; ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      [bA, bB].forEach(x => {
+        ctx.moveTo(x - plen / 2, yM - half); ctx.lineTo(x + plen / 2, yM - half);
+        ctx.moveTo(x - plen / 2, yM + half); ctx.lineTo(x + plen / 2, yM + half);
+      });
+      ctx.stroke();
+      battery(lx);
+    }
+
+    seriesNet();
+    parallelNet();
+
+    // A decorative sheen sweeping left to right — motion with no physical
+    // claim attached (it crosses both loops at once, in one direction, so it
+    // cannot be read as current or as charge filling either network).
+    const gx = -0.2 * W + u * 1.4 * W;
+    const sh = ctx.createLinearGradient(gx - 0.16 * W, 0, gx + 0.16 * W, 0);
+    sh.addColorStop(0, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.5, LIGHT ? 'rgba(2,132,199,.30)' : 'rgba(224,242,254,.34)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.strokeStyle = sh; ctx.lineWidth = 1.8;
+    const lxS = xS + loopW * 0.10, rxS = xS + loopW * 0.90;
+    const cA  = xS + loopW * 0.42, cB  = xS + loopW * 0.71;
+    const lxP = xP + loopW * 0.10, bA  = xP + loopW * 0.52, bB = xP + loopW * 0.90 - plen / 2;
+    ctx.beginPath();
+    ctx.moveTo(lxS, yT);        ctx.lineTo(cA - half, yT);
+    ctx.moveTo(cA + half, yT);  ctx.lineTo(cB - half, yT);
+    ctx.moveTo(cB + half, yT);  ctx.lineTo(rxS, yT);
+    ctx.moveTo(rxS, yT);        ctx.lineTo(rxS, yB);
+    ctx.moveTo(lxS, yB);        ctx.lineTo(rxS, yB);
+    ctx.moveTo(lxS, yT);        ctx.lineTo(lxS, yM - 4);
+    ctx.moveTo(lxS, yM + 4);    ctx.lineTo(lxS, yB);
+    ctx.moveTo(lxP, yT);        ctx.lineTo(bB, yT);
+    ctx.moveTo(lxP, yB);        ctx.lineTo(bB, yB);
+    ctx.moveTo(lxP, yT);        ctx.lineTo(lxP, yM - 4);
+    ctx.moveTo(lxP, yM + 4);    ctx.lineTo(lxP, yB);
+    [bA, bB].forEach(x => {
+      ctx.moveTo(x, yT); ctx.lineTo(x, yM - half);
+      ctx.moveTo(x, yM + half); ctx.lineTo(x, yB);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Name the two wirings. Nothing here says which one wins.
+    const fs = Math.max(11, Math.min(13, loopW / 7));   // never below the 11 px floor
+    ctx.font = fs + 'px ' + FAM;
+    ctx.fillStyle = soft; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('series',   xS + loopW / 2, H * 0.95);
+    ctx.fillText('parallel', xP + loopW / 2, H * 0.95);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const C1 = 2, c2a = 0.5, c2b = 6.0;
-    const CpMax = C1 + c2b;
-    const padL = W*0.10, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = C2 => padL + ((C2-c2a)/(c2b-c2a))*(padR-padL);
-    const yOf = C => padB - (C / (CpMax*1.08))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padB); ctx.lineTo(padR, padB); ctx.stroke();
-    const inkS = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
-    const inkP = LIGHT ? 'rgba(2,132,199,.90)' : 'rgba(96,165,250,.95)';
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 48; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const C2 = c2a + (n/(N-1))*(c2b-c2a);
-        const Cs = 1 / (1/C1 + 1/C2);
-        const Cp = C1 + C2;
-        ctx.fillStyle = inkS;
-        ctx.beginPath(); ctx.arc(xOf(C2), yOf(Cs), 2.5, 0, 7); ctx.fill();
-        ctx.fillStyle = inkP;
-        ctx.beginPath(); ctx.arc(xOf(C2), yOf(Cp), 2.5, 0, 7); ctx.fill();
-      }
-      if(n < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0.5); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0) / 1000;
+      paint((s / 5.0) % 1);                         // 5 s sheen sweep
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

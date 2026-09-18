@@ -844,11 +844,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A ball descending in equal time steps — KE and PE trade while their sum holds still</span>
+            <span class="hero-label">Two balls released from the same height on differently shaped tracks — KE and PE trade while both totals hold the same line</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Conservation of energy</span></h2>
-            <p class="welcome-blurb">Release two balls down different tracks from the same height — and watch the total energy refuse to move.</p>
+            <p class="welcome-blurb">Two balls, two track shapes, one release height — what decides the speed at the bottom?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2845,84 +2845,110 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to conservation of energy.',
-    'Here two balls run down tracks of different shapes from the same height. Potential energy drains into kinetic energy joule for joule, the total never moves, and both cross the finish at the very same speed.',
+    'Here two balls run down tracks of different shapes from the same height. One track is a straight ramp, the other dips and climbs — and the energy bars keep a running tally as each ball descends.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: a ball descending a hill in EQUAL-TIME dots — dense near the top where
-     it is slow, sparse near the bottom where it is fast — beside stacked KE/PE
-     bars sampled at those same instants: PE drains into KE while every bar's
-     total tops out on one constant line. Conservation, honestly drawn. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: what the blurb actually promises — TWO frictionless tracks of
+     different shape (blue: one gentle curve; pink: steeper with a dip and a
+     small bump) released from the SAME marked height, their balls caught in
+     mid-descent. Beside them, one stacked KE/PE bar per ball sampled at this
+     instant: the splits differ because the balls sit at different heights,
+     but both totals top out on the same dashed line — path-independence and
+     conservation in one picture.
+
+     Spoiler check (gated cards read before this pass): the single data-gate
+     predict is card 2 — "do they cross the finish at the same speed?". So the
+     balls are deliberately caught MID-JOURNEY (the pink ball still has a bump
+     ahead of it) and the animation loop never lets either reach the ground:
+     no finish-speed comparison is readable from this picture. The equal-totals
+     dashed line is safe — card 3 ("the Total bar does not move") is un-gated
+     and the welcome narration states conservation openly. The shared
+     start-height tick is the predict's PREMISE, not its answer. No text drawn.
+
+     The canvas is sized to its OWN CSS box (rect × devicePixelRatio) on every
+     draw rather than to the 1280×240 authored in the markup: the band is one
+     viewport wide and 140px tall, so the authored store was being stretched
+     ~2:1. The overlay's edge fade is opaque only between 22% and 78%, so the
+     tracks (27%–59%), the bars with their dashed total line (62%–75%) and the
+     start-height tick (25%–29%) all sit inside 24%–76%. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const groundC = LIGHT ? 'rgba(15,23,42,.22)'  : 'rgba(148,163,184,.20)';
+    const blue    = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(96,165,250,.95)';   // gentle track + its ball
+    const pink    = LIGHT ? 'rgba(190,24,93,.92)' : 'rgba(244,114,182,.92)';  // dip track + its ball
+    const KEc     = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.88)';
+    const PEc     = LIGHT ? 'rgba(2,132,199,.50)' : 'rgba(96,165,250,.48)';
+    const TOTc    = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const xa = W*0.07, xb = W*0.55, ybase = H*0.84, ytop = H*0.12;
-    const X = u => xa + (xb-xa)*u;
-    const Y = u => ybase - (ybase-ytop)*Math.pow(1-u,2);
-    // ground line + the hill track
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.20)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(xa-16, ybase+0.5); ctx.lineTo(W*0.945, ybase+0.5); ctx.stroke();
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.28)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for(let i=0;i<=140;i++){ const u=i/140; i ? ctx.lineTo(X(u),Y(u)) : ctx.moveTo(X(u),Y(u)); }
-    ctx.stroke();
-    // Equal-time samples down the hill: v = √(2g(h0−h)), advanced along the arc
-    const path = [];
-    { let u = 0.012; const g = 2.2, dt = 0.004; let guard = 0;
-      while(u < 1 && guard++ < 20000){
-        path.push(u);
-        const h = Math.pow(1-u,2);
-        const v = Math.sqrt(Math.max(0.02, 2*g*(1-h)));
-        u += dt * v / Math.hypot(1.6, 2*(1-u));
-      }
-    }
-    const NDOTS = 54, stride = Math.max(1, Math.floor(path.length/NDOTS));
-    const dots = []; for(let i=0;i<path.length;i+=stride) dots.push(path[i]);
-    // Bars sampled at seven of those instants, right of the hill
-    const NB = 7, bx0 = W*0.62, bx1 = W*0.945, bw = (bx1-bx0)/NB*0.62, bgap = (bx1-bx0)/NB;
-    const B = H*0.58;
-    const KEc = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.88)';
-    const PEc = LIGHT ? 'rgba(2,132,199,.88)'  : 'rgba(96,165,250,.85)';
-    const TOTc = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';
-    const ballC = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(96,165,250,.95)';
-    function drawBar(j){
-      const u = dots[Math.min(dots.length-1, Math.round(j*(dots.length-1)/(NB-1)))];
-      const pe = Math.pow(1-u,2), ke = 1-pe;
-      const x = bx0 + j*bgap;
+    const ytop = H*0.14, ybase = H*0.86, drop = ybase-ytop;
+    const xs = W*0.27;                          // both tracks share this start
+    // blue: one gentle curve.  pink: steep drop, low dip, small bump, on down.
+    const hA = t => Math.pow(1-t, 1.7);
+    const KN = [1, 0.30, 0.08, 0.26, 0];        // pink height knots, cosine-eased
+    const hB = t => { const s = Math.min(3.999, t*4), i = Math.floor(s), f = s-i,
+                      w = 0.5-0.5*Math.cos(Math.PI*f); return KN[i]*(1-w)+KN[i+1]*w; };
+    const Ax = t => xs + (W*0.50 - xs)*t,  Ay = t => ybase - drop*hA(t);
+    const Bx = t => xs + (W*0.59 - xs)*t,  By = t => ybase - drop*hB(t);
+    // ground + the two tracks
+    ctx.strokeStyle = groundC; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W*0.25, ybase+0.5); ctx.lineTo(W*0.75, ybase+0.5); ctx.stroke();
+    ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.strokeStyle = blue;
+    ctx.beginPath(); for(let i=0;i<=90;i++){ const t=i/90; i ? ctx.lineTo(Ax(t),Ay(t)) : ctx.moveTo(Ax(t),Ay(t)); } ctx.stroke();
+    ctx.strokeStyle = pink;
+    ctx.beginPath(); for(let i=0;i<=140;i++){ const t=i/140; i ? ctx.lineTo(Bx(t),By(t)) : ctx.moveTo(Bx(t),By(t)); } ctx.stroke();
+    // the SAME release height, marked with one dashed tick through the start
+    ctx.strokeStyle = TOTc; ctx.lineWidth = 1.5; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(W*0.25, ytop); ctx.lineTo(W*0.29, ytop); ctx.stroke();
+    ctx.setLineDash([]);
+    // the balls, caught mid-descent — never at the bottom: the finish IS the predict
+    const uA = 0.10 + 0.48*u, uB = 0.10 + 0.55*u;   // pink runs ahead: steeper start
+    ctx.fillStyle = blue; ctx.beginPath(); ctx.arc(Ax(uA), Ay(uA)-5, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = pink; ctx.beginPath(); ctx.arc(Bx(uB), By(uB)-5, 5, 0, 7); ctx.fill();
+    // one stacked KE/PE bar per ball at THIS instant — different splits…
+    const B = H*0.58, bw = W*0.038;
+    [[W*0.63, hA(uA), blue], [W*0.702, hB(uB), pink]].forEach(([x, h, edge])=>{
+      const pe = Math.max(0, Math.min(1, h)), ke = 1-pe;
       ctx.fillStyle = KEc; ctx.fillRect(x, ybase - ke*B, bw, ke*B);
       ctx.fillStyle = PEc; ctx.fillRect(x, ybase - B, bw, pe*B);
-    }
+      ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.strokeRect(x, ybase-B, bw, B);
+    });
+    // …but one dashed constant-total line across both bar tops
+    ctx.strokeStyle = TOTc; ctx.lineWidth = 2; ctx.setLineDash([6,5]);
+    ctx.beginPath(); ctx.moveTo(W*0.62, ybase-B); ctx.lineTo(W*0.75, ybase-B); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let k = 0, barsDrawn = 0;
-    function batch(){
-      const per = reduce ? dots.length : 2;
-      for(let s=0;s<per && k<dots.length;s++,k++){
-        const u = dots[k];
-        ctx.fillStyle = ballC;
-        ctx.beginPath(); ctx.arc(X(u), Y(u), 3.0, 0, 7); ctx.fill();
-        while(barsDrawn < NB && k >= Math.round(barsDrawn*(dots.length-1)/(NB-1))){ drawBar(barsDrawn); barsDrawn++; }
-      }
-      if(k < dots.length) requestAnimationFrame(batch);
-      else {
-        while(barsDrawn < NB){ drawBar(barsDrawn); barsDrawn++; }
-        // the constant-total line across every bar top — the picture's one claim
-        ctx.strokeStyle = TOTc; ctx.lineWidth = 2; ctx.setLineDash([6,5]);
-        ctx.beginPath(); ctx.moveTo(bx0-10, ybase-B); ctx.lineTo(bx1+2, ybase-B); ctx.stroke();
-        ctx.setLineDash([]);
-        // the ball itself at the finish
-        const u = dots[dots.length-1];
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X(u), Y(u), 5, 0, 7); ctx.fill();
-      }
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0.65); return; }          // static: blue high, pink deep in its dip
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((Math.max(0, now - t0))/1000) % 5.6;
+      paint(Math.min(1, s/4.0));                    // 4 s descent, 1.6 s dwell, repeat
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

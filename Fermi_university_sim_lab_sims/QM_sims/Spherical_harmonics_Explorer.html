@@ -125,11 +125,11 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:#3b9b8f;bo
   <div class="welcome-card">
     <div class="welcome-hero">
       <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-      <span class="hero-label">Sampled clouds of Y<sub>ℓ</sub><sup>0</sup> for ℓ = 0, 1, 2, 3 — each step in ℓ adds one nodal line</span>
+      <span class="hero-label">A sampled cloud of Y<sub>ℓ</sub><sup>0</sup> for one value of ℓ</span>
     </div>
     <div class="welcome-body">
       <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Spherical Harmonics</span></h2>
-      <p class="welcome-blurb">The angular shapes orbital angular momentum allows, and the nodes that count them.</p>
+      <p class="welcome-blurb">The angular shapes orbital angular momentum allows &mdash; and what its nodes count.</p>
       <p class="welcome-ask">How would you like to begin?</p>
       <div class="welcome-modes">
         <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1637,17 +1637,23 @@ html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F17
      that pins the mode their target lives in — otherwise the guide would glow
      at a zero-size element. */
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The harmonic', text:'The three-dimensional surface of the spherical harmonic Yₗₘ you have selected.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#legend-overlay',         mode:'show', title:'Colour key',         text:'What the colours mean: sign and magnitude, or phase and magnitude.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#btnResetDefault',        mode:'veil', title:'Reset',              text:'Returns every control and the camera to first load.' },
-    { sel:'.rotate-drag-hint-wrap',  mode:'veil', title:'Moving the view',    text:'Left-drag rotates, scroll zooms, right-drag pans.' },
-    { sel:'#legend-overlay',         mode:'veil', title:'Colour key',         text:'What the colours mean: sign and magnitude, or phase and magnitude.' },
-    { sel:'#formulaBox',             mode:'hide', title:'Current harmonic',   text:'The harmonic now plotted, and whether it is real or complex.' },
     { sel:'#lmBox',                  mode:'hide', title:'Quantum numbers',    text:'ℓ sets the angular momentum; m its projection on z, limited to |m| ≤ ℓ.' },
     { sel:'#harmonicToggleGroup',    mode:'hide', title:'Real or complex',    text:'Real standing-wave combinations, or complex states with a phase.' },
-    { sel:'#dynamicInfoPanel',       mode:'hide', title:'Note on this state', text:'A short note on the harmonic on screen, with a link to its counterpart.' },
     { sel:'#modeGroup',              mode:'hide', title:'Visualisation mode', text:'Sampled points, radius ∝ |Y|, or colour painted on a fixed sphere.' },
     { sel:'#pointCountBox',          mode:'hide', title:'Point count',        text:'How many sampled points the cloud draws.', pre:()=>setMode('cloud') },
     { sel:'#threshBox',              mode:'hide', title:'Surface cutoff',     text:'Fades the surface below this fraction of its peak radius.', pre:()=>setMode('surface') },
+    /* 4 · readouts — what the student can measure */
+    { sel:'.rotate-drag-hint-wrap',  mode:'veil', title:'Moving the view',    text:'Left-drag rotates, scroll zooms, right-drag pans.' },
+    { sel:'#formulaBox',             mode:'hide', title:'Current harmonic',   text:'The harmonic now plotted, and whether it is real or complex.' },
+    { sel:'#dynamicInfoPanel',       mode:'hide', title:'Note on this state', text:'A short note on the harmonic on screen, with a link to its counterpart.' },
     { sel:'#nodalGrid',              mode:'hide', title:'Nodal structure',    text:'Node counts: ℓ in total, |m| of them planes through the z axis.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.', pre:()=>setMode('surface') }
     /* Not stepped (meta-UI only): the title and its info tooltip. */
   ];
@@ -1730,6 +1736,7 @@ html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F17
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode==='show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -1814,22 +1821,37 @@ html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F17
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the spherical harmonics explorer.',
-    'These are the angular eigenfunctions of orbital angular momentum. The quantum number ell fixes how many nodal lines the pattern carries, and m fixes how many of those lines are planes through the z axis.',
+    'These are the angular eigenfunctions of orbital angular momentum. Two whole numbers, ell and m, select the pattern, and wherever the harmonic vanishes the surface pinches in to nothing.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's own point cloud, in the x–z slice. For each ℓ = 0..3 the
+  /* Hero: this sim's own point cloud, in the x–z slice, for a SINGLE ℓ. The
      real harmonic Yℓ0 ∝ N·Pℓ(cos θ) is sampled exactly as the Point Cloud mode
      does — a direction is accepted with probability |Y|²/max², and the dot is
-     placed at radius |Y|/max — so the ℓ nodal lines stay visibly bare and the
-     blue/red colouring is the sign of Y. */
+     placed at radius |Y|/max — so the nodal pinch stays bare and blue/red is the
+     sign of Y. Only ℓ = 1 is drawn. The old hero laid ℓ = 0…3 side by side, and
+     that progression answered two gated cards: the round ℓ = 0 ball IS card 2's
+     answer, and four node counts in a row give away card 3's ℓ rule. One ℓ is
+     apparatus; the comparison is the answer. ℓ = 1 is the safe choice because
+     its single nodal line is what ℓ, 2ℓ−1 and ℓ² all predict there, so the
+     picture cannot discriminate between card 3's three options. Canvas is sized
+     from its CSS box × devicePixelRatio and drawn in CSS px, so the lobes keep
+     their true shape at every viewport width (the old stretch squashed them). */
+  let heroGen = 0;                                // generation token: only the newest chain paints
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const rect = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(rect.width || 1280));
+    const H = Math.max(100, Math.round(rect.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);       // draw in CSS px: one scale for x and y
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
+    const gen = ++heroGen;                        // supersedes any chain already running
     function legendreP(l, x){                     // P_l(x) by the standard recurrence
       let p0 = 1, p1 = x;
       if(l === 0) return p0;
@@ -1838,38 +1860,68 @@ html[data-theme="light"] .welcome-ask, body.light-theme .welcome-ask{color:#0F17
       for(let k = 2; k <= l; k++){ p = ((2*k-1)*x*p1 - (k-1)*p0)/k; p0 = p1; p1 = p; }
       return p;
     }
-    const Y = (l, th) => Math.sqrt((2*l+1)/(4*Math.PI)) * legendreP(l, Math.cos(th));
-    const LS = [0,1,2,3];
-    const maxOf = l => { let mx = 0; for(let i=0;i<=512;i++){ const a = Math.abs(Y(l, Math.PI*i/512)); if(a>mx) mx=a; } return mx||1; };
-    const MAX = LS.map(maxOf);
-    const POS = LIGHT ? 'rgba(21,74,150,0.80)' : 'rgba(110,180,255,0.80)';
-    const NEG = LIGHT ? 'rgba(160,32,42,0.80)' : 'rgba(255,120,130,0.80)';
-    // Keep all four bands inside the hero's 22–78% soft mask so none is clipped.
-    const cx = l => W*(0.28 + 0.44*l/3), cy = H/2, R = Math.min(H*0.40, W*0.062);
+    const L = 1;                                  // one ℓ only — see the note above
+    const Y = th => Math.sqrt((2*L+1)/(4*Math.PI)) * legendreP(L, Math.cos(th));
+    let MAX = 0; for(let i=0;i<=512;i++){ const a = Math.abs(Y(Math.PI*i/512)); if(a>MAX) MAX=a; }
+    if(!MAX) MAX = 1;
+    const POS  = LIGHT ? 'rgba(21,74,150,0.80)'  : 'rgba(110,180,255,0.80)';
+    const NEG  = LIGHT ? 'rgba(160,32,42,0.80)'  : 'rgba(255,120,130,0.80)';
+    const AXIS = LIGHT ? 'rgba(15,23,42,0.30)'   : 'rgba(226,232,240,0.36)';
+    const cx = W*0.5, cy = H*0.5;
+    const R = Math.min(H*0.40, W*0.22);           // isotropic: one radius for x and z alike
+    function base(){                              // the z axis the cards refer to
+      ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+      const a = R*1.18;
+      ctx.strokeStyle = AXIS; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + a); ctx.lineTo(cx, cy - a);
+      ctx.moveTo(cx - 4, cy - a + 6); ctx.lineTo(cx, cy - a); ctx.lineTo(cx + 4, cy - a + 6);
+      ctx.stroke();
+      // the |Y| surface itself, in the same slice: r(θ) = |Y(θ)|/max, sign by colour
+      ctx.lineWidth = 1.6;
+      [[0, Math.PI/2, POS], [Math.PI/2, Math.PI, NEG]].forEach(seg => {
+        const [t0, t1, col] = seg;
+        [1, -1].forEach(side => {
+          ctx.strokeStyle = col;
+          ctx.beginPath();
+          for(let i=0;i<=72;i++){
+            const th = t0 + (t1-t0)*i/72, rr = Math.abs(Y(th))/MAX*R;
+            const px = cx + side*rr*Math.sin(th), py = cy - rr*Math.cos(th);
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.stroke();
+        });
+      });
+    }
+    base();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const PER = 260, FRAMES = 40;
+    const PER = 200, FRAMES = 40;
     let frame = 0;
     function batch(count){
-      for(const l of LS){
-        const mx = MAX[l], X0 = cx(l);
-        for(let k=0;k<count;k++){
-          const th = Math.acos(1 - 2*Math.random());      // uniform on the sphere
-          const yv = Y(l, th), a = Math.abs(yv)/mx;
-          if(Math.random() > a*a) continue;               // acceptance ∝ |Y|²
-          const rr = a*R*(0.97 + Math.random()*0.06);
-          ctx.fillStyle = yv >= 0 ? POS : NEG;
-          ctx.fillRect(X0 + rr*Math.sin(th), cy - rr*Math.cos(th), 1.8, 1.8);
-          ctx.fillRect(X0 - rr*Math.sin(th), cy - rr*Math.cos(th), 1.8, 1.8);
-        }
+      for(let k=0;k<count;k++){
+        const th = Math.acos(1 - 2*Math.random());      // uniform on the sphere
+        const yv = Y(th), a = Math.abs(yv)/MAX;
+        if(Math.random() > a*a) continue;               // acceptance ∝ |Y|²
+        const rr = a*R*(0.97 + Math.random()*0.06);
+        ctx.fillStyle = yv >= 0 ? POS : NEG;
+        ctx.fillRect(cx + rr*Math.sin(th), cy - rr*Math.cos(th), 2.0, 2.0);
+        ctx.fillRect(cx - rr*Math.sin(th), cy - rr*Math.cos(th), 2.0, 2.0);
       }
     }
-    if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-    (function step(){                             // accumulate once as the entrance; never loop
-      batch(PER); frame++;
-      if(frame < FRAMES) requestAnimationFrame(step);
+    if(reduce){ batch(PER*FRAMES); return; }      // exactly one frame under reduced motion
+    const DWELL = 80;                             // ~1.3 s hold, then the reveal replays
+    (function step(){                             // repeating cycle: reveal, dwell, wipe, repeat
+      if(gen !== heroGen || ov.classList.contains('hidden')) return;
+      if(frame < FRAMES) batch(PER);
+      frame++;
+      if(frame >= FRAMES + DWELL){ frame = 0; base(); }
+      requestAnimationFrame(step);
     })();
   }
   drawHero();
+  // A viewport change alters the CSS box, so the backing store and the layout must be rebuilt
+  window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+
   // Theme can change while the overlay is open: redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -987,11 +987,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots in a Venturi — sparse where the fluid is fast</span>
+            <span class="hero-label">Equal-time marks flowing down a Venturi pipe — crowded in the wide inlet, stretched out through the throat</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The Venturi</span></h2>
-            <p class="welcome-blurb">A pipe of water that can narrow in the middle. Watch how the flow changes from the wide part to the throat.</p>
+            <p class="welcome-blurb">A water pipe narrowed in the middle — what do the two manometers read?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2880,72 +2880,147 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: a Venturi drawn from continuity. Equal-time dots along streamlines —
-     A v is constant, so spatial density is high where the pipe is wide (slow)
-     and sparse in the throat (fast). Two manometer stems, the throat one lower. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const yC = H*0.64, xL = W*0.08, xR = W*0.92;
-    const halfMax = H*0.16, areaRatio = 0.36, halfMin = halfMax*Math.sqrt(areaRatio);
+  /* ===== Hero =====
+     A Venturi drawn from continuity alone. Three streamlines carry EQUAL-TIME
+     marks: the march integrates dx/dt ∝ 1/A, so the marks crowd in the wide
+     inlet and stretch out through the throat, and each mark is drawn as a short
+     capsule whose length is the local speed. The train LOOPS for as long as the
+     overlay is open (it used to freeze after ~1.5 s, so a student arriving late
+     met a static dot field with no motion cue at all).
+
+     SPOILER LEDGER (inquiry cards read before drawing). Card 2 is this sim's
+     one data-gate predict and it asks exactly this: "you are about to shrink
+     the throat — what happens to the fluid level in the THROAT manometer,
+     compared with the inlet?" (answer: it FALLS). The old hero drew both
+     manometer stems with the throat column visibly shorter — that is the gated
+     answer, on screen, before the question. Both stems are therefore gone, and
+     nothing pressure-related is left: no columns, no Δh, no P, no text of any
+     kind. Geometry and flow only, which is the premise card 1 already narrates
+     out loud and card 3 (ungated) tells the student to watch for.
+
+     GEOMETRY. Canvas sized to its OWN CSS box (getBoundingClientRect ×
+     devicePixelRatio) each paint, drawn in CSS px. The pipe used to span
+     0.08–0.92 W, so the WIDE INLET — half of the whole dense-vs-sparse
+     contrast — sat at 0.08–0.30 W under the mask's fade and the first ~20 marks
+     of every streamline launched nearly transparent. The bell now spans
+     0.27–0.73 W, fully inside the opaque band. The straight runs beyond it,
+     stroked with a fading gradient out to 0.08/0.92 W, are DECORATIVE: they say
+     "the pipe continues" and are free to dissolve under the mask. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, tSec, LIGHT){
+    ctx.clearRect(0, 0, W, H);
+    const gw = ctx.createLinearGradient(0, 0, 0, H);
+    gw.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    gw.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gw; ctx.fillRect(0, 0, W, H);
+
+    const xL = W * 0.27, xR = W * 0.73, L = xR - xL, yC = H * 0.50;
+    const halfMax = H * 0.32, areaRatio = 0.36, halfMin = halfMax * Math.sqrt(areaRatio);
     function halfAt(x){
-      const t = (x-xL)/(xR-xL);
-      const bell = Math.exp(-Math.pow((t-0.5)/0.15, 2));
-      return halfMax - (halfMax-halfMin)*bell;
+      const t = (x - xL) / L;
+      const bell = Math.exp(-Math.pow((t - 0.5) / 0.15, 2));
+      return halfMax - (halfMax - halfMin) * bell;
     }
-    // pipe fill
+
+    // Decorative continuation of the pipe walls, fading into the mask.
+    const runs = [[xL, W * 0.08], [xR, W * 0.92]];
+    for(let i = 0; i < runs.length; i++){
+      const a = runs[i][0], b = runs[i][1];
+      const gf = ctx.createLinearGradient(a, 0, b, 0);
+      gf.addColorStop(0, LIGHT ? 'rgba(14,116,144,.10)' : 'rgba(96,165,250,.12)');
+      gf.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gf;
+      ctx.fillRect(Math.min(a, b), yC - halfMax, Math.abs(b - a), 2 * halfMax);
+      const gs = ctx.createLinearGradient(a, 0, b, 0);
+      gs.addColorStop(0, LIGHT ? 'rgba(14,116,144,.45)' : 'rgba(147,197,253,.50)');
+      gs.addColorStop(1, LIGHT ? 'rgba(14,116,144,0)'   : 'rgba(147,197,253,0)');
+      ctx.strokeStyle = gs; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(a, yC - halfMax); ctx.lineTo(b, yC - halfMax);
+      ctx.moveTo(a, yC + halfMax); ctx.lineTo(b, yC + halfMax);
+      ctx.stroke();
+    }
+
+    // The bell itself — the essential geometry.
     ctx.beginPath();
     ctx.moveTo(xL, yC - halfAt(xL));
-    for(let i=1;i<=80;i++){ const x = xL + (i/80)*(xR-xL); ctx.lineTo(x, yC - halfAt(x)); }
-    for(let i=80;i>=0;i--){ const x = xL + (i/80)*(xR-xL); ctx.lineTo(x, yC + halfAt(x)); }
+    for(let i = 1; i <= 96; i++){ const x = xL + (i / 96) * L; ctx.lineTo(x, yC - halfAt(x)); }
+    for(let i = 96; i >= 0; i--){ const x = xL + (i / 96) * L; ctx.lineTo(x, yC + halfAt(x)); }
     ctx.closePath();
     ctx.fillStyle = LIGHT ? 'rgba(14,116,144,.10)' : 'rgba(96,165,250,.12)';
     ctx.fill();
-    ctx.strokeStyle = LIGHT ? 'rgba(14,116,144,.40)' : 'rgba(147,197,253,.45)';
-    ctx.lineWidth = 1.4; ctx.stroke();
-    // manometers: inlet (t=0.22) vs throat (t=0.50). Heights from Bernoulli:
-    // ΔP = ½ρ(v2²−v1²), Δh = ΔP/(ρg). Cartoon scale only.
-    const v1 = 1, v2 = v1/areaRatio, dhScale = 38;
-    const hIn = 70, hTh = Math.max(18, hIn - dhScale*(v2*v2 - v1*v1)*0.08);
-    const inkTube = LIGHT ? 'rgba(190,24,93,.55)' : 'rgba(244,114,182,.70)';
-    const inkCol  = LIGHT ? 'rgba(14,116,144,.80)' : 'rgba(96,165,250,.85)';
-    function mano(t, h){
-      const x = xL + t*(xR-xL), yTopPipe = yC - halfAt(x);
-      ctx.strokeStyle = inkTube; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.moveTo(x-5, yTopPipe); ctx.lineTo(x-5, yTopPipe-88);
-      ctx.moveTo(x+5, yTopPipe); ctx.lineTo(x+5, yTopPipe-88); ctx.stroke();
-      ctx.fillStyle = inkCol; ctx.fillRect(x-4, yTopPipe-h, 8, h);
+    ctx.strokeStyle = LIGHT ? 'rgba(14,116,144,.45)' : 'rgba(147,197,253,.50)';
+    ctx.lineWidth = 1.5; ctx.stroke();
+
+    /* Equal-time parameterisation: dt ∝ A dx, tabulated once, then inverted.
+       s ∈ [0,1) is elapsed transit time, not distance. */
+    const NS = 200, xs = new Array(NS + 1), ts = new Array(NS + 1);
+    let acc = 0; xs[0] = xL; ts[0] = 0;
+    for(let i = 1; i <= NS; i++){
+      const xa = xL + ((i - 1) / NS) * L, xb = xL + (i / NS) * L;
+      const hm = halfAt((xa + xb) / 2);
+      acc += (hm * hm) / (halfMax * halfMax) * (L / NS);
+      xs[i] = xb; ts[i] = acc;
     }
-    mano(0.22, hIn); mano(0.50, hTh);
-    const inkDot = LIGHT ? 'rgba(5,150,105,.90)' : 'rgba(110,231,183,.90)';
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // equal-time march: dx/dt ∝ 1/A ∝ 1/half², so dots are sparse in the throat
-    const N = 90; let k = 0;
-    const streamlines = [0.28, 0.50, 0.72];
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        streamlines.forEach(frac => {
-          // integrate equal-time from left; position after k steps
-          let x = xL, dt = (xR-xL)/N;
-          for(let j=0;j<k;j++){
-            const A = halfAt(x)*halfAt(x);
-            x += dt * (halfMax*halfMax) / Math.max(A, 1e-6);
-            if(x > xR) { x = xR; break; }
-          }
-          const h = halfAt(x);
-          const y = yC - h + frac*(2*h);
-          ctx.fillStyle = inkDot;
-          ctx.beginPath(); ctx.arc(x, y, 2.3, 0, 7); ctx.fill();
-        });
+    const Ttot = acc > 0 ? acc : 1;
+    function xAt(s){
+      const target = Math.max(0, Math.min(1, s)) * Ttot;
+      let lo = 0, hi = NS;
+      while(hi - lo > 1){ const mid = (lo + hi) >> 1; if(ts[mid] <= target) lo = mid; else hi = mid; }
+      const d = ts[hi] - ts[lo];
+      return xs[lo] + (xs[hi] - xs[lo]) * (d > 1e-9 ? (target - ts[lo]) / d : 0);
+    }
+
+    /* Mark count tracks the pipe length so the inlet gap stays ≈10 px at every
+       viewport width — below that the marks merge into a solid line, which is
+       exactly how the equal-time device used to disappear. One mark crosses the
+       whole pipe in TRANSIT seconds; ph is its progress through one gap, so the
+       train loops seamlessly. */
+    const M = Math.max(14, Math.min(48, Math.round(L / 13.5)));
+    const TRANSIT = 4.5;
+    const ph = ((Math.max(0, tSec) / (TRANSIT / M)) % 1 + 1) % 1;
+    const inkDot = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(110,231,183,.92)';
+    const rows = [0.22, 0.50, 0.78];
+    ctx.strokeStyle = inkDot; ctx.lineCap = 'round'; ctx.lineWidth = 4.2;
+    for(let j = 0; j < M; j++){
+      const s = (ph + j) / M;
+      if(s >= 1) continue;
+      const x = xAt(s), h = halfAt(x);
+      const sp = (halfMax * halfMax) / (h * h);   // local speed, 1 at the inlet
+      const tail = Math.min(9, 2.2 * sp);
+      for(let q = 0; q < rows.length; q++){
+        const y = yC - h + rows[q] * (2 * h);
+        ctx.beginPath(); ctx.moveTo(x - tail / 2, y); ctx.lineTo(x + tail / 2, y); ctx.stroke();
       }
-      if(k < N) requestAnimationFrame(batch);
     }
-    batch();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(tSec){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, tSec, LIGHT);
+    }
+    if(reduce){ paint(2.25); return; }            // static field, no motion
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      paint(((now || t0) - t0) / 1000);           // falsy ts ⇒ frame zero
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

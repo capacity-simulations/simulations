@@ -134,11 +134,11 @@ body{background:#060E11;font-family:var(--font-sans);color:#e2e8f0;overflow:hidd
   <div class="welcome-card">
     <div class="welcome-hero">
       <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-      <span class="hero-label">Partial sums of 1, 2, 3, 5, 9 and 16 harmonics closing in on a square wave</span>
+      <span class="hero-label">Three sine harmonics and the single sum they make, against a dashed square-wave target</span>
     </div>
     <div class="welcome-body">
       <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Fourier Series</span></h2>
-      <p class="welcome-blurb">Add up plain sine waves and watch a sharp-edged waveform appear.</p>
+      <p class="welcome-blurb">Add up plain sine waves &mdash; can they ever make a vertical drop?</p>
       <p class="welcome-ask">How would you like to begin?</p>
       <div class="welcome-modes">
         <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1878,15 +1878,20 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
-    { sel:'#reset',           mode:'veil', title:'Reset',                text:'Returns the target, the term count and the width to their first-load values.' },
-    { sel:'#equationBar',     mode:'veil', title:'Partial-sum formula',  text:'The series written out term by term, up to N.' },
-    { sel:'#panelTop',        mode:'veil', title:'Individual components',text:'Every harmonic drawn on its own, with its amplitude.' },
-    { sel:'#dragHandleH',     mode:'veil', title:'Panel split',          text:'Drag to trade height between the harmonic strip and the sum.' },
-    { sel:'#panelBottom',     mode:'veil', title:'Sum against target',   text:'The partial sum in colour, the target waveform dashed.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#panelTop',        mode:'show', title:'Individual components',text:'Every harmonic drawn on its own, with its amplitude.' },
+    { sel:'#panelBottom',     mode:'show', title:'Sum against target',   text:'The partial sum in colour, the target waveform dashed.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#narration-panel', mode:'hide', title:'Simulation context',   text:'A spoken tour of the plots, the formula and the controls.' },
     { sel:'#waveTypeBox',     mode:'hide', title:'Wave type',            text:'Chooses the target waveform the sine series must reproduce.' },
     { sel:'#sigmaControl',    mode:'hide', title:'Gaussian width',       text:'Width of the Gaussian target, in units of the box length.' },
     { sel:'#nControl',        mode:'hide', title:'Number of terms',      text:'How many harmonics the partial sum keeps: one to thirty.' },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#equationBar',     mode:'veil', title:'Partial-sum formula',  text:'The series written out term by term, up to N.' },
+    { sel:'#dragHandleH',     mode:'veil', title:'Panel split',          text:'Drag to trade height between the harmonic strip and the sum.' },
+    /* 6 · reset — recovery, once there is something to recover */
+    { sel:'#reset',           mode:'veil', title:'Reset',                text:'Returns the target, the term count and the width to their first-load values.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the "i" info tooltip beside the title. */
   ];
@@ -1968,6 +1973,8 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){   // always visible; only the glow moves
+        t.classList.remove('cg-hidden','cg-veiled'); return; }
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2048,56 +2055,89 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to Fourier series.',
-    'Any repeating waveform can be built from pure sine waves at whole multiples of one frequency. Keep only the first N of them, and see how close the sum gets — and the one place it stubbornly refuses to close the gap.',
+    'Any repeating waveform can be built from pure sine waves at whole multiples of one frequency. Keep only the first N of them, and see how close the sum gets to the shape you asked for.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's own square-wave series, drawn from its own coefficients.
-     Partial sums with 1, 2, 3, 5, 9 and 16 harmonics accumulate onto the
-     dashed square target — the last two carry the Gibbs ears at the jumps. */
+  /* Hero: this sim's own square-wave series, drawn from its own coefficients —
+     the setup, not the outcome. THREE harmonics 4/(pi n) sin(n x) appear one
+     at a time and then their single partial sum, in front of the dashed square
+     target it is aiming at. Only ONE N is ever drawn: card 2 asks what the
+     jump does as N grows and card 3 asks what the overshoot height does, so a
+     sequence of partial sums (the old 1,2,3,5,9,16 stack) was the answer to
+     both — the comparison is the spoiler, one case is just apparatus. Nothing
+     here is faked: the overshoot on the N = 3 sum is its true height. */
+  let heroGen = 0;                             // a re-entry cancels the running chain
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    /* The canvas is laid out at 100vw x 140px, so a fixed 1280x240 backing
+       store stretched every drawing by viewport/747. Size the backing store
+       from the element's real box x dpr and draw in CSS pixels. */
+    const rect = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(280, Math.round(rect.width  || 1280));
+    const H = Math.max(80,  Math.round(rect.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-    const X0 = -Math.PI, X1 = Math.PI, YMAX = 1.55;
-    const sy = y => H/2 - (y/YMAX)*(H/2 - 10);
+    // Plot box inside the hero mask's opaque 22%–78% window.
+    const XL = W*0.27, PW = W*0.46, XR = XL + PW;
+    const MID = H*0.5, YH = H*0.40, YMAX = 1.62;
+    const sx = t => XL + t*PW;                    // t = 0..1 spans x = -pi..pi
+    const sy = y => MID - (y/YMAX)*YH;
+    const M = 3;                                  // one partial sum: three harmonics
     // the sim's squareWaveTerm: 4/(pi*n) * sin(n x), n = 2k+1
-    const partial = (x, M) => { let s = 0; for(let k=0;k<M;k++){ const n = 2*k+1; s += (4/(Math.PI*n))*Math.sin(n*x); } return s; };
-    const MS = [1,2,3,5,9,16];
-    const DARK  = ['rgba(96,165,250,.45)','rgba(52,211,153,.5)','rgba(52,211,153,.62)','rgba(244,114,182,.7)','rgba(251,191,36,.85)','rgba(240,249,255,.95)'];
-    const LIGHTC= ['rgba(37,99,235,.45)','rgba(5,150,105,.5)','rgba(5,150,105,.62)','rgba(219,39,119,.7)','rgba(217,119,6,.85)','rgba(15,23,42,.95)'];
+    const term    = (x, n) => (4/(Math.PI*n))*Math.sin(n*x);
+    const partial = (x, m) => { let s = 0; for(let k=0;k<m;k++) s += term(x, 2*k+1); return s; };
+    const DARK   = ['rgba(96,165,250,.45)','rgba(52,211,153,.45)','rgba(244,114,182,.45)'];
+    const LIGHTC = ['rgba(37,99,235,.45)','rgba(5,150,105,.45)','rgba(219,39,119,.45)'];
+    const SUM    = LIGHT ? 'rgba(15,23,42,.95)' : 'rgba(240,249,255,.95)';
     function drawTarget(){
       ctx.save(); ctx.setLineDash([6,5]); ctx.lineWidth = 2;
       ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(203,213,225,.42)';
       ctx.beginPath();
-      ctx.moveTo(0, sy(-1));            ctx.lineTo(W/2, sy(-1));
-      ctx.moveTo(W/2, sy(1));           ctx.lineTo(W, sy(1));
+      ctx.moveTo(XL, sy(-1));       ctx.lineTo(sx(0.5), sy(-1));
+      ctx.moveTo(sx(0.5), sy(1));   ctx.lineTo(XR, sy(1));
       ctx.stroke(); ctx.restore();
     }
-    function drawCurve(i){
-      ctx.strokeStyle = (LIGHT ? LIGHTC : DARK)[i];
-      ctx.lineWidth = (i === MS.length-1) ? 2.4 : 1.4;
+    function curve(f, style, lw){
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
       ctx.beginPath();
-      for(let px=0; px<=W; px++){
-        const x = X0 + (px/W)*(X1-X0), y = partial(x, MS[i]);
-        if(px === 0) ctx.moveTo(px, sy(y)); else ctx.lineTo(px, sy(y));
+      const N = Math.max(160, Math.round(PW));
+      for(let i=0;i<=N;i++){
+        const t = i/N, y = f(-Math.PI + t*2*Math.PI);
+        i ? ctx.lineTo(sx(t), sy(y)) : ctx.moveTo(sx(t), sy(y));
       }
       ctx.stroke();
     }
+    const steps = [];                             // the three sines, then their sum
+    for(let k=0;k<M;k++){
+      const n = 2*k+1, col = (LIGHT ? LIGHTC : DARK)[k];
+      steps.push(()=>curve(x=>term(x,n), col, 1.4));
+    }
+    steps.push(()=>curve(x=>partial(x,M), SUM, 2.4));
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     drawTarget();
-    if(reduce){ MS.forEach((_,i)=>drawCurve(i)); return; }   // one frame under reduced motion
+    if(reduce){ steps.forEach(f=>f()); return; }              // one frame under reduced motion
+    const gen = ++heroGen, DWELL_MS = 1400;                  // ~1.0 s reveal + 1.4 s dwell
     let i = 0;
-    (function step(){                                        // accumulate once as the entrance; never loop
-      drawCurve(i); i++;
-      if(i < MS.length) setTimeout(()=>requestAnimationFrame(step), 165);
+    (function step(){                                        // accumulate, hold, then clear and replay
+      if(gen !== heroGen || ov.classList.contains('hidden')) return;
+      if(i < steps.length){ steps[i++](); setTimeout(()=>requestAnimationFrame(step), 250); }
+      else setTimeout(()=>requestAnimationFrame(()=>{
+        if(gen !== heroGen || ov.classList.contains('hidden')) return;
+        ctx.clearRect(0,0,W,H); drawTarget(); i = 0; step();
+      }), DWELL_MS);
     })();
   }
 
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open: redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

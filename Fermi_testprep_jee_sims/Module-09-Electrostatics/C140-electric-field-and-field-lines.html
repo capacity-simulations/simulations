@@ -1451,7 +1451,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Field lines</span></h2>
-            <p class="welcome-blurb">Field lines are integral curves of E — they never cross, and where they crowd the field is strong.</p>
+            <p class="welcome-blurb">Field lines are integral curves of E — flip a charge and watch what they do.</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3335,60 +3335,111 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to field lines.',
-    'Every curve is an integral curve of E. Lines leave plus and end on minus; they never cross; where they crowd, the field is strong.',
+    'Every curve is an integral curve of E. Lines leave plus and end on minus, and where they crowd, the field is strong.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: dipole (+1, −1) field lines as equal-s dots along integral curves of E. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    function field(x,y){
-      if(window.Engine && Engine.em && typeof Engine.em.fieldAt === 'function'){
-        const ch = Engine.em.makeCharges([{q:1,x:-1,y:0},{q:-1,x:1,y:0}]);
-        return Engine.em.fieldAt(ch, x, y, {softening:0.04});
-      }
+  /* Hero: dipole (+1 at x=−1, −1 at x=+1) field lines as equal-arc dots along
+     integral curves of E. The complete closed topology — every line leaves +
+     and returns to − — is the whole point, so every arc must FIT. The old code
+     centred at cy=0.52H and scaled y by 0.22W·0.85, which pushed the outer
+     arcs far off the 140px band (dot y ran −127…298 on a 240px store) and its
+     seeds (0.18·sin+0.02k) were asymmetric about the axis for no reason.
+     Now the 7 lines are TRACED FIRST from mirror-symmetric launch angles
+     (k−3)·0.28 rad on a 0.12 ring around +, the tallest arc is measured, and
+     the vertical scale is sy = min(sx·0.85, (H/2−8)/max|y|), so the whole
+     family sits inside the band with an 8px pad BY CONSTRUCTION (verified:
+     outermost ±48.1° seeds peak at |y|=0.695; dots span 8…H−8 px at every
+     width, x span 29.8–71.5% of W — inside the 24–76% mask window).
+     Backing store follows getBoundingClientRect × devicePixelRatio and all
+     drawing is in CSS px (C190 idiom), replacing the fixed 1280×240 store. */
+  let heroToken = 0;
+  function heroField(){
+    if(window.Engine && Engine.em && typeof Engine.em.fieldAt === 'function'){
+      const ch = Engine.em.makeCharges([{q:1,x:-1,y:0},{q:-1,x:1,y:0}]);
+      return (x,y) => Engine.em.fieldAt(ch, x, y, {softening:0.04});
+    }
+    return function(x,y){
       function contrib(qx,qy,q){
         const dx=x-qx, dy=y-qy, r2=dx*dx+dy*dy+0.0016, r=Math.sqrt(r2);
         return [q*dx/(r2*r), q*dy/(r2*r)];
       }
       const a=contrib(-1,0,1), b=contrib(1,0,-1);
       return [a[0]+b[0], a[1]+b[1]];
-    }
-    const seeds = [];
+    };
+  }
+  function traceHeroLines(){
+    const field = heroField(), R = 0.12, lines = [];
+    let maxY = 0.2;                                 // floor keeps sy finite
     for(let k=0;k<7;k++){
-      const th = -0.9 + k*0.3;
-      seeds.push([-0.88, 0.18*Math.sin(th) + 0.02*k]);
-    }
-    const ink = LIGHT ? 'rgba(5,150,105,.85)' : 'rgba(52,211,153,.85)';
-    const inkP = LIGHT ? 'rgba(185,28,28,.95)' : 'rgba(248,113,113,.95)';
-    const inkN = LIGHT ? 'rgba(37,99,235,.95)' : 'rgba(96,165,250,.95)';
-    const cx = W*0.5, cy = H*0.52, sc = W*0.22;
-    ctx.fillStyle = inkP; ctx.beginPath(); ctx.arc(cx + (-1)*sc, cy, 5, 0, 7); ctx.fill();
-    ctx.fillStyle = inkN; ctx.beginPath(); ctx.arc(cx + (1)*sc, cy, 5, 0, 7); ctx.fill();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 70; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        ctx.fillStyle = ink;
-        seeds.forEach((p, i) => {
-          const [Ex,Ey] = field(p[0], p[1]);
-          const mag = Math.hypot(Ex,Ey) || 1;
-          p[0] += 0.055 * Ex/mag;
-          p[1] += 0.055 * Ey/mag;
-          ctx.beginPath(); ctx.arc(cx + p[0]*sc, cy - p[1]*sc*0.85, 2.0, 0, 7); ctx.fill();
-        });
+      const th = (k-3)*0.28;                        // symmetric about the axis
+      let x = -1 + R*Math.cos(th), y = R*Math.sin(th);
+      const pts = [[x,y]];
+      for(let n=0;n<150;n++){
+        const [Ex,Ey] = field(x,y), m = Math.hypot(Ex,Ey) || 1;
+        x += 0.055*Ex/m; y += 0.055*Ey/m;
+        pts.push([x,y]);
+        maxY = Math.max(maxY, Math.abs(y));
+        if(Math.hypot(x-1,y) < 0.09) break;             // arrived at −: closed
+        if(Math.abs(x) > 1.8 || Math.abs(y) > 2.4) break; // safety net only
       }
-      if(step < N) requestAnimationFrame(batch);
+      lines.push(pts);
     }
-    batch();
+    return {lines, maxY};
+  }
+  function paintHero(ctx, W, H, frac, LIGHT, traced){
+    const ink  = LIGHT ? 'rgba(5,150,105,.85)'  : 'rgba(52,211,153,.85)';
+    const inkP = LIGHT ? 'rgba(185,28,28,.95)'  : 'rgba(248,113,113,.95)';
+    const inkN = LIGHT ? 'rgba(37,99,235,.95)'  : 'rgba(96,165,250,.95)';
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const cx = W*0.5, cy = H*0.5, sx = W*0.22;
+    const sy = Math.min(sx*0.85, (H*0.5 - 8)/traced.maxY); // every arc inside the band
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = ink;
+    const nMax = Math.max(...traced.lines.map(p => p.length));
+    traced.lines.forEach(pts => {
+      const upto = Math.min(pts.length, Math.ceil(frac*nMax));
+      for(let i=0;i<upto;i++){
+        ctx.beginPath(); ctx.arc(cx + pts[i][0]*sx, cy - pts[i][1]*sy, 2.0, 0, 7); ctx.fill();
+      }
+    });
+    ctx.fillStyle = inkP; ctx.beginPath(); ctx.arc(cx - sx, cy, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = inkN; ctx.beginPath(); ctx.arc(cx + sx, cy, 5, 0, 7); ctx.fill();
+    ctx.font = '13px '+FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = inkP; ctx.fillText('+q', cx - sx, cy - 10);
+    ctx.fillStyle = inkN; ctx.fillText('−q', cx + sx, cy - 10);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    const traced = traceHeroLines();
+    function paint(frac){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, frac, LIGHT, traced);
+    }
+    if(reduce){ paint(1); return; }               // reduced motion: full picture at once
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = (((typeof now === 'number' ? now : t0) - t0)/1000);
+      paint(Math.min(1, (s % 2.8)/1.4));   // 1.4 s tracing reveal, 1.4 s hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -874,11 +874,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Field vs distance, log–log: a dipole (teal) beside a single point charge (grey)</span>
+            <span class="hero-label">Field against distance on log–log axes: two curves falling at different rates, beside a small +q −q dipole glyph</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The electric dipole</span></h2>
-            <p class="welcome-blurb">A +q and a −q side by side almost cancel. What survives is the dipole field — and it fades with distance faster than either charge alone.</p>
+            <p class="welcome-blurb">A +q and a −q side by side almost cancel — what is left, and how fast does it fade?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3009,18 +3009,38 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the electric dipole.',
-    'A plus q and a minus q side by side almost cancel. What survives is the dipole field, and it fades with distance faster than either charge alone.',
+    'A plus q and a minus q side by side almost cancel. What survives is the dipole field — move the sample point outward and watch how fast it fades.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-log-r dots of E_axial ≈ 2kp/r³ vs a faint 1/r² ghost — slope −3 vs −2. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
+  /* Hero: the dipole's field beside a single point charge's, on log–log axes,
+     plus a ± dipole glyph so the plot is identifiably THIS sim's.
+     FIXED (not regenerated — the comparison is on-topic and the blurb names
+     it). What was wrong:
+       • padL = padR = 80 on a fixed 1280-wide store put the plot at
+         6.25%→93.75% of the DISPLAYED width — the widest overrun in the
+         module. Only ~64% of it fell inside the mask's opaque 22–78% band and
+         the punchline (the widening gap between the two slopes, maximal at
+         rMax) sat at 93.75%, where the mask alpha is ≈ 0.28. The plot box is
+         now 26%→74% of W, so the whole comparison — gap included — is opaque.
+       • the comparison curve was rgba(148,163,184,.32/.38); after the hero's
+         own opacity:.9 and the mask it was near-invisible and the plot could
+         read as one unexplained line. It is now a clearly visible DASHED line
+         (a different mark from the dipole's dots), so "two curves, two rates"
+         reads at a glance.
+       • no axis names: the axes are now named log r / log E, which is honest
+         about the log–log frame without making any claim about the slopes.
+     GATE READING: card 2 (data-gate) predicts the dipole field at double r —
+     answer ⅛, i.e. the 1/r³ law. So NEITHER curve is labelled and NO slope
+     numbers (−3 / −2) are drawn: the two visible rates are the premise, the
+     exponent is the card's answer and stays there. The ± glyph names the SIM,
+     not either curve.
+     Backing store follows getBoundingClientRect × devicePixelRatio and all
+     drawing is in CSS px (C190 idiom), replacing the fixed 1280×240 store. */
+  let heroToken = 0;
+  function heroCurves(){
     const qC = 2e-9, dM = 0.02;
     function Eaxial(rM){
       if(window.Engine && Engine.emf && typeof Engine.emf.electricField === 'function'){
@@ -3038,33 +3058,87 @@ return {
       const K = (window.Engine && Engine.emf && Engine.emf.constants && Engine.emf.constants.COULOMB_K) || 9e9;
       return K*qC/(rM*rM);
     }
-    const rMin = 0.06, rMax = 0.50;
-    const padL = 80, padR = 80, padT = 36, padB = 40;
-    const xOf = r => padL + (Math.log(r/rMin)/Math.log(rMax/rMin))*(W-padL-padR);
+    return {Eaxial, Epoint, rMin:0.06, rMax:0.50};
+  }
+  function paintHero(ctx, W, H, frac, LIGHT, cur){
+    const ink   = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.92)';  // dipole (dots)
+    const ghost = LIGHT ? 'rgba(71,85,105,.78)'  : 'rgba(203,213,225,.68)'; // comparison (dashed)
+    const axis  = LIGHT ? 'rgba(71,85,105,.55)'  : 'rgba(148,163,184,.45)';
+    const lab   = LIGHT ? 'rgba(71,85,105,.8)'   : 'rgba(148,163,184,.75)';
+    const inkP  = LIGHT ? '#dc2626' : '#f87171';
+    const inkN  = LIGHT ? '#2563eb' : '#60a5fa';
+    const FAM = (typeof getComputedStyle === 'function' && getComputedStyle(document.body).fontFamily) || 'sans-serif';
+    ctx.clearRect(0, 0, W, H);
+    const {Eaxial, Epoint, rMin, rMax} = cur;
+    // Plot box, in DISPLAYED px: 26%–74% of W, so every mark is fully opaque.
+    const x0 = W*0.26, x1 = W*0.74, yT = 30, yB = H - 26;
+    const xOf = t => x0 + 6 + t*(x1 - x0 - 6);
     const eLo = Eaxial(rMax)*0.6, eHi = Epoint(rMin)*1.15;
-    const yOf = E => padT + (1 - Math.log(E/eLo)/Math.log(eHi/eLo))*(H-padT-padB);
-    const ink = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.88)';
-    const ghost = LIGHT ? 'rgba(100,116,139,.38)' : 'rgba(148,163,184,.32)';
-    const axis = LIGHT ? 'rgba(71,85,105,.55)' : 'rgba(148,163,184,.4)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, H-padB); ctx.lineTo(W-padR, H-padB); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        const t = (step+0.5)/N;
-        const rM = rMin * Math.pow(rMax/rMin, t);
-        ctx.fillStyle = ghost;
-        ctx.beginPath(); ctx.arc(xOf(rM), yOf(Epoint(rM)), 1.7, 0, 7); ctx.fill();
-        ctx.fillStyle = ink;
-        ctx.beginPath(); ctx.arc(xOf(rM), yOf(Eaxial(rM)), 2.2, 0, 7); ctx.fill();
-      }
-      if(step < N) requestAnimationFrame(batch);
+    const yOf = E => yT + (1 - Math.log(E/eLo)/Math.log(eHi/eLo))*(yB - yT);
+    ctx.strokeStyle = axis; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x0, yT); ctx.lineTo(x0, yB); ctx.lineTo(x1, yB); ctx.stroke();
+    ctx.font = '11px ' + FAM; ctx.fillStyle = lab;
+    ctx.textAlign = 'left';  ctx.textBaseline = 'bottom'; ctx.fillText('log E', x0 + 5, yT - 5);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';    ctx.fillText('log r', x1, yB + 5);
+    const N = W < 620 ? 34 : 64;
+    const upto = Math.max(1, Math.round(frac*N));
+    const rAt = t => rMin * Math.pow(rMax/rMin, t);
+    // comparison curve: a dashed line — a different MARK from the dipole's dots
+    ctx.strokeStyle = ghost; ctx.lineWidth = 1.7; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    for(let i = 0; i < upto; i++){
+      const t = (i + 0.5)/N, X = xOf(t), Y = yOf(Epoint(rAt(t)));
+      if(i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
     }
-    batch();
+    ctx.stroke(); ctx.setLineDash([]);
+    // the dipole's own field: dots
+    ctx.fillStyle = ink;
+    for(let i = 0; i < upto; i++){
+      const t = (i + 0.5)/N;
+      ctx.beginPath(); ctx.arc(xOf(t), yOf(Eaxial(rAt(t))), 2.3, 0, 7); ctx.fill();
+    }
+    // identity: a small +/− dipole glyph, parked in the empty top-right of the
+    // plot (both curves are far below it there). It names the sim, not a curve.
+    const gx = x0 + 0.80*(x1 - x0), gy = yT + 15, gr = Math.max(3.5, Math.min(5, W*0.004)), gs = gr*2.3;
+    ctx.fillStyle = inkP; ctx.beginPath(); ctx.arc(gx - gs, gy, gr, 0, 7); ctx.fill();
+    ctx.fillStyle = inkN; ctx.beginPath(); ctx.arc(gx + gs, gy, gr, 0, 7); ctx.fill();
+    ctx.strokeStyle = lab; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gx - gs + gr + 1.5, gy); ctx.lineTo(gx + gs - gr - 1.5, gy); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    const b = gr*0.5;
+    ctx.beginPath(); ctx.moveTo(gx - gs - b, gy); ctx.lineTo(gx - gs + b, gy);
+    ctx.moveTo(gx - gs, gy - b); ctx.lineTo(gx - gs, gy + b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx + gs - b, gy); ctx.lineTo(gx + gs + b, gy); ctx.stroke();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    const cur = heroCurves();
+    function paint(frac){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, frac, LIGHT, cur);
+    }
+    if(reduce){ paint(1); return; }               // reduced motion: full picture at once
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = (((typeof now === 'number' ? now : t0) - t0)/1000);
+      paint(Math.min(1, (s % 2.7)/1.3));   // 1.3 s left-to-right reveal, 1.4 s hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

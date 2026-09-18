@@ -1562,11 +1562,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Friction sampled as the push climbs — the rise, the peak at μₛN, the drop to μₖN</span>
+            <span class="hero-label">Friction plotted against the applied push — the climb, the peak, the sudden drop</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Static &amp; kinetic friction</span></h2>
-            <p class="welcome-blurb">Push a block harder and harder — friction rises to match, then suddenly gives and the block lurches.</p>
+            <p class="welcome-blurb">Push a block harder and harder — what does friction do as the push climbs?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3611,63 +3611,146 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to static and kinetic friction.',
-    'Here you push a block harder and harder. Static friction rises to match the push, newton for newton — up to a ceiling. Then it suddenly drops to the kinetic value, and the block lurches away.',
+    'Here you push a block harder and harder. Watch what static friction does while the block still refuses to move — and what it does the moment the push finally wins.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the classic friction-vs-applied-force graph, drawn as accumulating
-     dots — the 45° static climb f = F, the peak at μₛN, the discontinuous
-     drop, then the flat kinetic line at μₖN. The sim's one picture. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const x0 = W*0.20, x1 = W*0.80, y0 = H*0.86, yTop = H*0.14;
-    const fs = 1.0, fk = 0.58;                 // normalized μₛN and μₖN levels
+  /* Hero — SURGICAL FIX (the picture was right, the frame and the labelling
+     were not). Friction plotted against the applied push: the 45° static climb
+     where f tracks F newton for newton, the peak where static friction runs
+     out, the discontinuous drop, then the flat kinetic line. That is the sim's
+     one picture and it matches the blurb, so it stays.
+
+     GATED-CARD CHECK. Card 1 (gated) asks what friction does while the push
+     climbs below the ceiling; card 3 (gated) asks what happens the instant the
+     push passes it. Both are answered with NUMBERS — μₛmg = 24.5 N and the drop
+     to μₖmg = 14.7 N. So the two dashed level guides stay ANONYMOUS: only the
+     axes are named ("applied push F", "friction f"), never μₛN / μₖN, and the
+     old hero-label's "μₛN … μₖN" wording has gone with them. The curve's SHAPE
+     is not withheld, because this very overlay's narration already says it out
+     loud two lines above the canvas ("friction rises to match the push … then
+     suddenly drops to the kinetic value"); drawing it leaks nothing the
+     welcome does not already say, while the numbers would.
+
+     Fixes: (i) the frame ran x0 = 20%W → x1 = 80%W with the axis pushing on to
+     82%, so the vertical axis and the right end of the kinetic line sat inside
+     the 22/78 mask fade — it is now 27% → 73.7% of the DISPLAYED width, and the
+     axis arrowhead's far corner at 26.8% is the leftmost ink. (ii) There were
+     no axis labels at all, so the curve read as an abstract squiggle; both axes
+     are now named. (iii) The canvas is sized to its OWN CSS box every paint
+     rather than to the 1280x240 authored in the markup — the band is one
+     viewport wide and 140px tall (≈10:1), so the authored 5.3:1 backing store
+     was being stretched to fit and the whole plot came out squashed. (iv) A
+     heroToken generation guard stops the previous rAF chain when a theme
+     change or a resize starts a new one, and prefers-reduced-motion paints the
+     finished curve in one shot. Only the faint top wash is allowed to run the
+     full width into the mask fade; it carries no information. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM     = '"DM Sans", "Segoe UI", Inter, Arial, sans-serif';
+    const axisInk = LIGHT ? 'rgba(15,23,42,.45)'   : 'rgba(148,163,184,.50)';
+    const guide   = LIGHT ? 'rgba(15,23,42,.24)'   : 'rgba(148,163,184,.30)';
+    const lab     = LIGHT ? 'rgba(15,23,42,.78)'   : 'rgba(226,232,240,.82)';
+    const inkRise = LIGHT ? 'rgba(5,150,105,.95)'  : 'rgba(110,231,183,.95)';   // static climb
+    const inkDrop = LIGHT ? 'rgba(225,29,72,.95)'  : 'rgba(251,113,133,.95)';   // the drop
+    const inkFlat = LIGHT ? 'rgba(217,119,6,.95)'  : 'rgba(253,224,171,.95)';   // kinetic line
+    const peakInk = LIGHT ? 'rgba(15,23,42,.92)'   : 'rgba(248,250,252,.95)';
+
+    ctx.clearRect(0,0,W,H);
+    // Decorative only: allowed to run the full width and fade into the mask.
+    const wash = ctx.createLinearGradient(0,0,0,H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.045)' : 'rgba(148,163,184,.06)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0,0,W,H);
+
+    const x0 = W*0.27, x1 = W*0.715, axTip = W*0.737;
+    const y0 = H*0.78, yTop = H*0.20, ayTip = yTop - H*0.07;
+    const fs = 1.0, fk = 0.58;                 // normalized static / kinetic levels (unlabelled)
     const xPeak = x0 + (x1-x0)*0.52;
     const yOf = f => y0 - (y0-yTop)*f;
-    // axes
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.30)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, yTop-8); ctx.lineTo(x0, y0); ctx.lineTo(x1+W*0.02, y0); ctx.stroke();
-    // dashed guides at the two friction levels
-    ctx.setLineDash([4,4]);
+
+    // axes, with a head on each
+    ctx.save();
+    ctx.strokeStyle = axisInk; ctx.lineWidth = 1.3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, ayTip); ctx.lineTo(x0, y0); ctx.lineTo(axTip, y0); ctx.stroke();
+    ctx.fillStyle = axisInk;
+    ctx.beginPath(); ctx.moveTo(x0, ayTip-1); ctx.lineTo(x0-4, ayTip+6); ctx.lineTo(x0+4, ayTip+6);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(axTip+1, y0); ctx.lineTo(axTip-6, y0-4); ctx.lineTo(axTip-6, y0+4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // The two friction levels, as anonymous guides — no μ labels (see above).
+    ctx.save();
+    ctx.strokeStyle = guide; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
     ctx.beginPath(); ctx.moveTo(x0, yOf(fs)); ctx.lineTo(xPeak, yOf(fs)); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x0, yOf(fk)); ctx.lineTo(x1, yOf(fk)); ctx.stroke();
-    ctx.setLineDash([]);
-    // dots accumulate along the curve: the f = F climb, the drop, the kinetic line
-    const inkRise = LIGHT ? 'rgba(5,150,105,.9)' : 'rgba(110,231,183,.9)';   // static climb (emerald)
-    const inkDrop = LIGHT ? 'rgba(225,29,72,.9)' : 'rgba(251,113,133,.9)';   // the drop (rose)
-    const inkFlat = LIGHT ? 'rgba(217,119,6,.9)' : 'rgba(253,224,171,.9)';   // kinetic line (amber)
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 120; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const u = (k+0.5)/N;
-        let x, y, ink;
-        if(u < 0.5){         // static rise: f = F up to the peak
-          const f = u/0.5;
-          x = x0 + (xPeak-x0)*f; y = yOf(fs*f); ink = inkRise;
-        } else if(u < 0.62){ // the discontinuous drop at breakaway
-          const f = (u-0.5)/0.12;
-          x = xPeak; y = yOf(fs - (fs-fk)*f); ink = inkDrop;
-        } else {             // kinetic: flat at μₖN
-          const f = (u-0.62)/0.38;
-          x = xPeak + (x1-xPeak)*f; y = yOf(fk); ink = inkFlat;
-        }
-        ctx.fillStyle = ink;
-        ctx.beginPath(); ctx.arc(x, y, 3.0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x0, yOf(fk)); ctx.lineTo(x1,    yOf(fk)); ctx.stroke();
+    ctx.restore();
+
+    // Dots accumulate along the curve: the f = F climb, the drop, the flat line.
+    const N = 120, kMax = Math.round(Math.max(0, Math.min(1, u||0)) * N);
+    for(let k=0;k<kMax;k++){
+      const t = (k+0.5)/N;
+      let x, y, dotInk;
+      if(t < 0.5){                 // static rise: f = F, up to the peak
+        const f = t/0.5;
+        x = x0 + (xPeak-x0)*f; y = yOf(fs*f); dotInk = inkRise;
+      } else if(t < 0.62){         // the discontinuous drop at breakaway
+        const f = (t-0.5)/0.12;
+        x = xPeak; y = yOf(fs - (fs-fk)*f); dotInk = inkDrop;
+      } else {                     // kinetic: flat
+        const f = (t-0.62)/0.38;
+        x = xPeak + (x1-xPeak)*f; y = yOf(fk); dotInk = inkFlat;
       }
-      if(k < N) requestAnimationFrame(batch);
-      else { ctx.fillStyle = LIGHT ? '#0F172A' : '#fff'; ctx.beginPath(); ctx.arc(xPeak, yOf(fs), 4.5, 0, 7); ctx.fill(); }
+      ctx.fillStyle = dotInk;
+      ctx.beginPath(); ctx.arc(x, y, 3.0, 0, Math.PI*2); ctx.fill();
     }
-    batch();
+    if(kMax >= Math.round(N*0.5)){
+      ctx.fillStyle = peakInk;
+      ctx.beginPath(); ctx.arc(xPeak, yOf(fs), 4.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Axis names only. Without them the curve reads as an abstract squiggle.
+    ctx.font = '600 12px ' + FAM;
+    ctx.fillStyle = lab; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    const yLab = ctx.measureText('friction f').width <= (x1-x0)*0.55 ? 'friction f' : 'f';
+    ctx.fillText(yLab, x0 + 8, ayTip + 9);
+    ctx.textAlign = 'right';
+    const xLab = ctx.measureText('applied push F').width <= (x1-x0)*0.62 ? 'applied push F' : 'F';
+    ctx.fillText(xLab, axTip, y0 + 15);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                      // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }                // the finished curve, no sweep
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                 // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;  // overlay dismissed: stop
+      const s = ((typeof now === "number" ? now : t0) - t0)/1000;
+      paint(Math.min(1, (s % 5.0)/2.6));           // 2.6 s sweep, 2.4 s dwell, loop
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

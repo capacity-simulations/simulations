@@ -1020,7 +1020,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time samples of N/N₀ = e^(−t/τ) — dots crowd as the curve flattens</span>
+            <span class="hero-label">A grid of nuclei winking out one by one, never to return, beside the falling count of the ones still left</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Radioactive Decay</span></h2>
@@ -2869,58 +2869,156 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time samples of N/N₀ = e^(−t/τ). Dots crowd as the curve
-     flattens — the leftover nuclei live longer, so late samples pack in y.
-     Left: a few nuclei wink out (same chance every tick). */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* HERO REBUILD — replan + an irreversible decay rule. Two faults in the old
+     hero. (1) Placement: the 5×6 nuclei grid sat between 6% and 13% of the
+     width, i.e. entirely inside the overlay's edge-mask fade, so the one
+     element that actually pictures the narration — "Each nucleus has the same
+     chance of decaying every second" — was erased, while the curve's tail ran
+     out to 90% and was clipped too. (2) Physics: liveness was recomputed each
+     frame as ((seed*13 + i*7) % 97) > 100(1−frac)·0.85, a formula with no
+     memory, so a dot that had gone dark could and did light up again — decay
+     running backwards, in a sim whose whole subject is irreversible decay.
+     New composition: nuclei grid at 26%–38% of the width, curve panel at
+     44%–74%, so both live inside the opaque band.
+     New decay rule — deterministic, computed ONCE, monotone by construction:
+     each of the M = 30 nuclei is given a fixed decay time t_k = −τ ln(u_k)
+     before any drawing happens, where u_k = (rank_k + ½)/M and
+     rank_k = (k·7 + 11) mod M is a bijection of the grid index (gcd(7,30) = 1)
+     that scatters the decay order across the grid. Those u are the M quantiles
+     of the uniform distribution, so the t_k are the exact quantiles of the
+     exponential law the curve draws: the number still alive at time t is
+     #{k : u_k < e^(−t/τ)} = round(M·e^(−t/τ)), matching the curve to within
+     one nucleus at every instant. A nucleus is alive iff t < t_k — t only
+     advances, t_k never changes, so nothing ever comes back. At the end of the
+     reveal (t = 2τ) the curve reads e^(−2) = 0.1353 and the grid holds exactly
+     4 of 30 alive = 0.1333 — agreement to 1.5%. Follows the file's existing
+     hero style: integer seeds and integer arithmetic, no Date.now, no
+     Math.random.
+     Spoiler audit against the gated cards:
+       · card 4 (data-gate) "Mean lifetime vs half-life" is a NUMERIC predict —
+         what fraction survives after one mean lifetime τ (answer 1/e ≈ 0.368,
+         explicitly contrasted with ½ and with T½ = τ ln 2). So the hero shows
+         NO T½ marker, NO τ marker, NO axis ticks, NO numbers, NO fraction or
+         percentage annotation and no gridlines: the axes are bare lines and
+         the curve and grid stay purely qualitative, so no value can be read
+         off either one.
+       · card 2 (data-gate) asks what happens to the curve when N₀ drops from
+         2500 to 50 (it gets rougher). The hero draws ONE sample size and one
+         smooth curve, never a second run or a small-N staircase to compare
+         against, so the contrast the card turns on is not on screen.
+       · ungated card 1 already describes exactly this pairing — dots winking
+         out on the left, the survivor count tracing a curve on the right — so
+         the composition itself leaks nothing.
+     Engineering: backing store sized from getBoundingClientRect() ×
+     devicePixelRatio at every paint and drawn in CSS px (the authored 1280×240
+     store is 5.3:1 while the CSS box is ~10:1 — the old art was smeared);
+     heroToken guards the rAF loop; resize → drawHero; reduced motion paints
+     the fully revealed frame; light/dark ink pairs; every element inside
+     24%–76% of the displayed width (the CSS mask is only opaque 22–78%). */
+  let heroToken = 0;
+  const HERO_COLS = 6, HERO_ROWS = 5, HERO_M = HERO_COLS*HERO_ROWS;
+  const HERO_TAU = 1, HERO_TMAX = 2*HERO_TAU;
+  /* Fixed decay time per nucleus, derived once from its grid index. */
+  const HERO_TDEC = (function(){
+    const out = [];
+    for(let k = 0; k < HERO_M; k++){
+      const rank = (k*7 + 11) % HERO_M;          // bijection: scatters the order
+      const u = (rank + 0.5)/HERO_M;             // the M quantiles of U(0,1)
+      out.push(-HERO_TAU*Math.log(u));           // ⇒ exact exponential quantiles
+    }
+    return out;
+  })();
+  function paintHero(ctx, W, H, t, LIGHT){
+    const inkAxis  = LIGHT ? 'rgba(15,23,42,.22)'   : 'rgba(148,163,184,.24)';
+    const inkGhost = LIGHT ? 'rgba(15,23,42,.10)'   : 'rgba(148,163,184,.13)';
+    const inkCurve = LIGHT ? 'rgba(5,150,105,.80)'  : 'rgba(52,211,153,.82)';
+    const inkAlive = LIGHT ? 'rgba(5,150,105,.92)'  : 'rgba(52,211,153,.92)';
+    const inkDead  = LIGHT ? 'rgba(100,116,139,.34)': 'rgba(148,163,184,.30)';
+
     ctx.clearRect(0,0,W,H);
-    const inkCurve = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.32)';
-    const inkDot   = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.92)';
-    const inkDead  = LIGHT ? 'rgba(100,116,139,.45)' : 'rgba(51,65,85,.75)';
-    const inkAxis  = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.22)';
-    const x0 = W*0.28, x1 = W*0.90, yTop = H*0.18, yBot = H*0.82;
-    ctx.strokeStyle = inkAxis; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(x0, yTop); ctx.lineTo(x0, yBot); ctx.lineTo(x1, yBot); ctx.stroke();
-    const tau = 1, tMax = 4;
-    ctx.strokeStyle = inkCurve; ctx.lineWidth = 2;
+    // a whisper of ground so the strip is never entirely transparent
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // ---- reveal clock: sweep, hold, repeat. t only ever moves forward -----
+    const CYCLE = 6.4, SWEEP = 4.2;
+    const p  = Math.max(0, Math.min(1, ((t % CYCLE) + CYCLE) % CYCLE / SWEEP));
+    const tN = HERO_TMAX*p;
+
+    // ---- the sample: a grid of nuclei, 26%–38% of the width --------------
+    const gx0 = W*0.26, gx1 = W*0.38, gy0 = H*0.18, gy1 = H*0.82;
+    const dx = (gx1 - gx0)/(HERO_COLS - 1), dy = (gy1 - gy0)/(HERO_ROWS - 1);
+    const rDot = Math.max(2.2, Math.min(3.6, dx*0.30));
+    for(let k = 0; k < HERO_M; k++){
+      const col = k % HERO_COLS, row = (k - col)/HERO_COLS;
+      const x = gx0 + col*dx, y = gy0 + row*dy;
+      if(tN < HERO_TDEC[k]){                 // still alive: a filled dot
+        ctx.fillStyle = inkAlive;
+        ctx.beginPath(); ctx.arc(x, y, rDot, 0, 7); ctx.fill();
+      } else {                               // decayed, and it stays decayed
+        ctx.strokeStyle = inkDead; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(x, y, rDot*0.82, 0, 7); ctx.stroke();
+      }
+    }
+
+    // ---- the survivor count, 44%–74% of the width. No ticks, no numbers --
+    const cx0 = W*0.44, cx1 = W*0.74, cyT = H*0.18, cyB = H*0.82;
+    const X = tt => cx0 + (cx1 - cx0)*tt/HERO_TMAX;
+    const Y = f  => cyB - (cyB - cyT)*f;
+    ctx.strokeStyle = inkAxis; ctx.lineWidth = 1.2; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(cx0, cyT); ctx.lineTo(cx0, cyB); ctx.lineTo(cx1, cyB); ctx.stroke();
+
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const STEPS = 90;
+    ctx.strokeStyle = inkGhost; ctx.lineWidth = 1.4;   // where the curve is headed
     ctx.beginPath();
-    for(let k=0;k<=80;k++){
-      const t = tMax * k/80;
-      const frac = Math.exp(-t/tau);
-      const x = x0 + (x1-x0)*t/tMax;
-      const y = yBot - (yBot-yTop)*frac;
-      if(k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    for(let k = 0; k <= STEPS; k++){
+      const tt = HERO_TMAX*k/STEPS, x = X(tt), y = Y(Math.exp(-tt/HERO_TAU));
+      if(k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
+
+    ctx.strokeStyle = inkCurve; ctx.lineWidth = 2.2;   // the part already run
+    ctx.beginPath();
+    const kN = Math.max(1, Math.round(STEPS*p));
+    for(let k = 0; k <= kN; k++){
+      const tt = tN*k/kN, x = X(tt), y = Y(Math.exp(-tt/HERO_TAU));
+      if(k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = inkAlive;
+    ctx.beginPath(); ctx.arc(X(tN), Y(Math.exp(-tN/HERO_TAU)), 3.0, 0, 7); ctx.fill();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 28; let i = 0;
-    const nuclei = [];
-    for(let r=0;r<5;r++) for(let col=0;col<6;col++){
-      nuclei.push({ x: W*0.06 + col*18, y: H*0.22 + r*22, seed: (r*6+col)*17+3 });
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(t){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && i<N;s++,i++){
-        const t = tMax * (i+1)/N;
-        const frac = Math.exp(-t/tau);
-        const x = x0 + (x1-x0)*t/tMax;
-        const y = yBot - (yBot-yTop)*frac;
-        ctx.fillStyle = inkDot;
-        ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fill();
-        nuclei.forEach(n => {
-          const alive = ((n.seed * 13 + i*7) % 97) > (100 * (1-frac) * 0.85);
-          ctx.fillStyle = alive ? inkDot : inkDead;
-          ctx.beginPath(); ctx.arc(n.x, n.y, 3.4, 0, 7); ctx.fill();
-        });
-      }
-      if(i < N) requestAnimationFrame(batch);
-    }
-    batch();
+    if(reduce){ paint(4.2); return; }           // the fully revealed frame
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      paint(((typeof now === 'number' ? now : t0) - t0)/1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

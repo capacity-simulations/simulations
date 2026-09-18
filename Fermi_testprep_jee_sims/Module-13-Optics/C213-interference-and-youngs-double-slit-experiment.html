@@ -825,7 +825,7 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">A point source, a barrier with two slits, and a screen that records every arrival</span>
+                <span class="hero-label">A point source, its wavefronts spreading to a barrier with two slits, a fresh wave leaving each slit, and the blank screen waiting behind them</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Double-slit experiment</span></h2>
@@ -3375,36 +3375,78 @@
       /* Hero = the APPARATUS (source → barrier with two slits → blank screen), never the
          result. The old hero sampled cos²·sinc² dots, i.e. it painted a finished fringe
          pattern — which is verbatim the answer to guided-inquiry card 2 ("what builds up
-         on the screen?"). Showing the setup keeps the gate honest. */
+         on the screen?"). Showing the setup keeps the gate honest. Card 3 (also gated)
+         turns on the same screen, so the screen stays outlined and BLANK here.
+
+         LAYOUT NOTE. The optical train used to run srcX = 10%W → scrX = 90%W, but the
+         hero mask is only opaque between 22% and 78% of the displayed width: the point
+         source and the detection screen were rendering at ~45% opacity, so of the three
+         objects the hidden .hero-label names, only the barrier was fully drawn. The
+         train is now compressed to 28.5%W → 71.5%W, with the barrier still at mid-width
+         and the source-to-barrier and barrier-to-screen legs still equal, so every
+         object — source, slits, screen — sits inside the opaque window. The wavefront
+         radii, speeds and spacing are all expressed in terms of those two (equal) legs,
+         so the incident train and the two secondary families stay in step exactly as
+         before; only the scale changed.
+
+         GEOMETRY NOTE. The backing store is now sized from getBoundingClientRect() ×
+         devicePixelRatio and the scene is drawn in CSS px under setTransform(dpr,…).
+         It previously drew into a fixed 1280×240 buffer that CSS stretched to
+         100vw×140, so the circular wavefronts reached the eye as ellipses. Arcs are
+         additionally truncated to the angular range that stays inside the 140-px strip
+         instead of being clipped by the canvas edge. */
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
         const ink   = LIGHT ? 'rgba(5,150,105,.85)'  : 'rgba(110,231,183,.85)';
         const solid = LIGHT ? 'rgba(71,85,105,.85)'  : 'rgba(148,163,184,.75)';
+        const scrF  = LIGHT ? 'rgba(148,163,184,.35)': 'rgba(30,41,59,.95)';
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         // one live loop only: the theme observers re-enter drawHero on every toggle
         const gen = (c.__heroGen = (c.__heroGen || 0) + 1);
-        const srcX = W*0.10, barX = W*0.46, scrX = W*0.90, midY = H/2;
-        const gap = H*0.10, half = H*0.40;          // slit half-gap, wall half-height
         function frame(t){
-          ctx.clearRect(0,0,W,H);
+          const rc = c.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+          const W = Math.max(320, Math.round(rc.width  || 1280));
+          const H = Math.max(100, Math.round(rc.height || 140));
+          const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+          if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+          const ctx = c.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, W, H);
+          // the whole train inside 26–74% of the displayed width; equal legs either side.
+          // The source blob and the screen slab have width of their own, so both shrink a
+          // little on narrow windows rather than pushing their own ink into the fade.
+          const cap = Math.max(4, Math.min(6, W*0.0045));
+          const srcX = W*0.272, barX = W*0.50, scrX = W*0.728, midY = H/2;
+          const leg = barX - srcX;                    // = scrX - barX by construction
+          const gap = H*0.10, half = H*0.40;          // slit half-gap, wall half-height
+          const capA = Math.PI/2.05;                  // forward-going arc half-angle
+          // an arc of radius r centred at (cx,cy), truncated so it never leaves the strip
+          function front(cx, cy, r){
+            if(r < 6) return;
+            const up = Math.min(capA, Math.asin(Math.min(1, Math.max(0, cy - 2)/r)));
+            const dn = Math.min(capA, Math.asin(Math.min(1, Math.max(0, H - cy - 2)/r)));
+            if(up + dn < 0.02) return;
+            ctx.beginPath(); ctx.arc(cx, cy, r, -up, dn); ctx.stroke();
+          }
           // source
           ctx.fillStyle = ink;
-          ctx.beginPath(); ctx.arc(srcX, midY, 6, 0, Math.PI*2); ctx.fill();
-          // incident wavefronts, source → barrier
+          ctx.beginPath(); ctx.arc(srcX, midY, cap, 0, Math.PI*2); ctx.fill();
+          // incident wavefronts, source → barrier (stop at the barrier face)
           ctx.strokeStyle = ink; ctx.lineWidth = 1.6;
-          for(let i=0;i<7;i++){
-            const r = ((t*34 + i*34) % 238);
-            if(r < 6 || r > barX-srcX) continue;
-            ctx.beginPath(); ctx.arc(srcX, midY, r, -Math.PI/2.1, Math.PI/2.1); ctx.stroke();
+          for(let i=0;i<5;i++){
+            const r = ((t*leg*0.62 + i*leg/5) % leg);
+            if(r > leg - 6) continue;
+            front(srcX, midY, r);
           }
-          // secondary wavefronts, one family from each slit
-          [midY-gap*1.6, midY+gap*1.6].forEach(sy=>{
-            for(let i=0;i<6;i++){
-              const r = ((t*34 + i*40) % 240);
-              if(r < 6 || r > scrX-barX) continue;
-              ctx.beginPath(); ctx.arc(barX, sy, r, -Math.PI/1.9, Math.PI/1.9); ctx.stroke();
+          // secondary wavefronts, one family from each slit — same speed and spacing,
+          // and in phase with the incident train because the legs are equal
+          [midY - gap*1.6, midY + gap*1.6].forEach(sy=>{
+            for(let i=0;i<5;i++){
+              const r = ((t*leg*0.62 + i*leg/5) % leg);
+              if(r > leg - 7) continue;
+              front(barX, sy, r);
             }
           });
           // barrier: three slabs, so the two slits read as gaps
@@ -3413,20 +3455,25 @@
           ctx.fillRect(barX-5, midY - gap*1.6 + gap*0.5, 10, gap*3.2 - gap);
           ctx.fillRect(barX-5, midY + gap*1.6 + gap*0.5, 10, half - gap*1.6 - gap*0.5);
           // blank detection screen — outlined so it reads as an object, never as a result
-          ctx.fillStyle = LIGHT ? 'rgba(148,163,184,.35)' : 'rgba(30,41,59,.95)';
-          ctx.fillRect(scrX-6, midY-half, 12, half*2);
+          ctx.fillStyle = scrF;
+          ctx.fillRect(scrX-cap, midY-half, cap*2, half*2);
           ctx.strokeStyle = solid; ctx.lineWidth = 2;
-          ctx.strokeRect(scrX-6, midY-half, 12, half*2);
+          ctx.strokeRect(scrX-cap, midY-half, cap*2, half*2);
         }
         let t0 = null;
         function loop(ts){
-          if(t0 === null) t0 = ts;
-          frame((ts-t0)/1000);
-          if(!reduce && c.__heroGen === gen && !ov.classList.contains('hidden')) requestAnimationFrame(loop);
+          if(c.__heroGen !== gen || ov.classList.contains('hidden')) return;
+          const now = (ts === undefined || ts === null)
+            ? ((window.performance && performance.now) ? performance.now() : Date.now())
+            : ts;                                     // ts === 0 is a real timestamp
+          if(t0 === null) t0 = now;
+          frame((now - t0)/1000);
+          if(!reduce) requestAnimationFrame(loop);
         }
         if(reduce) frame(1.6); else requestAnimationFrame(loop);
       }
       drawHero();
+      addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

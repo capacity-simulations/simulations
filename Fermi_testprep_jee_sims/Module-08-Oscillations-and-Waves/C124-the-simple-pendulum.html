@@ -533,11 +533,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-angle dots on T(θ₀)/T₀ — exact AGM curve vs flat T₀</span>
+            <span class="hero-label">Two same-length pendulums frozen at release — 10° and 90°, swing paths dotted</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Simple pendulum</span></h2>
-            <p class="welcome-blurb">The textbook period ignores amplitude — wide swings really do take longer.</p>
+            <p class="welcome-blurb">A real bob races a ghost obeying 2π√(L/g) — does a wide swing keep up?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2185,51 +2185,111 @@ else {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the simple pendulum.',
-    'Here a solid bob follows the true sine-theta dynamics, racing a ghost that obeys two-pi square root of L over g. The formula is trustworthy only as the release angle goes to zero.',
+    'Here a solid bob follows the true sine-theta dynamics, racing a ghost that obeys two-pi square root of L over g. Release them gently, then release them wide, and see whether the two stay together.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim’s T(θ₀)/T₀. T/T0 = 1/agm(1, cos(θ₀/2)).
-     Flat amber line = textbook T₀. Cyan dots = exact elliptic ratio. */
+  /* Hero: two pendulums of the SAME length, frozen at the instant of release —
+     a gentle 10° and a wide 90° — with each swing path dotted in. The
+     composition poses the sim's driving question (same length, different
+     release angle: same clock?) without answering it.
+     SPOILER DECISION (recorded): inquiry card 2 ("Predict — wide vs gentle",
+     data-gate) asks exactly whether one full swing at 90° takes more, less,
+     or the same time as at 10°. The previous hero plotted the rising exact
+     T(θ₀)/T₀ curve against the flat T₀ line — i.e. the gated answer — so the
+     curve is replaced by this glyph-only scene; the real curve stays in the
+     sim's 📈 panel, revealed by card 5.
+     Sizing: backing store from getBoundingClientRect()×devicePixelRatio,
+     drawing in CSS px — the fixed 1280×240 attributes were stretched into a
+     ~1500×140 box (~2:1 vertical squash). Essentials sit inside the 26–74%
+     band of the displayed width, clear of the overlay's edge fade. */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const my = ++heroToken;                      // one live draw chain at a time
+    const r = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(r.width || 1280));
+    const H = Math.max(100, Math.round(r.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     ctx.clearRect(0,0,W,H);
-    function agmRatio(th){
-      let a=1, b=Math.cos(th/2);
-      while(Math.abs(a-b)>1e-12){ const an=(a+b)/2; b=Math.sqrt(a*b); a=an; }
-      return 1/a;
-    }
-    const thMin = 0, thMax = Math.PI/2;
-    const rMin = 0.96, rMax = 1.22;
-    const padL = W*0.10, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = th => padL + ((th-thMin)/(thMax-thMin))*(padR-padL);
-    const yOf = r => padB - ((r-rMin)/(rMax-rMin))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, yOf(1)); ctx.lineTo(padR, yOf(1)); ctx.stroke();
-    const inkFlat = LIGHT ? 'rgba(180,83,9,.55)' : 'rgba(251,191,36,.45)';
-    const inkEx = LIGHT ? 'rgba(8,145,178,.92)' : 'rgba(34,211,238,.95)';
-    // faint flat T0 dots
+    const ink   = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
+    const soft  = LIGHT ? 'rgba(15,23,42,.40)'  : 'rgba(148,163,184,.50)';
+    const inkSm = LIGHT ? 'rgba(8,145,178,.92)' : 'rgba(34,211,238,.95)';   // 10° bob
+    const inkWd = LIGHT ? 'rgba(180,83,9,.92)'  : 'rgba(251,191,36,.95)';   // 90° bob
+    const arcSm = LIGHT ? 'rgba(8,145,178,.38)' : 'rgba(34,211,238,.40)';
+    const arcWd = LIGHT ? 'rgba(180,83,9,.38)'  : 'rgba(251,191,36,.40)';
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const pivY = H*0.16, rodL = Math.min(H*0.62, W*0.14), bobR = Math.max(5, H*0.05);
+    const piv = [[W*0.36, pivY], [W*0.58, pivY]];
+    const th0 = [10*Math.PI/180, 90*Math.PI/180];
+    const inks = [inkSm, inkWd];
+    piv.forEach(([px,py],i)=>{
+      // ceiling mount
+      ctx.strokeStyle = soft; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px-14, py-7); ctx.lineTo(px+14, py-7); ctx.stroke();
+      // dashed θ = 0 reference
+      ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py+rodL+bobR+3); ctx.stroke();
+      ctx.setLineDash([]);
+      // rod + bob, frozen at the release angle
+      const bx = px + rodL*Math.sin(th0[i]), by = py + rodL*Math.cos(th0[i]);
+      ctx.strokeStyle = ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.fillStyle = ink;
+      ctx.beginPath(); ctx.arc(px, py, 2.6, 0, 7); ctx.fill();
+      ctx.fillStyle = inks[i];
+      ctx.beginPath(); ctx.arc(bx, by, bobR, 0, 7); ctx.fill();
+      // release-angle label: beside the near-vertical bob, above the horizontal one
+      ctx.font = '12px '+FAM; ctx.fillStyle = inks[i];
+      if(i === 0){ ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('10°', bx + bobR + 6, by); }
+      // the 90° bob sits AT pivot height, so its label must be floored to stay
+      // on-canvas (by − bobR − 4 = 11.4 with a 12px bottom baseline → top −0.6)
+      else { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('90°', bx, Math.max(by - bobR - 4, 14)); }
+    });
+    ctx.font = '12px '+FAM; ctx.fillStyle = soft;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    // caption is left-aligned at 26%: drop to the short form rather than let it
+    // run past 74% (it reached 81% at W = 360 and collided with the 90° label).
+    // It sits on the FLOOR of the band: at H*0.05 its glyph box (y 7…19) was
+    // struck through by the first pendulum's ceiling mount at y = pivY − 7 =
+    // 15.4, which starts at x = 36% of W — inside the caption's own run. Below
+    // y = 120 the band is empty (the dashed θ = 0 rules stop at
+    // pivY + rodL + bobR + 3 = 119.2 and every swing dot is above that).
+    const capLong = 'same length, released together';
+    ctx.fillText(ctx.measureText(capLong).width <= W*0.46 ? capLong : 'same length', W*0.26, H - 3);
+    // swing paths dotted in — geometry only, no timing information
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 56; let n = 0;
+    const N = 29; let n = 0;
     function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const th = thMin + (n/(N-1))*(thMax-thMin);
-        ctx.fillStyle = inkFlat;
-        ctx.beginPath(); ctx.arc(xOf(th), yOf(1), 2.0, 0, 7); ctx.fill();
-        ctx.fillStyle = inkEx;
-        ctx.beginPath(); ctx.arc(xOf(th), yOf(agmRatio(th)), 2.6, 0, 7); ctx.fill();
+      if(my !== heroToken) return;               // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const per = reduce ? N : 1;
+      for(let s=0; s<per && n<N; s++, n++){
+        piv.forEach(([px,py],i)=>{
+          const th = th0[i]*(1 - 2*n/(N-1));     // +θ₀ … −θ₀
+          ctx.fillStyle = i ? arcWd : arcSm;
+          ctx.beginPath();
+          ctx.arc(px + rodL*Math.sin(th), py + rodL*Math.cos(th), 1.7, 0, 7);
+          ctx.fill();
+        });
       }
-      if(n < N) requestAnimationFrame(batch);
+      if(n < N){ requestAnimationFrame(batch); return; }
+      if(reduce) return;                         // reduced motion: one still frame, no cycle
+      // The dots accumulate on a scene painted once, so the cycle restarts by
+      // repainting the whole hero: 1.4 s dwell on the finished arcs, then again.
+      setTimeout(()=>{ if(my === heroToken && !ov.classList.contains('hidden')) drawHero(); }, 1400);
     }
     batch();
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

@@ -715,11 +715,11 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">A free wavepacket drifting and spreading &mdash; each curve one later instant, wider and lower</span>
+                <span class="hero-label">A free wavepacket at the first instant, with the later frames of the strip still blank</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Gaussian Wavepacket Time Evolution</span></h2>
-                <p class="welcome-blurb">A free particle&rsquo;s wavepacket drifts like a classical ball &mdash; but it cannot keep its width.</p>
+                <p class="welcome-blurb">A free particle&rsquo;s wavepacket, with no force anywhere &mdash; what does time do to it?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -1985,16 +1985,20 @@
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
-    { sel:'#wavePlotWrapper', mode:'veil', title:'Wavefunction plot',   text:'Real and imaginary parts of ψ(x,t), the packet’s complex wavefunction.' },
-    { sel:'#probPlotWrapper', mode:'veil', title:'Probability density', text:'P(x,t) — the chance of finding the particle near each x.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#wavePlotWrapper', mode:'show', title:'Wavefunction plot',   text:'Real and imaginary parts of ψ(x,t), the packet’s complex wavefunction.' },
+    { sel:'#probPlotWrapper', mode:'show', title:'Probability density', text:'P(x,t) — the chance of finding the particle near each x.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#playBtn',         mode:'veil', title:'Play / Pause',        text:'Runs and freezes the time evolution.' },
     { sel:'#resetBtn',        mode:'veil', title:'Reset',               text:'Returns the simulation to its first-load state.' },
     { sel:'#boxK0',           mode:'hide', title:'Mean momentum k₀',    text:'Sets the packet’s average momentum — its drift speed and direction.' },
     { sel:'#boxSigma',        mode:'hide', title:'Momentum spread σ',   text:'Width of A(k) in momentum; larger σ means a narrower packet in x.' },
     { sel:'#boxMass',         mode:'hide', title:'Mass m',              text:'Heavier particles drift and spread more slowly.' },
     { sel:'#boxSpeed',        mode:'hide', title:'Time speed',          text:'How fast simulation time advances while playing.' },
+    /* 4 · readouts — what the student can measure */
     { sel:'#boxToggles',      mode:'hide', title:'Component toggles',   text:'Show or hide the real and imaginary curves.' },
     { sel:'#boxMetrics',      mode:'hide', title:'Live metrics',        text:'Time, packet centre, width, peak density, drift speed and total probability.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the info tooltip and the static "Units: ℏ = 1" badge. */
   ];
@@ -2076,6 +2080,7 @@
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode==='show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2161,53 +2166,96 @@
       const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
       const script = [
         'Welcome to the Gaussian wavepacket time evolution.',
-        'A free quantum particle is a packet of waves. Press play and the packet drifts like a classical particle would, but it also spreads, growing wider and wider as time runs.',
+        'A free quantum particle is a packet of waves. Press play and watch what time does to it: where the hump goes, and what becomes of its shape.',
         'Choose how you would like to begin.',
         'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: this sim's own P(x,t) — one curve per instant, drifting and spreading */
+      /* Hero: this sim's SETUP, never its outcome. A three-cell filmstrip: the first
+         cell carries the packet's own P(x, 0) — the sim's Gaussian at t = 0 — and the
+         two later cells are left as empty dashed slots with a time arrow beneath.
+         What time does to the WIDTH is gated card 2 and what momentum does to the
+         CENTRE is gated card 4, so no second instant is ever drawn: the strip poses
+         the question and stops there. (The old hero swept 46 successive P(x, t)
+         curves, visibly drifting and flattening — both answers at once.) The canvas
+         is sized from its CSS box × devicePixelRatio and every coordinate is CSS px,
+         so x and y share one scale at every viewport width. */
+      let heroGen = 0;                                // generation token: only the newest chain paints
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        const rect = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(360, Math.round(rect.width || 1280));
+        const H = Math.max(100, Math.round(rect.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);       // draw in CSS px: one scale for x and y
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-        ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        /* This sim's own free-packet law (ħ = m = 1): P(x,t) is a Gaussian whose
-           centre moves at k₀t and whose squared width is 1/σ² + σ²t² — exactly
-           the sim's α(t). Each stroke is one later instant: further right,
-           wider, lower. Drawn oldest → newest once as the entrance; never loops. */
-        const sigma = 1.0, k0 = 1.55, T = 6.0, N = 46;
-        const xL = -4, xR = 14;
-        const p0 = 1/Math.sqrt(Math.PI);              // the t = 0 peak, for scaling
-        function curve(j){
-          const t = T*j/(N-1);
-          const wl = 1/(sigma*sigma) + sigma*sigma*t*t;
-          const ctr = k0*t;
-          const a = j/(N-1);
-          ctx.strokeStyle = LIGHT
-            ? 'rgba(15,110,96,' + (0.85 - 0.5*a).toFixed(3) + ')'
-            : 'rgba(94,226,196,' + (0.85 - 0.55*a).toFixed(3) + ')';
-          ctx.lineWidth = 2;
+        const gen = ++heroGen;                        // supersedes any chain already running
+        const xl = W*0.245, xr = W*0.755;             // the hero mask only fully clears 22–78%
+        const CELLS = 3, GAP = W*0.014;
+        const cw = (xr - xl - GAP*(CELLS-1))/CELLS;
+        const top = 16, baseY = H - 30;
+        const INK   = LIGHT ? 'rgba(15,23,42,0.34)'   : 'rgba(226,232,240,0.34)';
+        const FAINT = LIGHT ? 'rgba(15,23,42,0.20)'   : 'rgba(226,232,240,0.20)';
+        const CURVE = LIGHT ? 'rgba(15,110,96,0.92)'  : 'rgba(94,226,196,0.92)';
+        /* The sim's own free-packet law (ħ = m = 1) evaluated at t = 0 only:
+           P(x, 0) = exp(−x²/σ²)/√(πσ²) with σ = 1. Unaltered physics, one instant. */
+        const sigma = 1.0, xLo = -3.3, xHi = 3.3, p0 = 1/Math.sqrt(Math.PI*sigma*sigma);
+        const cellX = i => xl + i*(cw + GAP);
+        function base(){
+          ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+          ctx.lineWidth = 1.4;
+          for(let i=0;i<CELLS;i++){
+            const x0 = cellX(i);
+            if(i === 0){                              // the one instant this hero shows
+              ctx.setLineDash([]); ctx.strokeStyle = INK;
+              ctx.beginPath(); ctx.moveTo(x0, baseY); ctx.lineTo(x0 + cw, baseY); ctx.stroke();
+            } else {                                  // the instants the student will fill in
+              ctx.setLineDash([5,5]); ctx.strokeStyle = FAINT;
+              ctx.beginPath(); ctx.rect(x0, top, cw, baseY - top); ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+          const ay = H - 14;                          // time runs to the right, carrying nothing yet
+          ctx.strokeStyle = FAINT; ctx.lineWidth = 1.2;
           ctx.beginPath();
-          for(let px = 0; px <= W; px += 4){
-            const x = xL + (xR - xL)*px/W;
-            const p = Math.exp(-(x - ctr)*(x - ctr)/wl) / Math.sqrt(Math.PI*wl);
-            const y = H - 10 - (H - 26)*(p/p0);
-            if(px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+          ctx.moveTo(xl, ay); ctx.lineTo(xr, ay);
+          ctx.moveTo(xr - 7, ay - 3.5); ctx.lineTo(xr, ay); ctx.lineTo(xr - 7, ay + 3.5);
+          ctx.stroke();
+        }
+        function packet(frac){                        // P(x, 0) strokes in, left to right
+          const x0 = cellX(0), h = baseY - top;
+          ctx.strokeStyle = CURVE; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
+          const nx = Math.max(8, Math.round(cw));
+          const upto = Math.max(1, Math.round(nx*frac));
+          ctx.beginPath();
+          for(let i=0;i<=upto;i++){
+            const x = xLo + (xHi - xLo)*i/nx;
+            const p = Math.exp(-x*x/(sigma*sigma))/Math.sqrt(Math.PI*sigma*sigma);
+            const px = x0 + cw*i/nx, py = baseY - h*0.92*(p/p0);
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
           }
           ctx.stroke();
         }
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if(reduce){ for(let j = 0; j < N; j++) curve(j); return; }   // one frame under reduced motion
-        let j = 0, tick = 0;
-        (function step(){                              // ~1.5 s accumulation as the entrance; never loop
-          if((tick++ & 1) === 0){ curve(j); j++; }
-          if(j < N) requestAnimationFrame(step);
+        if(reduce){ base(); packet(1); return; }      // exactly one frame under reduced motion
+        const FRAMES = 40, DWELL = 80;                // ~0.66 s draw-in, ~1.3 s hold, then it replays
+        let f = 0, hold = 0;
+        (function step(){                             // repeating cycle: draw in, dwell, wipe, repeat
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(f < FRAMES){ f++; base(); packet(f/FRAMES); }
+          else if(++hold >= DWELL){ hold = 0; f = 0; base(); }
+          requestAnimationFrame(step);
         })();
       }
 
 drawHero();
+      // A viewport change alters the CSS box, so the backing store and the layout must be rebuilt
+      window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+
       // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

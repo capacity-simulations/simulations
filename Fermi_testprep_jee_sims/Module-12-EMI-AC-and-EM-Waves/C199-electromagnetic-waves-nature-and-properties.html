@@ -1112,11 +1112,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots of E and B — they peak together, locked by E/B = c</span>
+            <span class="hero-label">One wave train crossing the band, its wavelength collapsing from long lazy cycles at the left to tight ripples at the right</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The EM wave</span></h2>
-            <p class="welcome-blurb">Wavelength collapses by fourteen decades. The ratio E/B never leaves c.</p>
+            <p class="welcome-blurb">Sweep from radio to γ-ray — what do the wavelength and the fields do?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3300,54 +3300,128 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the electromagnetic wave.',
-    'Wavelength collapses by fourteen decades. The ratio of E to B never leaves the speed of light.',
+    'Here a travelling electromagnetic wave carries an electric field and a magnetic field at right angles to each other. Sweep the frequency from radio to gamma ray and watch what happens to the wavelength, and to the two amplitudes.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-z dots of E = E0 cos(kz) and B = (E0/c) cos(kz) — same phase, B scaled by c. */
+  /* Hero: the blurb's own headline, drawn — "wavelength collapses by fourteen
+     decades". ONE wave train crosses the band, its wavelength shortening
+     geometrically from long lazy cycles at the left to tight ripples at the
+     right (λ(t) = λ0·(λ1/λ0)^t, so equal steps across the band are equal
+     RATIOS of λ — the decade sweep the frequency slider performs), with a
+     subtle red→amber→green→blue→violet ramp running along it.
+     THIS REPLACES AN E/B PAIR, for two independent reasons.
+     (1) It was broken: E was plotted at cy − (E/E0)·amp and B at
+     cy − (B·c/E0)·amp, and since B was defined as E/c the two expressions were
+     algebraically identical — B was pre-divided by c and then re-multiplied by
+     it — so both trains landed on exactly the same pixels and only one curve
+     ever rendered. The "pair" was never visible.
+     (2) It is a DESPOILER: gated card 3 asks whether E and B take turns storing
+     energy (one peaking while the other is zero) or peak together, and its
+     correct answer is that they are IN PHASE. Any honest two-curve drawing of
+     E and B answers that question in the hero, before the student has predicted
+     — and a dishonest one would teach the pendulum error. So the pair is gone
+     altogether: a single train carries no phase relationship at all.
+     Gated card 1 asks what B0 does as f climbs (answer: unchanged, B0 = E0/c).
+     The train therefore holds ONE constant amplitude and is drawn with no field
+     identity, no axis labels, no c, no numbers: it makes no claim about E0 or
+     B0. Tapering the height with the wavelength — the obvious "pretty chirp"
+     — was rejected precisely because it would illustrate that card's distractor
+     ("B0 shrinks with f, it follows the collapsing wavelength").
+     Geometry: backing store sized from the canvas's own box × devicePixelRatio
+     and drawn in CSS px (the authored 1280×240 store was being CSS-stretched
+     into a 100vw×140 band). The train at full strength lives inside 26–74% of
+     the displayed width; beyond that its stroke gradient fades to transparent
+     so the two extremes dissolve into the overlay's own 22–78% edge mask
+     instead of being chopped off by it. Measured off the same maths at
+     1440×140 CSS: the train is drawn over 20.5–79.5% and reaches full opacity
+     over 25.8–74.2%; λ falls 327 → 199 → 121 → 74 → 45 px across the band (a
+     7.3× collapse, the same ratio in every quarter); 0.84 cycles fit in the
+     first quarter against 3.74 in the last; and the sampled envelope is flat to
+     within 0.01%, so the amplitude really is constant. The tightest cycle stays
+     44.7 px wide against a 61.6 px height, so the right end reads as a ripple
+     and not as a picket of vertical strokes; the λ floor holds that true down
+     to a 600 px window. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    ctx.clearRect(0,0,W,H);
+    const xa = W*0.205, xb = W*0.795, Lx = xb - xa;   // drawn span; core is 26–74%
+    const cy = H*0.52, amp = H*0.22;                  // ONE amplitude, held all the way across
+    // Shortest and longest cycle, in px. λ1 has a floor so the tight end stays a
+    // readable ripple rather than a picket of near-vertical strokes (its cycle
+    // is never much narrower than the train is tall), and λ0 is capped so a wide
+    // window does not run out of lazy cycles at the left.
+    const lam1 = Math.max(32, Lx/19);
+    const lam0 = Math.min(Lx/2.6, lam1*8);
+    const a = Math.log(lam0/lam1);                    // the log-range of the collapse
+    const k0L = 2*Math.PI*Lx/lam0;
+    const phaseAt = t => a > 1e-6 ? k0L*(Math.exp(a*t) - 1)/a : k0L*t;
+    const total = phaseAt(1);
+    const N = Math.max(420, Math.ceil(total/0.08));   // sample fine enough for the tight end
+    // Spectrum ramp along the train, transparent at both extremes.
+    const stops = LIGHT
+      ? [[185,28,28],[180,83,9],[21,128,61],[29,78,216],[109,40,217]]
+      : [[248,113,113],[251,191,36],[74,222,128],[96,165,250],[167,139,250]];
+    const A = LIGHT ? 0.88 : 0.90;
+    const grad = ctx.createLinearGradient(xa, 0, xb, 0);
+    grad.addColorStop(0, 'rgba('+stops[0].join(',')+',0)');
+    stops.forEach((rgb, i) => {
+      const p = 0.09 + (0.82*i)/(stops.length - 1);
+      grad.addColorStop(p, 'rgba('+rgb.join(',')+','+A+')');
+    });
+    grad.addColorStop(1, 'rgba('+stops[stops.length-1].join(',')+',0)');
+    // the line the train oscillates about, fading the same way at both ends
+    const axisRGB = LIGHT ? '71,85,105' : '148,163,184';
+    const ag = ctx.createLinearGradient(xa, 0, xb, 0);
+    ag.addColorStop(0, 'rgba('+axisRGB+',0)');
+    ag.addColorStop(0.12, 'rgba('+axisRGB+',' + (LIGHT ? 0.26 : 0.22) + ')');
+    ag.addColorStop(0.88, 'rgba('+axisRGB+',' + (LIGHT ? 0.26 : 0.22) + ')');
+    ag.addColorStop(1, 'rgba('+axisRGB+',0)');
+    ctx.strokeStyle = ag; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xa, cy); ctx.lineTo(xa + Lx*u, cy); ctx.stroke();
+    // the train itself — one path, one gradient stroke
+    ctx.strokeStyle = grad; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    const steps = Math.max(2, Math.round(N*u));
+    for(let i = 0; i <= steps; i++){
+      const t = (i/N);
+      const x = xa + Lx*t, y = cy - amp*Math.cos(phaseAt(t));
+      if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const E0 = 10, f = 1e8;
-    const emw = window.Engine && Engine.emwave;
-    const C = (emw && emw.constants && emw.constants.C) || 299792458;
-    function fields(z){
-      if(emw && typeof emw.fieldsAt === 'function') return emw.fieldsAt(E0, f, z, 0);
-      const k = 2*Math.PI*f/C;
-      const E = E0*Math.cos(k*z);
-      return { electricField:E, magneticField:E/C };
-    }
-    const lambda = C/f;
-    const zSpan = 2.2*lambda;
-    const padL = 70, padR = 70, cy = H*0.55, amp = H*0.32;
-    const xOf = z => padL + (z/zSpan)*(W-padL-padR);
-    const inkE = LIGHT ? 'rgba(37,99,235,.88)' : 'rgba(96,165,250,.88)';
-    const inkB = LIGHT ? 'rgba(219,39,119,.78)' : 'rgba(244,114,182,.82)';
-    const axis = LIGHT ? 'rgba(71,85,105,.45)' : 'rgba(148,163,184,.35)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(W-padR, cy); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 72; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        const z = ((step+0.5)/N)*zSpan;
-        const fl = fields(z);
-        const x = xOf(z);
-        ctx.fillStyle = inkE;
-        ctx.beginPath(); ctx.arc(x, cy - (fl.electricField/E0)*amp, 2.1, 0, 7); ctx.fill();
-        ctx.fillStyle = inkB;
-        ctx.beginPath(); ctx.arc(x, cy - (fl.magneticField*C/E0)*amp, 1.7, 0, 7); ctx.fill();
-      }
-      if(step < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    // looping reveal: the train unfurls left to right, tightening as it goes, then repeats
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // 2.8 s cycle: 1.4 s unfurl, 1.4 s dwell on the full train, then repeat
+      const s = Math.min(1, ((((now || t0) - t0)/1000) % 2.8)/1.4);
+      paint(s*s*(3 - 2*s));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -892,7 +892,7 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Sampled positions for the four bound states of the default well</span>
+                <span class="hero-label">The ground state of the default well, its wave carrying on past the shaded walls</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The Finite Potential Well</span></h2>
@@ -2244,6 +2244,9 @@
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The well and its states', text:'The finite well drawn against position x, with the bound state\'s |ψ(x)|² over it.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#btnPlayPause',  mode:'veil', title:'Play / Pause',        text:'Runs or freezes the phase rotation of the wave.' },
     { sel:'#btnReset',      mode:'veil', title:'Reset',               text:'Returns every control to its first-load value.' },
     { sel:'#boxV0',         mode:'hide', title:'Well depth V₀',       text:'How deep the well is, in electron-volts.' },
@@ -2251,8 +2254,10 @@
     { sel:'#boxSpeed',      mode:'hide', title:'Animation speed',     text:'Scales how fast the phase of the wave rotates.' },
     { sel:'#boxCurves',     mode:'hide', title:'Curve toggles',       text:'Show or hide the wave and the probability density.' },
     { sel:'#boxStateNav',   mode:'hide', title:'Bound-state selector',text:'Steps between bound states; the label gives the current n.' },
+    /* 4 · readouts — what the student can measure */
     { sel:'#boxStateInfo',  mode:'hide', title:'State readouts',      text:'Energy of the selected state and its probability outside the well.' },
     { sel:'#boxEnergyList', mode:'hide', title:'Energy ladder',       text:'Every bound state this well holds; click one to select it.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the "i" info tooltip in the title bar. */
   ];
@@ -2334,6 +2339,7 @@
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2414,99 +2420,152 @@
       const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
       const script = [
         'Welcome to the finite potential well.',
-        'The walls here are a rim, not a barrier: the well has a definite depth, so it holds only a handful of bound states, and the wave of each one reaches out past the walls into the region a classical particle could never enter.',
+        'The walls here are a rim, not a barrier. The well has a definite depth, and the wave of each bound state does not simply stop where the wall stands. How far it reaches beyond, and how many states the well can hold, are yours to work out.',
         'Choose how you would like to begin.',
         'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: this sim's own bound states, sampled into dots that spill past the walls */
+      /* Hero: this sim's own lower panel at its default well — V0 = 20 eV,
+         2a = 0.5 nm — for ONE state: the ground state n = 1 the sim boots on,
+         with the region beyond the walls shaded, so the wave is seen carrying on
+         past the wall instead of stopping at it.
+         SPOILER DECISION (show the apparatus, pose the question, withhold the
+         outcome). The earlier hero drew a BAND PER BOUND STATE — all four of the
+         default well, one above the other, each sampled into dots from its own
+         |psi_n|^2 — so the tails grew visibly longer down the stack. That
+         comparison is card 4's answer ("which state keeps the largest share of
+         its probability beyond the walls?" / "n = 4, the highest"): the whole
+         point of that card is that the leak is set by V0 − E and so differs
+         from state to state, and the stack plotted the trend.
+         Fixed at tier 4 (one case instead of four; the in-fleet model is
+         Multi_Stage_Stern_Gerlach_New, which draws one stage and leaves the
+         rest out) plus tier 2 (the per-state colour ladder goes with it). n = 1
+         is the honest single case: card 3's own stem says "the ground state
+         n = 1 is drawn", and the welcome blurb already promises "a wave that
+         reaches past the walls", so the tail itself is premise — what was
+         gated, and is now withheld, is how that tail CHANGES with n.
+         Equalising the four tails instead would have drawn card 4's distractor
+         C ("the same share for every state"), so the count had to come down
+         rather than the trend be flattened. The state is still solved from the
+         sim's own transcendental condition and drawn at its true amplitude:
+         the n = 1 tail really is this short. Card 5 (a shallower, narrower
+         well) needs a second well to compare with; there is only one here. */
+      let heroGen = 0;                                 // a re-entry cancels the running chain
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        /* House aspect fix: the canvas box is 100vw x 140px, so the authored
+           1280x240 backing store was stretched by viewport/747 in x and 140/240
+           in y — isotropic ink came out right only at exactly 747px wide. Size
+           the backing store from the measured box times devicePixelRatio and
+           draw in CSS pixels: one drawing unit is one CSS pixel in both axes. */
+        const r = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(320, Math.round(r.width || 1280));
+        const H = Math.max(100, Math.round(r.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-        ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        /* The sim's own default well — V0 = 20 eV, 2a = 0.5 nm, hbar^2/2m = 0.03810
-           eV nm^2 — solved from the same transcendental conditions the sim uses:
-           z tan z = sqrt(z0^2 - z^2) for even states, -z cot z = ... for odd ones.
-           One band per bound state; every dot is one position sampled from
-           |psi_n(x)|^2, so dot DENSITY is the probability. The dots that land
-           outside the dashed walls are the leak into the forbidden region. */
         const HB = 0.03810, V0 = 20, L = 0.5, a = L/2;
         const z0 = a*Math.sqrt(V0/HB);
-        const lhsOf = (z, odd) => { if(!odd) return z*Math.tan(z);
-          const s = Math.sin(z); return Math.abs(s) < 1e-9 ? NaN : -z*Math.cos(z)/s; };
-        const states = [];
-        for(const odd of [false, true]){
+        /* the sim's own even-parity condition, z tan z = sqrt(z0² − z²); its
+           LOWEST root is the ground state, the one this sim opens on */
+        function groundZ(){
           const dz = 0.002;
           for(let z = dz; z + dz < z0; z += dz){
             const r2 = z0*z0 - z*z, rn2 = z0*z0 - (z+dz)*(z+dz);
             if(r2 < 0 || rn2 < 0) continue;
-            const l1 = lhsOf(z, odd), l2 = lhsOf(z+dz, odd);
+            const l1 = z*Math.tan(z), l2 = (z+dz)*Math.tan(z+dz);
             if(!isFinite(l1) || !isFinite(l2)) continue;
             if(l1 < -50 || l2 < -50 || l1 > 1000 || l2 > 1000) continue;
-            const d = l1 - Math.sqrt(r2), dn = l2 - Math.sqrt(rn2);
-            if(d*dn >= 0) continue;
+            const d1 = l1 - Math.sqrt(r2), d2 = l2 - Math.sqrt(rn2);
+            if(d1*d2 >= 0) continue;
             let lo = z, hi = z + dz;
-            for(let i = 0; i < 60; i++){
-              const m = (lo+hi)/2, mr2 = z0*z0 - m*m;
-              if(mr2 < 0){ hi = m; continue; }
-              const md = lhsOf(m, odd) - Math.sqrt(mr2);
-              if(!isFinite(md)){ lo = m; continue; }
-              if(md*d > 0) lo = m; else hi = m;
+            for(let i=0;i<60;i++){
+              const mid = (lo+hi)/2, mr2 = z0*z0 - mid*mid;
+              if(mr2 < 0){ hi = mid; continue; }
+              const md = mid*Math.tan(mid) - Math.sqrt(mr2);
+              if(!isFinite(md)){ lo = mid; continue; }
+              if(md*d1 > 0) lo = mid; else hi = mid;
             }
-            const zs = (lo+hi)/2, E = zs*zs*HB/(a*a);
-            if(E > 0 && E < V0) states.push({ E: E, odd: odd });
+            return (lo+hi)/2;
           }
+          return null;
         }
-        states.sort((p,q) => p.E - q.E);
-        if(!states.length) return;
-        const psiAt = (st, x) => {
-          const k = Math.sqrt(st.E/HB), kap = Math.sqrt((V0-st.E)/HB);
-          if(!st.odd){
-            if(x < -a) return Math.cos(k*a)*Math.exp(kap*(x+a));
-            if(x >  a) return Math.cos(k*a)*Math.exp(-kap*(x-a));
-            return Math.cos(k*x);
-          }
-          if(x < -a) return -Math.sin(k*a)*Math.exp(kap*(x+a));
-          if(x >  a) return  Math.sin(k*a)*Math.exp(-kap*(x-a));
-          return Math.sin(k*x);
-        };
-        const XH = 0.55;                              // half-span in nm: the well is 45% of the strip
-        const xToPx = x => (x + XH)/(2*XH)*W;
-        const BANDS = states.length, pad = 12, bandH = (H - pad*2)/BANDS;
-        const DARK_COLS  = ['rgba(244,114,182,0.85)','rgba(96,165,250,0.85)','rgba(52,211,153,0.85)','rgba(251,191,36,0.85)'];
-        const LIGHT_COLS = ['rgba(157,23,77,0.85)','rgba(29,78,216,0.85)','rgba(6,95,70,0.85)','rgba(146,64,14,0.85)'];
-        const col = i => (LIGHT ? LIGHT_COLS : DARK_COLS)[i % 4];
-        // the walls at x = ±a, drawn ON TOP once the dots have settled so the
-        // spill beyond them is readable rather than buried under the scatter
-        function drawWalls(){
+        const zs = groundZ();
+        const E  = zs === null ? 0 : zs*zs*HB/(a*a);
+        const k  = zs === null ? 0 : zs/a;
+        const kap = zs === null ? 1 : Math.sqrt(Math.max(1e-9, (V0 - E))/HB);
+        function psi(x){                               // even state: cos inside, decaying outside
+          if(zs === null) return 0;
+          if(x >= -a && x <= a) return Math.cos(k*x);
+          return Math.cos(k*a)*Math.exp(-kap*(Math.abs(x) - a));
+        }
+        const XH = 0.42;                               // half-span in nm: the well fills 60% of the frame
+        const HALF = W*0.225, CX = W/2;                // all ink inside 27.5%..72.5% of the width
+        const X = x => CX + (x/XH)*HALF;
+        const Y0 = H - 28, PH = Y0 - 16;               // baseline, and the height of psi(0)
+        const OUT  = LIGHT ? 'rgba(148,163,184,.20)' : 'rgba(148,163,184,.13)';
+        const WALL = LIGHT ? 'rgba(15,23,42,.55)'    : 'rgba(226,232,240,.70)';
+        const AXIS = LIGHT ? 'rgba(51,65,85,.35)'    : 'rgba(148,163,184,.35)';
+        const WAVE = LIGHT ? '157,23,77'             : '244,114,182';
+        const TXT  = LIGHT ? 'rgba(51,65,85,.80)'    : 'rgba(203,213,225,.66)';
+        function frame(reveal){
+          ctx.clearRect(0, 0, W, H);                   // transparent: the overlay dim is the backdrop
+          const xL = X(-XH), xR = X(XH);
+          const cut = xL + (xR - xL)*Math.max(0, Math.min(1, reveal));
           ctx.save();
-          ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,0.55)' : 'rgba(226,232,240,0.7)';
-          ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
-          for(const xw of [-a, a]){ ctx.beginPath(); ctx.moveTo(xToPx(xw), pad*0.3); ctx.lineTo(xToPx(xw), H - pad*0.3); ctx.stroke(); }
+          ctx.beginPath(); ctx.rect(xL - 2, 0, Math.max(1, cut - xL + 2), H); ctx.clip();
+          // the classically forbidden region, beyond the walls
+          ctx.fillStyle = OUT;
+          ctx.fillRect(xL, 8, X(-a) - xL, H - 16);
+          ctx.fillRect(X(a), 8, xR - X(a), H - 16);
+          // the baseline the wave is drawn on
+          ctx.strokeStyle = AXIS; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(xL, Y0); ctx.lineTo(xR, Y0); ctx.stroke();
+          // the wave itself, filled to the baseline
+          ctx.beginPath(); ctx.moveTo(xL, Y0);
+          for(let j=0;j<=360;j++){
+            const x = -XH + (j/360)*2*XH;
+            ctx.lineTo(X(x), Y0 - psi(x)*PH);
+          }
+          ctx.lineTo(xR, Y0); ctx.closePath();
+          ctx.fillStyle = 'rgba(' + WAVE + ',0.22)'; ctx.fill();
+          ctx.beginPath();
+          for(let j=0;j<=360;j++){
+            const x = -XH + (j/360)*2*XH, sx = X(x), sy = Y0 - psi(x)*PH;
+            j ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy);
+          }
+          ctx.strokeStyle = 'rgba(' + WAVE + ',0.95)'; ctx.lineWidth = 1.9; ctx.stroke();
+          // the walls: where the well stops and the wave does not
+          ctx.strokeStyle = WALL; ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+          for(const xw of [-a, a]){ ctx.beginPath(); ctx.moveTo(X(xw), 8); ctx.lineTo(X(xw), H - 8); ctx.stroke(); }
+          ctx.setLineDash([]);
           ctx.restore();
+          if(W >= 520 && reveal > 0.92){
+            ctx.save();
+            ctx.fillStyle = TXT;
+            ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+            ctx.textBaseline = 'top';
+            ctx.textAlign = 'right'; ctx.fillText('−a', X(-a) - 5, Y0 + 5);
+            ctx.textAlign = 'left';  ctx.fillText('a',  X(a)  + 5, Y0 + 5);
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('ψ(x)', CX + 8, Y0 - PH + 12);
+            ctx.restore();
+          }
         }
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const PER = 90, FRAMES = 40;
-        let frame = 0;
-        function batch(count){
-          for(let b = 0; b < BANDS; b++){
-            const st = states[b], yTop = pad + b*bandH, h = bandH - 5;
-            ctx.fillStyle = col(b);
-            for(let k = 0; k < count; k++){
-              for(let t = 0; t < 60; t++){           // rejection-sample |psi_n|^2 (max is 1)
-                const x = (Math.random()*2 - 1)*XH;
-                const p = psiAt(st, x);
-                if(Math.random() <= p*p){ ctx.fillRect(xToPx(x), yTop + Math.random()*h, 2.0, 2.0); break; }
-              }
-            }
-          }
-        }
-        if(reduce){ batch(PER*FRAMES); drawWalls(); return; }   // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step); else drawWalls();
+        if(reduce){ frame(1); return; }                // one frame under reduced motion
+        const FRAMES = 44, DWELL = 84;                 // ~0.7 s wipe-in + ~1.4 s dwell
+        const gen = ++heroGen;
+        let f = 0, dwell = 0;
+        (function step(){                              // wipe in, hold, then replay
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(f < FRAMES){ f++; frame(f/FRAMES); }
+          else if(++dwell > DWELL){ f = 0; dwell = 0; }
+          requestAnimationFrame(step);
         })();
       }
 
@@ -2516,6 +2575,8 @@ drawHero();
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.body, { attributes:true, attributeFilter:['class'] });
+      window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+
       const synth = window.speechSynthesis;
       // Transport state: current line, char offset inside it (from boundary events), playing flag.
       let idx = 0, charAt = 0, playing = false, current = null, finished = false;

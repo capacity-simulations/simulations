@@ -1164,11 +1164,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-I and equal-r dots of v_d = I / (n A e)</span>
+                <span class="hero-label">A wire segment where ~30 electrons criss-cross in fast jagged thermal walks while the whole swarm creeps slowly one way — faint arrows mark conventional current and the opposite electron drift</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Drift velocity</span></h2>
-                <p class="welcome-blurb">A current is a bias in a fast random swarm — the field barely moves any one electron.</p>
+                <p class="welcome-blurb">Electrons dart at random in a copper wire — what changes when the field comes on?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3308,47 +3308,153 @@ if(typeof Shell !== 'undefined' && Shell.init){
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to drift velocity.',
-    'Here electrons dart at random. Switch the field on and each one still looks random, but the swarm average creeps.',
+    'Here electrons dart at random inside a copper wire, and a marker tracks the average position of the whole swarm. Your job is to work out what switching the field on does — to any one electron, and to that average.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: v_d = I/(n A e) from this sim.
-     EQUAL-parameter dots: v_d vs I (linear) and v_d vs r (1/r²). */
+  /* Hero: the SWARM, not the result. The old hero plotted the two textbook
+     answer curves of v_d = I/(nAe) — v_d vs I (linear) and v_d vs r (1/r²) —
+     while the blurb promises "a bias in a fast random swarm" and the shell
+     title calls the sim "the bias in the average". This one shows that
+     premise instead: a bare wire segment (two rails) holding ~30 electrons
+     on seeded deterministic jagged thermal random-walks — fast,
+     criss-crossing — while the whole cloud creeps slowly leftward. The drift
+     is deliberately tiny against the jitter (≈6 px/s under ≈92 px/s): that
+     contrast IS the sim's thesis. A faint green arrow above the wire marks
+     conventional current, opposite a smaller amber electron-drift arrow
+     below — no inquiry card gates on the direction. No axes, no curves, no
+     numbers: card 2's gated predict ("what will you see when the field goes
+     ON?") is qualitative, its answer is already stated in the welcome blurb,
+     and the quantitative punchlines (≈0.1 mm/s, 1:10^10) stay in the cards —
+     the hero's creep is unquantified.
+     Everything essential sits inside 24%–76% of the band (the CSS mask fades
+     the edges). The canvas backing store is sized from getBoundingClientRect()
+     × devicePixelRatio every paint and drawn in CSS px so nothing smears;
+     heroToken keeps one live animation; reduced-motion gets a static seeded
+     frame whose jagged tails + arrows still tell the story. */
+  let heroToken = 0;
+  // mulberry32 — deterministic swarm: identical on every load, and a theme or
+  // resize restart re-seeds the same walk instead of reshuffling the cloud.
+  function heroRng(seed){
+    let a = seed >>> 0;
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function stepSwarm(els, dt, rng, Lx, Ly){
+    const J = 92;   // thermal jitter speed, px/s — the fast criss-cross
+    const D = 6;    // whole-cloud drift, px/s, leftward — a whisper against J
+    for(const e of els){
+      e.t -= dt;
+      if(e.t <= 0){ e.a = rng()*Math.PI*2; e.t = 0.05 + 0.13*rng(); }
+      e.u += (Math.cos(e.a)*J - D)*dt/Lx;
+      e.v += Math.sin(e.a)*J*dt/Ly;
+      if(e.v < 0){ e.v = -e.v; e.a = -e.a; }        // bounce off the rails
+      if(e.v > 1){ e.v = 2 - e.v; e.a = -e.a; }
+      e.u -= Math.floor(e.u);                        // wrap: periodic segment
+    }
+  }
+  function paintHero(ctx, W, H, els, LIGHT, tails){
+    const ink  = LIGHT ? 'rgba(15,23,42,.62)'  : 'rgba(226,232,240,.66)';
+    const conv = LIGHT ? 'rgba(5,150,105,.60)' : 'rgba(52,211,153,.60)';
+    const elec = LIGHT ? 'rgba(180,83,9,.88)'  : 'rgba(251,191,36,.90)';
+    const elecSoft = LIGHT ? 'rgba(180,83,9,.50)' : 'rgba(251,191,36,.50)';
+    ctx.clearRect(0,0,W,H);
+    // A whisper of ground, so the band reads as one object.
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    // wire segment: two rails, wholly inside 24%–76% of the band
+    const x0 = W*0.27, x1 = W*0.73, yT = H*0.24, yB = H*0.80;
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, yT); ctx.lineTo(x1, yT); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0, yB); ctx.lineTo(x1, yB); ctx.stroke();
+    const arrow = (x, y, dx, dy, col, sc) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx)); ctx.scale(sc||1, sc||1);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(5.5,0); ctx.lineTo(-4,-4.5); ctx.lineTo(-4,4.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    };
+    // faint conventional-current arrow above the wire (rightward)…
+    ctx.strokeStyle = conv; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W*0.485, H*0.11); ctx.lineTo(W*0.515, H*0.11); ctx.stroke();
+    arrow(W*0.515+4, H*0.11, 1, 0, conv, 1);
+    // …opposite a smaller amber electron-drift arrow below it
+    ctx.strokeStyle = elecSoft; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W*0.512, H*0.925); ctx.lineTo(W*0.492, H*0.925); ctx.stroke();
+    arrow(W*0.492-3, H*0.925, -1, 0, elecSoft, 0.72);
+    // the swarm — amber electrons, faded out over the last 5% before a wrap
+    const pad = 6, Ly = yB - yT - 2*pad;
+    for(let i=0;i<els.length;i++){
+      const e = els[i];
+      const px = x0 + e.u*(x1-x0), py = yT + pad + e.v*Ly;
+      const f = Math.min(1, Math.min(e.u, 1-e.u)/0.05);
+      if(tails){
+        // reduced motion: a jagged 3-segment tail per electron shows the walk
+        const tr = heroRng(0x517E + i*97);
+        ctx.strokeStyle = elecSoft; ctx.lineWidth = 1;
+        ctx.globalAlpha = f*0.8;
+        ctx.beginPath(); ctx.moveTo(px, py);
+        let tx = px, ty = py;
+        for(let s=0;s<3;s++){
+          const a = tr()*Math.PI*2;
+          // clamp BOTH axes to the rails: an electron's walk stays in the metal
+          tx = Math.max(x0+3, Math.min(x1-3, tx + Math.cos(a)*7));
+          ty = Math.max(yT+3, Math.min(yB-3, ty + Math.sin(a)*7));
+          ctx.lineTo(tx, ty);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.globalAlpha = f;
+      ctx.fillStyle = elec;
+      ctx.beginPath(); ctx.arc(px, py, 2.1, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const n=8.5e28, e=1.602176634e-19;
-    const vd = (I, rMm) => I / (n * Math.PI * (rMm*1e-3)*(rMm*1e-3) * e);
-    const x0=W*0.10, x1=W*0.90, y0=H*0.82, y1=H*0.18;
-    const X = u => x0 + u*(x1-x0);
-    const vmax = vd(10, 0.5); // I-sweep peaks highest
-    const Y = v => y0 - (v/vmax)*(y0-y1);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dU=1/80, N=80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k*dU;
-        const I = 0.5 + 9.5*u;
-        const r = 0.25 + 1.75*u;
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Y(vd(I, 0.5)), 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Y(vd(1.0, r)), 2.6, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    const rng = heroRng(0xC156A);
+    const els = [];
+    for(let i=0;i<30;i++) els.push({ u: rng(), v: rng(), a: rng()*Math.PI*2, t: 0.05 + 0.13*rng() });
+    function paint(){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, els, LIGHT, reduce);
+      return [W, H];
     }
-    batch();
+    if(reduce){ paint(); return; }   // static seeded frame: tails + arrows carry the motion
+    let last = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      now = now || last;
+      const dt = Math.min(0.05, Math.max(0, (now - last)/1000)); last = now;
+      const r = c.getBoundingClientRect();
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      stepSwarm(els, dt, rng, W*0.46, Math.max(30, H*0.56 - 12));
+      paint();
+      requestAnimationFrame(frame);
+    })(last);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

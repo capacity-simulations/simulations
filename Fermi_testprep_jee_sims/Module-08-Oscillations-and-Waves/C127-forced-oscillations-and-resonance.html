@@ -1357,7 +1357,7 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-Ω dots of A(Ω) — two dampings, same clock</span>
+                <span class="hero-label">Equal-Ω dots of the steady amplitude A(Ω) swept across the drive frequency, for two dampings: a sharp curve at α = 0.5 rad/s over a broad one at α = 2 rad/s</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Forced oscillation</span></h2>
@@ -3617,47 +3617,141 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: A(Ω) = F0 / (m √((ω0²−Ω²)² + 4α²Ω²)) from this sim.
-     EQUAL-Ω-STEP dots; two dampings so the peak sits left of ω0 and slides. */
+  /* Hero: this sim's steady amplitude A(Ω) = F₀ / (m √((ω₀²−Ω²)² + 4α²Ω²)),
+     drawn as EQUAL-Ω-STEP dots for α = 0.5 and α = 2.0 rad/s with ω₀ = 10,
+     Ω swept 1 → 19 rad/s.
+
+     LAYOUT KEPT. Ω = 10 maps to exactly 50% of the displayed width, so the
+     peak of the sharp curve — the whole subject of the strip — sits dead
+     centre of the 22–78% opaque window, and both curve labels are measured
+     and placed inside 24%…76%.
+     DECORATIVE, deliberately allowed to fade: the bare baseline rule (10%…90%,
+     no ticks, no values) and the flat tails of both curves outside 24%…76%.
+     Those tails carry no structure: at x = 10% the curve stands at 10.1% of
+     the peak height and at x = 24% still only 12.1% — across that whole
+     stretch it is indistinguishable from the axis it lies on. Everything that
+     reads as shape — the crest and both flanks down to 18% of peak height —
+     falls between 35.6% and 60.6% of the displayed width.
+
+     SIZING — the substantive repair. The canvas carried fixed 1280×240
+     attributes while its box is one viewport wide and 140 px tall, so the art
+     arrived ~2:1 vertically squashed: the sharp α = 0.5 peak lost most of its
+     height advantage over the broad α = 2.0 curve, blunting exactly the "where
+     is A largest, and how sharp is it?" question the blurb asks. The backing
+     store is now taken from getBoundingClientRect()×devicePixelRatio on every
+     paint, the context is scaled by dpr, and all drawing is in CSS px, so the
+     drawn peak-height ratio is the true computed one: 3.92 : 1 on the Ω grid
+     (A = 0.1000 at Ω = 10, α = 0.5, against 0.02549 at Ω = 9.5, α = 2.0).
+
+     GATED CARDS. Card 2 is a data-gate predict — "where does A(Ω) peak?",
+     answer "a little below ω₀" (ω_res = √(ω₀² − 2α²)). So the hero carries NO
+     ω₀ marker, no vertical reference at Ω = 10, no frequency axis, no ticks
+     and no numeric Ω values: without a reference frequency the plotted hump
+     cannot be read as above, at or below ω₀, and the gated answer survives.
+     The two curve labels name α only, never a frequency. Card 4 (also gated)
+     asks what lowering α does to the peak; the hero does show that the smaller
+     α gives the taller peak, but that pairing is the ungated premise of card 1
+     and of the blurb, and card 4 is decided by its second clause ("closer to
+     ω₀"), which the hero cannot show for the same reason — no ω₀ reference. */
   function amp(Omega, w0, a){
     const m=1, F0=1, d=w0*w0-Omega*Omega, den=Math.sqrt(d*d + 4*a*a*Omega*Omega);
     return F0/(m*den);
   }
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  let heroToken = 0;                                   // one live hero animation at a time
+  function paintHero(ctx, W, H, u, LIGHT){
+    const rule = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
+    const soft = LIGHT ? 'rgba(15,23,42,.46)' : 'rgba(148,163,184,.62)';
+    const FAM  = (document.body && getComputedStyle(document.body).fontFamily) || 'sans-serif';
     ctx.clearRect(0,0,W,H);
     const w0=10, Om0=1, Om1=19;
     const rows = [
-      { a: 0.5, dark:'rgba(52,211,153,.95)',  light:'rgba(5,150,105,.92)' },
-      { a: 2.0, dark:'rgba(125,211,252,.92)', light:'rgba(2,132,199,.90)' }
+      { a: 0.5, lab:'α = 0.5', dark:'rgba(52,211,153,.95)',  light:'rgba(5,150,105,.92)' },
+      { a: 2.0, lab:'α = 2',   dark:'rgba(125,211,252,.92)', light:'rgba(2,132,199,.90)' }
     ];
+    // Layout unchanged: Ω = 10 lands at exactly 50% of the displayed width.
     const x0=W*0.10, x1=W*0.90, yBase=H*0.82, yAmp=H*0.62;
     const X = Om => x0 + ((Om-Om0)/(Om1-Om0))*(x1-x0);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
+    ctx.strokeStyle = rule;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x0, yBase); ctx.lineTo(x1, yBase); ctx.stroke();
     const Amax = amp(Math.sqrt(w0*w0-2*0.5*0.5), w0, 0.5);
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dOm = 0.25, N = Math.ceil((Om1-Om0)/dOm);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const Om = Om0 + k*dOm;
-        rows.forEach(r => {
-          const A = amp(Om, w0, r.a);
-          const px = X(Om), py = yBase - (A/Amax)*yAmp;
-          ctx.fillStyle = LIGHT ? r.light : r.dark;
-          ctx.beginPath(); ctx.arc(px, py, 2.8, 0, 7); ctx.fill();
-        });
+    // Equal-Ω dots. The count follows the pixel width so the dots stay dots
+    // (never a solid line) from 360 px to 1920 px; the Ω step stays uniform.
+    const N = Math.max(28, Math.min(72, Math.round((x1-x0)/13)));
+    const dOm = (Om1-Om0)/N;
+    const shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    const peak = rows.map(()=>({ x:0, y:yBase }));
+    for(let k = 0; k <= shown; k++){
+      const Om = Om0 + k*dOm;
+      for(let i = 0; i < rows.length; i++){
+        const r = rows[i];
+        const A = amp(Om, w0, r.a);
+        const px = X(Om), py = yBase - (A/Amax)*yAmp;
+        ctx.fillStyle = LIGHT ? r.light : r.dark;
+        ctx.beginPath(); ctx.arc(px, py, 2.8, 0, 7); ctx.fill();
+        if(py < peak[i].y){ peak[i].y = py; peak[i].x = px; }
       }
-      if(k<=N) requestAnimationFrame(batch);
     }
-    batch();
+    // Curve labels — α only. No ω₀ marker and no frequency values anywhere
+    // (gated card 2 asks where the peak sits relative to ω₀).
+    ctx.font = '12px '+FAM;
+    const lo = W*0.24, hi = W*0.76;
+    if(shown >= N){
+      // sharp curve: centred just above its own crest
+      const w1 = ctx.measureText(rows[0].lab).width;
+      if(peak[0].x - w1/2 > lo && peak[0].x + w1/2 < hi && peak[0].y > 16){
+        ctx.fillStyle = LIGHT ? rows[0].light : rows[0].dark;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(rows[0].lab, peak[0].x, peak[0].y - 7);
+      }
+      // broad curve: on its right flank, clear of the crest label
+      const bx = X(12), by = yBase - (amp(12, w0, rows[1].a)/Amax)*yAmp;
+      const w2 = ctx.measureText(rows[1].lab).width;
+      if(bx + 7 + w2 < hi){
+        ctx.fillStyle = LIGHT ? rows[1].light : rows[1].dark;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(rows[1].lab, bx + 7, by - 9);
+      }
+    }
+    // A single unlabelled word for the axis, centred in the opaque band
+    const cap = 'drive frequency Ω';
+    ctx.font = '12px '+FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    if(ctx.measureText(cap).width < (hi-lo)*0.9 && H - 6 > yBase + 8){
+      ctx.fillStyle = soft; ctx.fillText(cap, W/2, H - 5);
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;
+    function paint(u){
+      // Backing store from the DISPLAYED box, every paint: the markup's fixed
+      // 1280×240 was being stretched into a ~1500×140 box, squashing the peak.
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }                   // fast path: the finished plot
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                    // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;     // overlay dismissed: stop
+      // `now` can legitimately be 0 on the synchronous first call, so test the
+      // type rather than the truthiness — `now || Date.now()` would jump to u = 1.
+      const s = ((typeof now === 'number' ? now : Date.now()) - t0)/1000;
+      paint(Math.min(1, (s % 3.6)/2.2));            // 2.2 s to draw, 1.4 s to hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

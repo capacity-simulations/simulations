@@ -932,7 +932,7 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Repeated Z measurements on four tilts of the same spin</span>
+                <span class="hero-label">One tilted spin on the Bloch sphere, measured along Z, with the history still blank</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Quantum Spin Measurement</span></h2>
@@ -2439,16 +2439,22 @@
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
-    { sel:'#reset',          mode:'veil', title:'Reset',                text:'Returns the spin to |↑⟩ and clears the measurement history.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The Bloch sphere', text:'The spin state drawn on the Bloch sphere, together with the measurement axis n̂ you choose.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#measureButtons', mode:'hide', title:'Measure Spin',         text:'Projects the spin onto the chosen axis; the state collapses to one eigenstate.' },
-    { sel:'#wfEquation',     mode:'hide', title:'Wavefunction',         text:'The current state written in the up/down basis.' },
-    { sel:'#probBars',       mode:'hide', title:'Outcome probabilities',text:'Chances of Spin Up and Spin Down on the next Z measurement.' },
     { sel:'#presetButtons',  mode:'hide', title:'Preset states',        text:'The six eigenstates of the X, Y and Z axes.' },
     { sel:'#alphaGroup',     mode:'hide', title:'Amplitudes α and β',   text:'Type any complex pair; the sim normalises it for you.', also:['#betaGroup'] },
     { sel:'#applyState',     mode:'hide', title:'Apply Custom State',   text:'Moves the arrow to the state those amplitudes describe.' },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#wfEquation',     mode:'hide', title:'Wavefunction',         text:'The current state written in the up/down basis.' },
+    { sel:'#probBars',       mode:'hide', title:'Outcome probabilities',text:'Chances of Spin Up and Spin Down on the next Z measurement.' },
     { sel:'#blochCoords',    mode:'hide', title:'Bloch coordinates',    text:'The tilt θ away from Z and the azimuth φ around it.' },
     { sel:'#historyList',    mode:'hide', title:'Measurement History',  text:'Every measurement so far, with its axis and its result.' },
     { sel:'#rotateHint',     mode:'veil', title:'Rotate the view',      text:'Drag on the sphere to look at it from another side.' },
+    /* 6 · reset — recovery, once there is something to recover */
+    { sel:'#reset',          mode:'veil', title:'Reset',                text:'Returns the spin to |↑⟩ and clears the measurement history.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the info tooltip; the canvas is the scene, not a control. */
   ];
@@ -2530,6 +2536,7 @@
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2609,51 +2616,106 @@
       const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
       const script = [
         'Welcome to quantum spin measurement on the Bloch sphere.',
-        'A spin one half particle carries an arrow that can point anywhere on the sphere. Measure it along an axis and only two answers ever come back, plus or minus h bar over two, and the arrow snaps onto that axis.',
+        'A spin one half particle carries an arrow that can point anywhere on the sphere. Choose an axis, measure along it, and the history below records what came back.',
         'Choose how you would like to begin.',
         'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: this sim's own Born rule, drawn as measurements landing in two rows */
+      /* Hero: the apparatus and the question, with the record left blank. The sphere,
+         its z axis and the tilted arrow are this sim's own state display — one state,
+         θ = 60° from +z, the |ψ⟩ = (√3/2)|↑⟩ + (1/2)|↓⟩ of the cards. A single
+         measurement then travels to the history ledger on the right, whose rows stay
+         EMPTY. The old hero drew four tilts, each with its measurements landing in
+         two bands: that picture answers card 3 (two outcomes and nothing between)
+         and, through the 60° group's dot density, card 4 (75% up) as well. Nothing
+         about an outcome is drawn now — not how many values there are, not how often
+         each occurs — so no distractor is taught either. The tilt is drawn in a plain
+         x–z orthographic projection, screen (x, y) = R(sin θ, −cos θ), so the angle on
+         screen IS θ; this only holds because the canvas is sized from its CSS box ×
+         devicePixelRatio and drawn in CSS px. Under the old 1280×240-in-140px stretch
+         the same 60° arrow read anywhere from 40° to 77° depending on the viewport. */
+      let heroGen = 0;                                // generation token: only the newest chain paints
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        const rect = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(360, Math.round(rect.width || 1280));
+        const H = Math.max(100, Math.round(rect.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);       // draw in CSS px: one scale for x and y
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-        ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        /* For a state tilted theta from the z axis this sim uses
-           P(up) = cos^2(theta/2) and P(down) = sin^2(theta/2). Four tilts, four
-           groups; every dot is ONE z measurement landing in the upper (up) band
-           or the lower (down) band, so band DENSITY is the Born probability —
-           and nothing ever lands between the two bands. */
-        const TH = [0, 60, 90, 120], G = TH.length;
-        const padX = 10, padY = 14, gap = 18, split = 16;
-        const gw = (W - padX*2 - gap*(G-1)) / G;
-        const bandH = (H - padY*2 - split) / 2;
-        const UP = LIGHT ? 'rgba(15,110,74,0.85)'  : 'rgba(134,239,172,0.85)';
-        const DN = LIGHT ? 'rgba(158,32,96,0.85)'  : 'rgba(249,168,212,0.85)';
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const PER = 90, FRAMES = 40;
-        let frame = 0;
-        function batch(count){
-          for(let g=0; g<G; g++){
-            const th = TH[g]*Math.PI/180, pUp = Math.pow(Math.cos(th/2), 2);
-            const x0 = padX + g*(gw + gap);
-            for(let k=0; k<count; k++){
-              const up = Math.random() < pUp;
-              ctx.fillStyle = up ? UP : DN;
-              ctx.fillRect(x0 + Math.random()*gw, (up ? padY : padY + bandH + split) + Math.random()*bandH, 2.0, 2.0);
-            }
-          }
+        const gen = ++heroGen;                        // supersedes any chain already running
+        const THETA = 60*Math.PI/180;                 // the prepared tilt from +z
+        const cxs = W*0.35, cy = H*0.50;
+        const Rs = Math.min(H*0.36, W*0.10);
+        const lx0 = W*0.56, lx1 = W*0.755, ly0 = H*0.22, ly1 = H*0.80;
+        const LINE  = LIGHT ? 'rgba(15,23,42,0.30)'  : 'rgba(226,232,240,0.32)';
+        const FAINT = LIGHT ? 'rgba(15,23,42,0.18)'  : 'rgba(226,232,240,0.20)';
+        const ARROW = LIGHT ? 'rgba(15,23,42,0.92)'  : 'rgba(241,245,249,0.95)';
+        const MARK  = LIGHT ? 'rgba(13,110,90,0.90)' : 'rgba(94,234,212,0.92)';
+        function base(){                              // sphere, z axis, and the empty history ledger
+          ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+          ctx.strokeStyle = LINE; ctx.lineWidth = 1.3;
+          ctx.beginPath(); ctx.arc(cxs, cy, Rs, 0, 2*Math.PI); ctx.stroke();
+          ctx.strokeStyle = FAINT; ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.ellipse(cxs, cy, Rs, Rs*0.30, 0, 0, 2*Math.PI); ctx.stroke();
+          const a = Rs*1.25;                          // the z axis the measurement is made along
+          ctx.strokeStyle = LINE; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(cxs, cy + a); ctx.lineTo(cxs, cy - a);
+          ctx.moveTo(cxs - 4, cy - a + 6); ctx.lineTo(cxs, cy - a); ctx.lineTo(cxs + 4, cy - a + 6);
+          ctx.stroke();
+          ctx.strokeStyle = FAINT; ctx.lineWidth = 1.4; ctx.setLineDash([5,5]);
+          ctx.beginPath(); ctx.rect(lx0, ly0, lx1-lx0, ly1-ly0); ctx.stroke();
+          ctx.lineWidth = 1; ctx.setLineDash([4,5]);  // blank rows: the history has recorded nothing
+          ctx.beginPath();
+          for(let r=1;r<=3;r++){ const ry = ly0 + (ly1-ly0)*r/4;
+            ctx.moveTo(lx0 + 10, ry); ctx.lineTo(lx1 - 10, ry); }
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
-        if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step);
+        const px0 = cxs + Rs*1.15, px1 = lx0 - 9;     // the path from the state to the record
+        function spin(frac){                          // the prepared arrow, drawn out from the centre
+          const L = Rs*0.92*Math.max(0.08, frac);
+          const dx = Math.sin(THETA), dy = -Math.cos(THETA);
+          const tx = cxs + dx*L, ty = cy + dy*L;
+          ctx.strokeStyle = ARROW; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(cxs, cy); ctx.lineTo(tx, ty);
+          ctx.moveTo(tx - dx*7 - dy*4.5, ty - dy*7 + dx*4.5);
+          ctx.lineTo(tx, ty);
+          ctx.lineTo(tx - dx*7 + dy*4.5, ty - dy*7 - dx*4.5);
+          ctx.stroke();
+        }
+        function transit(frac){                       // one measurement on its way to the ledger
+          ctx.strokeStyle = FAINT; ctx.lineWidth = 1.2; ctx.setLineDash([3,5]);
+          ctx.beginPath(); ctx.moveTo(px0, cy); ctx.lineTo(px1, cy); ctx.stroke();
+          ctx.setLineDash([]);
+          if(frac <= 0) return;
+          ctx.fillStyle = MARK;
+          ctx.beginPath(); ctx.arc(px0 + (px1-px0)*Math.min(1, frac), cy, 3.2, 0, 2*Math.PI); ctx.fill();
+        }
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(reduce){ base(); spin(1); transit(0.55); return; }   // exactly one frame under reduced motion
+        const GROW = 24, FLY = 32, DWELL = 70;        // ~0.4 s arrow, ~0.5 s transit, ~1.2 s hold
+        let f = 0;
+        (function step(){                             // repeating cycle: prepare, measure, dwell, repeat
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          base();
+          if(f <= GROW){ spin(f/GROW); transit(0); }
+          else { spin(1); transit((f - GROW)/FLY); }
+          if(++f >= GROW + FLY + DWELL) f = 0;
+          requestAnimationFrame(step);
         })();
       }
 
 drawHero();
+      // A viewport change alters the CSS box, so the backing store and the layout must be rebuilt
+      window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+
       // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

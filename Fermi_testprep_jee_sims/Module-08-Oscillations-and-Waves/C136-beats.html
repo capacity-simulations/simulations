@@ -962,11 +962,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots on the sum — two nearby tones swell and fade at |f₁ − f₂|</span>
+            <span class="hero-label">Two nearby tones playing together — the sum swells and fades in slow throbs</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Beats</span></h2>
-            <p class="welcome-blurb">The throb rate is |f₁ − f₂| — only the difference, never the pitch.</p>
+            <p class="welcome-blurb">Two close tones at once — what sets the rate of the throbbing?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2843,54 +2843,92 @@ if (window.Shell && typeof Shell.init === 'function'){
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to beats.',
-    'When two nearby tones play together, loudness swells and fades at the difference of their frequencies. Bring them together and the beats stretch, then vanish.',
+    'When two nearby tones play together, the loudness swells and fades. Count the throbs, then slide one tone toward the other and count again.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time dots of the sum of 440 Hz and 444 Hz over two beat
-     periods. Density traces the fast carrier; the swell is |f₂ − f₁| = 4 Hz. */
+  /* Hero: the sum of 440 Hz and 444 Hz over two beat periods (0.5 s), drawn
+     as the filled body the fast carrier actually sweeps, inside the green
+     ±2|cos(πΔf·t)| beat envelope. The carrier itself is UNRESOLVABLE at this
+     scale — ~442 Hz × 0.5 s = 221 cycles across the 26–74% band, i.e.
+     ≈4 px/cycle even on a 1920px viewport, far under the ~8 px/cycle a drawn
+     oscillation needs (that would take a ≥3700px viewport) — so any sparse
+     dotted "carrier" here is pure aliasing, not the waveform. The filled
+     band whose envelope throbs IS the readable physics at this size. The
+     window scrolls exactly one beat period per loop, so the loop is
+     seamless and the envelope nulls always sit inside the band (statically
+     at 38% and 62% of the width; the mask fades at 22%/78%). No numbers and
+     no |f₁−f₂| formula anywhere: the beat rate is the gated prediction in
+     the inquiry cards. Backing store = CSS box × devicePixelRatio (the old
+     code drew on the stale 1280×240 attribute store); all drawing in CSS px. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const f1 = 440, f2 = 444;
+    const Tb = 1/Math.abs(f2 - f1);            // beat period, 0.25 s
+    const T  = 2*Tb;                           // two beat periods in view
+    const eFrac = t => Math.abs(Math.cos(Math.PI*(f1 - f2)*t)); // |envelope|/2 ∈ [0,1]
+    const xL = W*0.26, xR = W*0.74;            // essentials inside 24–76%
+    const mid = H*0.50, A = H*0.40;            // peak swing ±0.40H → y ∈ [0.10H, 0.90H]
+    const inkFill = LIGHT ? 'rgba(180,83,9,.26)'  : 'rgba(251,191,36,.22)';
+    const inkBody = LIGHT ? 'rgba(180,83,9,.55)'  : 'rgba(251,191,36,.50)';
+    const inkEnv  = LIGHT ? 'rgba(5,150,105,.85)' : 'rgba(52,211,153,.85)';
+    const inkAxis = LIGHT ? 'rgba(15,23,42,.25)'  : 'rgba(148,163,184,.30)';
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle = inkAxis; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xL, mid); ctx.lineTo(xR, mid); ctx.stroke();
+    // 240 samples over 0.5 s → 120 per beat period (4 Hz envelope): dense
+    // enough that the envelope is smooth to well under a pixel.
+    const M = 240;
+    const xAt = i => xL + (i/M)*(xR - xL);
+    const eAt = i => eFrac((i/M)*T + u*Tb);    // u scrolls the time window
+    // carrier body: fill between the + and − envelope (denser ink at the
+    // axis, where the unresolvable oscillation spends most of its ink)
+    ctx.beginPath();
+    for(let i=0;i<=M;i++){ const y = mid - eAt(i)*A; i ? ctx.lineTo(xAt(i), y) : ctx.moveTo(xAt(i), y); }
+    for(let i=M;i>=0;i--){ ctx.lineTo(xAt(i), mid + eAt(i)*A); }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, mid - A, 0, mid + A);
+    g.addColorStop(0, inkFill); g.addColorStop(0.5, inkBody); g.addColorStop(1, inkFill);
+    ctx.fillStyle = g; ctx.fill();
+    // the ± beat envelope — the physics the eye should follow
+    ctx.strokeStyle = inkEnv; ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for(let i=0;i<=M;i++){ const y = mid - eAt(i)*A; i ? ctx.lineTo(xAt(i), y) : ctx.moveTo(xAt(i), y); }
+    ctx.stroke();
+    ctx.beginPath();
+    for(let i=0;i<=M;i++){ const y = mid + eAt(i)*A; i ? ctx.lineTo(xAt(i), y) : ctx.moveTo(xAt(i), y); }
+    ctx.stroke();
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const f1 = 440, f2 = 444;
-    function ySum(t){
-      if(window.Engine && Engine.wave && typeof Engine.wave.superposeWaves === 'function'){
-        return Engine.wave.superposeWaves(
-          [{ amplitude:1, frequency:f1, wavelength:1 },
-           { amplitude:1, frequency:f2, wavelength:1 }], 0, t
-        ).displacement;
-      }
-      return -Math.sin(2*Math.PI*f1*t) - Math.sin(2*Math.PI*f2*t);
-    }
-    function env(t){ return 2 * Math.abs(Math.cos(Math.PI*(f1-f2)*t)); }
-    const T = 2 / Math.abs(f2-f1);   // two beat periods
-    const padL = W*0.06, padR = W*0.04, mid = H*0.52, amp = H*0.34;
-    const inkSum = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.88)';
-    const inkEnv = LIGHT ? 'rgba(5,150,105,.75)' : 'rgba(52,211,153,.75)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 90; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
-        const t = (k/(N-1)) * T;
-        const x = padL + (k/(N-1)) * (W - padL - padR);
-        const y = mid - (ySum(t)/2) * amp;
-        ctx.fillStyle = inkSum;
-        ctx.beginPath(); ctx.arc(x, y, 2.3, 0, 7); ctx.fill();
-        const e = env(t);
-        ctx.fillStyle = inkEnv;
-        ctx.beginPath(); ctx.arc(x, mid - (e/2)*amp, 1.8, 0, 7); ctx.fill();
-        ctx.beginPath(); ctx.arc(x, mid + (e/2)*amp, 1.8, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(0); return; }             // static frame, nulls at 38%/62%
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;              // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      paint((s/3.2) % 1);                       // one beat period per 3.2 s — seamless loop
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

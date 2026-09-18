@@ -989,12 +989,12 @@ Object.freeze(Engine);
 </script>
 </head>
 <body>
-<!-- POLISH: [physics] step 1 caption promised "a line appears in the colour it would actually have" but onStep(0) pre-set the controls to (3,2), making the instruction a no-op with only a dashed accent marker shown — default/step-0 selection changed to ni=nf=2 so the student's own slider move commits 3->2 in its true colour (HTML slider default, state.ni, DEFAULT_NI, onStep(0) updated); all displayed wavelengths/energies (656/486/121.5/1875/365 nm, hc=1240 eV.nm) verified correct and left untouched. [pedagogy] onStep(3) selected (2,1) during the "predict where 2->1 lands" gate, putting the 121.5 nm marker and Lyman readout on screen before the prediction — now selects (6,2), the last committed Balmer line; 2->1 still revealed at step 5. No gates, locks or panels added or removed. [visuals] canvas fonts used 'Npx var(--font-sans)' which the canvas font parser rejects (all labels silently fell back to 10px default) — replaced with real font stacks at >=11px; theme detection now covers both body.light-theme and html[data-theme=light] and cssVar reads body first (light theme previously drew light text on light background); wavelength labels under the spectrum strip now skip on collision instead of overprinting in the crowded Balmer-limit states (exact values remain in the Lines drawn list); ni->nf labels raised to clear the band labels. Deliberately NOT changed: shell CSS, managed markers, transport, card text, panel set, dedup of forward/reverse jumps. -->
+<!-- POLISH: [physics] step 1 caption promised "a line appears in the colour it would actually have" but onStep(0) pre-set the controls to (3,2), making the instruction a no-op with only a dashed accent marker shown — default/step-0 selection changed to ni=nf=2 so the student's own slider move commits 3->2 in its true colour (HTML slider default, state.ni, DEFAULT_NI, onStep(0) updated); all displayed wavelengths/energies (656/486/121.5/1875/365 nm, hc=1240 eV.nm) verified correct and left untouched. [pedagogy] onStep(3) selected (2,1) during the "predict where 2->1 lands" gate, putting the 121.5 nm marker and Lyman readout on screen before the prediction — now selects (6,2), the last committed Balmer line; 2->1 still revealed at step 5. No gates, locks or panels added or removed. [visuals] canvas fonts used 'Npx var(--font-sans)' which the canvas font parser rejects (all labels silently fell back to 10px default) — replaced with real font stacks at >=11px; theme detection now covers both body.light-theme and html[data-theme=light] and cssVar reads body first (light theme previously drew light text on light background); wavelength labels under the spectrum strip now skip on collision instead of overprinting in the crowded Balmer-limit states (exact values remain in the Lines drawn list); ni->nf labels raised to clear the band labels. Deliberately NOT changed: shell CSS, managed markers, transport, card text, panel set, dedup of forward/reverse jumps. HERO REBUILD [visuals+pedagogy]: the welcome-overlay canvas had a y-mapping sign bug (yOf returned H*0.82+(E+1)*H*0.62, so every rung n>=2 landed below the canvas) — all that rendered were four coloured ticks at 656/486/434/410 nm, i.e. the exact answers to gated cards 2 (predict where 4->2 lands) and 3 (build the Balmer series), while the explanatory ladder stayed invisible. Rebuilt: correct E_n = -13.6/n^2 ladder (n=1..6, deepest rung lowest, crowding toward E->0), a BLANK visible-spectrum band (a subtle rainbow gradient is "the visible spectrum", not an answer), and ONE amber arrow frozen mid-flight from n=4 toward n=2 with no tick and no wavelength label — card 2's question posed as a picture. Backing store now sized from getBoundingClientRect x devicePixelRatio each paint (was stretching a fixed 1280x240 store into a 100vw x 140 band), heroToken rAF guard, resize->drawHero hook, reduced-motion static final frame, composition kept inside 24%-76% of displayed width for the CSS mask fade. -->
 <div id="welcome-overlay" role="dialog" aria-labelledby="welcome-title" data-no-reset>
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Balmer jumps on Eₙ = −13.6/n² — each arrow is one spectral line</span>
+            <span class="hero-label">The hydrogen energy ladder Eₙ = −13.6/n² beside a blank visible-spectrum strip — one jump caught mid-flight from n = 4 toward n = 2, its line not yet landed</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Hydrogen Spectrum</span></h2>
@@ -3119,58 +3119,152 @@ Shell.init({
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the hydrogen spectrum.',
-    'Here every spectral line is one jump between two rungs of the hydrogen ladder. Bigger jumps make shorter wavelengths — the Balmer lines we see, and the ultraviolet we do not.',
+    'Here every spectral line is one jump between two rungs of the hydrogen ladder. You will draw the jumps yourself and find out where each line lands.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: rungs at E_n = −13.6/n² (crowding toward zero) plus Balmer
-     arrows 3→2 … 6→2, each dropping a tick on a visible-spectrum strip
-     at the Rydberg wavelength. Accumulate one jump per frame. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: the QUESTION, not the answer. The previous hero had a sign bug —
+     yOf returned H*0.82 + (E+1)*(H*0.62) with E = −1/n², so yOf(1) ≈ 0.82H but
+     every rung n ≥ 2 fell BELOW the canvas. All that actually rendered were
+     the four coloured Balmer ticks at 656/486/434/410 nm on the strip — which
+     are precisely the answers to gated card 2 ("Predict where 4 → 2 lands")
+     and card 3 ("Build the Balmer series") — while the explanatory ladder
+     stayed invisible. Rebuilt to draw the ladder and WITHHOLD the answers:
+       · rungs at E_n = −13.6/n² for n = 1…6, deepest rung lowest, crowding
+         toward E → 0 at the top — the pattern card 3 asks the student to find;
+       · a BLANK visible-spectrum strip (the subtle rainbow band is just "the
+         visible spectrum", not an answer) — no ticks, no wavelength labels;
+       · ONE amber arrow frozen mid-flight from n = 4 toward n = 2, visibly
+         short of landing, with a soft "?" hovering over the strip — literally
+         card 2's question posed as a picture.
+     Engineering: the old code drew into the authored 1280×240 backing store
+     and let CSS smear it into a 100vw × 140 px band. The store is now sized
+     from getBoundingClientRect() × devicePixelRatio on every paint and all
+     geometry is in CSS px; heroToken guards the rAF loop (one live animation
+     at a time); resize → drawHero; reduced-motion paints the final frame
+     once. The whole composition sits inside 24%–76% of the displayed width so
+     the CSS mask fade (transparent → 22% … 78% → transparent) never eats it. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, wob, LIGHT){
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const rung = LIGHT ? 'rgba(15,23,42,.50)'  : 'rgba(148,163,184,.55)';
+    const soft = LIGHT ? 'rgba(15,23,42,.42)'  : 'rgba(148,163,184,.50)';
+    const phot = LIGHT ? 'rgba(180,83,9,.95)'  : 'rgba(251,191,36,.95)';
+    const glow = LIGHT ? 'rgba(180,83,9,.18)'  : 'rgba(251,191,36,.20)';
+    const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
     ctx.clearRect(0,0,W,H);
-    const inkRung = LIGHT ? 'rgba(15,23,42,.40)' : 'rgba(148,163,184,.45)';
-    const colors = ['#f43f5e','#22c55e','#3b82f6','#8b5cf6'];
-    const lx = W*0.16, rx = W*0.46, sx0 = W*0.56, sx1 = W*0.86, sy = H*0.78;
-    function yOf(n){
-      const E = -1/(n*n);
-      return H*0.82 + (E + 1)*(H*0.62);
-    }
-    ctx.strokeStyle = inkRung; ctx.lineWidth = 1.6;
+    // a whisper of ground so the band reads as one object
+    const bg = ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+    // everything inside the mask-safe 24%–76% window
+    const lx  = W*0.245, rx = W*0.455;      // ladder rungs
+    const sx0 = W*0.520, sx1 = W*0.755;     // spectrum strip
+    const yTop = H*0.14, yBot = H*0.86;
+    const yOf = n => yTop + (1/(n*n))*(yBot - yTop); // E_n = −13.6/n², linear in E
+
+    // rungs, staggered in during the reveal (n = 1 first, crowding upward)
     for(let n=1;n<=6;n++){
+      const a = clamp01((u - 0.04 - (n-1)*0.06)/0.22);
+      if(a <= 0) continue;
       const y = yOf(n);
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = rung; ctx.lineWidth = n <= 3 ? 1.7 : 1.2;
       ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(rx, y); ctx.stroke();
     }
-    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.35)' : 'rgba(226,232,240,.28)';
-    ctx.fillRect(sx0, sy-10, sx1-sx0, 20);
-    const balmer = [
-      { ni:3, wl:656, col:colors[0] },
-      { ni:4, wl:486, col:colors[1] },
-      { ni:5, wl:434, col:colors[2] },
-      { ni:6, wl:410, col:colors[3] }
-    ];
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = balmer.length; let i = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && i<N;s++,i++){
-        const j = balmer[i];
-        const y1 = yOf(j.ni), y2 = yOf(2);
-        ctx.strokeStyle = j.col; ctx.lineWidth = 2.2;
-        ctx.beginPath(); ctx.moveTo((lx+rx)/2 + i*8, y1); ctx.lineTo((lx+rx)/2 + i*8, y2); ctx.stroke();
-        const tx = sx0 + (j.wl-380)/(780-380)*(sx1-sx0);
-        ctx.fillStyle = j.col;
-        ctx.fillRect(tx-1.5, sy-16, 3, 32);
+    ctx.globalAlpha = clamp01((u - 0.18)/0.3);
+    ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('n = 1', rx + 8, yOf(1));
+    ctx.fillText('n = 2', rx + 8, yOf(2));
+    ctx.fillText('n = 3', rx + 8, yOf(3));
+
+    // the visible-spectrum strip: deliberately BLANK — where lines WILL land
+    const stripA = clamp01((u - 0.22)/0.35);
+    if(stripA > 0){
+      const sy = H*0.60, sh = Math.max(14, H*0.13);
+      const g = ctx.createLinearGradient(sx0, 0, sx1, 0);
+      [[0,'#7c3aed'],[0.16,'#3b82f6'],[0.28,'#06b6d4'],[0.40,'#22c55e'],
+       [0.52,'#eab308'],[0.64,'#f97316'],[0.82,'#ef4444'],[1,'#b91c1c']]
+        .forEach(s => g.addColorStop(s[0], s[1]));
+      ctx.globalAlpha = stripA * (LIGHT ? 0.62 : 0.50);
+      ctx.fillStyle = g;
+      ctx.fillRect(sx0, sy - sh/2, sx1 - sx0, sh);
+      ctx.globalAlpha = stripA;
+      ctx.strokeStyle = soft; ctx.lineWidth = 1;
+      ctx.strokeRect(sx0 + 0.5, sy - sh/2 + 0.5, sx1 - sx0 - 1, sh - 1);
+      ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('visible spectrum', (sx0+sx1)/2, sy + sh/2 + 5);
+      // the question: WHERE will the 4 → 2 line land? (we don't say)
+      const qa = clamp01((u - 0.78)/0.22);
+      if(qa > 0){
+        ctx.globalAlpha = qa * clamp01(0.78 + 0.22*wob);
+        ctx.fillStyle = phot; ctx.font = '600 15px '+FAM;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('?', (sx0+sx1)/2, sy - sh/2 - 5);
       }
-      if(i < N) requestAnimationFrame(batch);
     }
-    batch();
+
+    // one jump, frozen mid-flight: n = 4 down toward n = 2 — not landed yet
+    const ext = clamp01((u - 0.45)/0.4);
+    if(ext > 0){
+      const e = ext*ext*(3 - 2*ext);
+      const ax = lx + (rx - lx)*0.62;
+      const y4 = yOf(4), y2 = yOf(2);
+      const tip = y4 + (y2 - y4)*0.5*e + wob*1.2*e;   // stops halfway + hover
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = glow; ctx.lineWidth = 7; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ax, y4); ctx.lineTo(ax, tip); ctx.stroke();
+      ctx.strokeStyle = phot; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(ax, y4); ctx.lineTo(ax, tip); ctx.stroke();
+      ctx.fillStyle = phot;
+      ctx.beginPath();
+      ctx.moveTo(ax, tip + 4.5);
+      ctx.lineTo(ax - 4, tip - 2);
+      ctx.lineTo(ax + 4, tip - 2);
+      ctx.closePath(); ctx.fill();
+      // the caption sits in the clear band BELOW the n = 2 rung: at the arrow's own
+      // mid-height it was drawn straight across the n = 3 rung (the rungs span lx…rx
+      // and ax is inside that span), so the glyphs were struck through by the line.
+      ctx.font = '11px '+FAM; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('4 → 2', ax + 8, yOf(2) + 6);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(u, wob){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, wob, LIGHT);
+    }
+    if(reduce){ paint(1, 0); return; }            // static final frame
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      const u = Math.min(1, s/1.8);               // 1.8 s reveal, then hover
+      paint(u, Math.sin(2*Math.PI*s/1.6));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

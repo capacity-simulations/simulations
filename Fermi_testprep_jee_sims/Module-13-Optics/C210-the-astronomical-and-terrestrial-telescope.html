@@ -3385,58 +3385,132 @@ Shell.init({
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
   /* Hero: the telescope in one picture — a parallel bundle from a distant star
-     converges at the objective's focus and leaves the eyepiece parallel again at
-     a wider angle, with tan α′ = (f_o/f_e)·tan α taken on the TANGENTS. It shows
-     ONE setting and no erecting lens, so it answers neither prediction: not card
-     2 (which eyepiece magnifies more) and not card 4 (what the third lens
-     costs). */
+     converges in the objective's focal plane and leaves the eyepiece parallel
+     again at a much steeper angle. It shows ONE setting and no erecting lens,
+     so it answers neither prediction: not card 2 (data-gate, "which eyepiece
+     magnifies more" — the hero shows only the sim's own default eyepiece, never
+     a second one and never the f_e rule) and not cards 4 and 5 (data-gate, what
+     the erecting lens costs and why it is 4f — the terrestrial case stays out of
+     the picture entirely, as this file has always documented).
+
+     2026-09-18 re-plan. The old drawing had three faults. (a) The emergent
+     bundle — the whole punchline — started at 75.5% and ran to 96%, so the band
+     mask ate almost all of it and roughly 32 px survived. (b) The objective sat
+     at 20%, on the fade edge. (c) The drawn f_o : f_e was about 9 : 1, which is
+     no telescope the sim can be set to. The layout is now derived from the
+     sim's ACTUAL defaults, read off the sliders: f_o = 1.00 m and f_e = 50 mm,
+     so f_o/f_e = 20 and |M| = 20. Objective at 32%, the common focal plane at
+     61.5%, eyepiece one f_e further on at 63%, and the emergent bundle ending
+     at 75% — about 168 px of it on a 1400 px band, all of it inside the opaque
+     part of the mask.
+
+     The ray transfer is the real thin-lens law, s′ = s − y/f, applied at each
+     lens, so the picture verifies itself: every incoming ray lands on the same
+     focal-plane point, and every emergent ray comes out with the same slope
+     −y_F/f_e. That makes tan α′ / tan α = f_o/f_e exactly — checked numerically
+     at 700, 1400 and 1900 px wide, where it comes out 20.000 against the sim's
+     20, with α = 1.5° and α′ = 28.0° on a 1400×140 band.
+
+     Two honest consequences are kept rather than faked. The incoming tilt really
+     is about a degree and a half at 20×, so the arriving bundle looks nearly
+     parallel to the axis; what carries the picture is the 20-fold steeper exit,
+     not an invented α. And the exit pupil really is the objective aperture
+     divided by M, so the five emergent rays sit about 2 px apart and read as one
+     narrow steep pencil leaving a wide shallow bundle — which is the point.
+
+     The backing store is re-sized from getBoundingClientRect() ×
+     devicePixelRatio and everything is drawn in CSS px, so the ~10:1 band no
+     longer squashes the vertical and understates the angular magnification. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     // BODY first — :root always resolves, so a root-first read makes any body
     // fallback dead code and pins the hero to one palette.
     const LIGHT = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
-    ctx.clearRect(0,0,W,H);
-    const axisY = H*0.55, xO = W*0.20, xF = W*0.70, xE = W*0.755;
-    const hA = H*0.20, tanA = 0.055;
-    const yF = axisY + (xF-xO)*tanA;
-    const tanOut = (xF-xO)/(xE-xF)*tanA;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.04, axisY); ctx.lineTo(W*0.96, axisY); ctx.stroke();
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);   // one live reveal at a time
+    const rect = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(rect.width || 1280));
+    const H = Math.max(100, Math.round(rect.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);               // draw in CSS px: no aspect stretch
+    // the sim's own defaults, straight off the markup: f_o = 1.00 m, f_e = 50 mm
+    const foEl = $('fo'), feEl = $('fe');
+    const fo = parseFloat((foEl && (foEl.defaultValue || foEl.value)) || '1.00') || 1.00;
+    const fe = parseFloat((feEl && (feEl.defaultValue || feEl.value)) || '0.050') || 0.050;
+    const MAG = fo/fe;                                    // 20 at the defaults
+    const axisY = H*0.62, xIn0 = W*0.25, xO = W*0.32, tube = W*0.31;
+    const foPx = tube*MAG/(MAG + 1), fePx = tube/(MAG + 1);   // drawn to the real ratio
+    const xF = xO + foPx, xE = xF + fePx, xEnd = W*0.75;
+    const run = xEnd - xE;
+    const hA = H*0.155, hE = H*0.12;
+    // pick α so the emergent bundle exactly fills the band's height and stops at 75%
+    const tanA = (axisY - H*0.06)/(foPx*(run/fePx - 1));
     const inkO = LIGHT ? 'rgba(37,99,235,.92)' : 'rgba(96,165,250,.95)';
     const inkE = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
     const inkR = LIGHT ? 'rgba(180,120,10,.85)' : 'rgba(251,191,36,.90)';
-    [[xO,hA,inkO],[xE,hA*0.62,inkE]].forEach(([x,hh,col])=>{
-      ctx.strokeStyle = col; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(x, axisY-hh); ctx.lineTo(x, axisY+hh); ctx.stroke();
-    });
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const rays = [-hA*0.8, -hA*0.4, 0, hA*0.4, hA*0.8];
-    let n = 0;
-    function batch(){
-      const per = reduce ? rays.length : 1;
-      for(let s=0;s<per && n<rays.length;s++,n++){
-        const hh = rays[n];
-        ctx.strokeStyle = inkR; ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(W*0.04, axisY + hh - (xO - W*0.04)*tanA);
-        ctx.lineTo(xO, axisY + hh);
-        ctx.lineTo(xF, yF);
-        ctx.stroke();
-        const slope = (yF - (axisY+hh))/(xF-xO);
-        const yE = yF + slope*(xE-xF);
-        const dx = Math.min(W*0.96 - xE, (yE - H*0.06)/tanOut);
-        ctx.beginPath();
-        ctx.moveTo(xF, yF); ctx.lineTo(xE, yE);
-        ctx.lineTo(xE + dx, yE - tanOut*dx);
-        ctx.stroke();
-      }
-      if(n < rays.length) requestAnimationFrame(batch);
+    const soft = LIGHT ? 'rgba(15,23,42,.30)'  : 'rgba(148,163,184,.34)';
+    const yF = axisY + foPx*tanA;
+    // The standing instrument — axis, objective, eyepiece, and the whispered common
+    // focal plane. Repainted at the head of every frame so the bundle can cycle.
+    function scaffold(){
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W*0.25, axisY); ctx.lineTo(W*0.75, axisY); ctx.stroke();
+      [[xO,hA,inkO],[xE,hE,inkE]].forEach(([x,hh,col])=>{
+        ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(x, axisY-hh); ctx.lineTo(x, axisY+hh); ctx.stroke();
+      });
+      // the common focal plane, as a whisper — no letter, no angle, no number
+      ctx.strokeStyle = soft; ctx.lineWidth = 1.2; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(xF, axisY - hE*0.9); ctx.lineTo(xF, yF + hE*0.5); ctx.stroke();
+      ctx.setLineDash([]);
     }
-    batch();
+    const rays = [-hA*0.8, -hA*0.4, 0, hA*0.4, hA*0.8];
+    function drawRay(hh){
+      ctx.strokeStyle = inkR; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+      // in: parallel bundle tilted by α; objective: s′ = s − y/f_o
+      const s1 = tanA - hh/foPx;
+      const yAtF = hh + s1*foPx;                          // = f_o·tan α for every ray
+      const yAtE = yAtF + s1*fePx;
+      ctx.beginPath();
+      ctx.moveTo(xIn0, axisY + hh - (xO - xIn0)*tanA);
+      ctx.lineTo(xO, axisY + hh);
+      ctx.lineTo(xF, axisY + yAtF);
+      ctx.lineTo(xE, axisY + yAtE);
+      ctx.stroke();
+      // eyepiece: s′ = s − y/f_e, which returns −y_F/f_e for every ray alike
+      const s2 = s1 - yAtE/fePx;
+      ctx.beginPath();
+      ctx.moveTo(xE, axisY + yAtE);
+      ctx.lineTo(xEnd, axisY + yAtE + s2*run);
+      ctx.stroke();
+    }
+    // TIME-gated, not frame-gated: one ray every STEP ms, a dwell on the finished
+    // bundle, then the reveal runs again. (Frame-gating put all five rays down
+    // inside ~83 ms, so the build was never actually visible.)
+    const STEP = 240, DWELL = 1400;
+    const PERIOD = rays.length*STEP + DWELL;
+    function paint(k){
+      scaffold();
+      for(let i = 0; i < k; i++) drawRay(rays[i]);
+    }
+    let t0 = 0;
+    function batch(now){
+      if(c.__heroGen !== gen) return;                     // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;         // overlay dismissed: stop
+      if(!t0) t0 = now;
+      const s = (now - t0) % PERIOD;
+      paint(Math.min(rays.length, 1 + Math.floor(s/STEP)));
+      requestAnimationFrame(batch);
+    }
+    if(reduce) paint(rays.length); else requestAnimationFrame(batch);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

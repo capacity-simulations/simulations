@@ -865,11 +865,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Three floating blocks — amber above the waterline, green below it</span>
+            <span class="hero-label">A block on a spring balance lowered into a tank, beside three blocks floating at the depths their densities set — amber above the waterline, green below it</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Archimedes</span></h2>
-            <p class="welcome-blurb">Lower a block into a tank of fluid. Watch the spring balance and how much of the block sits under the surface.</p>
+            <p class="welcome-blurb">A block on a spring balance, lowered into a tank — what sets how deep it sits?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2809,55 +2809,151 @@ Shell.init({
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three blocks floating at their Archimedes waterlines
-     (V_sub / V = ρ / ρ_f). Amber dots fill the dry part; green dots fill
-     the part under water. Density ratio is the picture. */
+  /* ===== Hero =====
+     The sim's apparatus in one line: a block hanging from a SPRING BALANCE and
+     lowered part way into a tank, and beside it three free blocks each floating
+     at the waterline its own density sets (V_sub/V = ρ/ρ_f). Amber stipple
+     fills the dry part of every block, green stipple the part under water — so
+     the waterline is read off the ink, not off a number.
+
+     SPOILER LEDGER (inquiry cards read before drawing). Three cards carry
+     data-gate: (1) "a 500 kg/m³ block in water — how much sits below?"
+     (answer: about half), (3) "read the fraction off the block" (answer:
+     exactly one half) and (4) "the same block in mercury" (answer: it floats
+     with almost nothing under). So the hero prints NO density, NO fraction and
+     NO balance reading — and, the fix that matters, NO block is drawn at one
+     half: the old middle block sat at exactly ρ/ρ_f = 0.50, which is literally
+     card 3's answer. The three floaters are now at 0.35, 0.65 and 0.88,
+     deliberately away from the gated value, and they carry no labels, so the
+     picture is "different blocks ride at different depths" — the premise —
+     rather than "here is the number". Only water is shown; mercury never
+     appears. The spring balance is bare apparatus — support, spring, hook,
+     wire — with no dial, no pointer and no scale, so what the balance READS
+     is still the student's to discover. (No card gates the balance reading
+     itself; card 2 discusses it openly and is ungated.)
+
+     GEOMETRY. Canvas sized to its OWN CSS box (getBoundingClientRect ×
+     devicePixelRatio) each paint, drawn in CSS px. Every block now sits inside
+     26–74 % of the displayed width: the outer two used to be centred at 0.22 W
+     and 0.78 W with bw = 0.13 W, so both END MEMBERS of a three-way density
+     comparison straddled the mask's fade and were the dimmed ones. The tank
+     spans 0.265–0.735 W and its water, waterline and floor each carry a
+     horizontal alpha gradient, so the ends fade on purpose instead of being
+     sliced off mid-rectangle by the mask. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const TAU = Math.PI * 2;
+    ctx.clearRect(0, 0, W, H);
+    const gw = ctx.createLinearGradient(0, 0, 0, H);
+    gw.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    gw.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gw; ctx.fillRect(0, 0, W, H);
+
+    const x0 = W * 0.265, x1 = W * 0.735, span = x1 - x0;
+    const yW = H * 0.56, yB = H * 0.95;
+
+    // Water body — its own horizontal gradient, so both ends fade deliberately.
+    const wg = ctx.createLinearGradient(x0, 0, x1, 0);
+    const wMid = LIGHT ? 'rgba(14,116,144,.13)' : 'rgba(56,189,248,.15)';
+    const wEnd = LIGHT ? 'rgba(14,116,144,0)'   : 'rgba(56,189,248,0)';
+    wg.addColorStop(0, wEnd); wg.addColorStop(0.08, wMid);
+    wg.addColorStop(0.92, wMid); wg.addColorStop(1, wEnd);
+    ctx.fillStyle = wg; ctx.fillRect(x0, yW, span, yB - yW);
+
+    const lg = ctx.createLinearGradient(x0, 0, x1, 0);
+    const lMid = LIGHT ? 'rgba(14,116,144,.62)' : 'rgba(125,211,252,.62)';
+    const lEnd = LIGHT ? 'rgba(14,116,144,0)'   : 'rgba(125,211,252,0)';
+    lg.addColorStop(0, lEnd); lg.addColorStop(0.09, lMid);
+    lg.addColorStop(0.91, lMid); lg.addColorStop(1, lEnd);
+    ctx.strokeStyle = lg;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x0, yW); ctx.lineTo(x1, yW); ctx.stroke();
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x0, yB); ctx.lineTo(x1, yB); ctx.stroke();
+
+    // Free floaters: submerged fraction = ρ/ρ_f. Never one half — see ledger.
+    const rhoF = 1000, bw = W * 0.055, bh = H * 0.34;
+    const blocks = [350, 650, 880].map((rho, i) => {
+      const frac = Math.min(1, rho / rhoF);
+      const cxb = x0 + span * (0.42 + i * 0.20);
+      return { frac: frac, left: cxb - bw / 2, top: yW - bh * (1 - frac), w: bw, h: bh };
+    });
+
+    // The suspended block, lowered part way in — the blurb's spring balance.
+    const bx = x0 + span * 0.13, bw2 = W * 0.05, bh2 = H * 0.36;
+    const hung = { frac: (H * 0.72 - yW) / bh2, left: bx - bw2 / 2, top: H * 0.36, w: bw2, h: bh2 };
+
+    const inkMet = LIGHT ? 'rgba(71,85,105,.88)' : 'rgba(203,213,225,.85)';
+    ctx.strokeStyle = inkMet; ctx.lineCap = 'round';
+    const yTop = H * 0.05, barHalf = Math.max(9, Math.min(24, W * 0.02));
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(bx - barHalf, yTop); ctx.lineTo(bx + barHalf, yTop); ctx.stroke();
+    const sy0 = yTop, sy1 = H * 0.26, coils = 5, amp = Math.max(4, Math.min(9, W * 0.008));
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(bx, sy0);
+    for(let i = 0; i < coils; i++){
+      ctx.lineTo(bx - amp, sy0 + (sy1 - sy0) * ((i + 0.25) / coils));
+      ctx.lineTo(bx + amp, sy0 + (sy1 - sy0) * ((i + 0.75) / coils));
+    }
+    ctx.lineTo(bx, sy1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, sy1 + 4, 3.2, Math.PI * 0.15, Math.PI * 0.85, true); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx, sy1 + 7); ctx.lineTo(bx, hung.top); ctx.stroke();
+
+    const all = blocks.concat([hung]);
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.42)' : 'rgba(226,232,240,.46)';
+    ctx.lineWidth = 1.5;
+    all.forEach(b => ctx.strokeRect(b.left, b.top, b.w, b.h));
+
+    /* Deterministic stipple, revealed progressively by u. Seeded rather than
+       Math.random so a resize or theme flip redraws the SAME grain. */
+    const inkDry = LIGHT ? 'rgba(180,83,9,.88)'  : 'rgba(251,191,36,.90)';
+    const inkWet = LIGHT ? 'rgba(5,150,105,.90)' : 'rgba(110,231,183,.90)';
+    let seed = 1088 >>> 0;
+    const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const N = 86, shown = Math.round(N * Math.max(0, Math.min(1, u)));
+    for(let k = 0; k < N; k++){
+      for(let j = 0; j < all.length; j++){
+        const b = all[j], yLine = b.top + b.h * (1 - b.frac);
+        const xd = b.left + rnd() * b.w, yd = b.top + rnd() * b.h * (1 - b.frac);
+        const xw = b.left + rnd() * b.w, yw = yLine + rnd() * b.h * b.frac;
+        if(k < shown){
+          ctx.fillStyle = inkDry;
+          ctx.beginPath(); ctx.arc(xd, yd, 2.2, 0, TAU); ctx.fill();
+          ctx.fillStyle = inkWet;
+          ctx.beginPath(); ctx.arc(xw, yw, 2.2, 0, TAU); ctx.fill();
+        }
+      }
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const yW = H*0.50;
-    const rhoF = 1000;
-    const blocks = [{rho:350,x:0.22},{rho:500,x:0.50},{rho:800,x:0.78}];
-    const bw = W*0.13, bh = H*0.58;
-    ctx.fillStyle = LIGHT ? 'rgba(14,116,144,.10)' : 'rgba(6,182,212,.13)';
-    ctx.fillRect(W*0.04, yW, W*0.92, H-yW);
-    ctx.strokeStyle = LIGHT ? 'rgba(14,116,144,.50)' : 'rgba(125,211,252,.50)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(W*0.04, yW); ctx.lineTo(W*0.96, yW); ctx.stroke();
-    blocks.forEach(b => {
-      const frac = Math.min(1, b.rho/rhoF);   // Archimedes: V_sub/V = ρ/ρ_f
-      b.frac = frac;
-      b.left = W*b.x - bw/2;
-      b.top = yW - bh*(1-frac);
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.35)' : 'rgba(226,232,240,.40)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(b.left, b.top, bw, bh);
-    });
-    const inkDry = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.90)';
-    const inkWet = LIGHT ? 'rgba(5,150,105,.90)' : 'rgba(110,231,183,.90)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 80; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        blocks.forEach(b => {
-          const xd = b.left + Math.random()*bw;
-          const yd = b.top + Math.random()*bh*(1-b.frac);
-          ctx.fillStyle = inkDry;
-          ctx.beginPath(); ctx.arc(xd, yd, 2.3, 0, 7); ctx.fill();
-          const xw = b.left + Math.random()*bw;
-          const yw = yW + Math.random()*bh*b.frac;
-          ctx.fillStyle = inkWet;
-          ctx.beginPath(); ctx.arc(xw, yw, 2.3, 0, 7); ctx.fill();
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live stipple chain at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const REVEAL = 1100, PERIOD = REVEAL + 1400;    // ms: stipple in, dwell on the full grain, repeat
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0) % PERIOD;              // falsy ts ⇒ frame zero
+      paint(Math.min(1, s / REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

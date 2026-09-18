@@ -575,7 +575,7 @@
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Where spin-j atoms land on the detector — one row per j, one dot per atom</span>
+                <span class="hero-label">A beam through one magnet gap, with two detector slots left empty</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Stern&ndash;Gerlach</span></h2>
@@ -2571,15 +2571,20 @@
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#canvas-container', mode:'show', title:'The apparatus', text:'The particle source, the inhomogeneous magnet, and the screen the beam lands on.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#headerReset',     mode:'veil', title:'Reset',                text:'Clears the detection screen and every count.' },
     { sel:'#beamToggle',      mode:'hide', title:'Beam',                 text:'Starts and stops the stream of atoms from the source.' },
     { sel:'#boxSpin',         mode:'hide', title:'Total spin j',         text:'Chooses the spin of the emitted particles.' },
     { sel:'#boxField',        mode:'hide', title:'Field gradient',       text:'Sets ∂B/∂z — how sharply the field varies across the gap.' },
     { sel:'#boxRate',         mode:'hide', title:'Beam intensity',       text:'How many atoms per second the source emits.' },
     { sel:'#classicalToggle', mode:'hide', title:'Classical prediction', text:'Swaps the quantum outcome for the classical expectation, and back.' },
+    /* 4 · readouts — what the student can measure */
     { sel:'#modeIndicator',   mode:'hide', title:'Mode banner',          text:'Names the mode currently on screen.' },
     { sel:'#boxTotal',        mode:'hide', title:'Detection count',      text:'Total atoms detected since the last reset.' },
     { sel:'#boxLegend',       mode:'hide', title:'Beam legend',          text:'One row per beam with a live hit count.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the info tooltip, the Hover & Explore
        switch, the feedback pill; the canvas is the scene, not a control. */
@@ -2662,6 +2667,7 @@
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -2748,46 +2754,102 @@
         'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
-      /* Hero: this sim's own outcome — where spin-j atoms land on the detector.
-         One row per j = 1/2, 1, 3/2, 2; every dot is one detected atom at
-         z = mj × (deflection per unit mj) plus a small spread, so the rows
-         literally read 2, 3, 4, 5 bands: the 2j+1 splitting. */
+      /* Hero: the APPARATUS — source, collimated beam, one inhomogeneous magnet
+         gap, detector screen — with the ONE splitting the cards hand the student
+         for free: j = 1/2, which card 3 states outright ("the beam splits in
+         two"). SPOILER RULE: card 4 asks how many bands a spin-j beam makes.
+         Four rows reading 2, 3, 4, 5 let a student count 2j+1 straight off the
+         picture, so only a single j is drawn — one case is apparatus, the series
+         is the answer. The empty dashed detector slots above and below are the
+         other spins the student has yet to try: the question, not its answer.
+         Nothing false is drawn: no classical smear (card 2's own subject) and no
+         second j. Layout: the hero mask only fully clears 22–78% of the width,
+         so the whole beam line lives between 26% and 75%. */
+      let heroGen = 0;                                // generation token: only the newest chain paints
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-        ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        const JS = [0.5, 1, 1.5, 2];
-        const COLS_D = ['rgba(255,107,157,0.85)','rgba(77,166,255,0.85)','rgba(157,255,107,0.85)','rgba(255,179,71,0.85)','rgba(199,125,255,0.85)'];
-        const COLS_L = ['rgba(190,24,93,0.85)','rgba(29,78,216,0.85)','rgba(22,101,52,0.85)','rgba(180,83,9,0.85)','rgba(126,34,206,0.85)'];
-        const COLS = LIGHT ? COLS_L : COLS_D;
-        const pad = 10, rowH = (H - pad*2) / JS.length;
+        // Backing store from the real CSS box × dpr, then draw in CSS px, so one
+        // x unit and one y unit are the same length at every viewport width.
+        const r = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(360, Math.round(r.width  || 1280));
+        const H = Math.max(100, Math.round(r.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const gen = ++heroGen;                        // supersedes any chain already running
+        const x0 = W*0.26, z0 = W*0.36, z1 = W*0.50, xDet = W*0.745, Lz = z1 - z0;
+        const y0 = H*0.50, d = H*0.049;               // d = deflection gained inside the gap
+        // Inside the gap the transverse force is constant, so the path is a
+        // parabola; past the gap the atom drifts in a straight line.
+        const off = x => x < z0 ? 0
+                    : (x <= z1 ? d*Math.pow((x-z0)/Lz, 2)
+                               : d*(1 + 2*(x-z1)/Lz));
+        const C0 = LIGHT ? 'rgba(22,101,52,0.85)'  : 'rgba(157,255,107,0.85)';   // unpolarised (COLORS.initial)
+        const CP = LIGHT ? 'rgba(190,24,93,0.85)'  : 'rgba(255,107,157,0.85)';   // mj = +1/2 (SPIN_COLORS[0])
+        const CM = LIGHT ? 'rgba(29,78,216,0.85)'  : 'rgba(77,166,255,0.85)';    // mj = −1/2 (SPIN_COLORS[1])
+        const MET = LIGHT ? 'rgba(15,23,42,0.40)'  : 'rgba(226,232,240,0.38)';
+        const FAINT = LIGHT ? 'rgba(15,23,42,0.18)' : 'rgba(226,232,240,0.18)';
+        function underlay(){                          // static under-layer, repainted each cycle
+          ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+          ctx.save();
+          ctx.strokeStyle = MET; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+          // Wedge pole above, flat pole below: the field gradient, drawn the way
+          // the sim draws its magnet.
+          ctx.beginPath();
+          ctx.moveTo(z0, y0-24); ctx.lineTo(z1, y0-24);
+          ctx.lineTo(z1, y0-13); ctx.lineTo((z0+z1)/2, y0-8); ctx.lineTo(z0, y0-13);
+          ctx.closePath(); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(z0, y0+24); ctx.lineTo(z1, y0+24);
+          ctx.lineTo(z1, y0+12); ctx.lineTo(z0, y0+12);
+          ctx.closePath(); ctx.stroke();
+          // Detector screen
+          ctx.beginPath(); ctx.lineWidth = 3;
+          ctx.moveTo(xDet, y0-H*0.40); ctx.lineTo(xDet, y0+H*0.40); ctx.stroke();
+          // Collimator slit at the source end
+          ctx.beginPath(); ctx.lineWidth = 3;
+          ctx.moveTo(x0, y0-H*0.30); ctx.lineTo(x0, y0-6);
+          ctx.moveTo(x0, y0+6);      ctx.lineTo(x0, y0+H*0.30);
+          ctx.stroke();
+          // Empty dashed slots on the screen: the other spins, not yet tried
+          ctx.setLineDash([4,4]); ctx.lineWidth = 2; ctx.strokeStyle = FAINT;
+          [-1, 1].forEach(s => {
+            const ys = y0 + s*(off(xDet) + H*0.13);
+            ctx.beginPath(); ctx.moveTo(xDet-14, ys); ctx.lineTo(xDet-1, ys); ctx.stroke();
+          });
+          ctx.restore();
+        }
+        underlay();
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const PER = 130, FRAMES = 40;
         let frame = 0;
         const gauss = () => (Math.random()+Math.random()+Math.random()+Math.random()-2)/2;
         function batch(count){
-          JS.forEach((j, r) => {
-            const yTop = pad + r*rowH, h = rowH - 6;
-            const nBands = Math.round(2*j + 1);
-            const sep = (W*0.62) / (2*j + 1);         // deflection per unit mj, scaled per row
-            for(let k=0;k<count;k++){
-              const band = Math.floor(Math.random()*nBands);
-              const mj = band - j;
-              ctx.fillStyle = COLS[band % COLS.length];
-              const x = W/2 + mj*sep + gauss()*W*0.008;
-              ctx.fillRect(x, yTop + Math.random()*h, 2.0, 2.0);
-            }
-          });
+          for(let k=0;k<count;k++){
+            const s = Math.random() < 0.5 ? 1 : -1;   // mj = ±1/2
+            const x = x0 + Math.random()*(xDet - x0);
+            const y = y0 - s*off(x) + gauss()*2.4;    // canvas y grows down
+            ctx.fillStyle = x < z0 ? C0 : (s > 0 ? CP : CM);
+            ctx.fillRect(x, y, 2.0, 2.0);
+          }
         }
-        if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step);
+        if(reduce){ batch(PER*FRAMES); return; }      // exactly one frame under reduced motion
+        const DWELL = 80;                             // ~1.3 s hold, then the reveal replays
+        (function step(){                             // repeating cycle: reveal, dwell, wipe, repeat
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(frame < FRAMES) batch(PER);
+          frame++;
+          if(frame >= FRAMES + DWELL){ frame = 0; underlay(); }
+          requestAnimationFrame(step);
         })();
       }
 
 drawHero();
+      // The backing store is sized from the CSS box, so a width change must repaint
+      addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

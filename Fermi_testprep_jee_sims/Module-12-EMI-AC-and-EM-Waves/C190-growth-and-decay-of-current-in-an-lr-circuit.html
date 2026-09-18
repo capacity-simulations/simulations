@@ -3420,7 +3420,16 @@ return {
      The canvas is sized to its OWN CSS box every time it is drawn, rather than
      to the 1280x240 authored in the markup. The band is one viewport wide and
      140px tall (≈10:1), so a 5.3:1 backing store was being stretched to fit and
-     every label came out horizontally smeared and vertically squashed. */
+     every label came out horizontally smeared and vertically squashed.
+
+     CARD GATES CHECKED (2026-09-18, layout pass). Cards 2–5 are all data-gate
+     predictions: I rises from 0 to ε/R (2); doubling L keeps the ceiling and
+     doubles τ (3); the current decays rather than stops when the battery leaves
+     (4); the coil's stored ½LI² pays for the heat (5). The hero therefore still
+     plots NO curve, carries no τ, no ε/R and no energy annotation — the layout
+     pass changed only WHERE the existing apparatus is drawn, never what it
+     shows. The blade animation, the dashed ghost of the unused contact and the
+     live-loop glow are all unchanged. */
   let heroToken = 0;
   function paintHero(ctx, W, H, phase, LIGHT){
     const ink   = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
@@ -3443,17 +3452,46 @@ return {
 
     // Capped and centred: on a 1500px viewport a full-bleed loop stretched to
     // 20:1 and stopped reading as a circuit at all.
-    const margin = Math.max(40, W*0.06);
-    const cw = Math.min(W - 2*margin, 1080), ox = (W - cw)/2;
-    const xA  = ox + 70;                           // outer rail — battery
-    const xB  = Math.max(xA + 200, ox + cw - 62);  // right rail — coil
+    //
+    // INK BUDGET. The band is masked to a soft edge outside 22–78% of its own
+    // width, so everything that has to be read is fitted inside 26.5–73.5%.
+    // The old margin/cw framing put the right rail at ≈87% of W, which is where
+    // the COIL L — the one component the sim is named for — and its label were
+    // rendering at roughly half opacity; 'battery' at ≈11% was dimmed the same
+    // way and the caption, right-aligned past the coil at ≈88%, was invisible.
+    // The rails are now derived from the 26.5/73.5 limits inward, reserving the
+    // MEASURED width of each label (ctx.measureText, so the reservation is
+    // exact at every font size) plus the 12px glow stroke's 6px overhang.
+    const L = W*0.265, R = W*0.735;                // hard ink limits
+    const FS = Math.max(9, Math.min(13, (R-L)/46));
+    // 'resistor R' hangs above the top rail (baseline yT − zA − 5, zA ≤ 9), so
+    // the rail is pushed down far enough for the whole cap-height to clear y=0.
+    // At 13px the old fixed yT = H*0.16 cropped the label by 3px.
+    const yB = H*0.62, dC = H*0.12;
+    const yT  = Math.max(H*0.16, FS*0.95 + 16);
+    const iy0 = yT + (yB-yT)*0.16, iy1 = yT + (yB-yT)*0.84;
+    const nL = 4, lS = (iy1-iy0)/nL;               // coil turn pitch (x-free)
+    const wide = W >= 640;
+    // Below 640px the 26.5–73.5% band is under 170px wide: the word 'battery'
+    // alone would eat a third of it, so the cell symbol stands unlabelled and
+    // the coil keeps a bare 'L'. (Same degradation the contact names already
+    // make via `roomy`.)
+    const bLab = wide ? 'battery' : '', cLab = wide ? 'coil L' : 'L';
+    const bOff = Math.round(FS*1.8), cOff = Math.round(FS*0.9);
+    const pw = Math.max(9, FS*1.15);               // battery plate half-width
+    ctx.font = FS+'px '+FAM;
+    const wBat = bLab ? ctx.measureText(bLab).width : 0;
+    const wCoi = ctx.measureText(cLab).width;
+    const padL = Math.max(pw + 2, bLab ? wBat + bOff : 0) + 9;   // +6 glow +3 slack
+    const padR = wCoi + cOff + lS/2 + 9;
+    let xA = L + padL;                             // outer rail — battery
+    let xB = R - padR;                             // right rail — coil
+    if(xB - xA > 1080){ const mid = (xA+xB)/2; xA = mid - 540; xB = mid + 540; }
     const xA2 = xA + Math.min(60, (xB-xA)*0.10);   // inner rail — freewheel
-    const yT  = H*0.16, yB = H*0.62, dC = H*0.12;
     const xP  = xA + (xB-xA)*(W < 720 ? 0.55 : 0.42);
     const xC  = xP - Math.min(110, (xP-xA2)*0.62);
     const battY = (yT+yB)/2, battGap = Math.max(7, H*0.055);
     const rx0 = xA2 + (xB-xA2)*0.56, rx1 = rx0 + Math.min(170, (xB-xA2)*0.26);
-    const iy0 = yT + (yB-yT)*0.16, iy1 = yT + (yB-yT)*0.84;
     const cOne = [xC, yB+dC], cTwo = [xC, yB-dC];
 
     // blade: 0 = seated on ①, 1 = seated on ②
@@ -3486,12 +3524,12 @@ return {
 
     // battery
     ctx.strokeStyle = batt; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(xA-15, battY-battGap); ctx.lineTo(xA+15, battY-battGap); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xA-pw, battY-battGap); ctx.lineTo(xA+pw, battY-battGap); ctx.stroke();
     ctx.lineWidth = 4.5;
-    ctx.beginPath(); ctx.moveTo(xA-8, battY+battGap); ctx.lineTo(xA+8, battY+battGap); ctx.stroke();
-    ctx.fillStyle = batt; ctx.font = '13px '+FAM;
+    ctx.beginPath(); ctx.moveTo(xA-pw*0.55, battY+battGap); ctx.lineTo(xA+pw*0.55, battY+battGap); ctx.stroke();
+    ctx.fillStyle = batt; ctx.font = FS+'px '+FAM;
     ctx.textAlign='right'; ctx.textBaseline='middle';
-    ctx.fillText('battery', xA-22, battY);
+    if(bLab) ctx.fillText(bLab, xA-bOff, battY);
 
     // resistor
     ctx.strokeStyle = res; ctx.lineWidth = 2;
@@ -3500,19 +3538,18 @@ return {
     ctx.moveTo(rx0, yT);
     for(let i=0;i<zN;i++){ ctx.lineTo(rx0+zStep*i+zStep*0.25, yT-zA); ctx.lineTo(rx0+zStep*i+zStep*0.75, yT+zA); }
     ctx.lineTo(rx1, yT); ctx.stroke();
-    ctx.fillStyle = res; ctx.font = '13px '+FAM;
+    ctx.fillStyle = res; ctx.font = FS+'px '+FAM;
     ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.fillText('resistor R', (rx0+rx1)/2, yT-zA-5);
 
     // coil
     ctx.strokeStyle = coil; ctx.lineWidth = 2;
     ctx.beginPath();
-    const nL = 4, lS = (iy1-iy0)/nL;
     for(let i=0;i<nL;i++){ const yc = iy0+(i+0.5)*lS; ctx.moveTo(xB, yc-lS/2); ctx.arc(xB, yc, lS/2, -Math.PI/2, Math.PI/2, false); }
     ctx.stroke();
-    ctx.fillStyle = coil; ctx.font = '13px '+FAM;
+    ctx.fillStyle = coil; ctx.font = FS+'px '+FAM;
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('coil L', xB+lS/2+10, (iy0+iy1)/2);
+    ctx.fillText(cLab, xB+lS/2+cOff, (iy0+iy1)/2);
 
     // the switch: pivot, two contacts, one blade
     ctx.fillStyle = ink;
@@ -3527,19 +3564,29 @@ return {
 
     // Contact names sit in the clear wedge to the RIGHT of the contact column —
     // to the left they would lie along the wires that leave each contact.
-    ctx.font = '13px '+FAM;
-    const roomy = (xP - xC) > 58 && W > 640;
+    ctx.font = FS+'px '+FAM;
+    // The 58px wedge test was tuned for a fixed 13px face; now that FS (and the
+    // circuit) scale with the band, scale the test too, or the mid widths lose
+    // the contact names purely because the loop got narrower.
+    const roomy = (xP - xC) > Math.max(34, FS*4.2) && W > 640;
     ctx.textAlign='left';
     ctx.fillStyle = onOne ? soft : ink;
     ctx.textBaseline='bottom';
     ctx.fillText(roomy ? '② battery out' : '②', xC+12, cTwo[1]-11);
     ctx.fillStyle = onOne ? ink : soft;
     ctx.textBaseline='top';
-    ctx.fillText(roomy ? '① battery in' : '①', xC+12, cOne[1]+11);
+    const oneLab = roomy ? '① battery in' : '①';
+    const oneEnd = xC + 12 + ctx.measureText(oneLab).width;   // measured at FS
+    ctx.fillText(oneLab, xC+12, cOne[1]+11);
     if(roomy){
-      ctx.fillStyle = soft; ctx.font = '12px '+FAM;
+      // Right-aligned on the COIL RAIL, not past it: xB is inside the opaque
+      // band, and ending there keeps the caption clear of the '① battery in'
+      // label, which shares this bottom line over by the contact column.
+      const cap = 'one switch, two positions';
+      ctx.fillStyle = soft; ctx.font = Math.max(8, FS-1)+'px '+FAM;
       ctx.textAlign='right'; ctx.textBaseline='bottom';
-      ctx.fillText('one switch, two positions', xB+lS/2, H-5);
+      const capL = xB - ctx.measureText(cap).width;
+      if(capL >= L && capL > oneEnd + 8) ctx.fillText(cap, xB, H-5);
     }
   }
   function drawHero(){
@@ -3564,7 +3611,7 @@ return {
     (function frame(now){
       if(my !== heroToken) return;                  // a newer drawHero took over
       if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
-      const s = ((now || Date.now()) - t0)/1000;
+      const s = ((now || t0) - t0)/1000;
       // 4.4 s round trip with a dwell at each contact (smoothstep on a cosine)
       const raw = 0.5 - 0.5*Math.cos(2*Math.PI*s/4.4);
       paint(raw*raw*(3 - 2*raw));

@@ -1269,11 +1269,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Two rods under the same torque, marked at equal time steps — the far-out masses lag</span>
+            <span class="hero-label">A pivoted rod with its two masses clamped close to the axis, spinning up under a steady torque arc at equal time steps, with dashed clamp slots marking where the masses are about to slide — twice as far out</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Moment of inertia</span></h2>
-            <p class="welcome-blurb">Spin a rod with a steady twist — and see why where the mass sits matters more than how much.</p>
+            <p class="welcome-blurb">Spin a rod with a steady twist — what sets how quickly it picks up spin?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3147,75 +3147,175 @@ Shell.init({
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to moment of inertia.',
-    'Here you spin a rod with a steady torque. Slide its two masses outward and the same twist produces far less angular acceleration — because moment of inertia grows with the square of the distance from the axis.',
+    'Here you spin a rod with a steady torque. Slide its two masses along the rod, or make them heavier, and watch what the very same twist does to the angular acceleration.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the sim's own comparison — two identical mass pairs on pivoted rods,
-     the SAME torque on both (I = 2md², α = τ/I with the sim's numbers). Equal-
-     time snapshots of each rod accumulate from rest: the close-in pair fans
-     nearly a full turn while the far-out pair (twice the d, four times the I,
-     a quarter the α) barely gets going. */
+  /* Hero: the sim's own apparatus at the moment its gated question is asked —
+     ONE pivoted rod carrying its two identical masses clamped close in at
+     d = 0.20 m, under the sim's own steady applied-torque arc, spinning up from
+     rest in equal-time snapshots (θ = ½αt², T = 1 s, with the sim's numbers
+     τ = 0.4 N·m, m = 0.5 kg each, I = 2md² ⇒ α = τ/(2md²) = 10.0 rad/s², so the
+     final drawn angle is ½·10·1² = 5.00 rad — the sim's real figure, unchanged).
+     Two dashed clamp slots further out mark where the masses are ABOUT to go,
+     twice as far from the axis; nothing is ever spun from those slots, so how
+     that rod would fare is left entirely open.
+
+     SPOILER DECISION (both data-gate cards re-read before this rewrite):
+       • Card 2 (gate): "slide the masses 0.2 m → 0.4 m, mass and torque
+         unchanged — what happens to α?" (correct: falls to about a quarter).
+         The previous hero drew TWO rods side by side under one caption "the
+         same torque τ on both, for the same time", their equal-time fans
+         ending at 5.00 rad and 1.25 rad — a 4 : 1 ratio, which is card 2's
+         answer drawn to scale. Its licence was that "the overlay's OWN blurb
+         and read-aloud script already state it in words"; both have since been
+         rewritten — the blurb now only asks "what sets how quickly it picks up
+         spin?" and the narration only promises to "watch what the very same
+         twist does to the angular acceleration" — so the licence is gone and
+         that rationale was stale.
+         FIX = fix-hierarchy tier 4, REDUCE THE NUMBER OF CASES SHOWN: one rod
+         instead of the comparison. A single rod cannot express a ratio, so the
+         answer is no longer on screen, while the far clamp slots pose the very
+         change the card asks about without resolving it. Note what is NOT done:
+         the far-out rod is not drawn sitting still under the same torque — a
+         motionless rod would teach "it does not accelerate at all", which the
+         physics denies — so no false picture and no distractor ("a half",
+         "unchanged") is depicted anywhere.
+       • Card 4 (gate): "double the mass instead — what do you predict for α?"
+         Mass never varies in the art: one mass value, one dot size, no mass
+         figure anywhere, so the mass branch is untouched.
+     The pivoted rod, its two clamped masses, the pivot and the applied-torque
+     arc are this sim's own instrument, so the strip still reads unmistakably as
+     THIS moment-of-inertia sim. No α value, no I, no k, no τ figure and no
+     angle read-out appears.
+
+     Geometry: R, S and the rod half-length keep their previous formulas (τ-arc
+     radius width- AND height-bounded); with a single centred rod every
+     essential — arc, rod, masses, clamp slots and both captions — sits inside
+     26%–74% of the displayed width. Captions are measureText-fitted (full text,
+     then shorter forms, then dropped).
+
+     Engineering: backing store = getBoundingClientRect() × dpr every paint,
+     drawn in CSS px; heroToken guard; resize redraws; prefers-reduced-motion
+     paints the completed fan statically; one entrance, never loops. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const capC  = LIGHT ? 'rgba(51,65,85,.92)'  : 'rgba(170,182,198,.92)';
+    const tauC  = LIGHT ? 'rgba(190,24,93,.92)' : 'rgba(244,114,182,.92)';   // theme-paired (was a bare '#f472b6')
+    const ghost = LIGHT ? 'rgba(51,65,85,.18)'  : 'rgba(148,163,184,.18)';
+    const pivC  = LIGHT ? '#0f172a' : '#e2e8f0';
+    const rodC  = LIGHT ? 'rgba(37,99,235,.88)' : 'rgba(96,165,250,.90)';    // the clamped masses
+    const slotC = LIGHT ? 'rgba(180,83,9,.90)'  : 'rgba(251,191,36,.92)';    // the far clamp slots
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const cy = H*0.52;
+    const R  = Math.min(W*0.100, cy - H*0.16);        // τ-arc radius: width- AND height-bounded
+    const S  = R*1.56;                                 // px per metre …
+    const half = 0.5*S;                                // … the rod is 0.5 m each side of the pivot
+    const cxR = W*0.5;                                 // one rod, centred on the strip
+    const d0 = 0.20, d1 = 0.40, alpha = 10.0;          // the sim's own numbers at d = 0.20 m
+    // ---- the applied-torque arc on the pivot ----
+    const a0 = -Math.PI*0.15, a1 = Math.PI*1.15, hs = Math.max(7, R*0.18);
+    ctx.strokeStyle = tauC; ctx.fillStyle = tauC; ctx.lineWidth = 2.5; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.arc(cxR, cy, R, a0, a1, true); ctx.stroke();
+    const hx = cxR + R*Math.cos(a1), hy = cy + R*Math.sin(a1), tg = a1 - Math.PI/2;
+    ctx.beginPath(); ctx.moveTo(hx, hy);
+    ctx.lineTo(hx - hs*Math.cos(tg - 0.4), hy - hs*Math.sin(tg - 0.4));
+    ctx.lineTo(hx - hs*Math.cos(tg + 0.4), hy - hs*Math.sin(tg + 0.4));
+    ctx.closePath(); ctx.fill();
+    // ---- equal-time snapshots from rest: θ = ½αt², T = 1 s ----
+    const N = 48, T = 1.0, kMax = Math.max(0, Math.min(N, Math.round(N*u)));
+    let uxL = 1, uyL = 0;                              // the leading (live) rod direction
+    for(let k = 0; k <= kMax; k++){
+      const t = k/N*T, last = (k === kMax);
+      const th = -0.5*alpha*t*t;                       // ccw on screen (canvas y is down)
+      const ux = Math.cos(th), uy = Math.sin(th), dp = d0*S;
+      if(last){ uxL = ux; uyL = uy; }
+      ctx.strokeStyle = last ? rodC : ghost;
+      ctx.lineWidth = last ? 3 : 1;
+      ctx.beginPath();
+      ctx.moveTo(cxR - half*ux, cy - half*uy); ctx.lineTo(cxR + half*ux, cy + half*uy);
+      ctx.stroke();
+      ctx.fillStyle = rodC; ctx.globalAlpha = last ? 1 : 0.22;
+      ctx.beginPath(); ctx.arc(cxR + dp*ux, cy + dp*uy, last ? 7 : 3, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(cxR - dp*ux, cy - dp*uy, last ? 7 : 3, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // ---- the far clamp slots on the live rod: twice as far out, never spun ----
+    const p1 = d1*S, tick = Math.max(5, R*0.13);
+    ctx.strokeStyle = slotC; ctx.lineWidth = 2; ctx.setLineDash([3,3]);
+    for(let s = -1; s <= 1; s += 2){
+      const px = cxR + p1*uxL*s, py = cy + p1*uyL*s;
+      ctx.beginPath();
+      ctx.moveTo(px + tick*uyL, py - tick*uxL);        // perpendicular to the rod
+      ctx.lineTo(px - tick*uyL, py + tick*uxL);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.lineWidth = 1;
+    ctx.fillStyle = pivC; ctx.beginPath(); ctx.arc(cxR, cy, 4, 0, 7); ctx.fill();
+    // ---- headline: the torque that never changes, fitted to the safe window ----
+    const heads = ['the same steady torque τ throughout', 'the same torque τ throughout', 'the same torque τ'];
+    for(let i = 0; i < heads.length; i++){
+      let done = false;
+      for(let s = 15; s >= 11; s--){
+        ctx.font = '600 ' + s + 'px ' + FAM;
+        if(ctx.measureText(heads[i]).width <= W*0.44){
+          ctx.fillStyle = tauC; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(heads[i], cxR, 16); done = true; break;
+        }
+      }
+      if(done) break;
+    }
+    // ---- the ask: the change the gate is about to put to the student ----
+    const asks = ['the masses are about to slide out to the far clamps — then what?',
+                  'masses about to slide out to the far clamps — then what?',
+                  'masses about to slide twice as far out',
+                  'masses slide twice as far out',
+                  'masses about to move out',
+                  'masses move out'];
+    for(let i = 0; i < asks.length; i++){
+      let done = false;
+      for(let s = 15; s >= 11; s--){
+        ctx.font = '600 ' + s + 'px ' + FAM;
+        if(ctx.measureText(asks[i]).width <= W*0.44){
+          ctx.fillStyle = capC; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(asks[i], cxR, H - 6); done = true; break;
+        }
+      }
+      if(done) break;
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const S = 182, cy = H*0.52;                       // px per metre, pivot height
-    const rods = [                                    // the sim's own numbers: τ = 0.4 N·m, m = 0.5 kg each
-      { cx: W*0.30, d: 0.20, alpha: 10.0, ink: LIGHT ? 'rgba(37,99,235,.8)' : 'rgba(96,165,250,.85)' },
-      { cx: W*0.70, d: 0.40, alpha: 2.5,  ink: LIGHT ? 'rgba(180,83,9,.8)'  : 'rgba(251,191,36,.85)' }
-    ];
-    const rodInk = LIGHT ? 'rgba(51,65,85,.14)' : 'rgba(148,163,184,.14)';
-    const tauInk = '#f472b6';
-    // fixed-size applied-τ arc on BOTH pivots — the twist is the same
-    rods.forEach(o => {
-      const R = 104, a0 = -Math.PI*0.15, a1 = Math.PI*1.15;
-      ctx.strokeStyle = tauInk; ctx.fillStyle = tauInk; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.8;
-      ctx.beginPath(); ctx.arc(o.cx, cy, R, a0, a1, true); ctx.stroke();
-      const hx = o.cx + R*Math.cos(a1), hy = cy + R*Math.sin(a1), tg = a1 - Math.PI/2, hs = 9;
-      ctx.beginPath(); ctx.moveTo(hx, hy);
-      ctx.lineTo(hx - hs*Math.cos(tg - 0.4), hy - hs*Math.sin(tg - 0.4));
-      ctx.lineTo(hx - hs*Math.cos(tg + 0.4), hy - hs*Math.sin(tg + 0.4));
-      ctx.closePath(); ctx.fill();
-      ctx.globalAlpha = 1;
-    });
-    // captions: what each fan literally is, plus the shared-torque line
-    ctx.fillStyle = LIGHT ? 'rgba(71,85,105,.92)' : 'rgba(170,182,198,.92)';
-    ctx.font = '600 17px ' + getComputedStyle(document.body).fontFamily;
-    ctx.textAlign = 'center';
-    ctx.fillText('masses close in', rods[0].cx, H - 10);
-    ctx.fillText('same masses, twice as far out', rods[1].cx, H - 10);
-    ctx.fillStyle = tauInk;
-    ctx.fillText('the same torque τ on both, for the same time', W*0.5, 20);
-    // equal-time snapshots from rest, θ = ½αt² — one orchestrated entrance, never loops
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 48, T = 1.0; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s = 0; s < per && k < N; s++, k++){
-        const t = (k+1)/N*T, last = (k === N-1);
-        rods.forEach(o => {
-          const th = -0.5*o.alpha*t*t;               // ccw on screen (canvas y is down)
-          const ux = Math.cos(th), uy = Math.sin(th);
-          const half = 0.5*S, dp = o.d*S;
-          ctx.strokeStyle = last ? o.ink : rodInk;
-          ctx.lineWidth = last ? 3 : 1;
-          ctx.beginPath(); ctx.moveTo(o.cx - half*ux, cy - half*uy); ctx.lineTo(o.cx + half*ux, cy + half*uy); ctx.stroke();
-          ctx.fillStyle = o.ink;
-          [dp, -dp].forEach(r => {
-            ctx.beginPath(); ctx.arc(o.cx + r*ux, cy + r*uy, last ? 7 : 3, 0, 7); ctx.fill();
-          });
-        });
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else rods.forEach(o => { ctx.fillStyle = LIGHT ? '#0f172a' : '#e2e8f0'; ctx.beginPath(); ctx.arc(o.cx, cy, 4, 0, 7); ctx.fill(); });
+    const my = ++heroToken;                     // one live entrance at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }             // the completed fan, static
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = (Math.max(0, now - t0))/1000;
+      const p = Math.min(1, s/1.6);
+      paint(p);
+      if(p < 1) requestAnimationFrame(frame);       // one entrance, never loops
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

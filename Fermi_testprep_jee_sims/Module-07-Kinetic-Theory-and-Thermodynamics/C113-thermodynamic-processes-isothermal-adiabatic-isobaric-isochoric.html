@@ -1240,7 +1240,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A gas, a piston, and four ways to change its state</span>
+            <span class="hero-label">A gas in a cylinder beside a PV map, with four named paths — isothermal, adiabatic, isobaric, isochoric — leaving the same start state at 10 L and 1 bar</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Four processes</span></h2>
@@ -3186,55 +3186,187 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim’s four PV paths from (V1=10 L, P1=1 bar), monatomic γ=5/3.
-     Isotherm PV=const, adiabat PV^γ=const, isobar P=const, isochore V=const.
-     Equal-volume dots along each expansion. */
+  /* Hero: the APPARATUS and the MAP — not the first-law answer.
+     A cylinder-and-piston glyph (the "gas and a piston" the blurb promises)
+     stands beside a LABELLED PV frame on which this sim's four paths grow out
+     of the one start state (V₁ = 10 L, P₁ = 1 bar, monatomic γ = 5/3):
+     isothermal PV = const, adiabatic PV^γ = const, isobaric P = const,
+     isochoric V = const. Axis letters P and V, and a legend naming all four
+     curves, replace the four anonymous coloured dotted curves the hero used to
+     draw — without names, the sim's central distinction (adiabat vs isotherm)
+     could not be read at all.
+
+     SPOILER AUDIT — gated cards read before drawing. The two data-gate steps
+     here are "Predict: adiabatic expansion" and "Predict: isothermal
+     expansion", and BOTH ask which of the three first-law terms is zero
+     (Q = 0 and ΔU = 0 respectively). Naming the curves answers neither, and
+     the ungated card that follows ("Observe: run the adiabatic") already says
+     in words that the adiabat is steeper than the isotherm — so the names are
+     safe, and they are what make the picture legible. What this hero
+     deliberately never draws is the ΔU = Q − W ledger, any struck-out term,
+     any temperature readout or any Q/W/ΔU annotation: that is the gated
+     answer and it stays behind the gate.
+
+     Framing: every essential mark — frame, axis letters, curves, legend and
+     the piston glyph — lives inside 26%–74% of the DISPLAYED width, clear of
+     the band's 22%/78% mask fade. The old layout put the axes at 12% and ran
+     the expansions out to 90%, so the axes and the right-hand ends of three
+     curves were in the fade. The cylinder glyph is the single decorative
+     element: below 860 CSS px there is no room for it and it is dropped, and
+     the legend folds to two rows.
+
+     Sizing: the backing store is taken from the canvas's own CSS box on every
+     paint (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…),
+     all drawing in CSS px). The 1280×240 authored in the markup was being
+     stretched into a viewport-wide 140px band. A generation token keeps one
+     animation alive at a time, and prefers-reduced-motion paints the final
+     frame once. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const ink  = LIGHT ? 'rgba(15,23,42,.85)'  : 'rgba(226,232,240,.88)';
+    const soft = LIGHT ? 'rgba(15,23,42,.62)'  : 'rgba(203,213,225,.70)';
+    const axis = LIGHT ? 'rgba(15,23,42,.38)'  : 'rgba(148,163,184,.44)';
+    const gasF = LIGHT ? 'rgba(2,132,199,.10)' : 'rgba(125,211,252,.12)';
+    const gasD = LIGHT ? 'rgba(2,132,199,.55)' : 'rgba(125,211,252,.62)';
+    const inks = LIGHT
+      ? ['rgba(5,150,105,.95)','rgba(180,83,9,.95)','rgba(2,132,199,.92)','rgba(124,58,237,.92)']
+      : ['rgba(110,231,183,.95)','rgba(251,191,36,.95)','rgba(125,211,252,.92)','rgba(196,181,253,.95)'];
+    const names = ['isothermal','adiabatic','isobaric','isochoric'];
+
+    ctx.clearRect(0,0,W,H);
+    const wash = ctx.createLinearGradient(0,0,0,H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0,0,W,H);
+
+    const x0 = W*0.26, x1 = W*0.74, inner = x1 - x0;
+    const roomy = W >= 860;
+    const pistonW = roomy ? Math.min(150, inner*0.24) : 0;
+    const plotL = roomy ? x0 + pistonW + inner*0.045 : x0 + 11;
+    const plotR = x1 - Math.min(16, inner*0.05);
+    const padT = H*0.17, padB = roomy ? H*0.72 : H*0.60;
+
+    /* Reduced units: V/V₁ and P/P₁. γ = 5/3, expansion out to 1.6 V₁, the
+       isochore heated to 1.44 P₁ — a window in which all four paths separate
+       inside a band only ~77 CSS px tall. */
+    const gam = 5/3, Vend = 1.60, Ptop = 1.44;
+    const Vlo = 0.86, Vhi = 1.66, Plo = 0.35, Phi = 1.52;
+    const xOf = V => plotL + ((V-Vlo)/(Vhi-Vlo))*(plotR-plotL);
+    const yOf = P => padB - ((P-Plo)/(Phi-Plo))*(padB-padT);
+    const curve = [ V => 1/V, V => Math.pow(V, -gam), () => 1 ];
+
+    // frame
+    ctx.strokeStyle = axis; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(plotL, padB); ctx.lineTo(plotR, padB); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(plotL, padT); ctx.lineTo(plotL, padB); ctx.stroke();
+    const axFs = roomy ? 13 : 11;
+    ctx.fillStyle = soft; ctx.font = axFs+'px '+FAM;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText('P', plotL-6, padT);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('V', plotR+5, padB);
+
+    // the one start state every path leaves from
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(xOf(1), yOf(1), 3.4, 0, 7); ctx.fill();
+    if(roomy){
+      // only when the caption clears the P axis on its left — otherwise it
+      // would cross the axis and land on the piston rod
+      ctx.font = '11px '+FAM;
+      const cap = '10 L, 1 bar', capW = ctx.measureText(cap).width;
+      if(xOf(1) - 8 - capW > plotL + 2){
+        ctx.fillStyle = soft;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(cap, xOf(1)-8, yOf(1));
+      }
+    }
+
+    // equal-volume dots along the three expansions, equal-pressure up the isochore
+    const N = roomy ? 34 : 22, R = roomy ? 2.6 : 2.0;
+    for(let k=0;k<N;k++){
+      const f = k/(N-1);
+      if(f > u) break;
+      const V = 1 + f*(Vend-1);
+      for(let i=0;i<3;i++){
+        ctx.fillStyle = inks[i];
+        ctx.beginPath(); ctx.arc(xOf(V), yOf(curve[i](V)), R, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = inks[3];
+      ctx.beginPath(); ctx.arc(xOf(1), yOf(1 + f*(Ptop-1)), R, 0, 7); ctx.fill();
+    }
+
+    // legend: the names are what let the four curves be told apart
+    const lgFs = roomy ? 12 : 11;
+    ctx.font = lgFs+'px '+FAM; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    // Column count is MEASURED, not assumed: at ~860-900 CSS px a 4-wide row put
+    // 'isothermal' underneath the next entry's swatch. Widest item + swatch + a
+    // one-space rail must fit the column, or the legend folds to two rows.
+    let cols = roomy ? 4 : 2;
+    const lgNeed = Math.max.apply(null, names.map(n => 12 + ctx.measureText(n).width + 8));
+    if(cols === 4 && lgNeed > (plotR-plotL)/4) cols = 2;
+    const cw = (plotR-plotL)/cols;
+    for(let i=0;i<4;i++){
+      const lx = plotL + (i%cols)*cw;
+      const ly = padB + 15 + Math.floor(i/cols)*(lgFs+4);
+      ctx.fillStyle = inks[i];
+      ctx.beginPath(); ctx.arc(lx+4, ly, 3.2, 0, 7); ctx.fill();
+      ctx.fillStyle = soft;
+      ctx.fillText(names[i], lx+12, ly);
+    }
+
+    // cylinder + piston: the blurb's "gas and a piston", expanding with u
+    if(roomy){
+      const cx0 = x0, cx1 = x0 + pistonW, cy0 = H*0.26, cy1 = H*0.70;
+      const headX = cx0 + pistonW*(0.46 + 0.26*u), midY = (cy0+cy1)/2;
+      ctx.fillStyle = gasF; ctx.fillRect(cx0, cy0, headX-cx0, cy1-cy0);
+      ctx.fillStyle = gasD;
+      [[.18,.28],[.42,.62],[.30,.80],[.62,.22],[.55,.70],[.78,.45],[.12,.58]].forEach(p=>{
+        ctx.beginPath(); ctx.arc(cx0 + p[0]*(headX-cx0), cy0 + p[1]*(cy1-cy0), 1.7, 0, 7); ctx.fill();
+      });
+      ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx1, cy0); ctx.lineTo(cx0, cy0); ctx.lineTo(cx0, cy1); ctx.lineTo(cx1, cy1);
+      ctx.stroke();
+      ctx.strokeStyle = soft; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(headX, cy0+2); ctx.lineTo(headX, cy1-2); ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(headX, midY); ctx.lineTo(cx1+10, midY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx1+10, cy0+6); ctx.lineTo(cx1+10, cy1-6); ctx.stroke();
+      ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('gas + piston', (cx0+cx1)/2, cy1+6);
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const P1 = 1e5, V1 = 0.010, g = 5/3;
-    const Vmin = 0.006, Vmax = 0.026;
-    const Pmin = 0.3e5, Pmax = 2.2e5;
-    const padL = W*0.12, padR = W*0.90, padT = H*0.14, padB = H*0.86;
-    const xOf = V => padL + ((V-Vmin)/(Vmax-Vmin))*(padR-padL);
-    const yOf = P => padB - ((P-Pmin)/(Pmax-Pmin))*(padB-padT);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, padB); ctx.lineTo(padR, padB); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padB); ctx.stroke();
-    const inks = LIGHT
-      ? ['rgba(5,150,105,.9)','rgba(180,83,9,.9)','rgba(2,132,199,.85)','rgba(124,58,237,.85)']
-      : ['rgba(110,231,183,.9)','rgba(251,191,36,.9)','rgba(125,211,252,.85)','rgba(196,181,253,.9)'];
-    const paths = [
-      { P: V => P1*V1/V },                         // isothermal
-      { P: V => P1*Math.pow(V1/V, g) },            // adiabatic
-      { P: V => P1 },                              // isobaric
-      { Vfixed: true }                             // isochoric (vertical)
-    ];
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 56; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const f = k/(N-1);
-        const V = V1 + f*(Vmax-V1);
-        // isotherm, adiabat, isobar along V
-        [0,1,2].forEach(i => {
-          ctx.fillStyle = inks[i];
-          ctx.beginPath(); ctx.arc(xOf(V), yOf(paths[i].P(V)), 2.6, 0, 7); ctx.fill();
-        });
-        // isochore: equal-P dots at V=V1
-        const P = Pmin + f*(Pmax-Pmin);
-        ctx.fillStyle = inks[3];
-        ctx.beginPath(); ctx.arc(xOf(V1), yOf(P), 2.6, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0)/1000;
+      paint(Math.min(1, (s % 5.6)/2.8));            // 2.8 s to grow, 2.8 s to hold
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

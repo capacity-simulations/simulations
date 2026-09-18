@@ -1274,11 +1274,11 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — a = g sinθ / (1 + I/MR²); sphere pulls ahead</span>
+                <span class="hero-label">Sphere, disc and hoop level at the release line of an incline — who reaches the flag first?</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The rolling race</span></h2>
-                <p class="welcome-blurb">Same mass, same radius, same drop — only shape decides who finishes first.</p>
+                <p class="welcome-blurb">A sphere, a disc and a hoop race down one incline — who gets there first?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3151,52 +3151,146 @@ if(themeBtn) themeBtn.addEventListener('click', () => {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to rolling on an inclined plane.',
-    'Here a sphere, a disc and a hoop race down the same incline. The one with the smallest I over M R squared pulls ahead, and mass and radius never change the order.',
+    'Here a sphere, a disc and a hoop race down the same incline. You can tilt the slope, change the mass and radius they all share, and rerun the race as often as you like.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: three bodies on this sim’s a = g sinθ / (1+c), s = ½ a t².
-     Sphere c=2/5, disc c=1/2, hoop c=1. EQUAL-TIME-STEP dots along the
-     incline — the sphere’s dots open out; the hoop’s stay dense. */
+  /* Hero: the RACE POSED, not decided. The incline runs LEFT→RIGHT downhill
+     (the sim's own convention), three parallel lanes carry the three bodies'
+     cross-section glyphs — sphere = filled circle with a highlight, disc =
+     circle with a centre dot, hoop = open ring — all FROZEN level with the
+     release line, so no finishing order can be read off: card 1's gated
+     predict IS the finishing order. The old hero interleaved three equal-time
+     dot trains on ONE line (order fully readable, no body icons, no legend)
+     and ran the slope right-to-left with the finish at x=14%, inside the edge
+     fade. A soft neutral cue now sweeps down the slope toward the ? flag —
+     it belongs to no body and ranks nothing (skipped under reduced motion).
+
+     The canvas is sized to its OWN CSS box every time it is drawn
+     (getBoundingClientRect × devicePixelRatio, drawing in CSS px) rather than
+     to the 1280×240 authored in the markup: the band is one viewport wide and
+     140 px tall, so the fixed backing store came out smeared. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, sweep, LIGHT){
+    const ink  = LIGHT ? 'rgba(15,23,42,.82)'  : 'rgba(226,232,240,.86)';
+    const soft = LIGHT ? 'rgba(15,23,42,.45)'  : 'rgba(148,163,184,.58)';
+    const lane = LIGHT ? 'rgba(15,23,42,.20)'  : 'rgba(148,163,184,.20)';
+    const bodies = [   // sim palette: sphere blue, disc pink, hoop amber
+      { name:'sphere', col: LIGHT ? 'rgba(37,99,235,.92)'  : 'rgba(96,165,250,.95)'  },
+      { name:'disc',   col: LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)' },
+      { name:'hoop',   col: LIGHT ? 'rgba(217,119,6,.90)'  : 'rgba(251,191,36,.95)'  }
+    ];
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);
+    // a whisper of ground, so the band reads as one object
+    const bg = ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0, LIGHT ? 'rgba(15,23,42,.055)' : 'rgba(148,163,184,.075)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+    // geometry: capped and centred inside the 24–76% window, downhill L→R
+    const cw = Math.min(W*0.50, 620), ox = (W-cw)/2;
+    const xs = ox, xf = ox + cw;
+    const ys = H*0.315, yf = H*0.645;                 // top lane: start high, finish low
+    const gap = Math.min(15, H*0.11);                 // lane-to-lane offset
+    const rg  = 6.5;                                  // glyph radius
+    const f0  = 0.05;                                 // release fraction — SAME for all three
+    const laneY = (i, f) => ys + i*gap + f*(yf - ys);
+    const laneX = f => xs + f*cw;
+    function glyph(i, x, y){
+      const col = bodies[i].col;
+      if(i === 0){                                    // sphere: filled + highlight
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(x, y, rg, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.beginPath(); ctx.arc(x-2.2, y-2.2, 1.9, 0, 7); ctx.fill();
+      } else if(i === 1){                             // disc: outline + centre dot
+        ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, rg-1, 0, 7); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill();
+      } else {                                        // hoop: open ring
+        ctx.strokeStyle = col; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, y, rg-1.5, 0, 7); ctx.stroke();
+      }
+    }
+    // legend, centred at the top
+    ctx.font = '12px '+FAM; ctx.textBaseline = 'middle';
+    let tot = 0;
+    const wds = bodies.map(b => ctx.measureText(b.name).width);
+    wds.forEach(w => { tot += 18 + w + 20; }); tot -= 20;
+    let lx = W/2 - tot/2; const ly = 14;
+    bodies.forEach((b, i) => {
+      glyph(i, lx + rg, ly);
+      ctx.fillStyle = ink; ctx.textAlign = 'left';
+      ctx.fillText(b.name, lx + 18, ly + 0.5);
+      lx += 18 + wds[i] + 20;
+    });
+    // the three lanes
+    ctx.strokeStyle = lane; ctx.lineWidth = 1.5;
+    for(let i = 0; i < 3; i++){
+      ctx.beginPath(); ctx.moveTo(xs, laneY(i,0)); ctx.lineTo(xf, laneY(i,1)); ctx.stroke();
+    }
+    // release line, crossing all three lanes through the glyph centres
+    const sx = laneX(f0);
+    ctx.strokeStyle = soft; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(sx, laneY(0,f0) - 14); ctx.lineTo(sx, laneY(2,f0) + 14); ctx.stroke();
+    ctx.setLineDash([]);
+    // neutral cue sweeping down the middle lane toward the flag (no body, no rank)
+    if(sweep >= 0){
+      const fx = laneX(sweep), fy = laneY(1, sweep);
+      const gl = ctx.createRadialGradient(fx, fy, 0, fx, fy, 13);
+      const a = 0.9*Math.sin(Math.PI*sweep);
+      gl.addColorStop(0, LIGHT ? 'rgba(15,23,42,'+(0.22*a)+')' : 'rgba(226,232,240,'+(0.20*a)+')');
+      gl.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gl;
+      ctx.beginPath(); ctx.arc(fx, fy, 13, 0, 7); ctx.fill();
+    }
+    // the racers — SAME fraction down the slope on every lane: no order readable
+    for(let i = 0; i < 3; i++) glyph(i, laneX(f0), laneY(i, f0));
+    // finish: flag at the far end of the lanes, with the open question
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(xf, yf - 12); ctx.lineTo(xf, yf - 36); ctx.stroke();
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.moveTo(xf, yf - 36); ctx.lineTo(xf - 20, yf - 30); ctx.lineTo(xf, yf - 24);
+    ctx.closePath(); ctx.fill();
+    // captions, one per end, on the bottom edge of the band
+    ctx.fillStyle = soft; ctx.font = '12px '+FAM; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillText('released together', xs, H - 6);
+    ctx.textAlign = 'right';
+    ctx.fillText('who reaches the flag first?', xf, H - 6);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const g = 9.81, theta = 30 * Math.PI / 180, L = 2.0;
-    const runners = [
-      { c: 2/5, dark:'rgba(96,165,250,.95)',  light:'rgba(37,99,235,.92)'  },
-      { c: 1/2, dark:'rgba(244,114,182,.95)', light:'rgba(219,39,119,.90)' },
-      { c: 1,   dark:'rgba(251,191,36,.95)',  light:'rgba(217,119,6,.90)'  }
-    ];
-    runners.forEach(r => { r.a = g * Math.sin(theta) / (1 + r.c); });
-    const x1 = W * 0.86, y1 = H * 0.22, x0 = W * 0.14, y0 = H * 0.82;
-    const dx = x0 - x1, dy = y0 - y1;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.16)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x0, y0); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dt = 0.05, T = Math.sqrt(2 * L / runners[2].a), N = Math.ceil(T / dt);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k <= N; sN++, k++){
-        const t = k * dt;
-        runners.forEach(r => {
-          const s = Math.min(0.5 * r.a * t * t, L);
-          const f = s / L;
-          const x = x1 + f * dx, y = y1 + f * dy;
-          ctx.fillStyle = LIGHT ? r.light : r.dark;
-          ctx.beginPath(); ctx.arc(x, y, 3.1, 0, 7); ctx.fill();
-        });
-      }
-      if(k <= N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(-1); return; }            // static frame, no sweep
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = (Math.max(0, now - t0))/1000;
+      paint((s % 3.4)/3.4);                         // 3.4 s glide, start → flag
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

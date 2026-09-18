@@ -1151,7 +1151,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time samples of a rod sliding at constant v — even spacing</span>
+            <span class="hero-label">A rod sweeps area through a field of ⊙ dots at constant v — velocity forward, retarding force back</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Motional EMF</span></h2>
@@ -3183,40 +3183,106 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time samples of a rod sliding at constant v (ε = BLv).
-     Even spacing is the point — speed is uniform. Swept area tints green. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* Hero: the blurb's stated premise, drawn whole — a rod slides on rails
+     THROUGH A VISIBLE FIELD, sweeping area (green tint) behind it, and the
+     field pushes back. The field is a sparse ⊙ lattice — dots OUT of the page,
+     the sim's own convention (card 1: "dots = out of the page"); ⊗ crosses
+     would contradict the scene the student meets seconds later. Equal-time
+     ghost rods trail at even spacing (speed is uniform); on the live rod a
+     velocity arrow points WITH the motion and one retarding-force arrow F
+     points AGAINST it.
+     Spoiler check against the gated cards: cards 2 and 3 gate the SCALING of
+     the force (double v → ×2, double B → ×4) — never its direction. Card 2's
+     own prose states "the field pushes back on the rod with a retarding
+     force" and the blurb says "electricity costs you a push", so a direction
+     arrow gives nothing away; no magnitudes or ratios are encoded.
+     Backing store = CSS box × devicePixelRatio, drawn in CSS px (the authored
+     1280×240 store was being CSS-stretched to 100vw×140); rails and every
+     essential sit inside 24–76% so the edge mask never eats them. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const inkRail = LIGHT ? 'rgba(15,23,42,.40)'  : 'rgba(148,163,184,.45)';
+    const inkRod  = LIGHT ? 'rgba(180,83,9,.95)'  : 'rgba(251,191,36,.95)';
+    const inkGho  = LIGHT ? 'rgba(180,83,9,.28)'  : 'rgba(251,191,36,.28)';
+    const inkArea = LIGHT ? 'rgba(5,150,105,.16)' : 'rgba(52,211,153,.15)';
+    const inkB    = LIGHT ? 'rgba(37,99,235,.42)' : 'rgba(96,165,250,.45)';
+    const inkV    = LIGHT ? 'rgba(2,132,199,.95)' : 'rgba(56,189,248,.95)';
+    const inkF    = LIGHT ? 'rgba(190,18,60,.92)' : 'rgba(244,63,94,.92)';
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     ctx.clearRect(0,0,W,H);
-    const inkRail = LIGHT ? 'rgba(15,23,42,.35)' : 'rgba(148,163,184,.40)';
-    const inkRod  = LIGHT ? 'rgba(180,83,9,.92)' : 'rgba(251,191,36,.92)';
-    const inkArea = LIGHT ? 'rgba(5,150,105,.22)' : 'rgba(52,211,153,.22)';
-    const inkF    = LIGHT ? 'rgba(225,29,72,.80)' : 'rgba(244,63,94,.85)';
-    const yT = H*0.34, yB = H*0.72, x0 = W*0.14, x1 = W*0.86;
-    ctx.strokeStyle = inkRail; ctx.lineWidth = 2.2;
+    const x0 = W*0.24, x1 = W*0.76, yT = H*0.28, yB = H*0.76;
+    // rails
+    ctx.strokeStyle = inkRail; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x0, yT); ctx.lineTo(x1, yT); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(x0, yB); ctx.lineTo(x1, yB); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 36; let i = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && i<N;s++,i++){
-        const t = (i+1)/N;
-        const x = x0 + (x1-x0-18)*t;
-        ctx.fillStyle = inkArea;
-        ctx.fillRect(x0, yT, x-x0, yB-yT);
-        ctx.fillStyle = inkRod;
-        ctx.fillRect(x-3, yT-4, 6, yB-yT+8);
-        ctx.fillStyle = inkF;
-        ctx.beginPath(); ctx.arc(x-14, (yT+yB)/2, 2.2, 0, 7); ctx.fill();
-      }
-      if(i < N) requestAnimationFrame(batch);
+    // swept area up to the live rod. The rod starts 46 px in from the left rail
+    // end and stops 46 px short of the right one, so BOTH arrows (v forward,
+    // F back, each 38 px + label) stay inside 24–76% for the whole sweep — at
+    // u = 0 an x0 start put the retarding-force arrow at 13% of a 360 px strip,
+    // i.e. under the transparent part of the overlay's edge mask.
+    const xEnd = x1 - 46, xStart = x0 + 46;
+    const xr = xStart + (xEnd - xStart)*u;
+    ctx.fillStyle = inkArea; ctx.fillRect(x0, yT, xr - x0, yB - yT);
+    // sparse B lattice: ⊙ = out of the page, everywhere between the rails
+    ctx.strokeStyle = inkB; ctx.fillStyle = inkB; ctx.lineWidth = 1.2;
+    for(let i = 0; i < 9; i++) for(let j = 0; j < 2; j++){
+      const bx = x0 + (x1 - x0)*(i + 0.5)/9;
+      const by = yT + (yB - yT)*(j === 0 ? 0.30 : 0.70);
+      ctx.beginPath(); ctx.arc(bx, by, 4.4, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, 1.1, 0, 7); ctx.fill();
     }
-    batch();
+    // equal-time ghost rods (even spacing = constant v)
+    ctx.fillStyle = inkGho;
+    for(let i = 1; i <= 9; i++){
+      const t = i/10; if(t >= u) break;
+      const gx = xStart + (xEnd - xStart)*t;
+      ctx.fillRect(gx - 2, yT - 3, 4, yB - yT + 6);
+    }
+    // the live rod
+    ctx.fillStyle = inkRod; ctx.fillRect(xr - 3, yT - 5, 6, yB - yT + 10);
+    // arrows on the live rod: v WITH the motion, the retarding force AGAINST it
+    function arrow(xa, ya, xb, col){
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, ya); ctx.stroke();
+      const s = xb > xa ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(xb + 2*s, ya); ctx.lineTo(xb - 6*s, ya - 4.4); ctx.lineTo(xb - 6*s, ya + 4.4); ctx.closePath(); ctx.fill();
+    }
+    const yV = yT + (yB - yT)*0.26, yF = yT + (yB - yT)*0.74;
+    arrow(xr + 8, yV, xr + 38, inkV);   // velocity, rightward
+    arrow(xr - 8, yF, xr - 38, inkF);   // retarding force, against the motion
+    ctx.font = 'italic 13px ' + FAM; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = inkV; ctx.textAlign = 'left';  ctx.fillText('v', xr + 22, yV - 6);
+    ctx.fillStyle = inkF; ctx.textAlign = 'right'; ctx.fillText('F', xr - 22, yF - 6);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0)/1000;
+      // 5.2 s cycle: 4 s sweep, 1.2 s dwell at the far end, then repeat
+      paint(Math.min(1, (s % 5.2)/4));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

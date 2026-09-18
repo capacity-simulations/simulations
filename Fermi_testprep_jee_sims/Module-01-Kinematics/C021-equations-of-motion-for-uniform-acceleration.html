@@ -841,7 +841,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">The same braking car on the road, with stacked bars at 10 m/s and 20 m/s — stopping distance quadruples</span>
+            <span class="hero-label">A car braking from 10 m/s on the sim's road, leaving a coloured stopping-distance bar — and an empty bar asking how far it would go from 20 m/s</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Stopping distance ∝ speed²</span></h2>
@@ -2960,120 +2960,158 @@ Shell.init({ onFrame, onReset, onResize, onStep, cfg: { autoplay: false, gateLoc
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the same scene as the sim — road, sedan, stacked 1:4 bars.
-     First the u = 10 m/s run (10 m), then u = 20 m/s (40 m). Opaque fill
-     so the main-canvas plot title cannot bleed through as "AKING CAR". */
-  let heroRaf = 0;
+  /* Hero: the sim's own road — the sedan braking from u = 10 m/s and the
+     coloured bar it leaves on the asphalt, which is exactly the mechanic
+     inquiry Step 1 (ungated) asks the student to read off the road.
+
+     ASPECT: the canvas is sized to its OWN CSS box every frame (backing store =
+     box × devicePixelRatio, all drawing in CSS px). The markup's fixed 1280×240
+     store was being stretched into a 100vw × 176px box — a 1.5–2.1× horizontal
+     smear that blurred the car and the road dashes.
+
+     BAND: the sky/grass/asphalt is full-bleed but alpha-ramped to nothing over
+     the outer 20% at each end (destination-out gradient), so the strip dissolves
+     like its siblings instead of ending in a hard edge. This file's CSS mask is
+     8%/92% rather than the family's 22/78; the mask itself is untouched and the
+     paint does the work. All essential ink lives inside 24–76% of the width.
+
+     SPOILER GATE: inquiry Step 2 carries data-gate and asks "u doubles to
+     20 m/s — how far now?", correct choice "About 40 m — four times as far".
+     The previous hero animated that very run and printed "u = 20 m/s  →  40 m"
+     beside a 4×-longer bar, and the hidden .hero-label said "stopping distance
+     quadruples" — the gated answer handed over in the art AND to screen-readers
+     before the question was ever asked. The 20 m/s run is now an EMPTY dashed
+     bar ending in "?", so the hero poses the sim's question instead of
+     answering it; the 10 m/s bar carries no distance number either. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, elapsed, LIGHT){
+    const a = 5, t1 = 10 / a, hold = 1.6, cycle = t1 + hold;
+    const teal  = LIGHT ? '#0f766e' : '#2dd4bf';
+    const amber = LIGHT ? '#b45309' : '#fbbf24';
+    const ink   = LIGHT ? '#0f172a' : '#e2e8f0';
+    const FAM   = '"DM Sans", "Segoe UI", Arial, sans-serif';
+    const fs    = Math.max(10, Math.min(13, W * 0.0105));
+    const roadY = Math.round(H * 0.42);
+    const roadH = Math.max(14, Math.round(H * 0.155));
+    const x0    = W * 0.30;          // braking starts here (inside the opaque zone)
+    const S     = (W * 0.18) / 10;   // 10 m of road = 18% of the band
+
+    ctx.clearRect(0, 0, W, H);
+    // ---- background band: full bleed, then dissolved to nothing at both ends ----
+    const sky = ctx.createLinearGradient(0, 0, 0, roadY);
+    if(LIGHT){ sky.addColorStop(0, '#bae6fd'); sky.addColorStop(1, '#e2e8f0'); }
+    else     { sky.addColorStop(0, '#0b1922'); sky.addColorStop(1, '#060e11'); }
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    const grassH = Math.max(5, Math.round(H * 0.045));
+    ctx.fillStyle = LIGHT ? '#65a30d' : '#14532d';
+    ctx.fillRect(0, roadY - grassH, W, grassH);
+    const asphalt = ctx.createLinearGradient(0, roadY, 0, roadY + roadH);
+    asphalt.addColorStop(0, LIGHT ? '#475569' : '#334155');
+    asphalt.addColorStop(1, LIGHT ? '#1e293b' : '#0f172a');
+    ctx.fillStyle = asphalt; ctx.fillRect(0, roadY, W, roadH);
+    ctx.strokeStyle = LIGHT ? 'rgba(248,250,252,0.55)' : 'rgba(226,232,240,0.28)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, roadY + 2.5); ctx.lineTo(W, roadY + 2.5);
+    ctx.moveTo(0, roadY + roadH - 2.5); ctx.lineTo(W, roadY + roadH - 2.5);
+    ctx.stroke();
+    ctx.strokeStyle = LIGHT ? 'rgba(254,240,138,0.95)' : 'rgba(251,191,36,0.80)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([14, 12]);
+    ctx.beginPath();
+    ctx.moveTo(0, roadY + roadH / 2); ctx.lineTo(W, roadY + roadH / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const fade = ctx.createLinearGradient(0, 0, W, 0);
+    fade.addColorStop(0,    'rgba(0,0,0,1)');
+    fade.addColorStop(0.20, 'rgba(0,0,0,0)');
+    fade.addColorStop(0.80, 'rgba(0,0,0,0)');
+    fade.addColorStop(1,    'rgba(0,0,0,1)');
+    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    // ---- the run: brake from u = 10 m/s, hold at the stop, repeat ----
+    const tt = ((elapsed % cycle) + cycle) % cycle;
+    let xCar, moving;
+    if(tt <= t1){ xCar = 10 * tt - 0.5 * a * tt * tt; moving = tt < t1 - 1e-6; }
+    else        { xCar = 10; moving = false; }
+
+    // braking-start tick; its caption is parked above the car's roof
+    ctx.strokeStyle = teal; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x0, roadY - Math.max(24, H * 0.19));
+    ctx.lineTo(x0, roadY + roadH + Math.max(6, H * 0.05));
+    ctx.stroke();
+    ctx.fillStyle = teal;
+    ctx.font = '600 ' + fs.toFixed(1) + 'px ' + FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('braking starts', x0 + 6, roadY - Math.max(26, H * 0.205));
+
+    // ---- the trail bar it leaves, and the question the sim asks next ----
+    const barH   = Math.max(9, Math.round(H * 0.085));
+    const barGap = Math.max(5, Math.round(H * 0.04));
+    const barY0  = roadY + roadH + Math.max(8, Math.round(H * 0.06));
+    ctx.fillStyle = teal; ctx.globalAlpha = 0.88;
+    ctx.fillRect(x0, barY0, Math.max(2, xCar * S), barH);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ink;
+    ctx.font = '600 ' + fs.toFixed(1) + 'px ' + FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('u = 10 m/s', x0 + 10 * S + 8, barY0 + barH / 2);
+    // the 20 m/s run is left as an open question — never as an answer
+    const qy = barY0 + barH + barGap;
+    const qw = Math.max(18, W * 0.055);
+    ctx.save();
+    ctx.strokeStyle = amber; ctx.lineWidth = 1.6; ctx.setLineDash([5, 4]);
+    ctx.strokeRect(x0 + 0.8, qy + 0.8, qw, Math.max(3, barH - 1.6));
+    ctx.restore();
+    ctx.fillStyle = amber;
+    ctx.font = '700 ' + (fs + 1).toFixed(1) + 'px ' + FAM;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('u = 20 m/s  →  ?', x0 + qw + 12, qy + barH / 2);
+
+    // ---- the sim's own sedan, scaled so it stays inside the opaque zone ----
+    if(typeof drawCar === 'function'){
+      const s = Math.max(0.5, Math.min(1, (W / 1280) * 0.9));
+      const cx = x0 + xCar * S;
+      ctx.save();
+      ctx.translate(cx, roadY);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -roadY);
+      drawCar(ctx, cx, roadY, moving, xCar, S);
+      ctx.restore();
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    cancelAnimationFrame(heroRaf);
-    const a = 5;
-    const x0 = W * 0.16;
-    const S = (W * 0.60) / 40;
-    const xPx = m => x0 + m * S;
-    const roadY = Math.round(H * 0.36);
-    const roadH = 24;
-    const teal = LIGHT ? '#0f766e' : '#2dd4bf';
-    const amber = LIGHT ? '#d97706' : '#fbbf24';
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const t1 = 10 / a, t2 = 20 / a, gap = 0.4, hold = 1.4;
-    const cycle = t1 + gap + t2 + hold;
-    const t0 = performance.now();
+    const my = ++heroToken;                       // one live animation at a time
     function paint(elapsed){
-      ctx.clearRect(0, 0, W, H);
-      const sky = ctx.createLinearGradient(0, 0, 0, roadY);
-      if(LIGHT){ sky.addColorStop(0, '#7dd3fc'); sky.addColorStop(1, '#e2e8f0'); }
-      else { sky.addColorStop(0, '#0b1922'); sky.addColorStop(1, '#060e11'); }
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = LIGHT ? '#65a30d' : '#14532d';
-      ctx.fillRect(0, roadY - 8, W, 8);
-      const asphalt = ctx.createLinearGradient(0, roadY, 0, roadY + roadH);
-      asphalt.addColorStop(0, LIGHT ? '#475569' : '#334155');
-      asphalt.addColorStop(1, LIGHT ? '#1e293b' : '#0f172a');
-      ctx.fillStyle = asphalt;
-      ctx.fillRect(0, roadY, W, roadH);
-      ctx.strokeStyle = LIGHT ? 'rgba(248,250,252,0.5)' : 'rgba(226,232,240,0.28)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(0, roadY + 3); ctx.lineTo(W, roadY + 3);
-      ctx.moveTo(0, roadY + roadH - 3); ctx.lineTo(W, roadY + roadH - 3);
-      ctx.stroke();
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([14, 12]);
-      ctx.beginPath();
-      ctx.moveTo(0, roadY + roadH / 2);
-      ctx.lineTo(W, roadY + roadH / 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      let xCar = 0, moving = false, d10 = 0, d20 = 0;
-      if(elapsed <= t1){
-        const t = elapsed;
-        xCar = 10 * t - 0.5 * a * t * t;
-        moving = t < t1 - 1e-6;
-        d10 = xCar;
-      } else if(elapsed <= t1 + gap){
-        xCar = 10; d10 = 10;
-      } else if(elapsed <= t1 + gap + t2){
-        const t = elapsed - t1 - gap;
-        xCar = 20 * t - 0.5 * a * t * t;
-        moving = t < t2 - 1e-6;
-        d10 = 10; d20 = xCar;
-      } else {
-        xCar = 40; d10 = 10; d20 = 40;
-      }
-
-      ctx.strokeStyle = LIGHT ? '#0f766e' : '#5eead4';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x0, roadY - 16);
-      ctx.lineTo(x0, roadY + roadH + 10);
-      ctx.stroke();
-      ctx.fillStyle = LIGHT ? '#0f766e' : '#5eead4';
-      ctx.font = '600 13px "DM Sans", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('braking starts', x0 + 6, roadY - 18);
-
-      const barY0 = roadY + roadH + 14;
-      const barH = 15, barGap = 8;
-      [[d20, amber, 'u = 20 m/s  →  40 m'], [d10, teal, 'u = 10 m/s  →  10 m']].forEach((row, i) => {
-        const [d, col, lab] = row;
-        if(d < 0.05) return;
-        const y = barY0 + i * (barH + barGap);
-        ctx.fillStyle = col;
-        ctx.globalAlpha = 0.85;
-        ctx.fillRect(x0, y, Math.max(2, d * S), barH);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = (d * S > 110) ? '#0f172a' : (LIGHT ? '#0f172a' : '#e2e8f0');
-        ctx.font = '600 12px "DM Sans", sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(lab, (d * S > 110) ? x0 + 8 : x0 + d * S + 8, y + barH / 2);
-      });
-
-      if(typeof drawCar === 'function'){
-        ctx.save();
-        ctx.translate(xPx(xCar), roadY);
-        ctx.scale(0.78, 0.78);
-        ctx.translate(-xPx(xCar), -roadY);
-        drawCar(ctx, xPx(xCar), roadY, moving, xCar, S);
-        ctx.restore();
-      }
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 176));
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, elapsed, LIGHT);
     }
-    if(reduce){ paint(cycle); return; }
-    function loop(now){
-      if(ov.classList.contains('hidden')) return;
-      paint(((now - t0) / 1000) % cycle);
-      heroRaf = requestAnimationFrame(loop);
-    }
-    heroRaf = requestAnimationFrame(loop);
+    if(reduce){ paint(2.0); return; }             // static: stopped, bar complete
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      paint(((typeof now === "number" ? now : t0) - t0) / 1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

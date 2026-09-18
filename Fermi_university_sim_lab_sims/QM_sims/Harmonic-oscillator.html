@@ -455,7 +455,7 @@
     <div class="welcome-card">
       <div class="welcome-hero">
         <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-        <span class="hero-label">The oscillator well with the probability clouds of its lowest states</span>
+        <span class="hero-label">The parabolic well with one energy level drawn on it, carrying the probability density of that state between its turning points</span>
       </div>
       <div class="welcome-body">
         <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Quantum Harmonic Oscillator</span></h2>
@@ -1436,17 +1436,21 @@ else init();
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#panelPotential',mode:'show', title:'Potential & levels',  text:'The parabola V(x), its ladder of allowed energies, and turning-point arrows.' },
+    { sel:'#panelWavefn',   mode:'show', title:'Wavefunction ψ(x,t)', text:'Real and imaginary parts of the state, rotating in time.' },
+    { sel:'#panelProb',     mode:'show', title:'Probability density', text:'|ψ|² — where the particle is likely to be found.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#btnPlayPause',  mode:'veil', title:'Play / Pause',        text:'Runs and freezes the time evolution of the wavefunction.' },
     { sel:'#btnReset',      mode:'veil', title:'Reset',               text:'Restarts the clock at t = 0 and resumes playing.' },
-    { sel:'#panelPotential',mode:'veil', title:'Potential & levels',  text:'The parabola V(x), its ladder of allowed energies, and turning-point arrows.' },
-    { sel:'#panelWavefn',   mode:'veil', title:'Wavefunction ψ(x,t)', text:'Real and imaginary parts of the state, rotating in time.' },
-    { sel:'#panelProb',     mode:'veil', title:'Probability density', text:'|ψ|² — where the particle is likely to be found.' },
-    { sel:'#boxParams',     mode:'hide', title:'Live values',         text:'Time, energy Eₙ, classical turning points and the oscillator length.' },
-    { sel:'#boxEquations',  mode:'hide', title:'Equations',           text:'The Schrödinger equation for this potential and its energy levels.' },
     { sel:'#boxN',          mode:'hide', title:'Quantum state n',     text:'Selects which allowed state ψₙ is shown in every panel.' },
     { sel:'#boxMass',       mode:'hide', title:'Mass m',              text:'A heavier particle makes the wavefunction narrower and more compact.' },
     { sel:'#boxOmega',      mode:'hide', title:'Angular frequency ω', text:'A stiffer spring: narrower states and a steeper parabola.' },
     { sel:'#speedControlGroup', mode:'hide', title:'Animation speed', text:'Only how fast the plotted phase advances — no physics changes.' },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#boxParams',     mode:'hide', title:'Live values',         text:'Time, energy Eₙ, classical turning points and the oscillator length.' },
+    { sel:'#boxEquations',  mode:'hide', title:'Equations',           text:'The Schrödinger equation for this potential and its energy levels.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the info button and its modal. No theme toggle in this sim. */
   ];
@@ -1528,6 +1532,7 @@ else init();
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode==='show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -1618,23 +1623,43 @@ else init();
         'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
       ];
       /* Hero: this sim's own textbook picture — the parabolic well V = x²/2
-         (units m = ω = ħ = 1), the evenly spaced rungs Eₙ = n + ½ between
-         their turning points, and on each rung the probability density |ψₙ|²
-         built from the same Hermite functions the sim plots. One left-to-right
-         sweep as the entrance; never loops. */
+         (units m = ω = ħ = 1) with ONE rung on it, the ground state E₀ = ½,
+         and |ψ₀|² from the same Hermite functions the sim plots, drawn on that
+         rung between its turning points. One left-to-right sweep, a short
+         dwell, then the sweep replays.
+         Spoiler note: the old hero drew the first five rungs with a density on
+         each. The even rung spacing was card 5's answer, and every density ran
+         on past its turning points — card 3's answer. So only one rung is
+         drawn (no spacing to read) and the density stops at the dotted turning
+         points with nothing beyond them: the region card 3 asks about is left
+         blank rather than filled in or falsely flattened to zero.
+         Dark-only by design — this sim ships no light theme. */
+      let heroGen = 0;                                 // a re-entry cancels the running chain
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        /* The canvas is laid out at 100vw x 140px, so a fixed 1280x240 backing
+           store stretched every drawing by viewport/747. Size the backing store
+           from the element's real box x dpr and draw in CSS pixels. */
+        const rect = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(280, Math.round(rect.width  || 1280));
+        const H = Math.max(80,  Math.round(rect.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
         function herm(n,x){ if(n===0) return 1; if(n===1) return 2*x; let a=1,b=2*x;
           for(let i=2;i<=n;i++){ const t=2*x*b-2*(i-1)*a; a=b; b=t; } return b; }
         function fact(n){ let f=1; for(let i=2;i<=n;i++) f*=i; return f; }
         function prob(n,x){ const p = Math.pow(Math.PI,-0.25)/Math.sqrt(Math.pow(2,n)*fact(n))*herm(n,x)*Math.exp(-x*x/2); return p*p; }
-        const NMAX = 4, XR = 4.6, EMAX = 5.6, GAIN = 1.35, NX = 460;
-        const mapx = u => W*0.5 + (u/XR)*(W*0.30);
-        const mapy = E => H - 12 - (E/EMAX)*(H - 26);
+        const N0 = 0, XR = 2.2, EMAX = XR*XR/2, GAIN = 1.5, NX = 460;
+        const E0 = N0 + 0.5, XTP = Math.sqrt(2*E0);   // turning points of the drawn rung
+        // half-width 0.23W keeps the well inside the mask's opaque 22%–78% band
+        const mapx = u => W*0.5 + (u/XR)*(W*0.23);
+        const mapy = E => H - 10 - (E/EMAX)*(H - 22);
         const xs = i => -XR + 2*XR*i/NX;
-        const COLS = ['rgba(94,234,212,0.95)','rgba(96,165,250,0.95)','rgba(52,211,153,0.95)','rgba(244,114,182,0.9)','rgba(251,191,36,0.9)'];
+        const COL = 'rgba(94,234,212,0.95)';
         function seg(f, i0, i1, style, lw){
           ctx.strokeStyle = style; ctx.lineWidth = lw;
           ctx.beginPath();
@@ -1646,36 +1671,42 @@ else init();
           ctx.stroke();
         }
         function drawSlice(i0, i1){
-          const pReach = Math.sqrt(2*EMAX*1.03);
-          const pLo = Math.ceil((-pReach + XR)/(2*XR)*NX), pHi = Math.floor((pReach + XR)/(2*XR)*NX);
-          const p0 = Math.max(i0, pLo), p1 = Math.min(i1, pHi);
-          if(p1 > p0) seg(u => u*u/2, p0, p1, 'rgba(168,85,247,0.75)', 2.5);
-          for(let n=0;n<=NMAX;n++){
-            const E = n + 0.5, xtp = Math.sqrt(2*E);
-            const a = Math.max(xs(Math.max(0,i0-1)), -xtp), b2 = Math.min(xs(i1), xtp);
-            if(b2 > a){ ctx.strokeStyle='rgba(148,163,184,0.35)'; ctx.lineWidth=1;
-              ctx.beginPath(); ctx.moveTo(mapx(a), mapy(E)); ctx.lineTo(mapx(b2), mapy(E)); ctx.stroke(); }
-            /* clip each curve where its tail has decayed, so it never reads
-               as a horizontal line running outside the well */
-            const reach = xtp + 1.7;
-            const cutLo = Math.ceil((-reach + XR)/(2*XR)*NX), cutHi = Math.floor((reach + XR)/(2*XR)*NX);
-            const s0 = Math.max(i0, cutLo), s1 = Math.min(i1, cutHi);
-            if(s1 > s0) seg(u => E + prob(n,u)*GAIN, s0, s1, COLS[n], 2);
-          }
+          seg(u => u*u/2, i0, i1, 'rgba(168,85,247,0.75)', 2.5);      // the well
+          const tpLo = Math.ceil((-XTP + XR)/(2*XR)*NX), tpHi = Math.floor((XTP + XR)/(2*XR)*NX);
+          const a = Math.max(xs(Math.max(0,i0-1)), -XTP), b2 = Math.min(xs(i1), XTP);
+          if(b2 > a){ ctx.strokeStyle='rgba(148,163,184,0.45)'; ctx.lineWidth=1;   // the rung
+            ctx.beginPath(); ctx.moveTo(mapx(a), mapy(E0)); ctx.lineTo(mapx(b2), mapy(E0)); ctx.stroke(); }
+          /* the density, drawn only between the turning points: what lies
+             beyond them is the question card 3 puts, so it is left empty */
+          const s0 = Math.max(i0, tpLo), s1 = Math.min(i1, tpHi);
+          if(s1 > s0) seg(u => E0 + prob(N0,u)*GAIN, s0, s1, COL, 2);
+          // dotted markers where the rung meets the well
+          ctx.save(); ctx.setLineDash([3,3]); ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(148,163,184,0.5)';
+          [-XTP, XTP].forEach(u => {
+            const iu = (u + XR)/(2*XR)*NX;
+            if(iu >= i0 && iu <= i1){
+              ctx.beginPath(); ctx.moveTo(mapx(u), mapy(E0)); ctx.lineTo(mapx(u), mapy(E0) + 12); ctx.stroke();
+            }
+          });
+          ctx.restore();
         }
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if(reduce){ drawSlice(0, NX); return; }        // one frame under reduced motion
-        const F = 46, per = Math.ceil(NX / F);
-        let k = 0;
-        (function step(){                              // accumulate once as the entrance; never loop
-          const i0 = k*per, i1 = Math.min(NX, (k+1)*per);
-          if(i0 >= NX) return;
-          drawSlice(i0, i1); k++;
+        const F = 46, per = Math.ceil(NX / F), DWELL = 84;  // ~0.77 s sweep + ~1.4 s dwell
+        const gen = ++heroGen;
+        let k = 0, dwell = 0;
+        (function step(){                              // sweep, hold, then clear and replay
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          const i0 = k*per;
+          if(i0 < NX){ drawSlice(i0, Math.min(NX, i0+per)); k++; }
+          else if(++dwell > DWELL){ ctx.clearRect(0,0,W,H); k = 0; dwell = 0; }
           requestAnimationFrame(step);
         })();
       }
 
       drawHero();
+      addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       const synth = window.speechSynthesis;
       // Transport state: current line, char offset inside it (from boundary events), playing flag.
       let idx = 0, charAt = 0, playing = false, current = null, finished = false;

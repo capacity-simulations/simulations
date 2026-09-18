@@ -335,7 +335,7 @@ html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{bac
   <div class="welcome-card">
     <div class="welcome-hero">
       <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-      <span class="hero-label">P₊ over time for spins prepared at five different tilts from the z axis</span>
+      <span class="hero-label">P₊ over time for a spin prepared at one tilt from the z axis</span>
     </div>
     <div class="welcome-body">
       <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Measuring spin along X</span></h2>
@@ -1506,17 +1506,21 @@ requestAnimationFrame(animate);
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#bcc',           mode:'show', title:'Bloch sphere',     text:'The state as an arrow; drag to rotate the view.' },
+    { sel:'#p1c',           mode:'show', title:'Probability plot', text:'P₊ for an Sᵡ measurement, against time.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#plB',           mode:'veil', title:'Pause / Play',     text:'Freezes or resumes the time evolution of the state.' },
     { sel:'#rsB',           mode:'veil', title:'Reset',            text:'Returns the clock to t = 0 and the first-load state.' },
-    { sel:'#bcc',           mode:'veil', title:'Bloch sphere',     text:'The state as an arrow; drag to rotate the view.' },
-    { sel:'#p1c',           mode:'veil', title:'Probability plot', text:'P₊ for an Sᵡ measurement, against time.' },
     { sel:'#plotMaxBloch',  mode:'veil', title:'Maximize a panel', text:'Expands one plot to fill the view; click again to restore.', also:['#plotMaxProb'] },
     { sel:'#boxAlpha',      mode:'hide', title:'α and β',          text:'The up and down amplitudes; each slider moves the other.', also:['#boxBeta'] },
     { sel:'#boxOmega',      mode:'hide', title:'μB',               text:'Field strength — the precession rate about the z axis.' },
     { sel:'#boxSpeed',      mode:'hide', title:'Speed',            text:'Scales the animation clock only; the physics is unchanged.' },
+    /* 4 · readouts — what the student can measure */
     { sel:'#outBox',        mode:'hide', title:'Live readout',     text:'The current time t and the probability P₊.' },
     { sel:'#stateBox',      mode:'hide', title:'Prepared state',   text:'The initial state written in the up-down basis.' },
     { sel:'#eqBlock',       mode:'hide', title:'P₊ equation',      text:'The closed form behind the curve on screen.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the ⓘ About tooltip. The "Drag to rotate" hint
        sits inside the Bloch panel and is covered by that step. */
@@ -1597,7 +1601,13 @@ requestAnimationFrame(animate);
     cgStep = Math.max(0, Math.min(n, cgSteps.length-1));
     cgMax = Math.max(cgMax, cgStep);
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
-    cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
+    cgSteps.forEach(st=>{
+      if(st.mode==='show'){   // always visible; only the glow moves
+        [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
+          t.classList.remove('cg-glow','cg-hidden','cg-veiled'); });
+        return;
+      }
+      [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
@@ -1680,45 +1690,87 @@ requestAnimationFrame(animate);
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to measuring spin along X.',
-    'A spin sits in a magnetic field pointing along z. Its arrow precesses around that axis, and the probability that a measurement along x returns plus h bar over two rises and falls with it. How far that probability swings is fixed by how the spin was prepared.',
+    'A spin sits in a magnetic field pointing along z, and its arrow precesses around that axis. At every instant the plot gives the probability that a measurement along x returns plus h bar over two.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's own result, P+(t) = ½(1 + 2αβ cos(μBt)) for an S^x
-     measurement, sampled as dots along the curve — one trace per prepared
-     amplitude α. Every trace is centred on 0.5; the SWING is 2αβ, so the
-     traces flatten as α climbs to 1, where a z-sharp spin sits at 0.5 for
-     ever. That shrinking envelope is the whole sim in one picture. */
+  /* Hero: this sim's own result, P₊(t) = ½(1 + 2αβ cos(μBt)) for an S^x
+     measurement, sampled as dots along the curve — for ONE prepared tilt only.
+     The old hero drew five values of α at once, and the shrinking envelope of
+     that family answered three gated cards: α = 1 sitting flat at 0.5 (card 2),
+     α = 1/√2 swinging the whole 0→1 (card 3) and the near-z tilt pinched about
+     0.5 (card 4). A single trace shows the apparatus — P₊ rides a cosine about
+     0.5 at the Larmor rate — without showing how the swing depends on α, and the
+     one α drawn (√0.9, swing 2αβ = 0.60, so P₊ runs 0.20…0.80) is deliberately
+     none of the three the cards ask about. The little arrow above the frame is
+     that state's Bloch tilt, 36.87° from z. Canvas is sized from its CSS box ×
+     devicePixelRatio and drawn in CSS px, so x and y share one scale. */
+  let heroGen = 0;                                // generation token: only the newest chain paints
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    const rect = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(rect.width || 1280));
+    const H = Math.max(100, Math.round(rect.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);       // draw in CSS px: one scale for x and y
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-    const ALPHAS = [0.7071, 0.87, 0.95, 0.99, 1.0];
-    const DARK  = ['rgba(96,165,250,.95)','rgba(125,211,252,.90)','rgba(94,234,212,.85)','rgba(244,114,182,.80)','rgba(251,191,36,.85)'];
-    const LIGHTC= ['rgba(29,78,216,.90)','rgba(7,110,160,.85)','rgba(13,120,110,.85)','rgba(157,23,104,.80)','rgba(146,90,10,.85)'];
-    const cols = LIGHT ? LIGHTC : DARK;
-    const pad = 24, top = pad, bot = H - pad;
-    const TOT = 430, TMAX = 4*Math.PI;            // two full Larmor periods at μB = 1
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const gen = ++heroGen;                        // supersedes any chain already running
+    const xl = W*0.245, xr = W*0.755;             // the hero mask only fully clears 22–78%
+    const top = 24, bot = H - 24;                 // P₊ = 1 at top, P₊ = 0 at bottom
+    const A2 = 0.9, ALPHA = Math.sqrt(A2), BETA = Math.sqrt(1 - A2);
+    const TMAX = 4*Math.PI;                       // two Larmor periods at μB = 1
+    const DOT  = LIGHT ? 'rgba(29,78,216,0.92)'   : 'rgba(96,165,250,0.95)';
+    const RAIL = LIGHT ? 'rgba(15,23,42,0.22)'    : 'rgba(226,232,240,0.26)';
+    const ARR  = LIGHT ? 'rgba(51,65,85,0.75)'    : 'rgba(203,213,225,0.75)';
+    function base(){                              // the P₊ = 0 and P₊ = 1 rails, and the prepared tilt
+      ctx.clearRect(0,0,W,H);                     // transparent: the overlay dim is the backdrop
+      ctx.strokeStyle = RAIL; ctx.lineWidth = 1.1; ctx.setLineDash([5,4]);
+      ctx.beginPath();
+      ctx.moveTo(xl, top); ctx.lineTo(xr, top);
+      ctx.moveTo(xl, bot); ctx.lineTo(xr, bot);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const th = Math.acos(2*A2 - 1);             // the drawn state's tilt from +z
+      const ax = xl + 13, ay = 12, hl = 9;
+      const dx = Math.sin(th), dy = -Math.cos(th);
+      ctx.strokeStyle = ARR; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ax - dx*hl, ay - dy*hl); ctx.lineTo(ax + dx*hl, ay + dy*hl);
+      ctx.moveTo(ax + dx*hl - dx*5 - dy*3, ay + dy*hl - dy*5 + dx*3);
+      ctx.lineTo(ax + dx*hl, ay + dy*hl);
+      ctx.lineTo(ax + dx*hl - dx*5 + dy*3, ay + dy*hl - dy*5 - dx*3);
+      ctx.stroke();
+    }
+    base();
+    const TOT = 320, reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let drawn = 0;
     function slice(n){
+      ctx.fillStyle = DOT;
       for(let k=0; k<n && drawn<TOT; k++, drawn++){
-        const frac = drawn/(TOT-1), tt = frac*TMAX, x = frac*W;
-        for(let i=0;i<ALPHAS.length;i++){
-          const a = ALPHAS[i], b = Math.sqrt(Math.max(0, 1-a*a));
-          const P = 0.5*(1 + 2*a*b*Math.cos(tt));
-          ctx.fillStyle = cols[i];
-          ctx.fillRect(x, top + (1-P)*(bot-top), 2.2, 2.2);
-        }
+        const frac = drawn/(TOT-1), tt = frac*TMAX;
+        const P = 0.5*(1 + 2*ALPHA*BETA*Math.cos(tt));
+        ctx.fillRect(xl + frac*(xr-xl-2.2), top + (1-P)*(bot-top), 2.2, 2.2);
       }
     }
-    if(reduce){ slice(TOT); return; }             // one frame under reduced motion
-    (function step(){ slice(9); if(drawn < TOT) requestAnimationFrame(step); })();
+    if(reduce){ slice(TOT); return; }             // exactly one frame under reduced motion
+    const DWELL = 80;                             // ~1.3 s hold, then the trace replays
+    let hold = 0;
+    (function step(){                             // repeating cycle: trace, dwell, wipe, repeat
+      if(gen !== heroGen || ov.classList.contains('hidden')) return;
+      if(drawn < TOT) slice(9);
+      else if(++hold >= DWELL){ hold = 0; drawn = 0; base(); }
+      requestAnimationFrame(step);
+    })();
   }
   drawHero();
+  // A viewport change alters the CSS box, so the backing store and the layout must be rebuilt
+  window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
+
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

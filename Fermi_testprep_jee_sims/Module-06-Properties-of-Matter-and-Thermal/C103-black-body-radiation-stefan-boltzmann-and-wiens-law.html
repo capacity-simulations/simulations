@@ -1616,7 +1616,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Black body radiation</span></h2>
-            <p class="welcome-blurb">A hot body radiates a spectrum. Watch where the curve sits relative to the light your eye can see.</p>
+            <p class="welcome-blurb">A hot body radiates a spectrum — where does the curve sit against the visible band?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3546,41 +3546,133 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: one Planck curve at 3000 K + visible band — the 6000 K overlay is the gated doubling. */
+  /* Hero: the sim's OPENING scene made alive but unspoiled — a glowing body,
+     its single Planck curve at 3000 K drawing itself on, and a real rainbow
+     strip for the visible band (380–750 nm), exactly what the hero-label
+     promises.
+
+     SPOILER DECISION (gated cards read before this redesign): the gated
+     predict (card 2) asks what happens to the TOTAL RADIATED POWER when T is
+     doubled — the T⁴ / ×16 growth. The recommended multi-temperature reveal
+     (2–3 curves at rising T, peak shifting, area growing) would visibly answer
+     that question — and eliminate its "power goes down" distractor — before
+     it is asked, so it is deliberately NOT used. This is the premise-only
+     fallback: ONE curve at 3000 K (card 1's ungated scene), the rainbow band,
+     and a glowing body pulsing at its 3000 K colour. No 6000 K curve, no
+     peak-march, no area comparison is drawn.
+
+     Backing store is sized every paint from getBoundingClientRect()×dpr and
+     drawn in CSS px (kills the authored-attribute squash); heroToken keeps one
+     animation alive; reduced-motion paints the finished frame once. All
+     essentials sit inside 24–76% of the displayed width (the CSS mask fades
+     everything outside 22–78%). */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
     const h = 6.62607015e-34, cc = 2.99792458e8, k = 1.380649e-23;
     function B(lam, T){
       const x = h*cc/(lam*k*T);
       if(!(x < 700)) return 0;
       return (2*h*cc*cc)/(lam*lam*lam*lam*lam) / (Math.exp(x) - 1);
     }
-    const lam0 = 200e-9, lam1 = 2500e-9;
-    const Tlo = 3000;
+    const lam0 = 200e-9, lam1 = 2500e-9, T0 = 3000, NPTS = 80;
     let Bmax = 0;
-    for(let i=0;i<=80;i++){
-      const lam = lam0 + (lam1-lam0)*i/80;
-      Bmax = Math.max(Bmax, B(lam, Tlo));
+    for(let i=0;i<=NPTS;i++){
+      const lam = lam0 + (lam1-lam0)*i/NPTS;
+      Bmax = Math.max(Bmax, B(lam, T0));
     }
-    const x0 = W*0.12, x1 = W*0.88, yBase = H*0.86, yTop = H*0.14;
-    const xAt = lam => x0 + ((lam-lam0)/(lam1-lam0))*(x1-x0);
-    const yAt = val => yBase - (val/Bmax)*(yBase-yTop);
-    ctx.fillStyle = LIGHT ? 'rgba(251,191,36,.10)' : 'rgba(251,191,36,.12)';
-    ctx.fillRect(xAt(380e-9), yTop, xAt(750e-9)-xAt(380e-9), yBase-yTop);
-    ctx.strokeStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for(let i=0;i<=80;i++){
-      const lam = lam0 + (lam1-lam0)*i/80;
-      const x = xAt(lam), y = yAt(B(lam, Tlo));
-      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    // prog: 0→1 draw-on of the curve; pulse: 0→1 glow breathing
+    function paint(prog, pulse){
+      const rct = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(rct.width || 1280));
+      const H = Math.max(100, Math.round(rct.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background
+      const soft = LIGHT ? 'rgba(15,23,42,.45)' : 'rgba(148,163,184,.6)';
+      // glowing body on the left, plot to its right — all inside the 24–76% band
+      const bodyX = W*0.275, bodyY = H*0.46;
+      const x0 = W*0.325, x1 = W*0.745, yBase = H*0.80, yTop = H*0.16;
+      const xAt = lam => x0 + ((lam-lam0)/(lam1-lam0))*(x1-x0);
+      const yAt = val => yBase - (val/Bmax)*(yBase-yTop);
+      // rainbow band for the visible range: a soft column wash on the plot plus
+      // a saturated strip along the axis — "the rainbow strip your eye can see"
+      const vx0 = xAt(380e-9), vx1 = xAt(750e-9);
+      const grad = ctx.createLinearGradient(vx0, 0, vx1, 0);
+      [[0,'#7c3aed'],[0.18,'#3b82f6'],[0.35,'#22d3ee'],[0.52,'#22c55e'],[0.70,'#eab308'],[0.85,'#f97316'],[1,'#ef4444']]
+        .forEach(s => grad.addColorStop(s[0], s[1]));
+      ctx.globalAlpha = LIGHT ? 0.14 : 0.16;
+      ctx.fillStyle = grad; ctx.fillRect(vx0, yTop, vx1-vx0, yBase-yTop);
+      ctx.globalAlpha = LIGHT ? 0.85 : 0.9;
+      ctx.fillRect(vx0, yBase+3, vx1-vx0, 5);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('visible', (vx0+vx1)/2, yBase+10);
+      // wavelength axis
+      ctx.strokeStyle = soft; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x0, yBase); ctx.lineTo(x1+10, yBase); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1+10, yBase); ctx.lineTo(x1+3, yBase-3.5);
+      ctx.moveTo(x1+10, yBase); ctx.lineTo(x1+3, yBase+3.5); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText('λ', x1+4, yBase-5);
+      // the single 3000 K Planck curve, drawing itself on left→right
+      const upTo = Math.max(1, Math.round(NPTS*prog));
+      const AMBER = LIGHT ? 'rgba(180,83,9,.9)' : 'rgba(251,191,36,.92)';
+      ctx.beginPath();
+      for(let i=0;i<=upTo;i++){
+        const lam = lam0 + (lam1-lam0)*i/NPTS;
+        const x = xAt(lam), y = yAt(B(lam, T0));
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle = AMBER; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+      // whisper of a fill under the drawn part (premise: card 1 shows this curve whole)
+      ctx.lineTo(xAt(lam0 + (lam1-lam0)*upTo/NPTS), yBase); ctx.lineTo(x0, yBase); ctx.closePath();
+      ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.07)' : 'rgba(251,191,36,.08)';
+      ctx.fill();
+      // temperature tag near the (already-drawn) peak — λpeak(3000 K) ≈ 966 nm
+      if(prog > 0.45){
+        ctx.fillStyle = soft; ctx.font = '12px '+FAM;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+        ctx.fillText('3000 K', xAt(966e-9)+10, yAt(Bmax)+2);
+      }
+      // the glowing body, breathing at its 3000 K colour
+      const rB = 11 + 1.6*pulse;
+      const halo = ctx.createRadialGradient(bodyX, bodyY, rB*0.4, bodyX, bodyY, rB*2.6);
+      halo.addColorStop(0, LIGHT ? 'rgba(234,88,12,.5)' : 'rgba(255,157,66,.55)');
+      halo.addColorStop(1, 'rgba(255,157,66,0)');
+      ctx.globalAlpha = 0.5 + 0.3*pulse;
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(bodyX, bodyY, rB*2.6, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+      const sph = ctx.createRadialGradient(bodyX-rB*0.3, bodyY-rB*0.3, rB*0.15, bodyX, bodyY, rB);
+      sph.addColorStop(0, '#ffd9a0'); sph.addColorStop(1, '#e8641b');
+      ctx.fillStyle = sph;
+      ctx.beginPath(); ctx.arc(bodyX, bodyY, rB, 0, 7); ctx.fill();
+      ctx.fillStyle = soft; ctx.font = '11px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('a glowing body', bodyX, bodyY+rB*2.6+2);
     }
-    ctx.stroke();
+    if(reduce){ paint(1, 0.5); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((now || t0) - t0)/1000;
+      const p = Math.min(1, s/2.4);
+      paint(p*p*(3-2*p), 0.5 + 0.5*Math.sin(s*2.0));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

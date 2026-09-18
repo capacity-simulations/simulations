@@ -428,11 +428,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time snapshots along each orbit — denser where the planet is slower</span>
+            <span class="hero-label">Mercury, Earth and Mars to scale — nested ellipses sharing the Sun at one focus</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Solar system orbits</span></h2>
-            <p class="welcome-blurb">Watch the planets trace their orbits — each one speeds up near the Sun and slows down far from it.</p>
+            <p class="welcome-blurb">Three planets, one Sun — where along an orbit does a planet move fastest?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2163,44 +2163,121 @@ const Shell = (function(){
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to solar system orbits.',
-    'Here you watch the planets trace their orbits around the Sun. Every orbit is an ellipse with the Sun at one focus, and each planet speeds up as it swings close to the Sun and slows down far away.',
+    'Here you watch the planets trace their orbits around the Sun. You will look at the shape of each orbit, and at where along it a planet moves fastest.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's Kepler ellipses (Sun at a focus) drawn as EQUAL-TIME
-     dots. Density is high at aphelion (slow) and sparse at perihelion (fast).
-     Orbits use this sim's eccentricities: Mercury 0.206, Mars 0.093, Earth 0.017. */
+  /* Hero: the sim's inner planets drawn TRUE — Mercury, Earth and Mars as
+     nested Kepler ellipses with the data table's real elements (Mercury
+     a=0.3871 e=0.2056 INNERMOST, Earth a=1.0000 e=0.0167, Mars a=1.5237
+     e=0.0934 outermost), at ONE uniform AU→px scale on both axes, face-on
+     (no tilt), Sun at the shared focus and all perihelia along +x exactly
+     as in the sim. The old art reversed the ordering (Mercury outermost,
+     Earth innermost — contradicting the sim's own table), advanced all
+     three at one mean-anomaly rate (equal periods — anti-Kepler III) and
+     flattened y by 0.40 on top of a ~2:1 CSS squash, so apparent shapes
+     were pure artefact and final markers were hard-coded #fff.
+     SPOILER GATE (recorded): card 2 gates "where is Mercury fastest" (K2
+     speed variation) and card 4 gates "which orbit is least circular", so
+     per policy the hero drops ALL timing cues and stays a STATIC premise —
+     correctly ordered, correctly shaped orbits plus one theme-paired
+     planet marker each; no equal-time dots, no speed/period cues, no
+     annotations. (Correct shapes are premise: the sim shows analytic-
+     ellipse trails at rest from frame 0.) Backing store = the canvas's
+     CSS box × devicePixelRatio, drawn in CSS px; heroToken plus
+     resize/theme hooks keep exactly one paint current.
+
+     FIT, AND THE CONSTRAINT BEHIND IT. The scale is now the tighter of a
+     height budget and a width budget instead of a fixed number, and the
+     height budget is measured against the outermost orbit's SEMI-MINOR axis
+     (its true vertical half-extent) rather than its aphelion distance: the
+     family grows from 113 px to 131 px wide and fills the strip from y = 4.9
+     to y = 135.1. That is as far as it can honestly go. This is a TRUE-ASPECT
+     ellipse family — one AU→px scale on both axes, e = 0.0167…0.2056, so
+     every orbit is within 2.2% of round — and the band is one viewport wide
+     by 140 px tall. Filling 24–76% of a 1280 px band would need a figure
+     666 px across in a 140 px strip, i.e. a 4.8:1 horizontal stretch, which
+     would turn three near-circles into three cigars and destroy the very
+     thing card 4 asks about. So the orbits stay true and the WIDTH is carried
+     by the shared line of apsides, which spans 26.5–73.5% at every viewport.
+     Measured ink: orbit family 44.9–55.1% at 1280 (was 45.1–54.1%); all ink
+     26.4–73.6% at every width (was 32.6–64.4% at 360 falling to 46.7–52.7%
+     at 1920). Still deliberately STATIC — no animation, by standing
+     decision; the blurb no longer promises motion. */
+  let heroToken = 0;
+  const HERO_ORBITS = [   // this sim's own PLANETS table (inner view), M = static eccentric-anomaly park position
+    { a:0.3871, e:0.2056, M:2.3, ink:['rgba(87,83,78,.95)',  'rgba(214,211,209,.95)'] },  // Mercury — innermost, least circular
+    { a:1.0000, e:0.0167, M:0.7, ink:['rgba(2,132,199,.95)', 'rgba(125,211,252,.95)'] },  // Earth
+    { a:1.5237, e:0.0934, M:4.1, ink:['rgba(194,65,12,.95)', 'rgba(251,146,110,.95)'] }   // Mars — outermost
+  ];
+  function heroKepler(M, e){
+    let E = M;
+    for(let i=0;i<12;i++) E -= (E - e*Math.sin(E) - M)/(1 - e*Math.cos(E));
+    return E;
+  }
+  function paintHero(ctx, W, H, LIGHT){
+    ctx.clearRect(0,0,W,H);
+    // ONE uniform AU→px scale on both axes, taken as the tighter of the two
+    // budgets. Height: the outermost orbit's vertical half-extent is its SEMI-
+    // MINOR axis b = a√(1−e²) = 1.5171 AU (the old code divided by the aphelion
+    // DISTANCE a(1+e) = 1.6660 AU, which is the horizontal reach, not the
+    // vertical one, and so left ~9 px of the strip unused above and below).
+    // Width: the family spans a(1+e) left of the shared focus and a(1−e) right
+    // of it, and must stay inside the 24–76% opaque zone.
+    const oOut = HERO_ORBITS[HERO_ORBITS.length - 1];
+    const bOut = oOut.a*Math.sqrt(1 - oOut.e*oOut.e);
+    const xNeg = oOut.a*(1 + oOut.e), xPos = oOut.a*(1 - oOut.e);
+    const S  = Math.min((H*0.5 - 5.5)/bOut, (W*0.50)/(xNeg + xPos));
+    const cy = H*0.50;
+    const cx = W*0.50 + (xNeg - xPos)*0.5*S;   // centres the INK, not the focus
+    const P = (o, E) => ({ x: cx + o.a*(Math.cos(E) - o.e)*S,
+                           y: cy - o.a*Math.sqrt(1 - o.e*o.e)*Math.sin(E)*S });
+    // The shared LINE OF APSIDES, drawn first and under everything: every
+    // perihelion in this family lies along +x from the common focus, so it is
+    // the one axis all three orbits share. It runs the opaque span because the
+    // band is ~14:1 and a true-aspect ellipse family cannot fill that without
+    // being stretched — the width is carried by the axis, not by the orbits.
+    ctx.save();
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(148,163,184,.20)';
+    ctx.lineWidth = 1; ctx.setLineDash([5,7]);
+    ctx.beginPath(); ctx.moveTo(W*0.265, cy); ctx.lineTo(W*0.735, cy); ctx.stroke();
+    ctx.restore();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.32)' : 'rgba(148,163,184,.30)';
+    HERO_ORBITS.forEach(o => {
+      ctx.beginPath();
+      for(let k=0;k<=240;k++){ const q = P(o, k/240*2*Math.PI); k===0 ? ctx.moveTo(q.x,q.y) : ctx.lineTo(q.x,q.y); }
+      ctx.closePath(); ctx.stroke();
+    });
+    // Sun at the shared focus — small enough not to swallow Mercury's ~11 px perihelion
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 9);
+    g.addColorStop(0,'rgba(255,224,130,1)'); g.addColorStop(.4,'rgba(255,196,60,.9)'); g.addColorStop(1,'rgba(255,196,60,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, 7); ctx.fill();
+    // One planet per orbit, parked at its own exact conic point (theme-paired ink, no #fff)
+    HERO_ORBITS.forEach(o => {
+      const q = P(o, heroKepler(o.M, o.e));
+      ctx.fillStyle = o.ink[LIGHT ? 0 : 1];
+      ctx.beginPath(); ctx.arc(q.x, q.y, 3.4, 0, 7); ctx.fill();
+    });
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    ++heroToken;      // static art: bumping the token invalidates any stale callback
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const orbits = [ {a:0.32, e:0.017}, {a:0.55, e:0.093}, {a:0.86, e:0.206} ];
-    const S = W*0.235, YS = 0.40;
-    const cx = W*0.50 + S*0.18, cy = H*0.52;
-    const kepler = (M, e) => { let E = M; for(let i=0;i<8;i++) E -= (E - e*Math.sin(E) - M)/(1 - e*Math.cos(E)); return E; };
-    const pos = (o, M) => { const E = kepler(M, o.e); const x = o.a*(Math.cos(E) - o.e), y = o.a*Math.sqrt(1-o.e*o.e)*Math.sin(E); return {x: cx + x*S, y: cy - y*S*YS}; };
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.16)'; ctx.lineWidth = 1;
-    orbits.forEach(o => { ctx.beginPath(); for(let k=0;k<=240;k++){ const p = pos(o, k/240*2*Math.PI); k===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y); } ctx.closePath(); ctx.stroke(); });
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26); g.addColorStop(0,'rgba(255,224,130,1)'); g.addColorStop(.35,'rgba(255,196,60,.9)'); g.addColorStop(1,'rgba(255,196,60,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, 7); ctx.fill();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 140; let k = 0;
-    function batch(){
-      const per = reduce ? N : 3;
-      for(let s=0;s<per && k<N;s++,k++){
-        orbits.forEach((o,i) => { const p = pos(o, k/N*2*Math.PI + i*0.9);
-          ctx.fillStyle = LIGHT ? (i===2 ? 'rgba(5,150,105,.9)' : i===1 ? 'rgba(2,132,199,.85)' : 'rgba(217,119,6,.85)') : (i===2 ? 'rgba(110,231,183,.9)' : i===1 ? 'rgba(125,211,252,.85)' : 'rgba(253,224,171,.85)');
-          ctx.beginPath(); ctx.arc(p.x, p.y, 3.0, 0, 7); ctx.fill(); });
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else orbits.forEach((o,i) => { const p = pos(o, i*0.9); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill(); });
-    }
-    batch();
+    const r = c.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(360, Math.round(r.width || 1280));
+    const H = Math.max(100, Math.round(r.height || 140));
+    const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+    if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paintHero(ctx, W, H, LIGHT);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

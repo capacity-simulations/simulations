@@ -803,7 +803,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A constant force acting over a distance — the shaded area is the work done</span>
+            <span class="hero-label">A constant force acting over a distance — the shaded area under the F–x line and the kinetic-energy bar grow by the same joules</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Work–energy theorem</span></h2>
@@ -2862,14 +2862,25 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   ];
   /* Hero: the work–energy equality drawn live from this sim's default run
      (m = 2 kg, v₀ = 3 m/s, F = 20 N, d = 2 m). The shaded area under the
-     constant-F line fills in strip by strip while the KE bar on the right grows
-     by exactly the same number of joules; equal-time dots along the track
-     spread out as the block speeds up. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+     constant-F line fills in while the KE bar to its right grows by exactly
+     the same number of joules; equal-time dots along the track spread out as
+     the block speeds up.
+
+     Spoiler check (gated cards read before this pass): the two data-gate
+     predicts are card 2 (a perpendicular force does zero work) and card 5
+     (double the work → v = √89 ≈ 9.43 m/s). The area = ΔKE equality itself is
+     NOT gated — card 1, card 6 and the welcome narration all state it openly —
+     so the tiny "work = area" and "ΔKE" captions below give nothing away, and
+     neither mentions angles or doubling, so both gated predictions stay live.
+
+     The canvas is sized to its OWN CSS box (rect × devicePixelRatio) on every
+     draw rather than to the 1280×240 authored in the markup: the band is one
+     viewport wide and 140px tall, so the authored store was being stretched
+     ~2:1 and the graph came out squashed. The overlay's edge fade is opaque
+     only between 22% and 78%, so the graph (26%–60%), the KE bar with its
+     green ΔKE outline (66%–71%) and both captions sit inside 24%–76%. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
     const amber     = LIGHT ? 'rgba(180,83,9,.9)'   : 'rgba(251,191,36,.9)';    // F line (work)
     const amberFill = LIGHT ? 'rgba(217,119,6,.20)' : 'rgba(245,158,11,.22)';   // shaded area
     const green     = LIGHT ? 'rgba(5,150,105,.9)'  : 'rgba(110,231,183,.9)';   // ΔKE growth
@@ -2877,50 +2888,73 @@ Shell.init({ onFrame, onReset, onResize, onStep });
     const blueFill  = LIGHT ? 'rgba(2,132,199,.35)' : 'rgba(96,165,250,.35)';   // KE₀ base
     const blueDot   = LIGHT ? 'rgba(2,132,199,.9)'  : 'rgba(125,211,252,.95)';  // block positions
     const axis      = LIGHT ? 'rgba(15,23,42,.30)'  : 'rgba(148,163,184,.30)';
-    // layout: F–x graph on the left, KE bar on the right
-    const gx0 = W*0.16, gx1 = W*0.62, gy0 = H*0.84, gy1 = H*0.16;
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    // layout: F–x graph on the left, KE bar to its right — everything in 24–76%
+    const gx0 = W*0.26, gx1 = W*0.60, gy0 = H*0.78, gy1 = H*0.14;
     const yF = gy0 - (gy0-gy1)*0.58;               // the constant-F line
-    const bx = W*0.74, bw = W*0.055;
+    const bx = W*0.66, barw = W*0.05;
     // the default run: a = F/m = 10 m/s², KE goes 9 J → 49 J over d = 2 m
     const V0 = 3, Fc = 20, m = 2, D = 2, a = Fc/m;
     const KE0 = 0.5*m*V0*V0, KEf = KE0 + Fc*D;
     const tEnd = (Math.sqrt(V0*V0 + 2*a*D) - V0)/a;
     const keH = j => (gy0-gy1) * j/KEf;            // joules → bar pixels (shared scale)
-    // axes, bar frame, KE₀ base, and the F line — drawn once; the rest accumulates
+    // axes, bar frame, KE₀ base, and the F line
     ctx.strokeStyle = axis; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(gx0, gy1-6); ctx.lineTo(gx0, gy0); ctx.lineTo(gx1+14, gy0); ctx.stroke();
-    ctx.strokeRect(bx, gy1, bw, gy0-gy1);
-    ctx.fillStyle = blueFill; ctx.fillRect(bx, gy0-keH(KE0), bw, keH(KE0));
+    ctx.strokeRect(bx, gy1, barw, gy0-gy1);
+    ctx.fillStyle = blueFill; ctx.fillRect(bx, gy0-keH(KE0), barw, keH(KE0));
     ctx.strokeStyle = amber; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(gx0, yF); ctx.lineTo(gx1, yF); ctx.stroke();
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 110; let k = 0, dots = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && k<N;s++,k++){
-        const f0 = k/N, f1 = (k+1)/N;
-        // the shaded area fills in strip by strip…
-        ctx.fillStyle = amberFill;
-        ctx.fillRect(gx0 + (gx1-gx0)*f0, yF, (gx1-gx0)*(f1-f0)+0.6, gy0-yF);
-        // …and the KE bar grows by exactly the same number of joules
-        const j0 = KE0 + (KEf-KE0)*f0, j1 = KE0 + (KEf-KE0)*f1;
-        ctx.fillStyle = greenFill;
-        ctx.fillRect(bx, gy0-keH(j1), bw, keH(j1)-keH(j0)+0.6);
-        // equal-time dots along the track: they spread out as the block speeds up
-        while(dots < 12){
-          const t = dots/11*tEnd, x = (V0*t + 0.5*a*t*t)/D;
-          if(x > f1) break;
-          ctx.fillStyle = blueDot;
-          ctx.beginPath(); ctx.arc(gx0 + (gx1-gx0)*x, gy0, 3.2, 0, 7); ctx.fill();
-          dots++;
-        }
-      }
-      if(k < N) requestAnimationFrame(batch);
-      else { ctx.strokeStyle = green; ctx.lineWidth = 2; ctx.strokeRect(bx, gy0-keH(KEf), bw, keH(KEf)-keH(KE0)); }
+    // the shaded area filled up to fraction u of the slide…
+    ctx.fillStyle = amberFill;
+    ctx.fillRect(gx0, yF, (gx1-gx0)*u, gy0-yF);
+    // …and the KE bar grown by exactly the same number of joules
+    const j = KE0 + (KEf-KE0)*u;
+    ctx.fillStyle = greenFill;
+    ctx.fillRect(bx, gy0-keH(j), barw, keH(j)-keH(KE0));
+    // equal-time dots along the track: they spread out as the block speeds up
+    ctx.fillStyle = blueDot;
+    for(let d=0; d<12; d++){
+      const t = d/11*tEnd, x = (V0*t + 0.5*a*t*t)/D;
+      if(x > u+1e-9) break;
+      ctx.beginPath(); ctx.arc(gx0 + (gx1-gx0)*x, gy0, 3.2, 0, 7); ctx.fill();
     }
-    batch();
+    // payoff: the ΔKE growth outlined on the bar — inside the opaque band
+    if(u >= 1){ ctx.strokeStyle = green; ctx.lineWidth = 2; ctx.strokeRect(bx, gy0-keH(KEf), barw, keH(KEf)-keH(KE0)); }
+    // two tiny captions (the equality is un-gated — see spoiler note above)
+    ctx.font = '12px '+FAM; ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+    ctx.fillStyle = amber; ctx.fillText('work = area', (gx0+gx1)/2, H-4);
+    ctx.fillStyle = green; ctx.fillText('ΔKE', bx + barw/2, H-4);
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(1); return; }             // static final frame, ΔKE outlined
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((Math.max(0, now - t0))/1000) % 6.2;
+      paint(Math.min(1, s/4.4));                    // 4.4 s fill, 1.8 s dwell, repeat
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

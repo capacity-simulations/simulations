@@ -1574,7 +1574,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time positions of a falling drop — spacing grows, then stays even</span>
+            <span class="hero-label">A raindrop falling from rest: a fixed weight arrow down, a growing drag arrow up, and a v(t) curve caught mid-climb</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Terminal velocity</span></h2>
@@ -4076,120 +4076,162 @@ var SimCfg = (() => {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time dots of this sim's quadratic-drag fall from rest.
-     y(t) = (v_T²/g) ln(cosh(g t / v_T)), v_T = √(m g / c), defaults m=1, c=0.25.
-     Spacing grows while the drop accelerates, then stays even at v_T. */
+  /* Hero: the raindrop and the two FORCES on it, beside a v(t) curve that is
+     still climbing. It shows the mechanism, not the result.
+
+     SPOILER GATE (guided-inquiry cards read before drawing). Card 2 is
+     data-gate and asks "What happens to the drop's speed as it falls further
+     and further?", correct answer "Speed rises, then levels off at a constant
+     value". The previous hero handed that answer over three times: it ran the
+     fall all the way to v_T, drew a dashed asymptote labelled 'terminal
+     velocity', and printed the callout 'drag = weight → a = 0'. All three are
+     gone. The loop now stops at t = 0.78 s, where v/v_T = 0.84 and the drag
+     arrow is 0.71 × the weight arrow — visibly growing, visibly still shorter.
+     Card 1 is NOT gated and already names both arrows ("the pink arrow is its
+     weight… the blue arrow will be air drag"), so drawing the arrows and the
+     equal-time trail reveals nothing; the welcome blurb says the same. The
+     partial curve is deliberately left ambiguous between "rises forever" and
+     "levels off" — that is card 2's question, posed rather than answered.
+
+     Sizing: the backing store is taken from the canvas's OWN CSS box
+     (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…), all drawing
+     in CSS px) instead of the 1280×240 authored in the markup. The band is one
+     viewport wide and 140 px tall (≈10:1), so the old 5.3:1 store was squashed
+     ~2:1 vertically: the drop rendered as an ellipse and every 12 px label as
+     ~7 px of ink. The drop is drawn with arc() under a uniform transform, so
+     its x- and y-radii are now exactly equal.
+
+     Composition: the band's mask is opaque only over 22–78% of the displayed
+     width, so ALL ink here is kept inside 26–74%. The scene is centred and
+     capped at 620 CSS px; below 430 px of usable width the v(t) panel is
+     dropped and only the drop column is drawn. Nothing is left in the fade. */
   let heroRAF = 0;
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    // The sim's own story, animated: a raindrop falls, drag grows with speed
-    // until it balances weight, and v(t) flattens at the terminal velocity.
-    const G = 9.81, mass = 1, dragC = 0.25;
-    const vT = Math.sqrt(mass * G / dragC);
-    const vOf = t => vT * Math.tanh(G * t / vT);
-    const yOf = t => { const u = G * t / vT; return (vT*vT/G) * Math.log(Math.cosh(u)); };
-    const tMax = 2.6, yMax = yOf(tMax);
-    const LOOP = 5.4;                       // s wall-clock: 4.2 fall + hold + reset
-    function frame(tt){
-      const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-      ctx.clearRect(0,0,W,H);
-      const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-      const u = tt % LOOP;
-      const t = Math.min(tMax, (u/4.2) * tMax);            // physics time
-      const v = vOf(t), atTerm = v/vT > 0.985;
-      const cW = LIGHT ? '#dc2626' : '#f43f5e';            // weight
-      const cD = LIGHT ? '#2563eb' : '#60a5fa';            // drag
-      const cT = LIGHT ? '#059669' : '#34d399';            // terminal
-      const mute = LIGHT ? '#475569' : '#94a3b8';
-      const ink  = LIGHT ? '#0f172a' : '#e2e8f0';
+  // The miniature runs this sim's own quadratic-drag fall from rest:
+  // v(t) = v_T tanh(g t / v_T), y(t) = (v_T²/g) ln cosh(g t / v_T),
+  // v_T = √(m g / c) with the sim's defaults m = 1 kg, c = 0.25.
+  const heroG = 9.81, heroMass = 1, heroDragC = 0.25;
+  const heroVT = Math.sqrt(heroMass * heroG / heroDragC);
+  const heroVof = t => heroVT * Math.tanh(heroG * t / heroVT);
+  const heroYof = t => { const u = heroG * t / heroVT; return (heroVT*heroVT/heroG) * Math.log(Math.cosh(u)); };
+  const heroTMax = 0.78;                 // stops at v/v_T = 0.84 — short of terminal
+  const heroYMax = heroYof(heroTMax);
+  const heroLoop = 5.4;                  // s wall-clock: 4.2 s fall + hold + reset
 
-      // ---- left: the falling drop with its equal-time trail
-      const dx = W*0.27, top = H*0.10, bot = H*0.90, span = bot - top;
-      const yPix = tt2 => top + (yOf(tt2)/yMax) * span;
-      // ground line
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.22)' : 'rgba(148,163,184,.25)';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(dx - W*0.09, bot+6); ctx.lineTo(dx + W*0.09, bot+6); ctx.stroke();
-      // trail: equal-TIME dots up to now — spacing grows, then locks constant
-      const NT = 26;
-      for(let k=0;k<NT;k++){
-        const tk = (k/(NT-1)) * tMax;
-        if(tk > t) break;
-        const vk = vOf(tk);
-        ctx.fillStyle = (vk/vT > 0.985) ? cT : (LIGHT ? 'rgba(37,99,235,.55)' : 'rgba(96,165,250,.5)');
-        ctx.beginPath(); ctx.arc(dx, yPix(tk), 3, 0, Math.PI*2); ctx.fill();
-      }
-      // the drop (teardrop-ish: circle + tip)
-      const yD = yPix(t);
-      const grad = ctx.createRadialGradient(dx-3, yD-3, 2, dx, yD, 10);
-      grad.addColorStop(0, LIGHT ? '#93c5fd' : '#bfdbfe');
-      grad.addColorStop(1, LIGHT ? '#3b82f6' : '#2563eb');
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(dx, yD, 9, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(dx-6, yD-6); ctx.quadraticCurveTo(dx, yD-16, dx+6, yD-6); ctx.fill();
-      // arrows: weight fixed, drag grows with v; halo so they read on anything
-      const wLen = 34, dLen = 34 * (v*v)/(vT*vT);
-      const arrow = (x0,y0,x1,y1,col)=>{
-        const ang = Math.atan2(y1-y0, x1-x0);
-        ctx.strokeStyle='rgba(2,8,14,.7)'; ctx.lineWidth=5; ctx.lineCap='round';
-        ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
-        ctx.strokeStyle=col; ctx.lineWidth=2.6;
-        ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
-        ctx.fillStyle=col;
-        ctx.beginPath(); ctx.moveTo(x1,y1);
-        ctx.lineTo(x1-8*Math.cos(ang-0.42), y1-8*Math.sin(ang-0.42));
-        ctx.lineTo(x1-8*Math.cos(ang+0.42), y1-8*Math.sin(ang+0.42));
-        ctx.closePath(); ctx.fill();
-      };
-      arrow(dx+18, yD, dx+18, yD + wLen, cW);
-      if(dLen > 3) arrow(dx-18, yD, dx-18, yD - dLen, cD);
-      ctx.font = '600 12px '+font; ctx.textBaseline='middle';
-      ctx.fillStyle = cW; ctx.textAlign='left';  ctx.fillText('weight', dx+26, yD + wLen);
-      if(dLen > 3){ ctx.fillStyle = cD; ctx.textAlign='right'; ctx.fillText('drag', dx-26, yD - dLen); }
-      if(atTerm){
-        ctx.fillStyle = cT; ctx.font='700 12px '+font; ctx.textAlign='left';
-        ctx.fillText('drag = weight → a = 0', dx + 40, yD - 12);
-      }
-      ctx.textAlign='left';
+  function paintHero(ctx, W, H, tt, LIGHT){
+    ctx.clearRect(0,0,W,H);
+    const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const u = tt % heroLoop;
+    const t = Math.min(heroTMax, (u/4.2) * heroTMax);      // physics time
+    const v = heroVof(t);
+    const cWt  = LIGHT ? '#dc2626' : '#f43f5e';            // weight
+    const cDg  = LIGHT ? '#1d4ed8' : '#60a5fa';            // drag
+    const mute = LIGHT ? '#475569' : '#94a3b8';
+    const ink  = LIGHT ? '#0f172a' : '#e2e8f0';
+    const axis = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.32)';
+    const halo = LIGHT ? 'rgba(248,250,252,.92)' : 'rgba(2,8,14,.70)';
+    const trail= LIGHT ? 'rgba(29,78,216,.45)'  : 'rgba(96,165,250,.50)';
 
-      // ---- right: v(t) drawing itself, flattening at v_T
-      const gx0 = W*0.46, gx1 = W*0.80, gy0 = H*0.82, gy1 = H*0.16;
-      ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.25)' : 'rgba(148,163,184,.3)';
-      ctx.lineWidth = 1;
+    // Safe window: every essential mark lives inside 26–74% of the shown width.
+    const L = W*0.26, R = W*0.74, CW = R - L, mid = (L + R)/2;
+    const compW = Math.min(CW, 620), cL = mid - compW/2, cR = mid + compW/2;
+    const roomy = CW >= 430;
+
+    // ---- the falling drop with its equal-time trail
+    const top = 22, bot = H - 46, span = bot - top;
+    const yPix = tk => top + (heroYof(tk)/heroYMax) * span;
+    const dx = roomy ? cL + Math.min(compW*0.18, 110) : mid;
+    ctx.strokeStyle = axis; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(dx - 34, bot + 6); ctx.lineTo(dx + 34, bot + 6); ctx.stroke();
+    // trail: equal-TIME dots up to now — the spacing grows, because it is still
+    // speeding up. (It never locks constant: that would be the gated answer.)
+    const NT = 22;
+    for(let k=0;k<NT;k++){
+      const tk = (k/(NT-1)) * heroTMax;
+      if(tk > t) break;
+      ctx.fillStyle = trail;
+      ctx.beginPath(); ctx.arc(dx, yPix(tk), 3, 0, Math.PI*2); ctx.fill();
+    }
+    // the drop (teardrop-ish: circle + tip) — circular now that the store is square
+    const yD = yPix(t);
+    const grad = ctx.createRadialGradient(dx-3, yD-3, 2, dx, yD, 10);
+    grad.addColorStop(0, LIGHT ? '#93c5fd' : '#bfdbfe');
+    grad.addColorStop(1, LIGHT ? '#2563eb' : '#1d4ed8');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(dx, yD, 9, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(dx-6, yD-6); ctx.quadraticCurveTo(dx, yD-16, dx+6, yD-6); ctx.fill();
+    // arrows: weight fixed, drag grows as v² ; halo so they read on anything
+    const wLen = 30, dLen = 30 * (v*v)/(heroVT*heroVT);
+    const arrow = (x0,y0,x1,y1,col)=>{
+      const ang = Math.atan2(y1-y0, x1-x0);
+      ctx.strokeStyle=halo; ctx.lineWidth=5; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.strokeStyle=col; ctx.lineWidth=2.6;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.moveTo(x1,y1);
+      ctx.lineTo(x1-8*Math.cos(ang-0.42), y1-8*Math.sin(ang-0.42));
+      ctx.lineTo(x1-8*Math.cos(ang+0.42), y1-8*Math.sin(ang+0.42));
+      ctx.closePath(); ctx.fill();
+    };
+    arrow(dx+18, yD, dx+18, yD + wLen, cWt);
+    if(dLen > 3) arrow(dx-18, yD, dx-18, yD - dLen, cDg);
+    ctx.font = '600 12px '+font; ctx.textBaseline='middle';
+    ctx.fillStyle = cWt; ctx.textAlign='left';  ctx.fillText('weight', dx+26, yD + wLen);
+    if(dLen > 3){ ctx.fillStyle = cDg; ctx.textAlign='right'; ctx.fillText('drag', dx-26, yD - dLen); }
+    ctx.textAlign='left';
+
+    // ---- v(t) drawing itself. No asymptote, no plateau: it stops mid-climb.
+    if(roomy){
+      const gy0 = H*0.72, gy1 = H*0.21;
+      const gx1 = cR - 6, gw = Math.min(compW*0.50, 360), gx0 = gx1 - gw;
+      ctx.strokeStyle = axis; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy0); ctx.stroke();   // t axis
       ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx0, gy1); ctx.stroke();   // v axis
-      const yV = vv => gy0 - (vv/vT) * (gy0-gy1) * 0.88;
-      ctx.setLineDash([5,4]);
-      ctx.strokeStyle = cT;
-      ctx.beginPath(); ctx.moveTo(gx0, yV(vT)); ctx.lineTo(gx1, yV(vT)); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = cT; ctx.font='600 12px '+font;
-      ctx.fillText('terminal velocity', gx1 + 8, yV(vT));
-      ctx.strokeStyle = cD; ctx.lineWidth = 2.2;
+      const yV = vv => gy0 - (vv/heroVT) * (gy0-gy1) * 0.90;
+      ctx.strokeStyle = cDg; ctx.lineWidth = 2.2;
       ctx.beginPath();
       const NC = 90;
       for(let k=0;k<=NC;k++){
         const tk = (k/NC) * t;
-        const px = gx0 + (tk/tMax)*(gx1-gx0), py = yV(vOf(tk));
+        const px = gx0 + (tk/heroTMax)*gw, py = yV(heroVof(tk));
         if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
       }
       ctx.stroke();
       // live cursor dot on the curve
-      ctx.fillStyle = cD;
-      ctx.beginPath(); ctx.arc(gx0 + (t/tMax)*(gx1-gx0), yV(v), 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = cDg;
+      ctx.beginPath(); ctx.arc(gx0 + (t/heroTMax)*gw, yV(v), 4, 0, Math.PI*2); ctx.fill();
+      // Captions live INSIDE the plot column — the old 'terminal velocity' label
+      // was hung off the right edge at 0.81W→0.92W, i.e. inside the mask's fade.
+      ctx.textBaseline='alphabetic';
       ctx.fillStyle = mute; ctx.font='600 12px '+font;
-      ctx.fillText('v(t) — speeds up, then levels off', gx0, gy0 + 16);
+      ctx.fillText('v(t) — still climbing', gx0, gy0 + 16);
       ctx.fillStyle = ink; ctx.font='700 12px '+font;
-      ctx.fillText('v = ' + v.toFixed(2) + ' m/s', gx0, gy1 - 4);
+      ctx.fillText('v = ' + v.toFixed(2) + ' m/s', gx0, gy1 - 5);
     }
+  }
+
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
     cancelAnimationFrame(heroRAF);
+    const isLight = () => document.documentElement.getAttribute('data-theme') === 'light'
+                       || document.body.classList.contains('light-theme');
+    function paint(tt){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, tt, isLight());
+    }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ frame(4.0); return; }   // static: at terminal, arrows balanced
-    const t0 = performance.now();
+    if(reduce){ paint(4.0); return; }   // static: late in the climb, drag well short of weight
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
     const tick = now => {
       if(ov.classList.contains('hidden')) return;
-      frame((now - t0)/1000);
+      paint(((now || t0) - t0)/1000);
       heroRAF = requestAnimationFrame(tick);
     };
     heroRAF = requestAnimationFrame(tick);
@@ -4198,6 +4240,8 @@ var SimCfg = (() => {
   // The hero is decoration: if it ever throws, the overlay must stay usable.
   try {
     drawHero();
+    // The band is sized to the viewport, so a resize changes its CSS box: repaint.
+    addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
     // Theme can change while the overlay is open: redraw the hero in the new colours
     new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
       .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

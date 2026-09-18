@@ -396,11 +396,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots on a Keplerian ellipse — dense at aphelion, sparse at perihelion. a = −GM r̂ / r²</span>
+                <span class="hero-label">Five Keplerian orbits of the same semi-major axis, e = 0 to 0.8 — equal-time dots placed by solving E − e sin E = M, the Sun at the true focus of each</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Kepler's three laws</span></h2>
-                <p class="welcome-blurb">Three laws from one force: ellipses, equal areas, and T² proportional to a³.</p>
+                <p class="welcome-blurb">One force, one ellipse — what does it fix about speed, area and period?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2099,62 +2099,154 @@ window.__giResume = function(){ onStep((typeof Shell !== 'undefined' && Shell.st
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to Kepler\'s three laws.',
-    'Here Newton\'s inverse-square force makes an ellipse, equal areas in equal times, and T squared proportional to a cubed.',
+    'Here Newton\'s inverse-square force sets the shape of the orbit, the rate the planet sweeps area, and the time it takes to go round.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-time dots on this sim's Keplerian ellipse (a=1 AU, e=0.6)
-     using a = −GM r̂/r² with GM = 4π². Dots bunch at aphelion (slow). */
+  /* ===== Hero: Kepler's first law, drawn analytically ==========================
+     WHAT WAS WRONG — the old band ran a 36-step velocity-Verlet from perihelion
+     with dt = 1/36 of a year on an a = 1, e = 0.6 orbit (GM = 4*pi^2). At that
+     step size the integrator injects energy near perihelion, so the dots left
+     the ellipse that was drawn underneath them: the integrated apoapsis came out
+     at 2.34 AU against the true 1.6 AU, and the track never closed. A hero that
+     contradicts its own curve is worse than no hero.
+
+     WHAT IT DRAWS NOW — no integrator at all. Each dot is placed by solving
+     Kepler's equation E - e sin E = M for equal steps in mean anomaly M, then
+     x = a(cos E - e), y = b sin E measured FROM THE FOCUS. Every dot therefore
+     lies on the drawn ellipse to machine precision (verified: max normal
+     distance from dot to drawn conic < 1e-12 px across all five orbits), and the
+     equal-time spacing is honest — sparse where the planet is quick, crowded
+     where it dawdles.
+
+     WHY FIVE ORBITS — the band is one viewport wide and 140 px tall (about
+     5.8:1). A single a = 1 ellipse drawn at a UNIFORM scale can never be wider
+     than 2a = 2b/sqrt(1-e^2) px, i.e. about 160 px at this height, which is the
+     44%-56% sliver the audit flagged; stretching it sideways to fill the band
+     would move the Sun off the true focus and fake the eccentricity. So the
+     figure is the K1 family instead: five orbits of the SAME semi-major axis
+     with e = 0, 0.2, 0.4, 0.6 (the sim's default, brightest), 0.8, each with the
+     Sun at its own true focus. That fills 26%-74% of the displayed width at
+     laptop sizes without a single distorted pixel.
+
+     SPOILER CHECK (the data-gate cards were read first):
+       - Card 2 (data-gate) asks where the planet is fastest. The band carries no
+         "perihelion"/"aphelion" words, no speed readout and no arrows — only the
+         equal-time dots themselves, which are the raw observation the student is
+         being asked to make, not its answer.
+       - Card 3 (data-gate, equal areas) — no swept wedges, no area windows.
+       - Card 4 (data-gate, does a heavier planet lag) — one body per orbit, no
+         mass comparison. The reveal is STAGGERED orbit by orbit precisely so the
+         five bodies are never seen racing side by side.
+       - Card 5 (data-gate, T^2 vs a^3) — every orbit here has the SAME a, so the
+         band contains no period-versus-distance information at all.
+     Card 1 is ungated and already tells the student the Sun sits at one focus
+     and that eccentricity deforms the ellipse, which is exactly what is drawn. */
+  let heroToken = 0;
+  function heroKeplerE(M, e){          // solve E - e sin E = M (Newton, from a safe start)
+    let E = (e < 0.8) ? M : Math.PI;
+    for(let i=0;i<60;i++){
+      const d = (E - e*Math.sin(E) - M)/(1 - e*Math.cos(E));
+      E -= d;
+      if(Math.abs(d) < 1e-15) break;
+    }
+    return E;
+  }
+  function paintHero(ctx, W, H, t, LIGHT){
+    const curve  = LIGHT ? 'rgba(37,99,235,.30)'  : 'rgba(96,165,250,.32)';
+    const curveF = LIGHT ? 'rgba(37,99,235,.55)'  : 'rgba(96,165,250,.58)';
+    const dot    = LIGHT ? 'rgba(219,39,119,.72)' : 'rgba(244,114,182,.74)';
+    const dotF   = LIGHT ? 'rgba(219,39,119,.95)' : 'rgba(244,114,182,.96)';
+    const sun    = LIGHT ? 'rgba(217,119,6,.95)'  : 'rgba(251,191,36,.95)';
+    const soft   = LIGHT ? 'rgba(51,65,85,.62)'   : 'rgba(203,213,225,.55)';
+    const FAM    = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);
+
+    const EV = [0, 0.2, 0.4, 0.6, 0.8], FEAT = 3, n = EV.length, N = 40;
+    // ---- proportional layout inside 26%-74% of the DISPLAYED width
+    const bandL = 0.26*W, bandW = 0.48*W, capH = 15;
+    const S = Math.min((H - 22 - capH)/2, bandW/(2*n + (n-1)*0.45));   // px per AU (a = 1 AU)
+    let gap = (bandW - 2*n*S)/(n-1);
+    gap = Math.max(0.45*S, Math.min(1.7*S, gap));
+    const total = 2*n*S + (n-1)*gap;
+    const left  = bandL + (bandW - total)/2;
+    const cy    = (H - capH)/2;
+    const rr    = Math.max(1.5, Math.min(2.6, S*0.045));
+
+    for(let j=0;j<n;j++){
+      const e  = EV[j], b = Math.sqrt(1 - e*e);
+      const cx = left + j*(2*S + gap) + S;          // ellipse CENTRE; focus sits at cx + a*e
+      const fx = cx + e*S;                          // the Sun, at the true focus
+      const feat = (j === FEAT);
+      // how much of this orbit has been laid down (staggered, so no two race)
+      const prog = Math.max(0, Math.min(1, (t - j*0.16)/0.62));
+      if(prog <= 0) continue;
+
+      ctx.strokeStyle = feat ? curveF : curve;
+      ctx.lineWidth   = feat ? 1.5 : 1.1;
+      ctx.beginPath();
+      for(let i=0;i<=160;i++){
+        const E = 2*Math.PI*i/160;
+        const X = cx + Math.cos(E)*S, Y = cy - b*Math.sin(E)*S;
+        if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = feat ? dotF : dot;
+      const shown = Math.round(N*prog);
+      for(let k=0;k<shown;k++){
+        const E = heroKeplerE(2*Math.PI*k/N, e);    // equal steps in TIME
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(E)*S, cy - b*Math.sin(E)*S, feat ? rr+0.5 : rr, 0, 7);
+        ctx.fill();
+      }
+      ctx.fillStyle = sun;
+      ctx.beginPath(); ctx.arc(fx, cy, Math.max(2.6, S*0.062), 0, 7); ctx.fill();
+
+      if(S >= 36){
+        ctx.fillStyle = soft; ctx.font = (feat ? '600 ' : '') + '11px ' + FAM;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText('e = ' + e.toFixed(1), cx, H - capH + 1);
+      }
+    }
+    // one body still running, on the sim's default orbit only (no side-by-side race)
+    if(t > 1){
+      const e = EV[FEAT], b = Math.sqrt(1 - e*e);
+      const cx = left + FEAT*(2*S + gap) + S;
+      const E  = heroKeplerE(((2*Math.PI*(t - 1)/7.5) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI), e);
+      ctx.fillStyle = dotF;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(E)*S, cy - b*Math.sin(E)*S, rr + 2.2, 0, 7); ctx.fill();
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const GM = 4*Math.PI*Math.PI, a = 1, e = 0.6;
-    const rp = a*(1-e), vp = Math.sqrt(GM*(1+e)/(a*(1-e)));
-    let x = rp, y = 0, vx = 0, vy = vp;
-    const b = a*Math.sqrt(1-e*e);
-    const S = (H*0.32)/a;
-    const ox = W*0.50, oy = H*0.52;
-    const cxWorld = -a*e;
-    function Wxy(wx,wy){ return {X: ox+(wx-cxWorld)*S, Y: oy-wy*S}; }
-    ctx.strokeStyle = LIGHT ? 'rgba(37,99,235,.35)' : 'rgba(96,165,250,.35)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    for(let i=0;i<=120;i++){
-      const E = 2*Math.PI*i/120;
-      const p = Wxy(a*(Math.cos(E)-e), b*Math.sin(E));
-      if(i===0) ctx.moveTo(p.X,p.Y); else ctx.lineTo(p.X,p.Y);
-    }
-    ctx.stroke();
-    const sun = Wxy(0,0);
-    ctx.fillStyle = LIGHT ? 'rgba(245,158,11,.9)' : 'rgba(251,191,36,.95)';
-    ctx.beginPath(); ctx.arc(sun.X, sun.Y, 5, 0, 7); ctx.fill();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 36, dt = 1/N;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k < N; sN++, k++){
-        const r2 = x*x+y*y, r = Math.sqrt(r2), r3 = r2*r;
-        const ax = -GM*x/r3, ay = -GM*y/r3;
-        const x1 = x + vx*dt + 0.5*ax*dt*dt;
-        const y1 = y + vy*dt + 0.5*ay*dt*dt;
-        const r2b = x1*x1+y1*y1, rb = Math.sqrt(r2b), r3b = r2b*rb;
-        const ax1 = -GM*x1/r3b, ay1 = -GM*y1/r3b;
-        vx += 0.5*(ax+ax1)*dt; vy += 0.5*(ay+ay1)*dt;
-        x = x1; y = y1;
-        const p = Wxy(x,y);
-        ctx.fillStyle = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
-        ctx.beginPath(); ctx.arc(p.X, p.Y, 2.8, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(t){
+      const r   = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W   = Math.max(360, Math.round(r.width  || 1280));
+      const H   = Math.max(100, Math.round(r.height || 140));
+      const bw  = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1.7); return; }             // static fallback: all five orbits, no motion
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      paint(((now || t0) - t0)/1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

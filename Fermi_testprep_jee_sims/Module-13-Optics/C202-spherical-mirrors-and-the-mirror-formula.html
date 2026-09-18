@@ -913,7 +913,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Purple: the object, stepped in by equal Δu. Green: where its image lands.</span>
+            <span class="hero-label">A concave mirror with F and C marked, a purple object beyond C, and the two construction rays meeting at the green real inverted image</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Spherical mirrors</span></h2>
@@ -3002,51 +3002,118 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-Δu dots of object (u) and image (v) from 1/u + 1/v = 1/f as the object walks toward F. */
+  /* Hero: the PREMISE only — one static ray construction. A concave mirror (arc with
+     back hatching), the principal axis, letter-only F and C ticks, one object beyond C
+     (u=30, f=10 → v=15, m=−0.5), and the two construction rays meeting at one real,
+     inverted, diminished image. This is exactly the ungated card-1 scene. The previous
+     hero marched equal-Δu object dots toward F while the image dots raced away — which
+     is VERBATIM the gated card-2 answer ("grows and races away… diverging to infinity"),
+     so the march was removed: no sweep toward F, no runaway image. The rays draw once
+     (~1.4 s) and stop; reduced motion gets the finished frame. Backing store is sized
+     from getBoundingClientRect()×devicePixelRatio and drawn in CSS px so the geometry
+     is undistorted. Deliberately distinct from C206's hero (lens + posed virtual case). */
+  let heroToken = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const f = 10;
-    function imageOf(u){
-      if(window.Engine && Engine.rays && typeof Engine.rays.sphericalMirror === 'function'){
-        const img = Engine.rays.sphericalMirror(u, f);
-        return img.atFocalPoint ? Infinity : img.imageDistance;
-      }
-      const inv = 1/f - 1/u;
-      return Math.abs(inv) < 1e-15 ? Infinity : 1/inv;
-    }
-    const padL = 70, padR = 90, cy = H*0.58;
-    const xMax = 55;
-    const xOf = dist => padL + (1 - dist/xMax)*(W-padL-padR); // mirror on the right; larger distance → further left
-    const inkO = LIGHT ? 'rgba(124,58,237,.88)' : 'rgba(167,139,250,.88)';
-    const inkI = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.88)';
-    const axis = LIGHT ? 'rgba(71,85,105,.45)' : 'rgba(148,163,184,.35)';
-    const mir = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(226,232,240,.55)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(W-padR+8, cy); ctx.stroke();
-    ctx.strokeStyle = mir; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(W-padR+8, cy-36); ctx.lineTo(W-padR+8, cy+36); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        const u = 40 - (step/(N-1))*(40-10.6);
-        const v = imageOf(u);
-        ctx.fillStyle = inkO;
-        ctx.beginPath(); ctx.arc(xOf(u), cy-10, 2.0, 0, 7); ctx.fill();
-        if(isFinite(v) && v > 0 && v < xMax*1.6){
-          ctx.fillStyle = inkI;
-          ctx.beginPath(); ctx.arc(xOf(Math.min(v, xMax)), cy+10, 2.2, 0, 7); ctx.fill();
-        }
-      }
-      if(step < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    const inkO = LIGHT ? 'rgba(124,58,237,.88)' : 'rgba(167,139,250,.88)';
+    const inkI = LIGHT ? 'rgba(5,150,105,.88)'  : 'rgba(52,211,153,.88)';
+    const axis = LIGHT ? 'rgba(71,85,105,.45)'  : 'rgba(148,163,184,.35)';
+    const soft = LIGHT ? 'rgba(71,85,105,.75)'  : 'rgba(148,163,184,.75)';
+    const mir  = LIGHT ? 'rgba(15,23,42,.60)'   : 'rgba(226,232,240,.60)';
+    const rayC = LIGHT ? 'rgba(180,83,9,.80)'   : 'rgba(251,191,36,.80)';
+    function arrow(ctx, x, y0, y1, ink){          // vertical arrow y0 → y1 with head
+      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+      const d = y1 > y0 ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(x, y1 + d*1.5); ctx.lineTo(x-4.5, y1 - d*6); ctx.lineTo(x+4.5, y1 - d*6); ctx.closePath(); ctx.fill();
     }
-    batch();
+    function drawPoly(ctx, pts, frac){            // draw the first `frac` of a polyline's length
+      let tot = 0; const seg = [];
+      for(let i=1;i<pts.length;i++){ const L = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]); seg.push(L); tot += L; }
+      let left = tot*Math.max(0, Math.min(1, frac));
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for(let i=1;i<pts.length && left>0;i++){
+        const L = seg[i-1], t = Math.min(1, left/L);
+        ctx.lineTo(pts[i-1][0] + (pts[i][0]-pts[i-1][0])*t, pts[i-1][1] + (pts[i][1]-pts[i-1][1])*t);
+        left -= L;
+      }
+      ctx.stroke();
+    }
+    function paint(k){                            // k ∈ [0,1]: ray-construction progress
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0,0,W,H);
+      const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+      // physics of the drawn case: 1/u + 1/v = 1/f with f=10, u=30 → v=15, m=−v/u=−0.5
+      const f = 10, u = 30;
+      const v = 1/(1/f - 1/u), mMag = v/u;        // 15, 0.5
+      const cy = H*0.56, mx = W*0.72, x0 = W*0.27;
+      const s = (mx - x0)/u;                      // px per cm; everything stays in 24–76%
+      const xF = mx - f*s, xC = mx - 2*f*s, xI = mx - v*s;
+      const h = H*0.30;
+      // principal axis
+      ctx.strokeStyle = axis; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W*0.26, cy); ctx.lineTo(W*0.74, cy); ctx.stroke();
+      // concave mirror: circular arc about C (radius R=2f), aperture ±a, hatching behind
+      const Rpx = 2*f*s, ccx = mx - Rpx, a = H*0.36;
+      const xarc = y => ccx + Math.sqrt(Math.max(0, Rpx*Rpx - (y-cy)*(y-cy)));
+      ctx.strokeStyle = mir; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for(let i=0;i<=28;i++){ const y = cy - a + (2*a)*i/28; const x = xarc(y); i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); }
+      ctx.stroke();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = soft;
+      for(let i=0;i<=9;i++){ const y = cy - a + (2*a)*i/9; const x = xarc(y);
+        ctx.beginPath(); ctx.moveTo(x+1.5, y); ctx.lineTo(x+8, y-6); ctx.stroke(); }
+      // F and C ticks, letter-only
+      ctx.strokeStyle = soft; ctx.lineWidth = 1.6;
+      [[xF,'F'],[xC,'C']].forEach(([x,t])=>{
+        ctx.beginPath(); ctx.moveTo(x, cy-5); ctx.lineTo(x, cy+5); ctx.stroke();
+        ctx.fillStyle = soft; ctx.font = '12px '+FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        // dropped clear of ray 2's reflected leg, which runs horizontally at
+        // cy + m·h = cy + 21 — the old cy+8 baseline put the glyph bottoms on it
+        ctx.fillText(t, x, cy + mMag*h + 5);
+      });
+      // object arrow (the given), beyond C
+      arrow(ctx, x0, cy, cy-h, inkO);
+      // two construction rays, drawn once:
+      //  ray 1 — parallel to the axis, reflects off the mirror through F, on to the image tip
+      //  ray 2 — through F, reflects parallel, running left through the image tip
+      const tip = [xI, cy + mMag*h];              // real image: inverted, below the axis
+      const P1 = [xarc(cy-h), cy-h];
+      const ext1 = [tip[0] - 0.30*(P1[0]-tip[0]), tip[1] + 0.30*(tip[1]-P1[1])];
+      const P2 = [xarc(cy + mMag*h), cy + mMag*h];
+      ctx.strokeStyle = rayC; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      drawPoly(ctx, [[x0, cy-h], P1, tip, ext1], k);
+      drawPoly(ctx, [[x0, cy-h], P2, [W*0.30, P2[1]]], k);
+      // the image the rays have just built (card 1's stated scene: real, inverted, smaller)
+      const ka = Math.max(0, Math.min(1, (k - 0.8)/0.2));
+      if(ka > 0){ ctx.save(); ctx.globalAlpha = ka; arrow(ctx, xI, cy, tip[1], inkI); ctx.restore(); }
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      // continuous cycle: build the construction in REVEAL ms, hold the finished
+      // picture for the rest of PERIOD, then draw it again. (It used to be a
+      // one-shot that froze 1.4 s in, so the overlay sat dead for every later look.)
+      const REVEAL = 1400, PERIOD = REVEAL + 1400;
+      const s = (((typeof now === 'number' ? now : t0) - t0) % PERIOD);
+      paint(Math.min(1, s/REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

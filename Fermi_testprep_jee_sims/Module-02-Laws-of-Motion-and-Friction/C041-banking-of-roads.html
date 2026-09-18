@@ -1661,11 +1661,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Rear-view of a car on a banked curve — W, N and F<sub>c</sub> at the design speed</span>
+            <span class="hero-label">Rear-view of a car on a banked curve at the design speed — W and N are the only forces acting, and the dashed parallelogram builds their sum: a horizontal net force pointing at the centre of the turn. Ghost cars show what the wrong speed does — too slow slips down the bank, too fast slides up it.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">The banked turn</span></h2>
-            <p class="welcome-blurb">Tilt the road, and one special speed lets the bank alone steer the car around the curve.</p>
+            <p class="welcome-blurb">Tilt the road and slide the friction up — what happens to the turn’s design speed?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3899,51 +3899,71 @@ return {
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to the banked turn.',
-    'Here a car rounds a banked curve, seen from behind. The tilt of the road gives the turn one design speed, fixed by geometry alone — and friction only widens the band of safe speeds around it.',
+    'Here a car rounds a banked curve, seen from behind. The tilt of the road and the grip of the tyres together decide which speeds are safe on that turn — and which one the turn is designed for.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the same rear-view car and bank as the sim, drawn once (no strobe
-     dots). Wheels sit on the tarmac; W down, N out of the road, F_c left —
-     the frictionless design condition N cosθ = W, F_c = W tanθ. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const dpr = window.devicePixelRatio || 1;
-    const W = Math.max(2, c.clientWidth || 1280);
-    const H = Math.max(2, c.clientHeight || 210);
-    if(c.width !== Math.floor(W*dpr) || c.height !== Math.floor(H*dpr)){
-      c.width = Math.floor(W*dpr); c.height = Math.floor(H*dpr);
-    }
-    const ctx = c.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  /* Hero: the same rear-view cross-section the sim draws — earthwork, tarmac slab,
+     lane paint, θ = 22°, and the car driving INTO the page around a turn centred
+     far to the LEFT (deliberately not an inclined-plane picture; see draw()).
+
+     FORCES — only the two real ones act on the car: W (weight, down) and N (normal,
+     out of the road surface). The centripetal requirement is NOT a third applied
+     force, so it is no longer drawn as a third arrow from the same tail — that is
+     exactly the double-counting error this topic breeds. It is now built as the
+     vector SUM: dashed parallelogram guides close N and W, and the diagonal from
+     the same tail is labelled as the net force, horizontal, pointing at the centre
+     of the turn. The construction is animated in that order (N and W, then the
+     guides, then the diagonal) so the diagonal can only read as a result.
+
+     SPEED — the sim's subject is a speed, so the loop also shows the alternatives:
+     two dashed ghost cars slide off down-slope ("too slow") and up-slope ("too
+     fast") and fade, while the real car stays put at v_d.
+
+     SPOILER GUARD — the only data-gate card is step 2: "drag μ up from 0 — what
+     happens to the design speed v_d?", correct answer "it doesn't move, friction
+     isn't in it". The hero never shows friction, never shows μ, and never says
+     what v_d depends on; it draws the single frictionless design case that step 1
+     hands the student outright (μ = 0). The too-slow / too-fast pair comes from
+     step 4, which is NOT gated ("below v_min the car slides down the bank; above
+     v_max it slides up and off"), so showing it here gives nothing away.
+
+     FRAMING — every essential mark (datum, earthwork, road, car, ghosts, arrows,
+     labels, captions) is laid out as a fraction of the displayed width and kept
+     inside 26–74%, clear of the hero's 18%/82% fade. Sizes scale with S so the
+     figure holds together from a 360 px phone strip to a 1920 px desktop one. */
+  let heroToken = 0;
+  // u = position in the 7 s loop (0 → 1): build the force triangle, hold,
+  // show the two wrong-speed ghosts, hold.
+  function paintHero(ctx, W, H, LIGHT, u){
     ctx.clearRect(0,0,W,H);
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    const font = getComputedStyle(document.body).fontFamily || 'DM Sans, sans-serif';
-    // A cross-section through the banked curve — the same slice the sim draws.
-    // The car is driving INTO the page around a turn centred far to the LEFT; this
-    // is deliberately not an inclined-plane picture (see draw() for the reasoning).
-    const th = 22*Math.PI/180;
-    const datumY = H*0.90;
-    const half = Math.min(W*0.125, 150);
-    const uX = Math.cos(th), uY = -Math.sin(th);    // along the surface, up-slope
-    const nX = -Math.sin(th), nY = -Math.cos(th);   // outward, air side
-    const midX = W*0.52, midY = datumY - 12 - half*Math.sin(th);
+    const S = Math.max(0.45, Math.min(1.25, Math.min(W/1280, H/210)));
+    const font = (typeof getComputedStyle === 'function' && document.body
+                  ? getComputedStyle(document.body).fontFamily : '') || 'DM Sans, sans-serif';
+    const th = 22*Math.PI/180, cth = Math.cos(th), sth = Math.sin(th), tth = Math.tan(th);
+    const datumY = H*0.88;
+    const half = Math.min(W*0.13, 190*S);           // half the carriageway, along the slope
+    const uX = cth, uY = -sth;                      // along the surface, up-slope
+    const nX = -sth, nY = -cth;                     // outward, air side
+    const slabT = 12*S;
+    const midX = W*0.5, midY = datumY - slabT - half*sth;
     const inX  = midX - half*uX, inY  = midY - half*uY;
     const outX = midX + half*uX, outY = midY + half*uY;
-    const slabT = 12;
     const binX  = inX  - nX*slabT, binY  = inY  - nY*slabT;
     const boutX = outX - nX*slabT, boutY = outY - nY*slabT;
     const ink = LIGHT ? '#334155' : '#94a3b8';
     const tarmac = LIGHT ? '#64748b' : '#334155';
 
-    function arrow(x1,y1,x2,y2,color,w){
+    function arrow(x1,y1,x2,y2,color,w,dash){
       ctx.save();
       ctx.strokeStyle = ctx.fillStyle = color;
       ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if(dash) ctx.setLineDash(dash);
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      const ang = Math.atan2(y2-y1, x2-x1), hs = 8 + w;
+      ctx.setLineDash([]);
+      const ang = Math.atan2(y2-y1, x2-x1), hs = (6 + w)*Math.max(0.8, S);
       ctx.beginPath();
       ctx.moveTo(x2,y2);
       ctx.lineTo(x2 - hs*Math.cos(ang-0.42), y2 - hs*Math.sin(ang-0.42));
@@ -3951,10 +3971,47 @@ return {
       ctx.closePath(); ctx.fill();
       ctx.restore();
     }
+    // Two-pass subscript text: '_' marks the next alphanumeric run as a sub.
+    function segsOf(t){
+      const segs = []; let cur='';
+      for(let i=0;i<t.length;i++){ const ch=t[i];
+        if(ch==='_'){ if(cur){segs.push([cur,0]); cur='';} let j=i+1,s='';
+          while(j<t.length && /[A-Za-z0-9]/.test(t[j])){ s+=t[j]; j++; }
+          segs.push([s,1]); i=j-1; } else cur+=ch; }
+      if(cur) segs.push([cur,0]);
+      return segs;
+    }
+    function smallOf(f){ return f.replace(/(\d+(?:\.\d+)?)px/, (m,n)=>Math.max(8, Math.round(n*0.72))+'px'); }
+    function subWidth(t){
+      const f = ctx.font, small = smallOf(f); let w = 0;
+      segsOf(t).forEach(([s,sub])=>{ ctx.font = sub?small:f; w += ctx.measureText(s).width; });
+      ctx.font = f; return w;
+    }
+    function subText(t, x, y){
+      const f = ctx.font, al = ctx.textAlign, small = smallOf(f), segs = segsOf(t);
+      const w = subWidth(t);
+      let px = al==='center' ? x-w/2 : al==='right' ? x-w : x;
+      ctx.textAlign = 'left';
+      segs.forEach(([s,sub])=>{ ctx.font = sub?small:f; ctx.fillText(s, px, y+(sub?3:0)); px += ctx.measureText(s).width; });
+      ctx.font = f; ctx.textAlign = al;
+    }
+    // largest font (weight w) at which every string fits `room`, else 0.
+    // Never starts below 12px: on a short wide strip S is driven by the height,
+    // and a 12*S cap would silently drop labels that have plenty of room.
+    function fitFont(texts, room, maxFs, weight){
+      for(let fs = Math.max(9, Math.round(maxFs)); fs >= 8; fs--){
+        ctx.font = weight+' '+fs+'px '+font;
+        let ok = true;
+        for(let i=0;i<texts.length;i++) if(subWidth(texts[i]) > room){ ok = false; break; }
+        if(ok) return fs;
+      }
+      return 0;
+    }
 
-    // The earthwork the carriageway is built up on
-    const batOut = Math.min(150, Math.max(18, (datumY - boutY) * 1.5));
-    const batIn  = Math.max(8, (datumY - binY) * 1.3);
+    // ---- the earthwork the carriageway is built up on
+    // batter runs kept inside 28–72% of the displayed width at every size
+    const batOut = Math.max(0, Math.min(Math.min(120*S, Math.max(18*S, (datumY - boutY) * 1.5)), W*0.72 - boutX));
+    const batIn  = Math.max(0, Math.min(Math.max(8*S, (datumY - binY) * 1.3), binX - W*0.28));
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(binX, binY); ctx.lineTo(boutX, boutY);
@@ -3966,7 +4023,7 @@ return {
     ctx.lineWidth = 1; ctx.stroke();
     ctx.restore();
 
-    // Tarmac slab
+    // ---- tarmac slab
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(inX, inY); ctx.lineTo(outX, outY);
@@ -3980,130 +4037,237 @@ return {
     ctx.beginPath(); ctx.moveTo(inX, inY); ctx.lineTo(outX, outY); ctx.stroke();
     ctx.restore();
 
-    // Paint seen end-on — short marks only, never a lane line up the tilt
+    // ---- paint seen end-on — short marks only, never a lane line up the tilt
     ctx.save();
     ctx.lineCap = 'round';
     ctx.strokeStyle = LIGHT ? 'rgba(255,255,255,.9)' : 'rgba(226,232,240,.7)';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(inX + uX*6, inY + uY*6);   ctx.lineTo(inX + uX*16, inY + uY*16);
-    ctx.moveTo(outX - uX*6, outY - uY*6); ctx.lineTo(outX - uX*16, outY - uY*16);
+    ctx.moveTo(inX + uX*6*S, inY + uY*6*S);   ctx.lineTo(inX + uX*16*S, inY + uY*16*S);
+    ctx.moveTo(outX - uX*6*S, outY - uY*6*S); ctx.lineTo(outX - uX*16*S, outY - uY*16*S);
     ctx.stroke();
     ctx.strokeStyle = LIGHT ? '#ca8a04' : '#eab308';
     ctx.lineWidth = 2;
     [-0.45, 0.45].forEach(function(fr){
       const mx = midX + half*fr*uX, my = midY + half*fr*uY;
-      ctx.beginPath(); ctx.moveTo(mx - uX*4, my - uY*4); ctx.lineTo(mx + uX*4, my + uY*4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx - uX*4*S, my - uY*4*S); ctx.lineTo(mx + uX*4*S, my + uY*4*S); ctx.stroke();
     });
     ctx.restore();
 
-    // Datum
+    // ---- datum: pulled in to 28–72% so neither end bleeds into the fade
+    ctx.save();
     ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.3)';
     ctx.lineWidth = 1; ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.moveTo(W*0.14, datumY); ctx.lineTo(W*0.86, datumY); ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(W*0.28, datumY); ctx.lineTo(W*0.72, datumY); ctx.stroke();
+    ctx.restore();
 
-    // θ, measured from the horizontal at the inner edge
+    // ---- θ, measured from the horizontal at the inner edge
+    ctx.save();
     ctx.strokeStyle = ink; ctx.lineWidth = 1.3;
     ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(inX, inY); ctx.lineTo(inX + 46, inY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(inX, inY); ctx.lineTo(inX + 46*S, inY); ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(inX, inY, 30, -th, 0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(inX, inY, 30*S, -th, 0); ctx.stroke();
+    ctx.restore();
     ctx.fillStyle = LIGHT ? '#0f172a' : '#e2e8f0';
-    ctx.font = '600 12px '+font;
+    ctx.font = '600 '+Math.max(9, Math.round(12*S))+'px '+font;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillText('θ = 22°', inX - 12, inY - 6);
+    ctx.fillText('θ = 22°', inX - 12*S, inY - 6*S);
 
-    // Car — rear view: driving into the page, around the turn
-    const carX = midX, carY = midY;
-    const carW = 60, carH = 46;
-    ctx.save();
-    ctx.translate(carX, carY);
-    ctx.rotate(-th);
-    ctx.fillStyle = 'rgba(0,0,0,.34)';
-    ctx.beginPath(); ctx.ellipse(0, 1, carW*0.52, 5, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#0f172a';
-    [-carW/2 + 3, carW/2 - 16].forEach(function(tx){
+    // ---- the car, rear view: driving into the page, around the turn
+    const carW = 60*S, carH = 46*S;
+    function drawCar(cx, cy, ghost, alpha){
+      if(alpha <= 0.01) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(cx, cy);
+      ctx.rotate(-th);
+      const body = () => {
+        ctx.beginPath();
+        ctx.moveTo(-carW/2, -carH*0.20);
+        ctx.lineTo(-carW/2, -carH*0.54);
+        ctx.lineTo(-carW/2 + 9*S, -carH);
+        ctx.lineTo( carW/2 - 9*S, -carH);
+        ctx.lineTo( carW/2, -carH*0.54);
+        ctx.lineTo( carW/2, -carH*0.20);
+        ctx.closePath();
+      };
+      if(ghost){
+        ctx.setLineDash([5*S, 4*S]);
+        ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+        ctx.strokeStyle = LIGHT ? 'rgba(30,58,138,.85)' : 'rgba(147,197,253,.85)';
+        body(); ctx.stroke();
+        [-carW/2 + 3*S, carW/2 - 16*S].forEach(function(tx){
+          ctx.beginPath(); ctx.rect(tx, -16*S, 13*S, 16*S); ctx.stroke();
+        });
+        ctx.setLineDash([]);
+        ctx.restore();
+        return;
+      }
+      ctx.fillStyle = 'rgba(0,0,0,.34)';
+      ctx.beginPath(); ctx.ellipse(0, 1*S, carW*0.52, 5*S, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      [-carW/2 + 3*S, carW/2 - 16*S].forEach(function(tx){
+        ctx.beginPath();
+        if(ctx.roundRect) ctx.roundRect(tx, -16*S, 13*S, 16*S, 4*S); else ctx.rect(tx, -16*S, 13*S, 16*S);
+        ctx.fill();
+      });
+      const bodyGrad = ctx.createLinearGradient(0, -carH, 0, -7*S);
+      bodyGrad.addColorStop(0, '#bfdbfe');
+      bodyGrad.addColorStop(0.55, '#60a5fa');
+      bodyGrad.addColorStop(1, '#2563eb');
+      ctx.fillStyle = bodyGrad;
+      ctx.strokeStyle = '#1e3a8a';
+      ctx.lineWidth = 1.3; ctx.lineJoin = 'round';
+      body(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(15,23,42,.72)';
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(tx, -16, 13, 16, 4); else ctx.rect(tx, -16, 13, 16);
-      ctx.fill();
-    });
-    const bodyGrad = ctx.createLinearGradient(0, -carH, 0, -7);
-    bodyGrad.addColorStop(0, '#bfdbfe');
-    bodyGrad.addColorStop(0.55, '#60a5fa');
-    bodyGrad.addColorStop(1, '#2563eb');
-    ctx.fillStyle = bodyGrad;
-    ctx.strokeStyle = '#1e3a8a';
-    ctx.lineWidth = 1.3; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-carW/2, -9);
-    ctx.lineTo(-carW/2, -carH*0.54);
-    ctx.lineTo(-carW/2 + 9, -carH);
-    ctx.lineTo( carW/2 - 9, -carH);
-    ctx.lineTo( carW/2, -carH*0.54);
-    ctx.lineTo( carW/2, -9);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(15,23,42,.72)';
-    ctx.beginPath();
-    ctx.moveTo(-carW/2 + 11, -carH + 3);
-    ctx.lineTo( carW/2 - 11, -carH + 3);
-    ctx.lineTo( carW/2 - 14, -carH + 15);
-    ctx.lineTo(-carW/2 + 14, -carH + 15);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(147,197,253,.95)';    // ⊗ — velocity into the page
-    ctx.lineWidth = 1.2;
-    const vcy = -carH + 9, vr = 5;
-    ctx.beginPath(); ctx.arc(0, vcy, vr, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-vr*0.7, vcy - vr*0.7); ctx.lineTo(vr*0.7, vcy + vr*0.7);
-    ctx.moveTo(-vr*0.7, vcy + vr*0.7); ctx.lineTo(vr*0.7, vcy - vr*0.7);
-    ctx.stroke();
-    ctx.fillStyle = '#f43f5e';
-    ctx.fillRect(-carW/2 + 5, -23, 9, 5);
-    ctx.fillRect( carW/2 - 14, -23, 9, 5);
-    ctx.fillStyle = 'rgba(226,232,240,.85)';
-    ctx.fillRect(-9, -20, 18, 6);
-    ctx.restore();
+      ctx.moveTo(-carW/2 + 11*S, -carH + 3*S);
+      ctx.lineTo( carW/2 - 11*S, -carH + 3*S);
+      ctx.lineTo( carW/2 - 14*S, -carH + 15*S);
+      ctx.lineTo(-carW/2 + 14*S, -carH + 15*S);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(147,197,253,.95)';    // ⊗ — velocity into the page
+      ctx.lineWidth = 1.2;
+      const vcy = -carH + 9*S, vr = 5*S;
+      ctx.beginPath(); ctx.arc(0, vcy, vr, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-vr*0.7, vcy - vr*0.7); ctx.lineTo(vr*0.7, vcy + vr*0.7);
+      ctx.moveTo(-vr*0.7, vcy + vr*0.7); ctx.lineTo(vr*0.7, vcy - vr*0.7);
+      ctx.stroke();
+      ctx.fillStyle = '#f43f5e';
+      ctx.fillRect(-carW/2 + 5*S, -23*S, 9*S, 5*S);
+      ctx.fillRect( carW/2 - 14*S, -23*S, 9*S, 5*S);
+      ctx.fillStyle = 'rgba(226,232,240,.85)';
+      ctx.fillRect(-9*S, -20*S, 18*S, 6*S);
+      ctx.restore();
+    }
 
-    // Forces at the design speed (friction idle): N = W/cosθ, F_c = W tanθ
-    const tailX = carX + nX*18, tailY = carY + nY*18;
-    const Wl = 58, Nl = Wl/Math.cos(th), Fl = Wl*Math.tan(th);
-    const cW = '#f43f5e', cN = '#f59e0b', cC = '#34d399';
-    arrow(tailX, tailY, tailX, tailY + Wl, cW, 3);
-    arrow(tailX, tailY, tailX + nX*Nl, tailY + nY*Nl, cN, 3);
-    ctx.save(); ctx.setLineDash([7,4]);
-    arrow(tailX, tailY, tailX - Fl, tailY, cC, 3);
-    ctx.restore();
-    // Two-pass subscript text: '_' marks the next alphanumeric run as a sub.
-    const subText = (t, x, y) => {
-      const f = ctx.font, al = ctx.textAlign;
-      const small = f.replace(/(\d+(?:\.\d+)?)px/, (m,n)=>Math.max(12, Math.round(n*0.72))+'px');
-      const segs = []; let cur='';
-      for(let i=0;i<t.length;i++){ const ch=t[i];
-        if(ch==='_'){ if(cur){segs.push([cur,0]); cur='';} let j=i+1,s='';
-          while(j<t.length && /[A-Za-z0-9]/.test(t[j])){ s+=t[j]; j++; }
-          segs.push([s,1]); i=j-1; } else cur+=ch; }
-      if(cur) segs.push([cur,0]);
-      let w=0; segs.forEach(([s,sub])=>{ ctx.font=sub?small:f; w+=ctx.measureText(s).width; });
-      let px = al==='center'? x-w/2 : al==='right'? x-w : x;
-      ctx.textAlign='left';
-      segs.forEach(([s,sub])=>{ ctx.font=sub?small:f; ctx.fillText(s,px,y+(sub?3:0)); px+=ctx.measureText(s).width; });
-      ctx.font=f; ctx.textAlign=al;
-    };
-    ctx.font = '700 13px '+font;
+    // ---- the wrong speeds: ghosts slipping off the bank, u ∈ [0.58, 0.88]
+    const gp = (u - 0.58) / 0.30;
+    const gAlpha = (gp > 0 && gp < 1) ? Math.sin(Math.PI*gp) : 0;
+    const go = half*0.46*(gp > 0 ? Math.min(1, gp*1.35) : 0);
+    if(gAlpha > 0.01){
+      drawCar(midX - go*uX, midY - go*uY, true, gAlpha*0.9);     // too slow: down the bank
+      drawCar(midX + go*uX, midY + go*uY, true, gAlpha*0.9);     // too fast: up and off
+      const slow = 'too slow — slides down', fast = 'too fast — slides up';
+      const roomL = (midX - go*uX - carW*0.5 - 8*S) - W*0.26;
+      const roomR = W*0.74 - (midX + go*uX + carW*0.5 + 8*S);
+      const gfs = fitFont([slow, fast], Math.min(roomL, roomR), 12*Math.max(0.85,S), '600');
+      if(gfs){
+        ctx.save();
+        ctx.globalAlpha = gAlpha;
+        ctx.font = '600 '+gfs+'px '+font;
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = LIGHT ? '#1e3a8a' : '#bfdbfe';
+        ctx.textAlign = 'right';
+        ctx.fillText(slow, midX - go*uX - carW*0.5 - 8*S, midY - go*uY + 2*S);
+        ctx.textAlign = 'left';
+        ctx.fillText(fast, midX + go*uX + carW*0.5 + 8*S, midY + go*uY + 2*S);
+        ctx.restore();
+      }
+    }
+    drawCar(midX, midY, false, 1);                               // the real car, at v_d
+
+    // ---- the two real forces, and the net built as their SUM
+    const P0x = midX + nX*18*S, P0y = midY + nY*18*S;
+    const Wl = 50*S, Nl = Wl/cth, Fl = Wl*tth;
+    const P1x = P0x + nX*Nl,  P1y = P0y + nY*Nl;                 // tip of N
+    const P3x = P0x,          P3y = P0y + Wl;                    // tip of W
+    const P2x = P0x - Fl,     P2y = P0y;                         // N + W
+    const cW = '#f43f5e', cN = '#f59e0b';
+    const cC = LIGHT ? '#047857' : '#34d399';
+    const ease = t => t<=0 ? 0 : t>=1 ? 1 : t*t*(3-2*t);
+    const a = ease((u - 0.02)/0.14);                             // W and N grow
+    const b = ease((u - 0.20)/0.14);                             // parallelogram guides
+    const cq = ease((u - 0.36)/0.12);                            // the diagonal = net
+    const lfs = Math.max(9, Math.round(13*S));
+    if(a > 0.01){
+      arrow(P0x, P0y, P0x, P0y + Wl*a, cW, 3*Math.max(0.7,S));
+      arrow(P0x, P0y, P0x + nX*Nl*a, P0y + nY*Nl*a, cN, 3*Math.max(0.7,S));
+    }
+    if(b > 0.01){   // close the parallelogram: W copied to N's tip, N copied to W's tip
+      ctx.save();
+      ctx.globalAlpha = 0.75;
+      ctx.setLineDash([4*S, 4*S]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = cW;
+      ctx.beginPath(); ctx.moveTo(P1x, P1y); ctx.lineTo(P1x + (P2x-P1x)*b, P1y + (P2y-P1y)*b); ctx.stroke();
+      ctx.strokeStyle = cN;
+      ctx.beginPath(); ctx.moveTo(P3x, P3y); ctx.lineTo(P3x + (P2x-P3x)*b, P3y + (P2y-P3y)*b); ctx.stroke();
+      ctx.restore();
+    }
+    if(cq > 0.01) arrow(P0x, P0y, P0x + (P2x-P0x)*cq, P0y, cC, 3.2*Math.max(0.7,S));
+    ctx.font = '700 '+lfs+'px '+font;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = cW; ctx.textAlign = 'left';  ctx.fillText('W', tailX + 9, tailY + Wl - 3);
-    ctx.fillStyle = cN; ctx.textAlign = 'right'; ctx.fillText('N', tailX + nX*(Nl+10), tailY + nY*(Nl+10));
-    ctx.fillStyle = cC; ctx.textAlign = 'right'; subText('F_c', tailX - Fl - 8, tailY);
+    if(a > 0.6){
+      ctx.save(); ctx.globalAlpha = Math.min(1,(a-0.6)/0.3);
+      ctx.fillStyle = cW; ctx.textAlign = 'left';  ctx.fillText('W', P3x + 8*S, P3y - 3*S);
+      ctx.fillStyle = cN; ctx.textAlign = 'right'; ctx.fillText('N', P1x - 6*S, P1y - 6*S);
+      ctx.restore();
+    }
+    if(cq > 0.6){
+      ctx.save(); ctx.globalAlpha = Math.min(1,(cq-0.6)/0.3);
+      ctx.fillStyle = cC; ctx.textAlign = 'right';
+      const netFs = fitFont(['N + W  →  centre of the turn'], Math.max(40, P2x - W*0.26 - 8*S), 12*Math.max(0.85,S), '700');
+      if(netFs){
+        ctx.font = '700 '+netFs+'px '+font;
+        ctx.fillText('N + W  →  centre of the turn', P2x - 8*S, P2y);
+      }
+      ctx.restore();
+    }
 
-    ctx.fillStyle = LIGHT ? '#047857' : '#6ee7b7';
-    ctx.font = '700 13px '+font;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    subText('v = v_d  —  the bank alone supplies F_c', W*0.20, 10);
-    ctx.fillStyle = LIGHT ? '#475569' : '#94a3b8';
-    ctx.font = '600 13px '+font;
-    subText('N cosθ = W     ·     F_c = W tanθ     ·     friction idle', W*0.20, 31);
+    // ---- captions, centred and shrink-to-fit inside 26–74%
+    const room = W*0.48;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const topCap = 'v = v_d  —  the bank alone steers the car';
+    const tfs = fitFont([topCap], room, 14*Math.max(0.85,S), '700');
+    if(tfs){
+      ctx.font = '700 '+tfs+'px '+font;
+      ctx.fillStyle = LIGHT ? '#047857' : '#6ee7b7';
+      subText(topCap, W*0.5, H*0.03);
+    }
+    const botCap = 'N cosθ = W   ·   net = W tanθ   ·   friction idle';
+    const bfs = fitFont([botCap], room, 13*Math.max(0.85,S), '600');
+    if(bfs){
+      ctx.font = '600 '+bfs+'px '+font;
+      ctx.fillStyle = LIGHT ? '#475569' : '#94a3b8';
+      ctx.textBaseline = 'middle';
+      subText(botCap, W*0.5, (datumY + H)/2);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const token = ++heroToken;          // any re-entry (theme flip, resize) kills the old chain
+    const dpr = window.devicePixelRatio || 1;
+    const box = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+    const W = Math.max(2, Math.round((box && box.width)  || c.clientWidth  || 1280));
+    const H = Math.max(2, Math.round((box && box.height) || c.clientHeight || 210));
+    if(c.width !== Math.round(W*dpr) || c.height !== Math.round(H*dpr)){
+      c.width = Math.round(W*dpr); c.height = Math.round(H*dpr);
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);               // draw in CSS px
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ paintHero(ctx, W, H, LIGHT, 0.73); return; }  // static: triangle built, ghosts out
+    const LOOP = 7000;                                        // ms per cycle
+    let t0 = null;
+    paintHero(ctx, W, H, LIGHT, 0);
+    // One clock only: every entry comes from rAF, so `ts` is always the frame
+    // timestamp (never mixed with Date.now(), and ts = 0 is handled).
+    function frame(ts){
+      if(token !== heroToken) return;                         // superseded — stop
+      if(ov.classList.contains('hidden')) return;             // overlay dismissed: stop
+      const now = (typeof ts === 'number') ? ts
+                : ((window.performance && performance.now) ? performance.now() : Date.now());
+      if(t0 === null) t0 = now;
+      paintHero(ctx, W, H, LIGHT, ((now - t0) % LOOP) / LOOP);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
   drawHero();
   addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });

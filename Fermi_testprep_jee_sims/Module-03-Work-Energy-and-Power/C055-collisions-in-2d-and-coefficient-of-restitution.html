@@ -1574,7 +1574,7 @@ Object.freeze(Engine);
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Glancing collision</span></h2>
-            <p class="welcome-blurb">Watch two billiard balls collide off-centre — momentum becomes a vector story, and equal masses part at an angle worth predicting.</p>
+            <p class="welcome-blurb">Two billiard balls meet off-centre — what does the offset do to the angle between them?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3557,76 +3557,145 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's own physics — an equal-mass off-centre collision
-     (u = 5, θCM = 0.6π, the sim's defaults) drawn as EQUAL-TIME dots: the
-     incoming ball marches in along the dashed axis, then the two outgoing
-     paths open at exactly 90°; on the right, the momentum vectors are laid
-     tip-to-tail and close onto the same Σp as before the hit. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+  /* ===== Hero: the equal-mass glancing hit, drawn TRUE =========================
+     Composition is the original's (the best mask discipline in the module):
+     equal-time dots march ball 1 in along the dashed line of centres, the two
+     outgoing paths open from the impact point, and to the right the outgoing
+     momenta are laid tip-to-tail and close onto the same Sigma-p as before.
+
+     WHY IT HAD TO BE REDRAWN — the geometry was a lie. The old code carried the
+     comment "UNIFORM scale — a y-squash would bend the true opening angle", and
+     it WAS uniform inside the authored 1280x240 backing store; but that store is
+     stretched into a 100vw x 140px CSS box. On a 1440px viewport that is 1.125x
+     in x and 0.583x in y, so the exact 90 degrees between the outgoing paths
+     arrived on screen as atan(2.3776*0.583/1.7275) + atan(2.3776*0.583/3.2725)
+     = 56.2 degrees. The cure is the C190 idiom: re-size the backing store from
+     getBoundingClientRect() x devicePixelRatio inside the paint routine and draw
+     in CSS pixels, so one world unit is the same number of pixels in x as in y
+     and a right angle stays a right angle at every viewport width. Verified off
+     the drawn dot coordinates: 90.000 degrees at W = 760 ... 1920.
+
+     SPOILER CHECK (the data-gate cards were read first):
+       - Card 1 (data-gate) asks what the angle BETWEEN the two outgoing paths
+         does as the hit goes from grazing to head-on; the answer is the
+         INVARIANCE — the same angle at every setting. One collision cannot show
+         invariance, so the hero draws a single hit and carries NO angle arc, NO
+         "90" text and no impact-parameter sweep. (The welcome narration already
+         promises "an angle with a surprise in it ... you will predict it before
+         you see it", so the band stays wordless about the value.)
+       - Card 3 (data-gate) asks what supplies the fourth equation; the hero
+         shows no equation count and never names the impact parameter.
+       - Card 4 (ungated, unequal masses) is not depicted either.
+     The only text in the band is the caption under the momentum triangle.
+
+     Layout is fully proportional: every essential mark lands inside 26%-74% of
+     the DISPLAYED width, and the CSS mask is opaque only over 22%-78%. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, shown, LIGHT){
+    const ink1 = LIGHT ? 'rgba(37,99,235,.92)'  : 'rgba(96,165,250,.92)';   // ball 1
+    const ink2 = LIGHT ? 'rgba(219,39,119,.92)' : 'rgba(244,114,182,.92)';  // ball 2
+    const inkP = LIGHT ? 'rgba(15,23,42,.55)'   : 'rgba(226,232,240,.58)';  // total momentum
+    const axis = LIGHT ? 'rgba(15,23,42,.28)'   : 'rgba(148,163,184,.30)';
+    const soft = LIGHT ? 'rgba(51,65,85,.70)'   : 'rgba(203,213,225,.64)';
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
     ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    // The sim's default collision: m1 = m2 = 1, u = 5 m/s, thetaCM = 0.6*pi.
+
+    // The sim's default collision: m1 = m2 = 1 kg, u = 5 m/s, thetaCM = 0.6*pi.
     const u = 5, th = 0.6*Math.PI;
     const vcm = [u/2, 0];
     const u1p = [ (u/2)*Math.cos(th), (u/2)*Math.sin(th) ];
-    const v1 = [ u1p[0]+vcm[0],  u1p[1]+vcm[1] ];   // ball 1 out (up-right)
-    const v2 = [ vcm[0]-u1p[0],  vcm[1]-u1p[1] ];   // ball 2 out (down-right)
-    const px0 = W*0.40, py0 = H*0.52;               // impact point
-    const s = 16, ys = 1.0, T = 2.0;                // px per world unit; UNIFORM scale — a y-squash would bend the true opening angle on screen
-    // dashed incoming axis
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.28)';
-    ctx.lineWidth = 1; ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.moveTo(W*0.04, py0); ctx.lineTo(W*0.58, py0); ctx.stroke();
-    ctx.setLineDash([]);
-    const ink1 = LIGHT ? 'rgba(37,99,235,.9)'  : 'rgba(96,165,250,.9)';    // ball 1 (blue)
-    const ink2 = LIGHT ? 'rgba(219,39,119,.9)' : 'rgba(244,114,182,.9)';   // ball 2 (pink)
-    const inkP = LIGHT ? 'rgba(15,23,42,.55)'  : 'rgba(226,232,240,.55)';  // total momentum (grey)
+    const v1  = [ u1p[0]+vcm[0], u1p[1]+vcm[1] ];     // ball 1 out (up-right)
+    const v2  = [ vcm[0]-u1p[0], vcm[1]-u1p[1] ];     // ball 2 out (down-right)
+    const T = 2.0, N = 56, dt = T/N, NIN = 25;        // NIN approach dots, same time cadence
+
+    // ---- proportional layout, entirely inside 26%-74% of the displayed width
+    const bandL = 0.26*W, bandW = 0.48*W, padV = 13;
+    const wx0 = -u*NIN*dt, wx1 = Math.max(v1[0], v2[0])*T;
+    const wyH = Math.max(Math.abs(v1[1]), Math.abs(v2[1]))*T;
+    let s   = (H - 2*padV)/(2*wyH);                   // px per world unit — the SAME in x and y
+    let ms  = (H - 2*padV - 20)/v1[1];                // px per momentum unit
+    let gap = Math.max(22, Math.min(58, 0.09*bandW));
+    let wA  = (wx1 - wx0)*s, wB = u*ms;
+    const fit = bandW/(wA + gap + wB);
+    if(fit < 1){ s *= fit; ms *= fit; gap *= fit; wA *= fit; wB *= fit; }
+    const left = bandL + (bandW - (wA + gap + wB))/2;
+    const px0  = left - wx0*s, py0 = H/2;              // impact point
+    const ox   = left + wA + gap, triH = v1[1]*ms;
+    const oy   = (H - (triH + 20))/2 + triH;           // baseline of the Sigma-p arrow
+
     function arrow(x0,y0,x1,y1,ink,wd){
       ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = wd;
       ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
-      const a = Math.atan2(y1-y0, x1-x0);
+      const a = Math.atan2(y1-y0, x1-x0), hd = Math.max(6, 3.0*wd);
       ctx.beginPath(); ctx.moveTo(x1,y1);
-      ctx.lineTo(x1-9*Math.cos(a-0.42), y1-9*Math.sin(a-0.42));
-      ctx.lineTo(x1-9*Math.cos(a+0.42), y1-9*Math.sin(a+0.42));
+      ctx.lineTo(x1-hd*Math.cos(a-0.42), y1-hd*Math.sin(a-0.42));
+      ctx.lineTo(x1-hd*Math.cos(a+0.42), y1-hd*Math.sin(a+0.42));
       ctx.closePath(); ctx.fill();
     }
-    function drawMomenta(){
-      // Tip-to-tail on the right: p1' then p2' close onto the same Sigma-p.
-      const ms = 24, ox = W*0.66, oy = H*0.60;
-      arrow(ox, oy, ox + u*ms, oy, inkP, 2.5);                                  // Sigma-p (before = after)
-      arrow(ox, oy, ox + v1[0]*ms, oy - v1[1]*ms, ink1, 2.5);                   // p1'
-      arrow(ox + v1[0]*ms, oy - v1[1]*ms, ox + u*ms, oy, ink2, 2.5);            // p2' tip-to-tail
-      ctx.fillStyle = LIGHT ? 'rgba(51,65,85,.85)' : 'rgba(203,213,225,.8)';
-      ctx.font = '600 20px ' + getComputedStyle(document.body).fontFamily;
-      ctx.fillText('momenta, tip-to-tail', ox, oy + 34);
+    // the incoming line of centres, dashed
+    ctx.strokeStyle = axis; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(px0 + wx0*s, py0); ctx.lineTo(px0 + 1.6*s, py0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // equal-time dots: NIN on the approach, then N along each outgoing path
+    const rr = Math.max(2.1, Math.min(3.0, s*0.24));
+    ctx.fillStyle = ink1;
+    for(let i=0; i<Math.min(shown, NIN); i++){
+      const x = wx0 + u*(i+0.5)*dt;
+      ctx.beginPath(); ctx.arc(px0 + x*s, py0, rr, 0, 7); ctx.fill();
     }
-    // equal-time dots accumulating along the incoming and both outgoing paths
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 56; let k = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let q=0;q<per && k<N;q++,k++){
-        const f = (k+0.5)/N, t = f*T;
-        // incoming: ball 1 marches toward the impact point at u
-        const ix = px0 - u*(T - t)*s;
-        if(ix > W*0.03){
-          ctx.fillStyle = ink1;
-          ctx.beginPath(); ctx.arc(ix, py0, 3.0, 0, 7); ctx.fill();
-        }
-        // outgoing: both balls leave the impact point (canvas y is flipped)
-        ctx.fillStyle = ink1;
-        ctx.beginPath(); ctx.arc(px0 + v1[0]*t*s, py0 - v1[1]*t*s*ys, 3.0, 0, 7); ctx.fill();
-        ctx.fillStyle = ink2;
-        ctx.beginPath(); ctx.arc(px0 + v2[0]*t*s, py0 - v2[1]*t*s*ys, 3.0, 0, 7); ctx.fill();
+    const outN = Math.max(0, Math.min(shown - NIN, N));
+    for(let j=0; j<outN; j++){
+      const t = (j+0.5)*dt;
+      ctx.fillStyle = ink1;
+      ctx.beginPath(); ctx.arc(px0 + v1[0]*t*s, py0 - v1[1]*t*s, rr, 0, 7); ctx.fill();
+      ctx.fillStyle = ink2;
+      ctx.beginPath(); ctx.arc(px0 + v2[0]*t*s, py0 - v2[1]*t*s, rr, 0, 7); ctx.fill();
+    }
+    // the momentum triangle, once both outgoing paths are laid down
+    if(shown >= NIN + N){
+      arrow(ox, oy, ox + u*ms, oy, inkP, 2.2);                         // Sigma-p (before = after)
+      arrow(ox, oy, ox + v1[0]*ms, oy - v1[1]*ms, ink1, 2.2);          // p1'
+      arrow(ox + v1[0]*ms, oy - v1[1]*ms, ox + u*ms, oy, ink2, 2.2);   // p2', tip-to-tail
+      if(wB > 130 && W > 620){
+        ctx.fillStyle = soft; ctx.font = '11.5px ' + FAM;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText('momenta, tip to tail', ox + wB/2, oy + 7);
       }
-      if(k < N) requestAnimationFrame(batch);
-      else drawMomenta();
     }
-    batch();
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                       // one live animation at a time
+    const TOTAL = 25 + 56;                        // NIN + N
+    function paint(n){
+      const r   = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W   = Math.max(360, Math.round(r.width  || 1280));
+      const H   = Math.max(100, Math.round(r.height || 140));
+      const bw  = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, n, LIGHT);
+    }
+    if(reduce){ paint(TOTAL); return; }           // static fallback, fully drawn
+    // 0.7 s to march the dots in (the original 2-dots-per-frame cadence at
+    // 60 fps), then a 1.4 s dwell on the finished figure before it repeats
+    const REVEAL = 0.7, PERIOD = REVEAL + 1.4;
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = ((Math.max(0, now - t0))/1000) % PERIOD;
+      paint(Math.round(TOTAL * Math.min(1, s/REVEAL)));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

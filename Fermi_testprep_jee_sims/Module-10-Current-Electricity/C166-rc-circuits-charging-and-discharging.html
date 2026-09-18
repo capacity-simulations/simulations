@@ -1173,7 +1173,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots on the charging traces V_C(t) and I(t)</span>
+            <span class="hero-label">Equal-time dots over five time constants of charging: the capacitor voltage V_C and the remaining gap V_s − V_C, both as fractions of the supply on one 0-to-1 axis</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">RC Circuit</span></h2>
@@ -3271,50 +3271,120 @@ if (typeof Shell !== 'undefined' && Shell.init){
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to RC circuits — charging and discharging.',
-    'Here a battery, resistor and capacitor share one clock. Voltage on the capacitor climbs while the current falls — they are mirror images of the same remaining gap.',
+    'Here a battery, a resistor and a capacitor share one clock. Your job is to work out what the voltage and the current do from the moment the switch closes, and what sets the time they take.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's charging laws V_C(t)=Vs(1−e^{−t/τ}) and I(t)=(Vs/R)e^{−t/τ}
-     drawn as equal-time dots so density shows how each trace slows (Vs=12 V, τ=1 ms). */
+  /* Hero: the charging pair drawn as equal-time dots over 0 → 5τ, so the
+     thinning dot density shows how the approach slows. Both curves are plotted
+     as FRACTIONS OF THE SUPPLY on one shared 0→1 axis — blue V_C/V_s climbing,
+     amber (V_s − V_C)/V_s (the gap the resistor still sees) falling — and both
+     are named on the canvas.
+
+     HONESTY. The previous version drew the second curve as I/I₀ but mapped it
+     through the VOLTAGE scale, Yv(iFrac*Vs), with nothing on the canvas saying
+     the amber trace was a normalised current rather than volts: two different
+     quantities silently sharing one axis and one set of numbers. Re-reading the
+     pair as V_C/V_s and (V_s − V_C)/V_s removes the rescaling entirely — both
+     really are dimensionless fractions of V_s on the same axis, and the two
+     labels say which is which.
+
+     CARD GATES CHECKED (2026-09-18). Card 1 is a data-gate prediction: "when is
+     the current through the resistor LARGEST?", whose answer is "the instant the
+     switch closes". A falling amber curve LABELLED as current would hand that
+     over on the welcome screen, so the hero deliberately does not name current
+     or Ohm's law anywhere; the falling trace is named for what it literally is,
+     the remaining gap. (Card 2, which supplies I = (V_s − V_C)/R and so links
+     the two, is ungated.) Card 4 is a second gate — the 36.8% left at t = τ on
+     DISCHARGE — so the pink t = τ rule stays a bare vertical: it is not
+     labelled τ, and no 63.2% / 36.8% level line is drawn against it. The sim
+     shows charging only, never the discharge the gate asks about.
+
+     The canvas is sized to its OWN CSS box on every paint, not to the 1280x240
+     authored in the markup: the band is one viewport wide and 140px tall, so a
+     5.3:1 backing store was being stretched to ≈10:1 and smearing every dot. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const axis = LIGHT ? 'rgba(15,23,42,.30)'   : 'rgba(148,163,184,.34)';
+    const tick = LIGHT ? 'rgba(15,23,42,.55)'   : 'rgba(148,163,184,.65)';
+    const rule = LIGHT ? 'rgba(219,39,119,.38)' : 'rgba(244,114,182,.44)';
+    const inkV = LIGHT ? 'rgba(37,99,235,.90)'  : 'rgba(96,165,250,.94)';
+    const inkG = LIGHT ? 'rgba(180,83,9,.90)'   : 'rgba(245,158,11,.94)';
+    // Ink budget: the band is masked to a soft edge outside 22–78% of its width,
+    // so every axis, dot and label is fitted inside 26.5–73.5%. The old frame ran
+    // 10%→90%, leaving the y-axis and the whole plateau/tail end in the fade.
+    const L = W*0.265, R = W*0.735;
+    const FS = Math.max(9, Math.min(13, (R-L)/34));
+    ctx.font = FS+'px '+FAM;
+    const x0 = L + Math.ceil(ctx.measureText('1').width) + 7;   // room for the 0/1 ticks
+    const x1 = R - 4;                                           // dot radius stays inside R
+    const y0 = H*0.83, y1 = H*0.17;
+    const X = f => x0 + f*(x1-x0);        // f = t/5τ, 0…1
+    const Y = f => y0 - f*(y0-y1);        // f = fraction of V_s, 0…1
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = axis;
+    ctx.beginPath(); ctx.moveTo(x0, y0+0.5); ctx.lineTo(x1, y0+0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0+0.5, y1); ctx.lineTo(x0+0.5, y0); ctx.stroke();
+    // 0 and 1 on the fraction axis — the whole scale, in two glyphs
+    ctx.fillStyle = tick; ctx.font = FS+'px '+FAM;
+    ctx.textAlign='right';
+    ctx.textBaseline='top';    ctx.fillText('1', x0-5, y1);
+    ctx.textBaseline='bottom'; ctx.fillText('0', x0-5, y0);
+    // The circuit's own clock, at t = τ (one fifth of the span). Left unlabelled
+    // on purpose — see the gate note above.
+    ctx.strokeStyle = rule;
+    ctx.beginPath(); ctx.moveTo(X(0.2), y1); ctx.lineTo(X(0.2), y0); ctx.stroke();
+    // Curve names, stacked in the empty mid-height wedge on the right, where
+    // neither trace passes (both are past 0.9 / under 0.1 by then).
+    const mid = (y0+y1)/2;
+    ctx.textAlign='right';
+    ctx.font = FS+'px '+FAM;
+    ctx.fillStyle = inkV; ctx.textBaseline='bottom'; ctx.fillText('V_C / V_s', x1, mid-2);
+    ctx.fillStyle = inkG; ctx.textBaseline='top';    ctx.fillText('(V_s − V_C) / V_s', x1, mid+2);
+    // equal-time dots: density thins as the exponential slows
+    const N = 80, shown = Math.max(0, Math.min(N, Math.round(u*N)));
+    for(let k=0;k<shown;k++){
+      const f = (k+1)/N;                   // t / 5τ
+      const vFrac = 1 - Math.exp(-5*f);    // V_C / V_s
+      ctx.fillStyle = inkV;
+      ctx.beginPath(); ctx.arc(X(f), Y(vFrac), 2.6, 0, 7); ctx.fill();
+      ctx.fillStyle = inkG;
+      ctx.beginPath(); ctx.arc(X(f), Y(1-vFrac), 2.6, 0, 7); ctx.fill();
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const Vs = 12, tau = 1e-3, tMax = 5*tau;
-    const x0 = W*0.10, x1 = W*0.90, y0 = H*0.86, y1 = H*0.14;
-    const X = t => x0 + (t/tMax)*(x1-x0);
-    const Yv = v => y0 - (v/Vs)*(y0-y1);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x0, y1); ctx.lineTo(x0, y0); ctx.stroke();
-    // τ marker (vertical at t=τ) — caption stays neutral; this is the sim's clock
-    ctx.strokeStyle = LIGHT ? 'rgba(219,39,119,.35)' : 'rgba(244,114,182,.40)';
-    ctx.beginPath(); ctx.moveTo(X(tau), y1); ctx.lineTo(X(tau), y0); ctx.stroke();
-    const inkV = LIGHT ? 'rgba(37,99,235,.88)' : 'rgba(96,165,250,.92)';
-    const inkI = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(245,158,11,.92)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 80; let k = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && k<N;s++,k++){
-        const t = ((k+1)/N)*tMax;
-        const v = Vs*(1 - Math.exp(-t/tau));
-        const iFrac = Math.exp(-t/tau);          // I / I_max
-        ctx.fillStyle = inkV;
-        ctx.beginPath(); ctx.arc(X(t), Yv(v), 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = inkI;
-        ctx.beginPath(); ctx.arc(X(t), Yv(iFrac*Vs), 2.6, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }             // static: the completed pair
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      // 3.2 s cycle: 1.8 s reveal, 1.4 s dwell on the finished pair, then repeat
+      const s = (((now || t0) - t0)/1000) % 3.2;
+      paint(Math.min(1, s/1.8));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

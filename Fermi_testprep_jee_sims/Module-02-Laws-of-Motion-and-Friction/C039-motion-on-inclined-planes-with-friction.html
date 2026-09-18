@@ -516,7 +516,7 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">A crate on a ramp — stuck while tanθ &lt; μ, then friction drops and it slides</span>
+            <span class="hero-label">A crate on a ramp with mg, N and fₖ — it slides off, marked at equal time steps</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Forces on a block</span></h2>
@@ -2458,39 +2458,92 @@ window.__audit={
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: one static textbook FBD — crate sitting ON the slope (not inside
-     the wedge). Outward normal is (−sinθ, −cosθ) in screen coords (y down),
-     so the block's centre is surface + n·half and its bottom edge is flush. */
-  function drawHero(){
-    const c = $('welcome-fringes'); if(!c) return;
-    const dpr = window.devicePixelRatio || 1;
-    const W = Math.max(2, c.clientWidth || 1280);
-    const H = Math.max(2, c.clientHeight || 168);
-    if(c.width !== Math.floor(W*dpr) || c.height !== Math.floor(H*dpr)){
-      c.width = Math.floor(W*dpr); c.height = Math.floor(H*dpr);
-    }
-    const ctx = c.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    const th = 22 * Math.PI/180;          // above repose (μ=0.30 → 17°) so f is kinetic
-    const ink  = LIGHT ? '#0f172a' : '#e2e8f0';
-    const mute = LIGHT ? '#475569' : '#94a3b8';
-    const wedgeFill = LIGHT ? '#c5d0de' : '#1d2a3f';
+  /* Hero — SURGICAL FIX (the textbook FBD was sound; the geometry, the safe
+     band and the stillness were not). A crate sitting ON the slope, the wedge
+     hatched beneath it, the θ corner marked, and mg / N / fₖ from the crate's
+     centre. What is new is the MOTION the sim is named for: past the repose
+     angle friction loses its grip and the crate slides, dropping a ghost
+     outline at EQUAL TIME intervals, so the widening gaps read as acceleration
+     rather than as drift. One slide per ~4.2 s loop, with a pause at each end.
+
+     GATED-CARD CHECK. The only data-gate card in this sim is card 2 — "which
+     way does the block set off" for the three forces on the FLAT top-view
+     table (answer: along the vector sum, ↗ at 45°, not along the biggest
+     arrow). This hero shows neither the flat scene, nor those three forces,
+     nor any F_net or a arrow, so it cannot leak it. "Does it slide or stay" is
+     NOT gated: card 5 is an ungated explore card that states the tanθ = μ
+     threshold (θ ≈ 16.7°) outright, and this overlay's own blurb already says
+     the leftover force sends the crate down the slope. So the slide cue is
+     fair game, and the hero stops being the only static one in an animated
+     family. It also stays plainly distinct from C033's hero, which was
+     regenerated to a six-scene strip with no force arrows at all.
+
+     Fixes. (i) The apex was clipped: L = min(W*0.42, 460) against a pivot at
+     0.86H put apex.y ≈ −28 on a 1440px-wide band, i.e. above the top of the
+     canvas. The ramp is now sized from the HEIGHT budget first — the run is
+     whatever fits between the caption band and the ground line — and only then
+     capped by width, so the whole wedge is always on-canvas. (ii) The θ arc ran
+     from −θ to 0, i.e. to the RIGHT of the pivot where there is no wedge at
+     all; it now spans π → π+θ, inside the corner it actually measures. (iii)
+     The captions were pinned at 0.20W, outside the safe band; every piece of
+     essential ink now lives inside 25%–75% of the DISPLAYED width (the strip's
+     own mask is 18/82, so this is the conservative 24/76 target). On a wide
+     band the captions move into a left column so the ramp can use the full
+     height instead of being squeezed under them. (iv) The backing store now
+     comes from getBoundingClientRect() × devicePixelRatio rather than
+     clientWidth, and a heroToken generation guard cancels the previous rAF
+     chain when a theme change or a resize starts a new one;
+     prefers-reduced-motion gets the end-of-slide frame, statically. Only the
+     faint top wash runs the full width into the mask fade — it carries no
+     information. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM = '"DM Sans", "Segoe UI", Arial, sans-serif';
+    const th  = 22 * Math.PI/180;          // above repose (μ=0.30 → 17°) so f is kinetic
+    const ink   = LIGHT ? '#0f172a' : '#e2e8f0';
+    const mute  = LIGHT ? '#475569' : '#94a3b8';
+    const wedgeFill   = LIGHT ? '#c5d0de' : '#1d2a3f';
     const wedgeStroke = LIGHT ? '#64748b' : '#41567a';
-    const ground = LIGHT ? 'rgba(15,23,42,.40)' : 'rgba(148,163,184,.42)';
+    const hatchInk    = LIGHT ? 'rgba(15,23,42,.12)' : 'rgba(148,163,184,.16)';
+    const groundInk   = LIGHT ? 'rgba(15,23,42,.40)' : 'rgba(148,163,184,.42)';
+    const tickInk     = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
+    const ghostInk    = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.38)';
     const colMg = LIGHT ? '#dc2626' : '#f87171';
     const colN  = LIGHT ? '#2563eb' : '#60a5fa';
     const colF  = LIGHT ? '#d97706' : '#f59e0b';
+    const capHi = LIGHT ? '#b45309' : '#fde68a';
 
     ctx.clearRect(0,0,W,H);
+    // Decorative only: allowed to run the full width and fade into the mask.
+    const wash = ctx.createLinearGradient(0,0,0,H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0,0,W,H);
 
-    const pivot = { x: W*0.58, y: H*0.86 };
-    const L = Math.min(W*0.42, 460);
-    // Up-slope unit (screen y down). The wedge sits to the LEFT of the
-    // hypotenuse, so the air normal is right-and-up: (sinθ, −cosθ).
-    const ux = -Math.cos(th), uy = -Math.sin(th);
-    const nx =  Math.sin(th), ny = -Math.cos(th);
-    const apex = { x: pivot.x + ux*L, y: pivot.y + uy*L };
+    const bx0 = W*0.25, bw = W*0.50;       // the safe band: 25%–75% of displayed width
+    const baseY = H*0.88;                  // ground line
+    // Wide bands get a caption column beside the ramp, so the ramp keeps the
+    // full height; narrow bands stack one caption line above it.
+    const sideBySide = bw > 420;
+    const capBottom  = sideBySide ? 3 : H*0.155 + 6;   // ceiling for every ramp-side pixel
+    // The old hero sized the ramp from the WIDTH alone (L = min(W*0.42, 460))
+    // and clipped its apex off the top of a 140–168px band. Size it from the
+    // HEIGHT budget first: reserve the crate's normal offset, its own rotated
+    // half-height and most of the N arrow, and give the rise what is left.
+    let half = Math.max(10, Math.min(20, H*0.135));
+    let boxH = half*(Math.cos(th)+Math.sin(th));       // crate's rotated half-height
+    const headroom = (half+2)*Math.cos(th) + boxH + 0.70*(half*1.70)*Math.cos(th) + 8;
+    const riseMax = Math.max(22, (baseY - capBottom - headroom)/0.66);
+    const runByW  = sideBySide ? bw*0.50 : bw*0.66;   // side-by-side leaves half the band for the captions
+    const run  = Math.min(runByW, 330, riseMax/Math.tan(th));   // horizontal run of the slope
+    const L    = run/Math.cos(th);                  // slope length
+    const rise = run*Math.tan(th);
+    half = Math.max(9, Math.min(half, L*0.18));     // never wider than the ramp it rides
+    boxH = half*(Math.cos(th)+Math.sin(th));
+    const pivot = { x: sideBySide ? (bx0 + bw - 18) : (W*0.5 + run/2), y: baseY };
+    const apex  = { x: pivot.x - run, y: baseY - rise };
+    const ux = -Math.cos(th), uy = -Math.sin(th);   // up-slope unit (screen y down)
+    const nx =  Math.sin(th), ny = -Math.cos(th);   // outward slope normal
 
     function arrow(x1,y1,x2,y2,color,w){
       ctx.save();
@@ -2507,93 +2560,171 @@ window.__audit={
     }
 
     // ground
-    ctx.strokeStyle = ground; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(W*0.18, pivot.y); ctx.lineTo(W*0.82, pivot.y); ctx.stroke();
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.10)' : 'rgba(148,163,184,.14)';
-    ctx.lineWidth = 1;
-    for(let x=W*0.18; x<W*0.82; x+=14){
-      ctx.beginPath(); ctx.moveTo(x, pivot.y+2); ctx.lineTo(x-8, pivot.y+12); ctx.stroke();
+    ctx.save();
+    ctx.strokeStyle = groundInk; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(apex.x - 18, baseY); ctx.lineTo(pivot.x + 18, baseY); ctx.stroke();
+    ctx.strokeStyle = tickInk; ctx.lineWidth = 1;
+    for(let x = apex.x - 10; x < pivot.x + 18; x += 14){
+      ctx.beginPath(); ctx.moveTo(x, baseY+2); ctx.lineTo(x-8, baseY+10); ctx.stroke();
     }
+    ctx.restore();
 
     // wedge under the slope
-    ctx.fillStyle = wedgeFill; ctx.strokeStyle = wedgeStroke; ctx.lineWidth = 2;
+    ctx.save();
+    ctx.fillStyle = wedgeFill; ctx.strokeStyle = wedgeStroke; ctx.lineWidth = 2; ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(pivot.x, pivot.y); ctx.lineTo(apex.x, apex.y); ctx.lineTo(apex.x, pivot.y);
     ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
 
-    // hatch inside the solid (inward)
+    // hatch inside the solid (inward from the slope face)
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(pivot.x, pivot.y); ctx.lineTo(apex.x, apex.y); ctx.lineTo(apex.x, pivot.y);
     ctx.closePath(); ctx.clip();
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.12)' : 'rgba(148,163,184,.16)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = hatchInk; ctx.lineWidth = 1;
     for(let i=10;i<L;i+=16){
       ctx.beginPath();
       ctx.moveTo(pivot.x + ux*i, pivot.y + uy*i);
-      ctx.lineTo(pivot.x + ux*i - nx*16, pivot.y + uy*i - ny*16); // inward, into the solid
+      ctx.lineTo(pivot.x + ux*i - nx*16, pivot.y + uy*i - ny*16);
       ctx.stroke();
     }
     ctx.restore();
 
-    // θ arc
-    ctx.strokeStyle = mute; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(pivot.x, pivot.y, 30, -th, 0); ctx.stroke();
-    ctx.fillStyle = ink;
-    ctx.font = '600 13px "DM Sans", "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.fillText('θ = 22°', pivot.x+34, pivot.y-6);
-
-    // Crate ON the slope: contact at 55% of the way up from the foot.
-    const half = 22;
-    const t = 0.55;
-    const sx = pivot.x + ux*t*L, sy = pivot.y + uy*t*L;
-    // +2 px so the crate sits on top of the wedge stroke, not in it
-    const bx = sx + nx*(half+2), by = sy + ny*(half+2);
+    // θ arc — the corner between the ground running LEFT and the slope running
+    // up-left, i.e. π → π+θ. (It used to be drawn at −θ → 0, off the wedge.)
+    const arcR = Math.max(16, Math.min(28, run*0.16));
     ctx.save();
-    ctx.translate(bx, by);
-    ctx.rotate(th);
-    const gr = ctx.createLinearGradient(-half,-half,half,half);
-    gr.addColorStop(0, LIGHT ? '#94a3b8' : '#46586f');
-    gr.addColorStop(1, LIGHT ? '#64748b' : '#232d3c');
-    ctx.fillStyle = gr;
-    ctx.strokeStyle = LIGHT ? '#334155' : '#cbd5e1';
-    ctx.lineWidth = 2;
-    const r = 6;
-    ctx.beginPath();
-    ctx.moveTo(-half+r,-half); ctx.lineTo(half-r,-half); ctx.quadraticCurveTo(half,-half,half,-half+r);
-    ctx.lineTo(half,half-r); ctx.quadraticCurveTo(half,half,half-r,half);
-    ctx.lineTo(-half+r,half); ctx.quadraticCurveTo(-half,half,-half,half-r);
-    ctx.lineTo(-half,-half+r); ctx.quadraticCurveTo(-half,-half,-half+r,-half);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(226,232,240,.88)';
-    ctx.font = '700 12px "DM Sans", "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('m', 0, 1);
+    ctx.strokeStyle = mute; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(pivot.x, pivot.y, arcR, Math.PI, Math.PI+th, false); ctx.stroke();
     ctx.restore();
+    ctx.fillStyle = ink;
+    ctx.font = '600 13px ' + FAM;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('θ = 22°', pivot.x - arcR - 8, pivot.y - 6);
 
-    // Forces from the crate centre. N along +n, f_k up-slope, mg straight down.
-    // Lengths only need to look right: mg longest, N ~ mg cosθ, f_k = μ N < mg sinθ.
-    const mgLen = 50, nLen = 36, fLen = 20;
-    arrow(bx, by, bx, by+mgLen, colMg, 2.5);
-    arrow(bx, by, bx+nx*nLen, by+ny*nLen, colN, 2.5);
-    arrow(bx, by, bx+ux*fLen, by+uy*fLen, colF, 2.5);
-    ctx.font = '700 12px "DM Sans", "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = colMg; ctx.fillText('mg', bx+8, by+mgLen-2);
-    ctx.fillStyle = colN;  ctx.fillText('N', bx+nx*nLen+6, by+ny*nLen);
-    ctx.fillStyle = colF;  ctx.fillText('fₖ', bx+ux*fLen-22, by+uy*fLen-8);
+    // ---- the slide: equal time steps, so the widening gaps read as accelerating
+    // Start point: as high as the crate can sit with its whole box under the
+    // caption ceiling. End point: 0.32 L further down the slope.
+    const bOff = (half+2)*Math.cos(th);              // crate centre off the slope face
+    const tHi  = Math.max(0.30, Math.min(0.66, (baseY - capBottom - boxH - bOff)/rise));
+    const tLo  = Math.max(0.12, tHi - 0.32);         // fractions of L, crate centre
+    const bHi  = baseY - tHi*rise - bOff;            // highest crate centre
+    const bLo  = baseY - tLo*rise - bOff;            // lowest crate centre
+    // mg longest, N ≈ mg cosθ, fₖ = μN < mg sinθ — then every arm is clipped to
+    // the room its own label actually has, so nothing leaves the canvas.
+    const nCap  = (bHi - capBottom - 7.5)/Math.cos(th);
+    const fCap  = (bHi - capBottom - 14.5)/Math.sin(th);
+    const mgCap = H - 7.5 - bLo;
+    const armK  = Math.min(1, nCap/(half*1.70), fCap/(half*0.95), mgCap/(half*2.30));
+    const arm   = Math.max(0.25, armK);
+    const mgLen = Math.max(6, Math.min(half*2.30*arm, mgCap));
+    const nLen  = Math.max(5, Math.min(half*1.70*arm, nCap));
+    const fLen  = Math.max(4, Math.min(half*0.95*arm, fCap));
+    const hold0 = 0.14, slideFrac = 0.58;            // of the loop: still, then sliding
+    let p = ((u||0) - hold0)/slideFrac; p = p < 0 ? 0 : (p > 1 ? 1 : p);
+    const tOf = q => tHi - (tHi-tLo)*q*q;            // s ∝ t² at constant acceleration
 
-    ctx.fillStyle = LIGHT ? '#b45309' : '#fde68a';
-    ctx.font = '700 13px "DM Sans", "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText('θ > tan⁻¹μ  —  leftover force down the slope', W*0.20, 12);
-    ctx.fillStyle = mute;
-    // 12px floor for canvas text (K-12 legibility). The line is left-aligned at
-    // 0.20W on a ~1280px hero and runs ~330px at this size, so it still clears
-    // the right edge, and the 13px headline above it sits on its own baseline.
-    ctx.font = '600 12px "DM Sans", "Segoe UI", Arial, sans-serif';
-    ctx.fillText('μ = 0.30   ·   tan⁻¹μ ≈ 17°   ·   N = mg cosθ   ·   fₖ = μN', W*0.20, 32);
+    function crate(tt, isGhost){
+      const sx = pivot.x + ux*tt*L, sy = pivot.y + uy*tt*L;
+      const bx = sx + nx*(half+2), by = sy + ny*(half+2);   // +2 so it sits ON the face
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(th);
+      const r = 6;
+      ctx.beginPath();
+      ctx.moveTo(-half+r,-half); ctx.lineTo(half-r,-half); ctx.quadraticCurveTo(half,-half,half,-half+r);
+      ctx.lineTo(half,half-r);   ctx.quadraticCurveTo(half,half,half-r,half);
+      ctx.lineTo(-half+r,half);  ctx.quadraticCurveTo(-half,half,-half,half-r);
+      ctx.lineTo(-half,-half+r); ctx.quadraticCurveTo(-half,-half,-half+r,-half);
+      ctx.closePath();
+      if(isGhost){
+        ctx.strokeStyle = ghostInk; ctx.lineWidth = 1.2; ctx.setLineDash([4,3]); ctx.stroke();
+      } else {
+        const gr = ctx.createLinearGradient(-half,-half,half,half);
+        gr.addColorStop(0, LIGHT ? '#94a3b8' : '#46586f');
+        gr.addColorStop(1, LIGHT ? '#64748b' : '#232d3c');
+        ctx.fillStyle = gr;
+        ctx.strokeStyle = LIGHT ? '#334155' : '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(226,232,240,.88)';
+        ctx.font = '700 12px ' + FAM;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('m', 0, 1);
+      }
+      ctx.restore();
+      return { x: bx, y: by };
+    }
+
+    // ghosts at equal time slices already gone by
+    for(let k=0;k<=4;k++){
+      const pk = k/4;
+      if(pk <= p + 1e-6 && pk < 1 - 1e-6) crate(tOf(pk), true);
+    }
+    const b = crate(tOf(p), false);
+
+    // Forces from the crate centre.
+    arrow(b.x, b.y, b.x, b.y + mgLen, colMg, 2.5);
+    arrow(b.x, b.y, b.x + nx*nLen, b.y + ny*nLen, colN, 2.5);
+    arrow(b.x, b.y, b.x + ux*fLen, b.y + uy*fLen, colF, 2.5);
+    ctx.font = '700 12px ' + FAM;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = colMg; ctx.fillText('mg', b.x + 8, b.y + mgLen - 2);
+    ctx.fillStyle = colN;  ctx.fillText('N',  b.x + nx*nLen + 6, b.y + ny*nLen);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = colF;  ctx.fillText('fₖ', b.x + ux*fLen - 5, b.y + uy*fLen - 7);
+
+    // ---- captions. 12px floor for canvas text (K-12 legibility); each line
+    // falls back to a shorter wording, then is dropped, if the band is too narrow.
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    const capMax = sideBySide ? (apex.x - 18 - bx0 - 14) : bw*0.98;
+    function capLine(list, y, color, size){
+      ctx.font = '600 ' + size + 'px ' + FAM;
+      for(let i=0;i<list.length;i++){
+        if(ctx.measureText(list[i]).width <= capMax){
+          ctx.fillStyle = color; ctx.fillText(list[i], bx0, y); return;
+        }
+      }
+    }
+    const lineA = ['θ = 22° > tan⁻¹μ ≈ 17°', 'θ > tan⁻¹μ'];
+    const lineB = ['friction gives way, the crate slides', 'it slides'];
+    const lineC = ['μ = 0.30,  N = mg cosθ,  fₖ = μN', 'fₖ = μN'];
+    if(sideBySide){
+      capLine(lineA, H*0.37, capHi, 13);
+      capLine(lineB, H*0.55, mute, 12);
+      capLine(lineC, H*0.72, mute, 12);
+    } else {
+      capLine(lineA, H*0.13, capHi, 13);   // one line only: a 140px band has no room for two
+    }
+  }
+  function drawHero(){
+    const c = $('welcome-fringes'); if(!c) return;
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const my = ++heroToken;                      // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 168));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
+    }
+    if(reduce){ paint(0.72); return; }             // end of the slide, ghosts in place
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                 // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;  // overlay dismissed: stop
+      const s = ((typeof now === "number" ? now : t0) - t0)/1000;
+      paint((s/4.2) % 1);                          // still, slide, hold, repeat
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
   addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });

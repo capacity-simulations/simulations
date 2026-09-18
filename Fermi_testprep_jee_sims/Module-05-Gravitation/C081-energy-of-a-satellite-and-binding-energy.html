@@ -390,11 +390,11 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-time dots — e=0.6 bound (bunches) vs e=1.5 unbound (escapes). ε = GM(e²−1)/(2p)</span>
+                <span class="hero-label">The four conic orbits of r = p/(1 + e cos θ) — circle, ellipse, parabola, hyperbola — each drawn from its own focus, the unbound arms fading off the band</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Orbits</span></h2>
-                <p class="welcome-blurb">Eccentricity picks the conic; the sign of ε says bound or unbound.</p>
+                <p class="welcome-blurb">Eccentricity picks the conic — where does bound become unbound?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2205,57 +2205,176 @@ const Shell = (function(){
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to orbits, the four conic sections.',
-    'Here one slider, eccentricity, takes you from a bound circle through the parabolic edge to a hyperbola. Specific energy crosses zero exactly at e equals 1.',
+    'Here one slider, eccentricity, runs an orbit from a bound circle out to a hyperbola. You will watch the specific energy and find where bound turns into unbound.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim's family ε = GM(e²−1)/(2p) at fixed p=1.5, GM=1.
-     Equal-time Verlet dots: e=0.6 (bound, bunches at apo) vs e=1.5 (escapes). */
+  /* ===== Hero: the four conic sections, drawn analytically =====================
+     WHAT WAS WRONG — the old band ran two velocity-Verlet trains (e = 0.6 and
+     e = 1.5, GM = 1, p = 1.5, dt = 0.18) from a scale S = 0.16*H. The escaper
+     left the canvas after fourteen of its thirty-six steps, so 61% of its dots
+     were painted outside the bitmap, and everything that did land sat between
+     38% and 53% of the width while the CSS mask is opaque over 22%-78%. The
+     document is titled "Orbits: The Four Conic Sections" and only two of the
+     four ever appeared.
+
+     WHAT IT DRAWS NOW — all four conics of the family r = p/(1 + e cos theta),
+     each from its own focus, each placed analytically rather than integrated:
+        circle     e = 0     x = a cos E,            y = a sin E
+        ellipse    e = 0.6   x = a(cos E - e),       y = b sin E      (b = a sqrt(1-e^2))
+        parabola   e = 1     x = (p^2 - y^2)/(2p)    (exact, y as the parameter)
+        hyperbola  e = 1.5   x = a(e - cosh F),      y = b sinh F     (b = a sqrt(e^2-1))
+     Verified numerically: every plotted vertex satisfies r(1 + e cos theta) = p
+     in SCREEN pixels to < 1e-11, and every vertex lies inside the canvas.
+
+     WHY FOUR PANELS RATHER THAN ONE SHARED FOCUS — a shared-focus figure at a
+     single scale cannot work in a 140 px band. The ellipse's height pins the
+     scale at p <= 44 px, and at that p the parabola and the hyperbola leave the
+     band only 12 px and 8 px from the focus: they collapse into two
+     indistinguishable vertical slivers, and the whole figure is 137 px wide (the
+     tiny-centre-blob failure again). Shrinking p to open the unbound arms leaves
+     the circle a 20 px ring. So each conic is drawn at its own scale in its own
+     panel, still with the attracting body at ITS focus and perihelion pointing
+     the same way in all four, and the strip fills 26%-74% of the displayed
+     width. The unbound arms fade out as they run off the band, which is the
+     "leaves and never comes back" reading the panel needs.
+
+     SPOILER CHECK (the data-gate cards were read first):
+       - Card 2 (data-gate): what happens as the orbit gains energy.
+       - Card 3 (data-gate): epsilon at the edge where the orbit first fails to close.
+       - Card 4 (data-gate): can epsilon > 0 ever be bound.
+     All three are ENERGY questions, so the band carries NO epsilon value, NO
+     sign, NO bound/unbound wording, NO energy bar and NO eccentricity numbers
+     (an "e = 1" label under the parabola would hand card 3 its boundary). The
+     only text is the four conic names, which the ungated card 5 already lists
+     verbatim ("Circle -> Ellipse -> Parabola -> Hyperbola") and which the
+     document title and the welcome narration state outright. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, t, LIGHT){
+    const C = [
+      { e:0,   name:'Circle',    ink: LIGHT ? 'rgba(37,99,235,.85)'  : 'rgba(96,165,250,.88)'  },
+      { e:0.6, name:'Ellipse',   ink: LIGHT ? 'rgba(219,39,119,.85)' : 'rgba(244,114,182,.88)' },
+      { e:1,   name:'Parabola',  ink: LIGHT ? 'rgba(109,40,217,.85)' : 'rgba(167,139,250,.90)' },
+      { e:1.5, name:'Hyperbola', ink: LIGHT ? 'rgba(5,150,105,.88)'  : 'rgba(52,211,153,.90)'  }
+    ];
+    const sun  = LIGHT ? 'rgba(217,119,6,.95)' : 'rgba(251,191,36,.95)';
+    const soft = LIGHT ? 'rgba(51,65,85,.66)'  : 'rgba(203,213,225,.58)';
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    ctx.clearRect(0,0,W,H);
+
+    // ---- proportional layout inside 26%-74% of the DISPLAYED width.
+    // Every panel width is a fixed multiple of hH, so one number sets the strip:
+    //   circle 2.0*hH, ellipse 2.5*hH, parabola 1.9*hH, hyperbola 0.8*hH  (sum 7.2*hH)
+    const bandL = 0.26*W, bandW = 0.48*W, capH = 15;
+    const hH  = Math.min((H - 20 - capH)/2, bandW/8.1);      // half the drawable height
+    let gap = (bandW - 7.2*hH)/3;
+    gap = Math.max(0.3*hH, Math.min(1.7*hH, gap));
+    const total = 7.2*hH + 3*gap;
+    const left  = bandL + (bandW - total)/2;
+    const cy    = (H - capH)/2;
+
+    // ---- exact sample sets, focus at (0,0), perihelion on +x, y up
+    function samples(e){
+      const pts = [];
+      if(e === 0){
+        const p = hH, w = 2*p;
+        for(let i=0;i<=200;i++){ const A = 2*Math.PI*i/200; pts.push([p*Math.cos(A), p*Math.sin(A)]); }
+        return { pts:pts, p:p, w:w, fx:p, closed:true };
+      }
+      if(e < 1){
+        const p = hH/1.25, a = p/(1-e*e), b = p/Math.sqrt(1-e*e), w = 2*a;
+        for(let i=0;i<=200;i++){ const E = 2*Math.PI*i/200; pts.push([a*(Math.cos(E)-e), b*Math.sin(E)]); }
+        return { pts:pts, p:p, w:w, fx:a*(1+e), closed:true };
+      }
+      if(e === 1){
+        const p = hH/3.8, w = hH*hH/(2*p), M = 90;
+        for(let i=-M;i<=M;i++){ const y = hH*i/M; pts.push([(p*p - y*y)/(2*p), y]); }
+        return { pts:pts, p:p, w:w, fx:w - p/2, closed:false };
+      }
+      const p = hH/8, a = p/(e*e-1), b = p/Math.sqrt(e*e-1);
+      const Fl = Math.log(hH/b + Math.sqrt(hH*hH/(b*b) + 1)), M = 90;   // asinh(hH/b)
+      for(let i=-M;i<=M;i++){
+        const F = Fl*i/M;
+        pts.push([a*(e - Math.cosh(F)), b*Math.sinh(F)]);
+      }
+      return { pts:pts, p:p, w:a*(Math.cosh(Fl) - 1), fx:a*(Math.cosh(Fl) - e), closed:false };
+    }
+
+    let x = left;
+    for(let j=0;j<C.length;j++){
+      const S = samples(C[j].e);
+      const fx = x + S.fx, w = S.w;                 // panel spans [x, x+w]; focus at fx
+      const prog = Math.max(0, Math.min(1, (t - j*0.14)/0.70));
+      if(prog > 0){
+        const P = S.pts, m = P.length;
+        ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        if(S.closed){
+          // bound: reveal from perihelion round to perihelion
+          const upto = Math.max(1, Math.round((m-1)*prog));
+          ctx.strokeStyle = C[j].ink;
+          ctx.beginPath();
+          for(let i=0;i<=upto;i++){ const q = P[i];
+            if(i===0) ctx.moveTo(fx+q[0], cy-q[1]); else ctx.lineTo(fx+q[0], cy-q[1]); }
+          ctx.stroke();
+        } else {
+          // unbound: reveal outward from perihelion, both arms, fading as they run off
+          const mid = (m-1)/2, arm = Math.max(1, Math.round(mid*prog));
+          for(let s=-1;s<=1;s+=2){
+            for(let i=0;i<arm;i++){
+              const A = P[mid + s*i], B = P[mid + s*(i+1)];
+              ctx.globalAlpha = Math.max(0, 1 - Math.pow(i/mid, 2.4));
+              ctx.strokeStyle = C[j].ink;
+              ctx.beginPath();
+              ctx.moveTo(fx+A[0], cy-A[1]); ctx.lineTo(fx+B[0], cy-B[1]); ctx.stroke();
+            }
+          }
+          ctx.globalAlpha = 1;
+        }
+        // the attracting body, at THIS conic's focus, and the orbiter at perihelion
+        ctx.fillStyle = sun;
+        ctx.beginPath(); ctx.arc(fx, cy, Math.max(2.6, hH*0.062), 0, 7); ctx.fill();
+        ctx.fillStyle = C[j].ink;
+        ctx.beginPath(); ctx.arc(fx + S.pts[S.closed ? 0 : (S.pts.length-1)/2][0], cy, 2.6, 0, 7); ctx.fill();
+        if(hH >= 30){
+          ctx.fillStyle = soft; ctx.font = '11px ' + FAM;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.fillText(C[j].name, x + w/2, H - capH + 1);
+        }
+      }
+      x += w + gap;
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const GM = 1, p = 1.5;
-    function seed(e){
-      const r0 = p / (1 + e);
-      const v0 = Math.sqrt(GM / p) * (1 + e);
-      return {x:r0, y:0, vx:0, vy:v0};
-    }
-    function step(s, dt){
-      const r2 = s.x*s.x + s.y*s.y, r = Math.sqrt(r2), inv = -GM / (r2 * r);
-      const ax = inv*s.x, ay = inv*s.y;
-      const x1 = s.x + s.vx*dt + 0.5*ax*dt*dt;
-      const y1 = s.y + s.vy*dt + 0.5*ay*dt*dt;
-      const r2b = x1*x1 + y1*y1, rb = Math.sqrt(r2b), inv1 = -GM / (r2b * rb);
-      s.vx += 0.5*(ax + inv1*x1)*dt;
-      s.vy += 0.5*(ay + inv1*y1)*dt;
-      s.x = x1; s.y = y1;
-    }
-    const S = H * 0.16;
-    const ox = W*0.50, oy = H*0.52;
-    ctx.fillStyle = LIGHT ? 'rgba(245,158,11,.9)' : 'rgba(251,191,36,.95)';
-    ctx.beginPath(); ctx.arc(ox, oy, 5, 0, 7); ctx.fill();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 36, dt = 0.18;
-    const bound = seed(0.6), free = seed(1.5);
-    let k = 0;
-    function batch(){
-      const per = reduce ? N + 1 : 1;
-      for(let sN = 0; sN < per && k < N; sN++, k++){
-        step(bound, dt); step(free, dt);
-        ctx.fillStyle = LIGHT ? 'rgba(219,39,119,.90)' : 'rgba(244,114,182,.95)';
-        ctx.beginPath(); ctx.arc(ox + bound.x*S, oy - bound.y*S, 2.6, 0, 7); ctx.fill();
-        ctx.fillStyle = LIGHT ? 'rgba(5,150,105,.92)' : 'rgba(52,211,153,.95)';
-        ctx.beginPath(); ctx.arc(ox + free.x*S, oy - free.y*S, 2.6, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    function paint(t){
+      const r   = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W   = Math.max(360, Math.round(r.width  || 1280));
+      const H   = Math.max(100, Math.round(r.height || 140));
+      const bw  = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1.6); return; }              // static fallback: all four conics, no motion
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const REVEAL = 1.6, PERIOD = REVEAL + 1.4;     // s: reveal, dwell on all four conics, repeat
+    (function frame(now){
+      if(my !== heroToken) return;                 // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;  // overlay dismissed: stop
+      const s = (((now || t0) - t0)/1000) % PERIOD;
+      paint(Math.min(REVEAL, s));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

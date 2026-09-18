@@ -822,7 +822,7 @@
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Multi-Stage Stern&ndash;Gerlach</span></h2>
-                <p class="welcome-blurb">Chain magnets one after another, block a beam, and watch a measurement you already made come undone.</p>
+                <p class="welcome-blurb">Chain magnets one after another, block a beam &mdash; what reaches the screen?</p>
                 <p class="welcome-ask">How would you like to begin?</p>
                 <div class="welcome-modes">
                     <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3118,19 +3118,24 @@ animate();
   const giBtn = $('btn-gi'), cgBtn = $('btn-cg'), root = document.documentElement;
   let cgOn = false, cgStep = 0, cgMax = 0, callout = null, nav = null, cgVoice = null, cgAuto = false;
   const cgSteps = [
-    { sel:'#boxExplore',     mode:'veil', title:'Explore',              text:'Turns on hover labels for every part of the apparatus.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#three-container', mode:'show', title:'The apparatus', text:'The silver-atom source, the chain of magnet stages, and the detector at the end.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#btnHeaderReset', mode:'veil', title:'Reset',                text:'Restores the default single Z stage and clears every count.' },
     { sel:'#btnPlayPause',   mode:'veil', title:'Pause and play',       text:'Freezes or resumes the atom beam and its motion.' },
-    { sel:'#boxPalette',     mode:'hide', title:'Magnets and blockers', text:'Drag a Z or X magnet, or a beam blocker, into a stage.', also:['#boxBuilderNote'] },
     { sel:'#boxStage1',      mode:'hide', title:'Stage 1',              text:'Sets the first magnet’s axis and which of its outputs is blocked.' },
-    { sel:'#dz2',            mode:'hide', title:'Stage 2 and Stage 3',  text:'The downstream slots; Stage 3 opens once Stage 2 holds a magnet.', also:['#dz3'] },
     { sel:'#boxClear23',     mode:'hide', title:'Clear stages 2 and 3', text:'Removes both downstream stages, leaving Stage 1 alone.' },
     { sel:'#boxRate',        mode:'hide', title:'Emission rate',        text:'How many atoms the source releases each second.' },
     { sel:'#boxField',       mode:'hide', title:'Field strength',       text:'The field in tesla; stronger fields deflect the beams further apart.' },
+    /* 4 · readouts — what the student can measure */
+    { sel:'#boxExplore',     mode:'veil', title:'Explore',              text:'Turns on hover labels for every part of the apparatus.' },
+    { sel:'#boxPalette',     mode:'hide', title:'Magnets and blockers', text:'Drag a Z or X magnet, or a beam blocker, into a stage.', also:['#boxBuilderNote'] },
+    { sel:'#dz2',            mode:'hide', title:'Stage 2 and Stage 3',  text:'The downstream slots; Stage 3 opens once Stage 2 holds a magnet.', also:['#dz3'] },
     { sel:'#boxStats1',      mode:'hide', title:'Counters',             text:'Atoms emitted, detected, stopped by a blocker, and their final spin.', also:['#boxStats2'] },
     { sel:'#hudLegend',      mode:'veil', title:'Colour legend',        text:'Maps each beam colour to the spin state it carries.' },
     { sel:'#hudInsight',     mode:'veil', title:'Orientation note',     text:'Recalls which way each magnet axis deflects the beam.' },
     { sel:'#camHint',        mode:'veil', title:'Camera',               text:'Drag the scene to rotate it; scroll to zoom in or out.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
     /* Not stepped (meta-UI only): the About tooltip, the hover tooltip and
        drag hint (transient), the feedback pill; #three-container is the scene
@@ -3214,6 +3219,7 @@ animate();
     const introduced = new Set(cgSteps.slice(0, cgMax+1).map(s=>s.sel));
     cgSteps.forEach(st=>{ [st.sel].concat(st.also||[]).forEach(sl=>{ const t=cel(sl); if(!t) return;
       t.classList.remove('cg-glow');
+      if(st.mode === 'show'){ t.classList.remove('cg-hidden','cg-veiled'); return; }   // always visible; only the glow moves
       t.classList.toggle(st.mode==='hide'?'cg-hidden':'cg-veiled', !introduced.has(st.sel)); }); });
     const cur = cel(cgSteps[cgStep].sel); if(cur) cur.classList.add('cg-glow');
     callout.querySelector('h5').textContent = cgSteps[cgStep].title;
@@ -3304,20 +3310,39 @@ animate();
          gained and then drifts freely — a parabola inside the gap, a straight
          line after it. One Z stage is drawn: lime before the measurement, rose
          and blue after. The two dashed slots downstream stay empty — that is
-         what the sequential stages will fill. */
+         what the sequential stages will fill. Layout note: the hero mask only
+         fully clears 22–78% of the width, so the beam is emitted from 0.25W and
+         the gap starts at 0.34W, which keeps a readable run of unsplit beam
+         inside the clear band, and each slot's opening is computed from off()
+         at its far edge so the rails hug the beams they wait for. */
+      let heroGen = 0;                                 // a re-entry cancels the running chain
       function drawHero(){
         const c = $('welcome-fringes'); if(!c) return;
-        const ctx = c.getContext('2d'), W = c.width, H = c.height;
+        /* House aspect fix: the canvas box is 100vw x 140px, so the authored
+           1280x240 backing store was stretched by viewport/747 in x and 140/240
+           in y — the parabola inside the gap and the fan after it were a
+           different shape at every viewport width. Size the backing store from
+           the measured CSS box times devicePixelRatio and draw in CSS pixels:
+           one drawing unit is one CSS pixel in both axes. */
+        const r = c.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const W = Math.max(360, Math.round(r.width  || 1280));
+        const H = Math.max(100, Math.round(r.height || 140));
+        const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+        if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
         ctx.clearRect(0,0,W,H);                       // transparent: the overlay dim is the backdrop
-        const y0 = H*0.5, z0 = 0.24*W, z1 = 0.36*W, Lz = z1 - z0, d = H*0.017;
+        const y0 = H*0.5, z0 = 0.34*W, z1 = 0.46*W, Lz = z1 - z0, d = H*0.017;
+        const zIn = 0.25*W, zOut = 0.75*W;            // the beam's run, inside the mask's clear band
         const COL0 = LIGHT ? '#4d7c0f' : '#a3e635';   // unpolarised (COL.initial)
         const CP   = LIGHT ? '#9d174d' : '#db2777';   // Z+   (COL.zPlus)
         const CM   = LIGHT ? '#1d4ed8' : '#2563eb';   // Z−   (COL.zMinus)
         const off = x => x < z0 ? 0
                     : (x <= z1 ? d*Math.pow((x-z0)/Lz, 2)
                                : d*(1 + 2*(x-z1)/Lz));
-        (function apparatus(){
+        function apparatus(){                         // repainted at the head of every cycle
           ctx.save();
           ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.38)' : 'rgba(226,232,240,.38)';
           ctx.lineWidth = 3;
@@ -3327,34 +3352,46 @@ animate();
           ctx.stroke();
           ctx.setLineDash([5,5]); ctx.lineWidth = 2;
           ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.20)' : 'rgba(226,232,240,.20)';
-          [0.56*W, 0.76*W].forEach(zs => {
+          [0.53*W, 0.685*W].forEach(zs => {
+            const ys = off(zs + 0.06*W) + 3;   // rails just clear the beams at the slot's far edge
             ctx.beginPath();
-            ctx.moveTo(zs, y0-34); ctx.lineTo(zs+0.06*W, y0-34);
-            ctx.moveTo(zs, y0+34); ctx.lineTo(zs+0.06*W, y0+34);
+            ctx.moveTo(zs, y0-ys); ctx.lineTo(zs+0.06*W, y0-ys);
+            ctx.moveTo(zs, y0+ys); ctx.lineTo(zs+0.06*W, y0+ys);
             ctx.stroke();
           });
           ctx.restore();
-        })();
+        }
+        apparatus();
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const PER = 140, FRAMES = 40;
+        // Atoms per frame track the length of the beam's run, so the stream keeps
+        // the grain it was authored with instead of packing solid once the run
+        // is fitted into the clear band.
+        const PER = Math.max(16, Math.round((zOut-zIn)*140/1280)), FRAMES = 40, DWELL = 84;  // ~0.67 s reveal + ~1.4 s dwell
         let frame = 0;
         function batch(n){
           for(let k=0;k<n;k++){
             const s = Math.random() < 0.5 ? 1 : -1;
-            const x = Math.random()*W;
+            const x = zIn + Math.random()*(zOut - zIn);
             const y = y0 - s*off(x) + (Math.random()-0.5)*3;   // canvas y grows down; Z+ deflects up
             ctx.fillStyle = x < z0 ? COL0 : (s > 0 ? CP : CM);
             ctx.fillRect(x, y, 2.0, 2.0);
           }
         }
         if(reduce){ batch(PER*FRAMES); return; }      // one frame under reduced motion
-        (function step(){                             // accumulate once as the entrance; never loop
-          batch(PER); frame++;
-          if(frame < FRAMES) requestAnimationFrame(step);
+        const gen = ++heroGen;
+        let dwell = 0;
+        (function step(){                             // accumulate, hold, then clear and replay
+          if(gen !== heroGen || ov.classList.contains('hidden')) return;
+          if(frame < FRAMES){ batch(PER); frame++; }
+          else if(++dwell > DWELL){ ctx.clearRect(0,0,W,H); apparatus(); frame = 0; dwell = 0; }
+          requestAnimationFrame(step);
         })();
       }
 
 drawHero();
+      // The backing store is sized from the live CSS box, so a resize must
+      // re-measure it — otherwise the beam keeps the width of the first paint.
+      window.addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
       // Theme can change while the overlay is open: redraw the hero in the new colours
       new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

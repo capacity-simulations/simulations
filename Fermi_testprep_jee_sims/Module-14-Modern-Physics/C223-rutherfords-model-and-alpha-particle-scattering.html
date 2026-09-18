@@ -794,7 +794,7 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">Equal-angle dots of dσ/dΩ ∝ 1/sin⁴(θ/2)</span>
+                <span class="hero-label">A beam of α particles meets a thin gold foil: most go straight through, a couple are thrown aside, one comes back</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Rutherford scattering</span></h2>
@@ -3386,41 +3386,173 @@ var SimCfg = (() => {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: dσ/dΩ ∝ 1/sin⁴(θ/2) from this sim (Au, 7.7 MeV shape).
-     EQUAL-angle dots from 15° to 150° — forward peak, then a steep fall. */
+  /* HERO REBUILD — the scene the blurb promises, not a plot. The old hero was
+     an unlabelled dσ/dΩ ∝ 1/sin⁴(θ/2) dot curve whose forward peak sat at 10%
+     of the width — inside the overlay's edge-mask fade — so the only part a
+     student could actually see was a near-flat tail hugging the axis. It also
+     showed no scattering scene at all, and that angular distribution is
+     gated card 2's answer. New scene, straight from the narration: a thin gold
+     foil drawn as a vertical strip, a beam of α tracks arriving from the left,
+     most sailing straight through or barely nudged, two visibly turned through
+     a large angle, and ONE turning right round and heading back to the source.
+     Spoiler audit against the gated cards:
+       · card 2 (data-gate) "Predict — what will the detector see?" asks what
+         the PLUM-PUDDING model predicts. The welcome narration this hero sits
+         under already states the observation outright — "A few of them come
+         bouncing straight back — and that is the puzzle" — so drawing the
+         observed tracks leaks nothing the student has not just been told, and
+         the card's real task (reason from a model to a distribution) is
+         untouched: NO counts, NO detector ring, NO rate comparison, NO angular
+         distribution and NO 1/sin⁴ shape appear anywhere in the hero.
+       · card 4 (data-gate) "What does a wide-angle flash tell you?" asks the
+         student to INFER the target's structure ("almost all the positive
+         charge packed into a tiny, massive core"). So the hero draws NO
+         nucleus dot, no core, no atom interior, no impact parameter and no
+         closest-approach distance, and names NO model — neither "Thomson" nor
+         "Rutherford" appears in the art or in the hidden label. Tracks and
+         foil only; the deflections are shown as brute facts with nothing on
+         screen to explain them, which is exactly what card 4 wants explained.
+       · no θ value is drawn or implied to scale.
+     Engineering: backing store sized from getBoundingClientRect() ×
+     devicePixelRatio at every paint and drawn in CSS px (the authored 1280×240
+     store is 5.3:1 while the CSS box is ~10:1 — the old art was smeared);
+     heroToken guards the rAF loop; resize → drawHero; reduced motion paints one
+     static frame with every track visible; light/dark ink pairs; every element
+     inside 24%–76% of the displayed width (the CSS mask is only opaque
+     22–78%). */
+  let heroToken = 0;
+  /* Each α: entry height as a fraction of H, and its deflection angle at the
+     foil in degrees (0 = straight on, 180 = straight back). `len` is the run
+     past the foil — a fraction of H for the hard turns (H is the tight
+     dimension), of W for the one that comes back. Seven are nudged by ~1°. */
+  const HERO_TRACKS = [
+    { y:0.13, deg:   1.0 },
+    { y:0.21, deg:  -1.2 },
+    { y:0.29, deg:   0.8 },
+    { y:0.37, deg: -58.0, big:true,  len:0.600 },
+    { y:0.45, deg:  -0.6 },
+    { y:0.53, deg: 178.0, back:true, len:0.335 },
+    { y:0.62, deg:  56.0, big:true,  len:0.615 },
+    { y:0.70, deg:   1.2 },
+    { y:0.78, deg:  -0.9 },
+    { y:0.87, deg:   0.7 }
+  ];
+  function paintHero(ctx, W, H, t, LIGHT){
+    const foilC = LIGHT ? 'rgba(161,98,7,.85)'    : 'rgba(250,204,21,.80)';
+    const foilF = LIGHT ? 'rgba(202,138,4,.22)'   : 'rgba(250,204,21,.16)';
+    const trkF  = LIGHT ? 'rgba(180,83,9,.26)'    : 'rgba(251,191,36,.26)';
+    const trk   = LIGHT ? 'rgba(180,83,9,.82)'    : 'rgba(251,191,36,.88)';
+    const hotF  = LIGHT ? 'rgba(190,18,60,.30)'   : 'rgba(251,113,133,.30)';
+    const hot   = LIGHT ? 'rgba(190,18,60,.90)'   : 'rgba(251,113,133,.92)';
+
+    ctx.clearRect(0,0,W,H);
+    // a whisper of ground so the strip is never entirely transparent
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // ---- geometry: everything lives inside 24%–76% of W -------------------
+    const xIn = W*0.262, xF = W*0.615, xOut = W*0.748;
+
+    // ---- the thin gold foil: a bare vertical strip. No atoms, no nucleus --
+    const fw = 7, fy0 = H*0.09, fy1 = H*0.91;
+    ctx.fillStyle = foilF; ctx.fillRect(xF - fw/2, fy0, fw, fy1 - fy0);
+    ctx.strokeStyle = foilC; ctx.lineWidth = 1.3;
+    ctx.strokeRect(xF - fw/2, fy0, fw, fy1 - fy0);
+
+    // ---- polyline helpers (constant-speed travel along a kinked path) -----
+    function pointAt(pts, cum, s){
+      for(let i = 1; i < pts.length; i++){
+        if(s <= cum[i] || i === pts.length - 1){
+          const a = pts[i-1], b = pts[i];
+          const seg = (cum[i] - cum[i-1]) || 1;
+          const u = Math.max(0, Math.min(1, (s - cum[i-1])/seg));
+          return [a[0] + (b[0]-a[0])*u, a[1] + (b[1]-a[1])*u];
+        }
+      }
+      return pts[pts.length - 1];
+    }
+    function strokeRange(pts, cum, sa, sb){
+      const p0 = pointAt(pts, cum, sa), p1 = pointAt(pts, cum, sb);
+      ctx.beginPath(); ctx.moveTo(p0[0], p0[1]);
+      for(let i = 1; i < pts.length; i++){
+        if(cum[i] > sa && cum[i] < sb) ctx.lineTo(pts[i][0], pts[i][1]);
+      }
+      ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+    }
+
+    // ---- the beam ---------------------------------------------------------
+    const T = 3.9;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    HERO_TRACKS.forEach((tr, i) => {
+      const y = H*tr.y, th = tr.deg*Math.PI/180;
+      let ex, ey;
+      if(tr.back){ const L = W*tr.len; ex = xF + L*Math.cos(th); ey = y - L*Math.sin(th); }
+      else if(tr.big){ const L = H*tr.len; ex = xF + L*Math.cos(th); ey = y - L*Math.sin(th); }
+      else { const L = (xOut - xF)/Math.cos(th); ex = xOut; ey = y - L*Math.sin(th); }
+      ex = Math.max(W*0.255, Math.min(W*0.752, ex));
+      ey = Math.max(H*0.07,  Math.min(H*0.93,  ey));
+
+      const pts = [[xIn, y], [xF, y], [ex, ey]];
+      const cum = [0, xF - xIn, 0];
+      cum[2] = cum[1] + Math.hypot(ex - xF, ey - y);
+      const total = cum[2], wide = !!(tr.big || tr.back);
+
+      // the track itself, always fully drawn so the pattern reads at a glance
+      ctx.strokeStyle = tr.back ? hotF : trkF;
+      ctx.lineWidth = wide ? 1.7 : 1.2;
+      strokeRange(pts, cum, 0, total);
+
+      // one α running along it, staggered so the beam never pulses in step
+      const s = (((t/T) + i*0.137) % 1) * total;
+      const tail = Math.min(total*0.30, 54);
+      ctx.strokeStyle = tr.back ? hot : trk;
+      ctx.lineWidth = wide ? 2.1 : 1.6;
+      strokeRange(pts, cum, Math.max(0, s - tail), s);
+      const p = pointAt(pts, cum, s);
+      ctx.fillStyle = tr.back ? hot : trk;
+      ctx.beginPath(); ctx.arc(p[0], p[1], wide ? 2.9 : 2.3, 0, 7); ctx.fill();
+
+      // an arrowhead on the one that came back, so the reversal is unmissable
+      if(tr.back){
+        ctx.save();
+        ctx.translate(ex, ey); ctx.rotate(Math.atan2(ey - y, ex - xF));
+        ctx.fillStyle = hot;
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-8,-3.6); ctx.lineTo(-8,3.6);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    });
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const TH0 = 15*Math.PI/180, TH1 = 150*Math.PI/180;
-    const shape = th => {
-      const s = Math.sin(th/2);
-      return 1 / (s*s*s*s);
-    };
-    const peak = shape(TH0);
-    const x0=W*0.10, x1=W*0.90, y0=H*0.82, y1=H*0.18;
-    const X = u => x0 + u*(x1-x0);
-    const Y = v => y0 - Math.min(1, v/peak)*(y0-y1);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dU=1/80, N=80;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k*dU;
-        const th = TH0 + (TH1-TH0)*u;
-        ctx.fillStyle = LIGHT ? 'rgba(180,83,9,.88)' : 'rgba(251,191,36,.92)';
-        ctx.beginPath(); ctx.arc(X(u), Y(shape(th)), 2.6, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(t){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1.5); return; }           // static frame, all tracks shown
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      paint(((typeof now === 'number' ? now : t0) - t0)/1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

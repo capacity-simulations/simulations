@@ -1808,7 +1808,10 @@ window.__giResume = function(){
   // Concise steps: what the control is + what it controls (≤15 words each).
   // mode: 'veil' = top bar / hero (invisible, slot kept — no reflow, no canvas
   //                resize); 'hide' = sidebar (collapses until introduced, so the
-  //                sidebar opens EMPTY and fills in this order).
+  //                sidebar opens EMPTY and fills in this order);
+  //       'show' = never hidden (the two canvas panels — veiling their wrapper
+  //                would blank the diagrams the guide is describing, because
+  //                visibility is inherited).
   // Skipped with reason: #shell-info + #shell-theme (meta-UI: about box / theme
   // toggle); #shell-lecture (retired in the user version, never shown);
   // #btn-gi + #btn-cg (the two mode buttons that own this guide);
@@ -1816,18 +1819,23 @@ window.__giResume = function(){
   // its onFrame callback is empty, so the transport changes nothing on screen;
   // reported as a sim defect rather than described dishonestly here).
   const steps = [
-    { sel:'#vp-left',        mode:'veil', title:'Euclidean panel', text:'The x–y plane: grey axes are the unprimed frame, orange the rotated one.' },
-    { sel:'#vp-right',       mode:'veil', title:'Spacetime panel', text:'The ct–x plane: the dashed yellow 45° lines are the paths of light.' },
+    /* 1 · the stage — always visible; the glow just moves to it */
+    { sel:'#vp-left',        mode:'show', title:'Euclidean panel', text:'The x–y plane: grey axes are the unprimed frame, orange the rotated one.' },
+    { sel:'#vp-right',       mode:'show', title:'Spacetime panel', text:'The ct–x plane: the dashed yellow 45° lines are the paths of light.' },
+    /* 3 · inputs — what the student can change */
     { sel:'#thetaGroup',     mode:'hide', also:['#panel-controls'], title:'Rotation angle θ', text:'Turns the primed axes in the left panel, from 0° to 80°.' },
     { sel:'#betaGroup',      mode:'hide', title:'Boost speed v/c',  text:'Sets the boosted frame’s speed, 0 to 0.80, and reports γ beside it.' },
     { sel:'#calib-btn',      mode:'hide', also:['#box-toggles'], title:'Primed grid + ticks', text:'Draws each primed frame’s own coordinate grid and its unit marks.' },
     { sel:'#inv-btn',        mode:'hide', title:'Invariant curves', text:'Draws the circle on the left and the unit hyperbolae on the right.' },
     { sel:'#qty-btn',        mode:'hide', title:'Readouts',         text:'Shows or hides the coordinate, invariant and angle strips under each panel.' },
     { sel:'#events-btn',     mode:'hide', title:'Sample events',    text:'Shows or hides the points P₁, P₂ and the events E₁, E₂.' },
+    /* 4 · readouts — what the student can measure */
     { sel:'#panel-symbols',  mode:'hide', title:'Read the symbols', text:'Defines θ and γ and the colour of every line on the two canvases.' },
-    { sel:'#shell-reset',    mode:'veil', title:'Reset',            text:'Restores the first-load state — defaults, guided inquiry at card 1.' },
-    { sel:'#shell-maximize', mode:'veil', title:'Maximize',         text:'Expands both panels; the sidebar and the equations hide.' },
+    /* 5 · the formal layer */
     { sel:'#toggle-formal',  mode:'veil', title:'Formal',           text:'Shows the rotation and boost matrices and the invariant identities.' },
+    /* 6 · reset — recovery, once there is something to recover */
+    { sel:'#shell-reset',    mode:'veil', title:'Reset',            text:'Restores the first-load state — defaults, guided inquiry at card 1.' },
+    /* 7 · wrap-up */
     { sel:null, title:'That’s every control that changes the picture', text:'Explore freely — reopen either guide from the top bar.' }
   ];
   const giBtn = document.getElementById('btn-gi');
@@ -2031,6 +2039,12 @@ window.__giResume = function(){
     dimmables().forEach(t => t.classList.remove('cg-glow'));
     steps.forEach(st => {
       if(!st.sel) return;
+      if(st.mode === 'show'){   // always visible; only the glow moves
+        [st.sel].concat(st.also || []).forEach(sl => {
+          const t = el(sl); if(t) t.classList.remove('cg-hidden','cg-veiled');
+        });
+        return;
+      }
       const off = !introduced.has(st.sel);
       const cls = st.mode === 'hide' ? 'cg-hidden' : 'cg-veiled';
       [st.sel].concat(st.also || []).forEach(sl => {
@@ -2166,14 +2180,19 @@ window.__giResume = function(){
        RIGHT — the ct–x plane, signature (+, −) (ds² = (c dt)² − dx², see the
                Formal panel): unprimed ct and x, the dashed 45° light lines that
                card 1 hands the student outright, and the sim's own events
-               E₁ (0, 1) and E₂ (sinh 0.8, cosh 0.8) at their LAB coordinates.
+               E₁ (0, 1) and E₂ (sinh 0.8, cosh 0.8) at their LAB coordinates,
+               plus a third unlabelled event at (sinh 0.4, cosh 0.4) between
+               them — three samples of (ct)² − x² = 1 that POSE "what curve
+               joins these?" without answering it.
      Both planes share one tick pitch, which is what the picture is really for:
      same axes, same scale, one sign different.
      DELIBERATELY ABSENT — each of these would answer a gated card:
        · no primed axes on EITHER side. Card 2 asks what ct′ and x′ do (they
          tilt toward the light line) and card 4 how far they can close; and the
          LEFT primed pair turning in rigidly is card 2's distractor A drawn out.
-       · no invariant hyperbola. Card 3 asks which curve E₂ slides along.
+       · no invariant hyperbola. Card 3 gates exactly this (its choices are
+         circle / hyperbola / ellipse), so stroking the curve would leak the
+         answer; the third on-curve event above is as far as the hero may go.
        · no track joining E₁ to E₂ and no arrow on the right at all, since any
          such path is that same hyperbola by another name.
      Static by design: drawHero is re-run by animationend, a 700 ms timer,
@@ -2309,6 +2328,8 @@ window.__giResume = function(){
     ctx.stroke(); ctx.restore();
     ticks(cxR);
     dmd(cxR, 0, 1);                               // E₁ (x, ct) = (0, 1)
+    dmd(cxR, Math.sinh(0.4), Math.cosh(0.4));     // unlabelled: also on (ct)² − x² = 1 — poses the
+                                                  // pattern card 3 asks about, without naming the curve
     dmd(cxR, Math.sinh(0.8), Math.cosh(0.8));     // E₂ (x, ct) = (sinh 0.8, cosh 0.8)
 
     /* a quiet seam between the two geometries */

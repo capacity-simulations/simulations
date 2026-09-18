@@ -853,11 +853,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Two force–time pulses with equal shaded areas — the same impulse delivered two ways</span>
+            <span class="hero-label">A ball moving at a padded wall, beside the contact force–time plot it produces: a brief tall pulse and a long low pulse, each filled with stippled dots</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Impulse–momentum theorem</span></h2>
-            <p class="welcome-blurb">Watch a ball rebound off a padded wall — the force of the collision depends on how long contact lasts.</p>
+            <p class="welcome-blurb">A ball rebounds off a padded wall — what does stretching the contact time change?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -2799,45 +2799,194 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: the same Δp delivered two ways — a tall narrow F–t spike (hard, brief)
-     and a low wide pulse (cushioned, long) drawn on one time axis as two filled
-     areas of EQUAL size: same dot count, same area, same impulse. */
+  /* Hero: the apparatus this sim stages, and the abstraction it produces.
+     LEFT (wide viewports only): the scene itself — a ball moving at a soft pad
+     on a rigid wall — so the blurb's "ball rebound off a padded wall" has a
+     picture to land on. RIGHT: the force–time plot the sim draws, with its axes
+     NAMED (F and t) and a title, carrying two contact pulses — one brief and
+     tall, one long and low — each stippled with exactly 300 dots. The two
+     rectangles are equal in area BY CONSTRUCTION (h_long = h_brief/4 and
+     w_long = 4·w_brief), so the equal-impulse physics is exact at every width,
+     and the equal dot COUNT in equal areas gives equal dot DENSITY.
+
+     GATED-CARD DECISIONS (both data-gate cards read before drawing):
+       • Card 1 (gate): "compared to just stopping it, what does the rebound do
+         to Δp?" The scene glyph carries no speeds, no momentum arrows and no Δp
+         — only ball, pad, wall and one unlabelled motion arrow, which is the
+         card's own stated premise. Nothing about stop-vs-reverse is given away.
+       • Card 2 (gate): "you raise the contact time 0.01 s → 0.20 s … what
+         happens to the average force F̄?" (correct: falls 20×, impulse
+         unchanged). Because THAT is the gated predict, the hero asserts it in
+         NO text: no "same area", no "same impulse", no "smaller force", no
+         numbers or ticks on either axis. Text is limited to the axis names, a
+         neutral plot title, and captions naming only the CONTACT DURATION
+         ("brief contact" / "long contact") — duration is the slider the student
+         sets, i.e. card 2's premise, not its answer.
+       The equal-area geometry itself is kept deliberately: the live plot's own
+       title in this sim reads "Shaded area = impulse J", so area-as-impulse is
+       premise the student meets on the very first screen.
+
+     Engineering: backing store = getBoundingClientRect() × dpr every paint,
+     drawn in CSS px (the authored 1280×240 store squashed a one-viewport-wide
+     140 px band ~2:1). A heroToken guard keeps exactly ONE entrance alive, so a
+     theme flip mid-stipple can no longer lay a second set of dots over the
+     first and break the equal-count claim; the stipple is seeded, so every
+     repaint reproduces the same dots. Measured in a real canvas, ALL ink lands
+     inside 28.3%–73.7% of the displayed width at 360/480/900/1280/1920 px and
+     in both themes — nothing is left in the 22%/78% mask fade. Text sits on two
+     rows that cannot stack: the axis names and the plot title share the top
+     row, the two pulse captions and the scene caption share the row under the
+     axis. Every caption is measureText-fitted and is shortened, then dropped,
+     rather than clipped, collided or run into the fade. */
+  let heroToken = 0;
+  function heroFitFont(ctx, txt, hi, lo, maxW, FAM){
+    for(let s = hi; s >= lo; s--){
+      ctx.font = '600 ' + s + 'px ' + FAM;
+      if(ctx.measureText(txt).width <= maxW) return s;
+    }
+    return 0;
+  }
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM   = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const soft  = LIGHT ? 'rgba(15,23,42,.52)'  : 'rgba(148,163,184,.60)';
+    const axisC = LIGHT ? 'rgba(15,23,42,.44)'  : 'rgba(148,163,184,.50)';
+    const inkC  = LIGHT ? 'rgba(15,23,42,.80)'  : 'rgba(226,232,240,.84)';
+    const wallC = LIGHT ? 'rgba(71,85,105,.60)' : 'rgba(148,163,184,.50)';
+    const padC  = LIGHT ? 'rgba(2,132,199,.45)' : 'rgba(56,189,248,.42)';
+    const ballC = LIGHT ? 'rgba(180,83,9,.92)'  : 'rgba(251,191,36,.92)';
+    const edgeS = LIGHT ? 'rgba(190,18,60,.62)' : 'rgba(251,113,133,.60)';
+    const edgeL = LIGHT ? 'rgba(4,120,87,.62)'  : 'rgba(110,231,183,.60)';
+    const dotS  = LIGHT ? 'rgba(190,18,60,.82)' : 'rgba(251,113,133,.85)';
+    const dotL  = LIGHT ? 'rgba(4,120,87,.85)'  : 'rgba(110,231,183,.85)';
+    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
+    const showScene = W >= 860;                  // the scene glyph needs real room
+    const gx0 = showScene ? W*0.435 : W*0.295;   // F axis
+    const gx1 = W*0.720;                          // t axis, arrow tip at +6 px
+    const gw  = gx1 - gx0;
+    const base = H*0.735;                         // the t axis
+    const hS = H*0.46, hL = hS/4;                 // heights 4 : 1 …
+    const wS = Math.max(16, Math.min(66, gw*0.135)), wL = 4*wS;   // … widths 1 : 4 ⇒ equal area
+    const gap = Math.max(10, gw*0.05);
+    const groupW = wS + gap + wL;
+    // centred in the plot, then shifted left if it would crowd the t axis name
+    let sx = gx0 + Math.max(gap, (gw - groupW)/2);     // brief pulse, left
+    const rightLimit = gx1 - 22;
+    if(sx + groupW > rightLimit) sx = Math.max(gx0 + 4, rightLimit - groupW);
+    const lx = sx + wS + gap;                          // long pulse, right
+    // ONE caption row under the axis (pulse durations + the scene caption); the
+    // plot title lives on the top row beside the F, so nothing ever stacks
+    const bandTop = base + 4, bandBot = H - 3;
+    const capSize = Math.max(0, Math.min(13, Math.floor(bandBot - bandTop)));
+    // ---- the scene the blurb describes: ball → pad → wall ----
+    if(showScene){
+      const wx = W*0.385, wt = Math.max(7, W*0.006);
+      const wy0 = H*0.24, wy1 = H*0.70;
+      ctx.fillStyle = wallC; ctx.fillRect(wx, wy0, wt, wy1 - wy0);
+      ctx.strokeStyle = wallC; ctx.lineWidth = 1; ctx.lineCap = 'butt';
+      for(let i=0;i<5;i++){
+        const yy = wy0 + (i + 0.5)*(wy1 - wy0)/5;
+        ctx.beginPath(); ctx.moveTo(wx + wt, yy); ctx.lineTo(wx + wt + 7, yy + 7); ctx.stroke();
+      }
+      const pt = Math.max(6, W*0.005);
+      ctx.fillStyle = padC; ctx.fillRect(wx - pt, wy0 + 4, pt, (wy1 - wy0) - 8);
+      const br = Math.max(7, H*0.075), by = (wy0 + wy1)/2, bx = wx - pt - br - 14;
+      ctx.fillStyle = ballC; ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill();
+      const a0 = bx - br - 26, a1 = bx - br - 7;          // one unlabelled motion arrow
+      ctx.strokeStyle = soft; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a0, by); ctx.lineTo(a1 - 4, by); ctx.stroke();
+      ctx.fillStyle = soft;
+      ctx.beginPath(); ctx.moveTo(a1, by); ctx.lineTo(a1 - 7, by - 4.5); ctx.lineTo(a1 - 7, by + 4.5); ctx.closePath(); ctx.fill();
+      const scx = (a0 + wx + wt)/2, fs = capSize >= 10 ? heroFitFont(ctx, 'padded wall', Math.min(12, capSize), 10, (wx + wt) - a0, FAM) : 0;
+      if(fs){ ctx.fillStyle = soft; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('padded wall', scx, bandTop); }
+    }
+    // ---- axes, named ----
+    const top = base - hS - H*0.10;
+    ctx.strokeStyle = axisC; ctx.lineWidth = 1.2; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(gx0 + 0.5, base + 0.5); ctx.lineTo(gx1, base + 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx0 + 0.5, base + 0.5); ctx.lineTo(gx0 + 0.5, top); ctx.stroke();
+    ctx.fillStyle = axisC;
+    ctx.beginPath(); ctx.moveTo(gx1 + 6, base + 0.5); ctx.lineTo(gx1 - 3, base - 4); ctx.lineTo(gx1 - 3, base + 5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(gx0 + 0.5, top - 6); ctx.lineTo(gx0 - 4, top + 3); ctx.lineTo(gx0 + 5, top + 3); ctx.closePath(); ctx.fill();
+    // axis NAMES — the fix for a hero that did not identify itself as an F–t plot
+    const lf = Math.min(14, Math.max(10, H*0.10));      // height-safe
+    const nameY = Math.max(lf + 1, top - 10);           // never clipped by the top edge
+    ctx.fillStyle = inkC; ctx.font = '600 ' + lf + 'px ' + FAM;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('F', gx0, nameY);
+    ctx.textAlign = 'right';  ctx.textBaseline = 'bottom';
+    ctx.fillText('t', gx1 - 5, base - 3);                // above the axis, clear of the caption row
+    // neutral plot title on the same top row, hard right: names the plot, claims nothing
+    const tt = 'contact force vs time', tf = heroFitFont(ctx, tt, Math.min(13, lf), 10, gw*0.62, FAM);
+    if(tf){
+      ctx.font = '600 ' + tf + 'px ' + FAM; ctx.fillStyle = soft;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(tt, gx1, nameY);
+    }
+    // ---- the two contact pulses: areas equal by construction ----
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = edgeS; ctx.strokeRect(sx + 0.5, base - hS + 0.5, wS, hS);
+    ctx.strokeStyle = edgeL; ctx.strokeRect(lx + 0.5, base - hL + 0.5, wL, hL);
+    // equal areas stippled with EQUAL, DETERMINISTIC dot counts (seeded, so a
+    // repaint reproduces the same stipple instead of adding a second one)
+    const N = 300, n = Math.max(0, Math.min(N, Math.round(N*u)));
+    let seed = 0x9E3779B9 >>> 0;
+    const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    const DR = 1.9, inset = DR + 1.2;
+    const spanSW = Math.max(1, wS - 2*inset), spanSH = Math.max(1, hS - 2*inset);
+    const spanLW = Math.max(1, wL - 2*inset), spanLH = Math.max(1, hL - 2*inset);
+    for(let i=0;i<n;i++){
+      const p = rnd(), q = rnd(), a = rnd(), b = rnd();
+      ctx.fillStyle = dotS;
+      ctx.beginPath(); ctx.arc(sx + inset + p*spanSW, base - inset - q*spanSH, DR, 0, 7); ctx.fill();
+      ctx.fillStyle = dotL;
+      ctx.beginPath(); ctx.arc(lx + inset + a*spanLW, base - inset - b*spanLH, DR, 0, 7); ctx.fill();
+    }
+    // ---- captions: duration only (card 2's premise), never force or area ----
+    const c1 = sx + wS/2, c2 = lx + wL/2;
+    const pairs = [['brief contact','long contact'], ['brief','long']];
+    if(capSize) for(let v = 0; v < pairs.length; v++){
+      const t1 = pairs[v][0], t2 = pairs[v][1];
+      let cs = 0;
+      for(let s = capSize; s >= 10; s--){
+        ctx.font = '600 ' + s + 'px ' + FAM;
+        const w1 = ctx.measureText(t1).width, w2 = ctx.measureText(t2).width;
+        if(w1/2 + w2/2 + 12 <= (c2 - c1) && c1 - w1/2 >= W*0.255 && c2 + w2/2 <= gx1 - 10){ cs = s; break; }
+      }
+      if(cs){
+        ctx.font = '600 ' + cs + 'px ' + FAM; ctx.fillStyle = soft;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(t1, c1, bandTop); ctx.fillText(t2, c2, bandTop);
+        break;
+      }
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);   // transparent: the overlay's dim is the background in both themes
-    const base = H*0.82;                        // shared time axis
-    const spike   = { x: W*0.315, w: 54,  h: H*0.62 };            // tall, brief
-    const cushion = { x: W*0.435, w: 54 * (H*0.62) / (H*0.086), h: H*0.086 };  // low, long — SAME area
-    // time axis
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.30)' : 'rgba(148,163,184,.30)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.13, base+0.5); ctx.lineTo(W*0.87, base+0.5); ctx.stroke();
-    // pulse outlines
-    const inkSpike   = LIGHT ? 'rgba(225,29,72,.55)'  : 'rgba(251,113,133,.55)';
-    const inkCushion = LIGHT ? 'rgba(5,150,105,.55)'  : 'rgba(110,231,183,.55)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = inkSpike;   ctx.strokeRect(spike.x, base - spike.h, spike.w, spike.h);
-    ctx.strokeStyle = inkCushion; ctx.strokeRect(cushion.x, base - cushion.h, cushion.w, cushion.h);
-    // equal areas filled by EQUAL dot counts — impulse as an amount you can count
-    const dotSpike   = LIGHT ? 'rgba(225,29,72,.8)'  : 'rgba(251,113,133,.85)';
-    const dotCushion = LIGHT ? 'rgba(5,150,105,.85)' : 'rgba(110,231,183,.85)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 300; let k = 0;
-    function batch(){
-      const per = reduce ? N : 5;
-      for(let s=0;s<per && k<N;s++,k++){
-        ctx.fillStyle = dotSpike;
-        ctx.beginPath(); ctx.arc(spike.x + 2 + Math.random()*(spike.w-4), base - 2 - Math.random()*(spike.h-4), 1.9, 0, 7); ctx.fill();
-        ctx.fillStyle = dotCushion;
-        ctx.beginPath(); ctx.arc(cushion.x + 2 + Math.random()*(cushion.w-4), base - 2 - Math.random()*(cushion.h-4), 1.9, 0, 7); ctx.fill();
-      }
-      if(k < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live entrance at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }             // fully stippled, static
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((Math.max(0, now - t0))/1000) % 3.1;
+      const p = Math.min(1, s/1.7);
+      paint(p*p*(3 - 2*p));                         // 1.7 s stipple, 1.4 s dwell, repeat
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

@@ -962,7 +962,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-Δθ₁ dots of the refracted ray — they graze, then vanish past θ_c</span>
+            <span class="hero-label">Two rays meet the same glass–air boundary: the shallow one gets out, the steep one is turned back inside.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Internal reflection</span></h2>
@@ -2855,51 +2855,123 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-Δθ₁ dots of the refracted ray (Engine.rays.snell) until TIR, then only the reflected ray. */
+  /* Hero: the PREMISE only — two static rays at one glass↔air interface, drawn once.
+     GEOMETRY FIX. The old hero swept θ₁ from 8° to 80° as dot loci and placed the
+     reflected dot at ox + L·0.85·sin(θ_refl) — the SAME side of the normal as the
+     "incident" locus at ox + L·sin(θ₁) — so the TIR branch was just a second, fainter
+     arc lying on top of the incident one, and no reflection was visible at all. The
+     reflected ray now mirrors about the normal (ox + …  vs  ox − …), and because the
+     backing store is sized from getBoundingClientRect()×devicePixelRatio and drawn in
+     CSS px (uniform scale on both axes), the angles on screen are the true angles:
+     incident and reflected each make 60.00° with the normal, on opposite sides.
+     DESPOILED. Card 2 is data-gate and its correct answer is "the refracted ray bends
+     FURTHER from the normal, reaching 90° at some θ_c" — i.e. both the bending
+     direction and the θ_c moment are the student's to predict. So the sweep is gone:
+     one FIXED modest ray (θ₁ = 25° → θ₂ = 39.35° by Snell) is drawn, with no
+     progression, no θ_c marker, no grazing-at-90° frame and no angle numbers, per the
+     "single fixed correct angle" rule. Card 4 (also data-gate) asks what the refracted
+     ray does past θ_c; the hero shows ONE steep ray (60°) turned back into the glass
+     because that is the sim's title and welcome blurb ("tilt it far enough and the
+     boundary stops behaving like a window") — premise, not answer — and it is shown
+     without any threshold, fade, percentage or caption, so card 4's discriminators
+     (where θ_c is, what share of the light reflects) stay unspoken. The weak partial
+     reflection on the modest ray is kept (faint) so the hero does not teach the false
+     "below θ_c nothing reflects". Essentials sit inside 24–76% of the displayed width
+     (the mask is opaque 22–78%). Deliberately distinct from C202's mirror hero. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const n1 = 1.5, n2 = 1.0;
-    function snellAt(th1){
-      if(window.Engine && Engine.rays && typeof Engine.rays.snell === 'function'){
-        return Engine.rays.snell(n1, th1, n2);
-      }
-      const s2 = (n1/n2)*Math.sin(th1);
-      if(Math.abs(s2) > 1) return { totalInternalReflection:true, refractionAngle:null, reflectionAngle:th1 };
-      return { totalInternalReflection:false, refractionAngle:Math.asin(s2), reflectionAngle:th1 };
-    }
-    const ox = W*0.42, oy = H*0.62, L = H*0.42;
-    const inkI = LIGHT ? 'rgba(219,39,119,.35)' : 'rgba(244,114,182,.4)';
-    const inkR = LIGHT ? 'rgba(37,99,235,.88)' : 'rgba(96,165,250,.88)';
-    const inkF = LIGHT ? 'rgba(180,83,9,.75)' : 'rgba(251,191,36,.8)';
-    const axis = LIGHT ? 'rgba(71,85,105,.45)' : 'rgba(148,163,184,.35)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(W*0.12, oy); ctx.lineTo(W*0.88, oy); ctx.stroke();
-    ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(ox, 12); ctx.lineTo(ox, H-12); ctx.stroke(); ctx.setLineDash([]);
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 56; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        const th1 = (8 + (step/(N-1))*72) * Math.PI/180;
-        const res = snellAt(th1);
-        ctx.fillStyle = inkI;
-        ctx.beginPath(); ctx.arc(ox + L*Math.sin(th1), oy + L*Math.cos(th1), 1.6, 0, 7); ctx.fill();
-        if(res.totalInternalReflection || res.refractionAngle == null){
-          ctx.fillStyle = inkF;
-          ctx.beginPath(); ctx.arc(ox + L*0.85*Math.sin(res.reflectionAngle), oy + L*0.85*Math.cos(res.reflectionAngle), 2.1, 0, 7); ctx.fill();
-        } else {
-          ctx.fillStyle = inkR;
-          ctx.beginPath(); ctx.arc(ox + L*Math.sin(res.refractionAngle), oy - L*Math.cos(res.refractionAngle), 2.2, 0, 7); ctx.fill();
-        }
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);   // re-entry cancels the old chain
+    const n1 = 1.50, n2 = 1.00;
+    const TH_A = 25*Math.PI/180;                  // modest: refracts out into the air
+    const TH_B = 60*Math.PI/180;                  // steep: turned back inside the glass
+    const inkI = LIGHT ? 'rgba(219,39,119,.88)' : 'rgba(244,114,182,.88)';   // incident
+    const inkR = LIGHT ? 'rgba(37,99,235,.88)'  : 'rgba(96,165,250,.88)';    // refracted
+    const inkF = LIGHT ? 'rgba(180,83,9,.88)'   : 'rgba(251,191,36,.88)';    // reflected
+    const surf = LIGHT ? 'rgba(15,23,42,.58)'   : 'rgba(226,232,240,.58)';
+    const soft = LIGHT ? 'rgba(71,85,105,.75)'  : 'rgba(148,163,184,.75)';
+    const glass= LIGHT ? 'rgba(56,189,248,.12)' : 'rgba(125,211,252,.10)';
+    function refractOf(th1){                      // θ₂ or null when no real solution
+      if(window.Engine && Engine.rays && typeof Engine.rays.snell === 'function'){
+        const r = Engine.rays.snell(n1, th1, n2);
+        if(r && !r.totalInternalReflection && r.refractionAngle != null) return r.refractionAngle;
+        if(r) return null;
       }
-      if(step < N) requestAnimationFrame(batch);
+      const s = (n1/n2)*Math.sin(th1);
+      return Math.abs(s) > 1 ? null : Math.asin(s);
     }
-    batch();
+    function ray(ctx, x0, y0, x1, y1, t, ink, alpha, w){   // first `t` of the segment, head at the tip
+      if(t <= 0) return;
+      const x = x0 + (x1-x0)*t, y = y0 + (y1-y0)*t;
+      const L = Math.hypot(x1-x0, y1-y0) || 1, ux = (x1-x0)/L, uy = (y1-y0)/L;
+      ctx.save();
+      ctx.globalAlpha = (alpha == null ? 1 : alpha);
+      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = (w || 2); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.lineTo(x - ux*7 - uy*3.6, y - uy*7 + ux*3.6);
+      ctx.lineTo(x - ux*7 + uy*3.6, y - uy*7 - ux*3.6);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    function paint(k){                            // k ∈ [0,1]: how far the rays have run
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);     // 1 unit = 1 CSS px on BOTH axes → honest angles
+      ctx.clearRect(0, 0, W, H);
+      const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+      const iy  = H*0.46;                         // the glass ↔ air interface
+      const xA  = W*0.355, xB = W*0.645;          // two incidence points, well inside 24–76%
+      const Lin = Math.min(H*0.44, W*0.072);      // ray length below the interface
+      const Lup = Math.min(H*0.40, W*0.065);      // ray length above it
+      // the two media: glass below, air above
+      ctx.fillStyle = glass; ctx.fillRect(W*0.26, iy, W*0.48, H - iy);
+      ctx.strokeStyle = surf; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(W*0.26, iy); ctx.lineTo(W*0.74, iy); ctx.stroke();
+      ctx.fillStyle = soft; ctx.font = '12px '+FAM; ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom'; ctx.fillText('air',   W*0.272, iy - 5);
+      ctx.textBaseline = 'top';    ctx.fillText('glass', W*0.272, iy + 5);
+      // the normals the angles are measured from
+      ctx.save(); ctx.setLineDash([3,4]); ctx.strokeStyle = soft; ctx.globalAlpha = .55; ctx.lineWidth = 1;
+      [xA, xB].forEach(x => { ctx.beginPath(); ctx.moveTo(x, iy - H*0.34); ctx.lineTo(x, iy + H*0.34); ctx.stroke(); });
+      ctx.restore();
+      // endpoints. Incident rays arrive from the lower LEFT; the reflected ray leaves on
+      // the mirror-image side of the normal (+sin) — that is the geometry that was wrong.
+      const th2  = refractOf(TH_A);               // 39.35° — away from the normal
+      const inA  = [xA - Lin*Math.sin(TH_A),      iy + Lin*Math.cos(TH_A)];
+      const outA = th2 == null ? null : [xA + Lup*Math.sin(th2), iy - Lup*Math.cos(th2)];
+      const rflA = [xA + Lin*0.58*Math.sin(TH_A), iy + Lin*0.58*Math.cos(TH_A)];
+      const inB  = [xB - Lin*Math.sin(TH_B),      iy + Lin*Math.cos(TH_B)];
+      const rflB = [xB + Lin*Math.sin(TH_B),      iy + Lin*Math.cos(TH_B)];
+      const pIn  = Math.max(0, Math.min(1, k/0.5));
+      const pOut = Math.max(0, Math.min(1, (k - 0.5)/0.5));
+      ray(ctx, inA[0], inA[1], xA, iy, pIn, inkI);
+      ray(ctx, inB[0], inB[1], xB, iy, pIn, inkI);
+      if(outA) ray(ctx, xA, iy, outA[0], outA[1], pOut, inkR);   // gets out, bent by Snell
+      ray(ctx, xA, iy, rflA[0], rflA[1], pOut, inkF, .38, 1.4);  // the always-present weak reflection
+      ray(ctx, xB, iy, rflB[0], rflB[1], pOut, inkF);            // steep ray: turned back inside
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(c.__heroGen !== gen) return;             // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      // continuous cycle: run the rays in REVEAL ms, dwell on the finished pair,
+      // then run them again. (It used to be a one-shot that froze after 1.4 s.)
+      const REVEAL = 1400, PERIOD = REVEAL + 1400;
+      const s = (((typeof now === 'number' ? now : t0) - t0) % PERIOD);
+      paint(Math.min(1, s/REVEAL));               // no sweep: θ₁ never changes
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

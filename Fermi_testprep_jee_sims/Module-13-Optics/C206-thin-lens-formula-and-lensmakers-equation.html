@@ -960,7 +960,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-Δu dots: the object walks in — watch what the image does</span>
+            <span class="hero-label">A lens whose focal length its glass and two curved faces set: one object out at 2F with its rays stopped at the glass, one posed inside F.</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Thin lens formula</span></h2>
@@ -2883,57 +2883,140 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: equal-Δu dots of object (u) and image (v) from 1/u + 1/v = 1/f. f from lensMaker. */
+  /* Hero: the PREMISE only — the lens itself, plus the two placements the sim asks about,
+     with the rays stopped at the glass. The old hero was a near-duplicate of C202's old
+     composition (bare axis + vertical bar + a purple/green dot pair marching inward), its
+     sweep ran from 13.5% to 94.5% of the width — i.e. out under the mask fades — it never
+     crossed inside f despite the blurb promising the virtual case, and the lensmaker's
+     half of the title was nowhere on screen.
+     REDESIGNED, and deliberately distinct from the newly-fixed C202 (concave mirror arc,
+     hatching, full two-ray construction, real image): here the subject is a REAL LENS
+     BODY — two circular faces, dashed continuations of their circles and the letters n,
+     R₁, R₂, the three inputs of the lensmaker's equation. The drawn faces are honest:
+     R₁ = −R₂ = R is drawn at the same px scale as F, which is exactly right for this
+     sim's lens, since 1/f = (n−1)(1/R₁ − 1/R₂) = (0.5)(2/R) gives f = R at n = 1.5.
+     DESPOILED, and both gated cards checked. Card 1 is data-gate ("object at |u| = 2f —
+     where does the image land?") and card 4 is data-gate (the virtual image at |u| < f),
+     and the SIM ITSELF withholds both: gateHeld() makes draw() stop the rays AT the lens
+     and print "?" for v, m and kind until a choice is committed. So no image is built
+     here either — not the real one and not the virtual one. The hero draws precisely the
+     sim's honest held frame: the object at 2f with ray 1 (parallel) and ray 2 (toward the
+     optical centre) reaching the glass and stopping there, plus the second object POSED
+     inside F with its rays not yet traced at all. F is ticked on both sides — that is the
+     definition of the focal length, not an answer. Essentials sit inside 24–76% of the
+     displayed width (the mask is opaque 22–78%); the backing store is sized from
+     getBoundingClientRect()×devicePixelRatio and drawn in CSS px, so the lens faces and
+     the ray slopes are undistorted. The rays draw once (~1.1 s) and stop; reduced motion
+     gets the finished frame. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    let f = 0.20;
-    if(window.Engine && Engine.rays && typeof Engine.rays.lensMaker === 'function'){
-      const lm = Engine.rays.lensMaker(1.5, 0.20, -0.20);
-      if(lm && isFinite(lm.focalLength)) f = lm.focalLength;
-    }
-    function imageOf(u){
-      if(window.Engine && Engine.rays && typeof Engine.rays.thinLens === 'function'){
-        const img = Engine.rays.thinLens(u, f);
-        return img.atFocalPoint ? Infinity : img.imageDistance;
-      }
-      const inv = 1/f - 1/u;
-      return Math.abs(inv) < 1e-15 ? Infinity : 1/inv;
-    }
-    const padL = 70, padR = 70, cy = H*0.58;
-    const xMax = 0.70;
-    const lensX = padL + (W-padL-padR)*0.42;
-    const xOfLeft = dist => lensX - (dist/xMax)*(lensX-padL);
-    const xOfRight = dist => lensX + (dist/xMax)*((W-padR)-lensX);
-    const inkO = LIGHT ? 'rgba(124,58,237,.88)' : 'rgba(167,139,250,.88)';
-    const inkI = LIGHT ? 'rgba(5,150,105,.88)' : 'rgba(52,211,153,.88)';
-    const axis = LIGHT ? 'rgba(71,85,105,.45)' : 'rgba(148,163,184,.35)';
-    const lens = LIGHT ? 'rgba(15,23,42,.55)' : 'rgba(226,232,240,.55)';
-    ctx.strokeStyle = axis; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(W-padR, cy); ctx.stroke();
-    ctx.strokeStyle = lens; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(lensX, cy-40); ctx.lineTo(lensX, cy+40); ctx.stroke();
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64; let step = 0;
-    function batch(){
-      const per = reduce ? N : 1;
-      for(let s=0;s<per && step<N;s++,step++){
-        const u = 0.55 - (step/(N-1))*(0.55-0.212);
-        const v = imageOf(u);
-        ctx.fillStyle = inkO;
-        ctx.beginPath(); ctx.arc(xOfLeft(u), cy-10, 2.0, 0, 7); ctx.fill();
-        if(isFinite(v) && v > 0 && v < xMax*2.2){
-          ctx.fillStyle = inkI;
-          ctx.beginPath(); ctx.arc(xOfRight(Math.min(v, xMax)), cy+10, 2.2, 0, 7); ctx.fill();
-        }
-      }
-      if(step < N) requestAnimationFrame(batch);
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);   // re-entry cancels the old chain
+    const inkO  = LIGHT ? 'rgba(124,58,237,.88)' : 'rgba(167,139,250,.88)';  // object
+    const ray1c = LIGHT ? 'rgba(37,99,235,.85)'  : 'rgba(96,165,250,.85)';   // ray 1 — as in the legend
+    const ray2c = LIGHT ? 'rgba(219,39,119,.85)' : 'rgba(244,114,182,.85)';  // ray 2 — as in the legend
+    const axis  = LIGHT ? 'rgba(71,85,105,.45)'  : 'rgba(148,163,184,.35)';
+    const soft  = LIGHT ? 'rgba(71,85,105,.75)'  : 'rgba(148,163,184,.75)';
+    const edge  = LIGHT ? 'rgba(15,23,42,.60)'   : 'rgba(226,232,240,.60)';
+    const body  = LIGHT ? 'rgba(56,189,248,.14)' : 'rgba(125,211,252,.11)';
+    function arrow(ctx, x, y0, y1, ink, alpha){   // vertical object arrow y0 → y1
+      ctx.save(); ctx.globalAlpha = (alpha == null ? 1 : alpha);
+      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+      const d = y1 > y0 ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(x, y1 + d*1.5); ctx.lineTo(x-4.5, y1 - d*6); ctx.lineTo(x+4.5, y1 - d*6); ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
-    batch();
+    function paint(k){                            // k ∈ [0,1]: how far the rays have run
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);     // 1 unit = 1 CSS px on BOTH axes
+      ctx.clearRect(0, 0, W, H);
+      const FAM = getComputedStyle(document.body).fontFamily || 'sans-serif';
+      const cy  = H*0.50, cx = W*0.545;
+      const fpx = Math.min(W*0.085, H*0.80);      // F distance in px
+      const R   = fpx;                            // n = 1.5, R₁ = −R₂ = R  ⇒  f = R
+      const ap  = Math.min(H*0.32, fpx*0.55);     // semi-aperture of the drawn lens
+      const sag = R - Math.sqrt(Math.max(0, R*R - ap*ap));
+      const tc  = 2*sag + 2;                      // centre thickness (2 px of edge)
+      const bulge = dy => R - Math.sqrt(Math.max(0, R*R - dy*dy));
+      const xL = dy => (cx - tc/2) + bulge(dy);   // left face  (bulges left)
+      const xR = dy => (cx + tc/2) - bulge(dy);   // right face (bulges right)
+      // principal axis
+      ctx.strokeStyle = axis; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx - 2*fpx - 18, cy); ctx.lineTo(cx + fpx + 26, cy); ctx.stroke();
+      // dashed continuations of the two face circles — the lensmaker's R₁ and R₂
+      const over = Math.min(11, ap*0.30);
+      ctx.save(); ctx.setLineDash([3,4]); ctx.globalAlpha = .55; ctx.strokeStyle = soft; ctx.lineWidth = 1;
+      [xL, xR].forEach(fx => {
+        [-1, 1].forEach(s => {
+          ctx.beginPath();
+          for(let i=0;i<=10;i++){ const dy = s*(ap + over*i/10); const x = fx(dy); i ? ctx.lineTo(x, cy+dy) : ctx.moveTo(x, cy+dy); }
+          ctx.stroke();
+        });
+      });
+      ctx.restore();
+      // the lens body: two circular faces
+      ctx.beginPath();
+      for(let i=0;i<=24;i++){ const dy = -ap + 2*ap*i/24; const x = xL(dy); i ? ctx.lineTo(x, cy+dy) : ctx.moveTo(x, cy+dy); }
+      for(let i=24;i>=0;i--){ const dy = -ap + 2*ap*i/24; ctx.lineTo(xR(dy), cy+dy); }
+      ctx.closePath();
+      ctx.fillStyle = body; ctx.fill();
+      ctx.strokeStyle = edge; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.stroke();
+      // letters only: n inside the glass, R₁ / R₂ beside the two faces
+      ctx.fillStyle = soft; ctx.font = '12px '+FAM;
+      // 'n' is lifted off the principal axis: at cy it was drawn exactly on the axis
+      // line and the stroke ran straight through the glyph. Kept inside the glass —
+      // at |dy| = 11 the two faces are still ~16 px apart at every drawn width.
+      if(tc >= 16){ ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('n', cx, cy - Math.min(11, ap*0.45)); }
+      ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('R₁', xL(-ap) - 6, cy - ap - 1);
+      ctx.textAlign = 'left';  ctx.textBaseline = 'top';    ctx.fillText('R₂', xR(ap) + 6, cy + ap + 1);
+      // F on both sides, letter-only
+      ctx.strokeStyle = soft; ctx.lineWidth = 1.6;
+      [-1, 1].forEach(s => {
+        const x = cx + s*fpx;
+        ctx.beginPath(); ctx.moveTo(x, cy-5); ctx.lineTo(x, cy+5); ctx.stroke();
+        ctx.fillStyle = soft; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText('F', x, cy + 8);
+      });
+      // object 1, out at 2f: its two construction rays reach the glass and STOP there —
+      // exactly what the sim draws while a gated card is unanswered.
+      const hA = ap*0.72, xA = cx - 2*fpx, tipY = cy - hA;
+      arrow(ctx, xA, cy, tipY, inkO);
+      let t = (cx - tc/2 - xA)/(cx - xA);          // ray 2 meets the curved face: 3 iterations
+      for(let i=0;i<3;i++){ const y = tipY + t*(cy - tipY); t = (xL(y - cy) - xA)/(cx - xA); }
+      const r2x = xA + t*(cx - xA), r2y = tipY + t*(cy - tipY);
+      const kk = Math.max(0, Math.min(1, k));
+      ctx.lineCap = 'round'; ctx.lineWidth = 2;
+      ctx.strokeStyle = ray1c;
+      ctx.beginPath(); ctx.moveTo(xA, tipY); ctx.lineTo(xA + (xL(-hA) - xA)*kk, tipY); ctx.stroke();
+      ctx.strokeStyle = ray2c;
+      ctx.beginPath(); ctx.moveTo(xA, tipY); ctx.lineTo(xA + (r2x - xA)*kk, tipY + (r2y - tipY)*kk); ctx.stroke();
+      // object 2, posed inside F — rays not traced: where its image goes is the student's call
+      arrow(ctx, cx - 0.5*fpx, cy, cy - ap*0.42, inkO, .5);
+    }
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(c.__heroGen !== gen) return;             // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      // continuous cycle: the two rays run to the glass in REVEAL ms, dwell there,
+      // then run again. The rays still STOP at the glass — where the image lands is
+      // card 1's gated question and is never drawn here; only the build now repeats.
+      const REVEAL = 1100, PERIOD = REVEAL + 1300;
+      const s = (((typeof now === 'number' ? now : t0) - t0) % PERIOD);
+      paint(Math.min(1, s/REVEAL));
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

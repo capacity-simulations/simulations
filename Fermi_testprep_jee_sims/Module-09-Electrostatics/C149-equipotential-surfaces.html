@@ -1408,11 +1408,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-angle dots: circular V and radial E</span>
+            <span class="hero-label">Dipole equipotential contours with field lines crossing them at right angles</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Equipotentials</span></h2>
-            <p class="welcome-blurb">Field lines meet equipotentials at 90° everywhere — forced by E = −∇V.</p>
+            <p class="welcome-blurb">Two charges, contours of constant V — what does a trip along one cost?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3664,49 +3664,181 @@ Shell.init({
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to equipotential surfaces.',
-    'Here two charges draw field lines and contours of constant V. Drag along a contour and the work stays zero — the field is always perpendicular to the path.',
+    'Here two charges draw field lines and contours of constant V. Drag a test charge along a contour, then straight across them, and watch the work counter.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: E = −∇V geometry for a point charge.
-     Equal-angle cyan dots on a circle (equipotential) and equal-r amber
-     dots on radial rays (field). They meet at 90°. */
+  /* Hero: the DIPOLE the sim actually shows (+q at x=−1, −q at x=+1) — cyan
+     equipotential contours of V = 1/r₊ − 1/r₋ with amber field lines threading
+     through them. The blurb states the right angle openly ("Field lines meet
+     equipotentials at 90° everywhere"), so the right-angle PICTURE is premise,
+     not a reveal — but that makes the geometry load-bearing, and the old hero
+     broke it twice over: it drew a single POINT CHARGE (circle + 8 radial rays,
+     R = 0.28·min(W,H) ≈ 67px, filling only ~18% of the band) while the scene and
+     every card are a dipole, and it drew into a fixed 1280×240 backing store
+     stretched across a ~1400×140 CSS box, a ~2:1 anisotropic squash that flattens
+     the circle to an ellipse so the "radii" visibly meet it at 60–70°, not 90°.
+     Fixes: (1) backing store = getBoundingClientRect × devicePixelRatio, all
+     drawing in CSS px (C190 idiom); (2) the sim→screen map is ISOTROPIC —
+     one scale s for x and y — because right angles survive only a conformal map,
+     so nothing but a uniform scale can be used here.
+     Composition: contours V = ±2.8, ±4.6, ±7.6 (three nested ovals about each
+     charge, sampled by bisecting V along rays from the charge — they are NOT
+     circles: each is visibly pulled toward the other charge) and 7 field lines
+     traced from ±0.54/±0.36/±0.18/0 rad on a 0.13 ring about +q. No contour
+     encloses BOTH charges: for equal and opposite charges the V = 0 surface is
+     the flat perpendicular bisector, so every V ≠ 0 contour closes around exactly
+     one charge — drawing a contour around the pair would have been a lie.
+     Geometry (measured, not assumed): bbox |x| ≤ 1.309, |y| ≤ 0.410, aspect 3.19;
+     s = min((H/2−8)/ymax, (0.24W−10)/xmax) keeps the whole picture inside the
+     24–76% mask window at every width (x span 36.3–63.7% at W=1440, 30.7–69.3%
+     at 1024, 27.3–72.7% at 760; y within ±62 of a ±70 band).
+     Verified: at each crossing the contour tangent (from the drawn polyline, in
+     screen px) against the field tangent (E at that point, mapped by s) gives
+     |cos| ≤ 7.3e-4, i.e. 89.96°–90.00° — true right angles on screen.
+     SPOILERS: card 1 (gated) asks for the work done along a contour and card 3
+     (gated) asks what is true at the dipole MIDPOINT — so the hero carries no
+     midpoint cross-hair, no V values, no work/ΔV annotation and no angle chip;
+     only the two charges and the bare geometry the blurb already promises. */
+  let heroToken = 0;
+  function heroV(x, y){                      // V in units of kq, q = 1
+    return 1/Math.max(Math.hypot(x+1, y), 1e-9) - 1/Math.max(Math.hypot(x-1, y), 1e-9);
+  }
+  function heroE(x, y){
+    function c(qx, q){
+      const dx = x-qx, dy = y, r2 = dx*dx + dy*dy + 1e-4, r = Math.sqrt(r2);
+      return [q*dx/(r2*r), q*dy/(r2*r)];
+    }
+    const a = c(-1, 1), b = c(1, -1);
+    return [a[0]+b[0], a[1]+b[1]];
+  }
+  /* Contour V = level about +q: V falls monotonically along any ray from the
+     charge, so a bisection per polar angle lands exactly on the level set. */
+  function heroContour(level, N){
+    const pts = [];
+    for(let i=0;i<=N;i++){
+      const ph = (i/N)*2*Math.PI;
+      let lo = 1e-4, hi = 1.9;
+      for(let k=0;k<44;k++){                 // 1.9/2⁴⁴ ≈ 1e-13 units: far below a pixel
+        const m = (lo+hi)/2;
+        if(heroV(-1 + m*Math.cos(ph), m*Math.sin(ph)) > level) lo = m; else hi = m;
+      }
+      const r = (lo+hi)/2;
+      pts.push([-1 + r*Math.cos(ph), r*Math.sin(ph)]);
+    }
+    return pts;
+  }
+  /* All of this lives in sim units — it does not depend on W, H, dpr or theme,
+     so it is built once and reused by every repaint, resize and theme flip. */
+  let heroGeom = null;
+  function heroGeometry(){
+    if(heroGeom) return heroGeom;
+    const LEVELS = [2.8, 4.6, 7.6], SEED = 0.13;
+    const contours = [];
+    LEVELS.forEach(L => {
+      const p = heroContour(L, 180);
+      contours.push(p);                                            // about +q
+      contours.push(p.map(q => [-q[0], q[1]]));                    // mirror: about −q
+    });
+    const lines = [];
+    [0, 0.18, -0.18, 0.36, -0.36, 0.54, -0.54].forEach(th => {
+      let x = -1 + SEED*Math.cos(th), y = SEED*Math.sin(th);
+      const pts = [[x, y]];
+      for(let n=0;n<400;n++){
+        const [ex, ey] = heroE(x, y), m = Math.hypot(ex, ey) || 1;
+        x += 0.03*ex/m; y += 0.03*ey/m;
+        pts.push([x, y]);
+        if(Math.hypot(x-1, y) < SEED) break;        // arrived at −q
+        if(Math.abs(x) > 2.2 || Math.abs(y) > 2.2) break;  // safety net only
+      }
+      lines.push(pts);
+    });
+    let xmax = 0.2, ymax = 0.05;
+    contours.concat(lines).forEach(p => p.forEach(q => {
+      xmax = Math.max(xmax, Math.abs(q[0])); ymax = Math.max(ymax, Math.abs(q[1]));
+    }));
+    heroGeom = {contours, lines, xmax, ymax};
+    return heroGeom;
+  }
+  /* Resample a polyline to dots at a fixed SCREEN spacing — the house
+     equal-arc-dot idiom, and it keeps tight inner contours from smearing. */
+  function heroDots(pts, cx, cy, s, gap){
+    const out = [], P = pts.map(q => [cx + q[0]*s, cy - q[1]*s]);
+    let acc = gap;
+    for(let i=1;i<P.length;i++){
+      let seg = Math.hypot(P[i][0]-P[i-1][0], P[i][1]-P[i-1][1]);
+      let t = 0;
+      while(acc + (seg - t) >= gap && seg > 1e-9){
+        t += gap - acc; acc = 0;
+        out.push([P[i-1][0] + (P[i][0]-P[i-1][0])*t/seg, P[i-1][1] + (P[i][1]-P[i-1][1])*t/seg]);
+      }
+      acc += seg - t;
+    }
+    return out;
+  }
+  function paintHero(ctx, W, H, frac, LIGHT, geom){
+    const inkV = LIGHT ? 'rgba(14,116,144,.92)' : 'rgba(34,211,238,.92)';   // sim's contour ink
+    const inkE = LIGHT ? 'rgba(180,83,9,.92)'   : 'rgba(251,191,36,.92)';   // sim's field ink
+    const ring = LIGHT ? 'rgba(15,23,42,.75)'   : 'rgba(255,255,255,.9)';
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const cx = W*0.5, cy = H*0.5;
+    // ISOTROPIC scale — the only map that preserves the 90° the blurb promises.
+    const s = Math.min((H*0.5 - 8)/geom.ymax, (W*0.24 - 10)/geom.xmax);
+    ctx.clearRect(0, 0, W, H);
+    // contours settle first, then the field lines thread through them
+    const fC = Math.max(0, Math.min(1, frac/0.55));
+    const fL = Math.max(0, Math.min(1, (frac - 0.45)/0.55));
+    ctx.fillStyle = inkV;
+    geom.contours.forEach(p => {
+      const d = heroDots(p, cx, cy, s, 4.2), upto = Math.ceil(fC*d.length);
+      for(let i=0;i<upto;i++){ ctx.beginPath(); ctx.arc(d[i][0], d[i][1], 2.0, 0, 7); ctx.fill(); }
+    });
+    ctx.fillStyle = inkE;
+    const nMax = Math.max(...geom.lines.map(p => heroDots(p, cx, cy, s, 4.4).length));
+    geom.lines.forEach(p => {
+      const d = heroDots(p, cx, cy, s, 4.4), upto = Math.min(d.length, Math.ceil(fL*nMax));
+      for(let i=0;i<upto;i++){ ctx.beginPath(); ctx.arc(d[i][0], d[i][1], 2.2, 0, 7); ctx.fill(); }
+    });
+    [[-1, '#dc2626', '+'], [1, '#2563eb', '−']].forEach(([x, fill, glyph]) => {
+      ctx.beginPath(); ctx.arc(cx + x*s, cy, 9, 0, 7);
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = ring; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 13px '+FAM;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(glyph, cx + x*s, cy + 1);
+    });
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const cx = W*0.50, cy = H*0.52;
-    const R = Math.min(W, H)*0.28;
-    const inkV = LIGHT ? 'rgba(8,145,178,.92)' : 'rgba(34,211,238,.95)';
-    const inkE = LIGHT ? 'rgba(217,119,6,.90)' : 'rgba(251,191,36,.95)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const Ncirc = 40, Nrays = 8, Nalong = 7;
-    const total = Ncirc + Nrays*Nalong; let n = 0;
-    function batch(){
-      const per = reduce ? total : 3;
-      for(let s=0;s<per && n<total;s++,n++){
-        if(n < Ncirc){
-          const a = (n/Ncirc)*Math.PI*2;
-          ctx.fillStyle = inkV;
-          ctx.beginPath(); ctx.arc(cx + R*Math.cos(a), cy + R*Math.sin(a), 2.5, 0, 7); ctx.fill();
-        } else {
-          const k = n - Ncirc;
-          const ray = Math.floor(k / Nalong);
-          const j = k % Nalong;
-          const a = (ray/Nrays)*Math.PI*2;
-          const r = 10 + (j/(Nalong-1))*(R*1.55);
-          ctx.fillStyle = inkE;
-          ctx.beginPath(); ctx.arc(cx + r*Math.cos(a), cy + r*Math.sin(a), 2.2, 0, 7); ctx.fill();
-        }
-      }
-      if(n < total) requestAnimationFrame(batch);
+    const my = ++heroToken;                       // one live animation at a time
+    const geom = heroGeometry();
+    function paint(frac){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);     // draw in CSS px: no squash
+      paintHero(ctx, W, H, frac, LIGHT, geom);
     }
-    batch();
+    if(reduce){ paint(1); return; }               // reduced motion: full picture at once
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return; // overlay dismissed: stop
+      const s = (((typeof now === 'number' ? now : t0) - t0)/1000);
+      paint(Math.min(1, (s % 2.9)/1.5));   // 1.5 s reveal, 1.4 s hold, then again
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

@@ -1353,11 +1353,11 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Random field orientations meeting a filter, and the single orientation that leaves it</span>
+            <span class="hero-label">Field orientations of every direction arriving at one filter, its transmission axis marked down the middle, and beyond it only that one orientation, and at lower amplitude</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Malus's law</span></h2>
-            <p class="welcome-blurb">Unpolarized light becomes polarized, then the analyser dims it as cos² of the angle between them.</p>
+            <p class="welcome-blurb">One filter polarizes the light. Add a second, turn it — how much gets through?</p>
             <p class="welcome-ask">How would you like to begin?</p>
             <div class="welcome-modes">
                 <button type="button" class="welcome-mode" data-mode="inquiry">
@@ -3205,7 +3205,7 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   const playBtn = $('welcome-speak'), prevBtn = $('welcome-prev'), nextBtn = $('welcome-next'), prog = $('welcome-progress');
   const script = [
     'Welcome to Malus\'s law.',
-    'Here unpolarized light hits a polarizer and drops to half. A second polarizer then dims the beam as cosine squared of the angle between them.',
+    'Here unpolarized light passes a filter. A second filter is then turned in the beam — and you work out what reaches the screen.',
     'Choose how you would like to begin.',
     'Guided Inquiry walks you through the physics step by step, with predictions to make and then observe.',
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
@@ -3214,45 +3214,144 @@ Shell.init({ onFrame, onReset, onResize, onStep });
   /* Hero: the unpolarized → polarized transition. It used to plot the cos²(Δθ)
      curve itself, which answers the deck's crossed-polarizer gate before the
      student has been asked — and, with .hero-label display:none, it did so as
-     an unlabelled arc of dots nobody could decode anyway. */
+     an unlabelled arc of dots nobody could decode anyway. What is drawn now is
+     the beam axis, ONE filter seen edge-on with its TRANSMISSION AXIS marked,
+     warm field segments at every orientation arriving from the left, and cool
+     segments leaving on the right, all aligned with that marked axis and drawn
+     at 0.72× the incoming amplitude (0.72² ≈ ½, the halving of unpolarized light).
+
+     ONE FILTER ONLY — and why the visible blurb overshoots it. The blurb reads
+     "…then the analyser dims it as cos² of the angle between them", but card 3 is
+     a data-gate whose question is literally "P₂ is now set perpendicular to P₁.
+     What reaches the screen?", and card 2 is a data-gate on what the FIRST filter
+     alone transmits. Drawing a second filter — at any orientation — would preview
+     the gated answer to "what does a second filter do", so the analyser is
+     deliberately absent. KNOWN GAP, recorded here rather than closed: the welcome
+     name ("Malus's law") and the blurb promise an analyser and a cos² relation that
+     the art does not show. The hidden .hero-label names only what is drawn.
+
+     THE TRANSMISSION AXIS is new. The filter used to be a bare ellipse, so the
+     vertical output segments had nothing to be aligned WITH and read as arbitrary;
+     a bold vertical axis line (with two faint companions inside the ellipse) now
+     makes "the single orientation that leaves it" a visible alignment.
+
+     ORIENTATIONS ARE NOW ISOTROPIC. The old code multiplied only the HORIZONTAL
+     half of each segment by 0.58 to pre-compensate for the CSS stretch — but the
+     stretch factor depends on the window width, so the "random" orientations came
+     out biased toward horizontal on screen. That hack is gone: the backing store is
+     sized from getBoundingClientRect()×devicePixelRatio and the scene is drawn in
+     CSS px under setTransform(dpr,…), so a drawn angle is the angle you see. The
+     orientations are drawn one per equal-width angular stratum of [0,π) and the
+     strata shuffled, which is uniform by construction — with a handful of segments
+     a plain hash was visibly lumpy.
+
+     INK. Axis, both populations and the filter live inside 26–74% of the DISPLAYED
+     width (the mask is opaque 22–78%). The old axL = 8%W / axR = 94%W put roughly
+     half of each population into the fade. Nothing decorative is left outside. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
     const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const midY = H*0.52, axL = W*0.08, axR = W*0.94, filtX = W*0.50, len = H*0.24;
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(axL, midY); ctx.lineTo(axR, midY); ctx.stroke();
-    // the filter, seen edge-on, axis vertical
-    ctx.strokeStyle = LIGHT ? 'rgba(37,99,235,.75)' : 'rgba(96,165,250,.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(filtX, midY, H*0.10, H*0.30, 0, 0, 7); ctx.stroke();
-    const warm = LIGHT ? 'rgba(180,83,9,.80)' : 'rgba(254,243,199,.85)';
-    const cool = LIGHT ? 'rgba(37,99,235,.85)' : 'rgba(96,165,250,.95)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 44; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const t = n/(N-1), x = axL + t*(axR-axL);
-        const before = x < filtX - H*0.12;
-        if(!before && x < filtX + H*0.12) continue;
-        const hs = Math.sin(n*12.9898)*43758.5453;
-        const rot = before ? (hs - Math.floor(hs))*Math.PI : Math.PI/2;
-        const a = len * (before ? 1 : 0.72);
-        ctx.strokeStyle = before ? warm : cool;
-        ctx.lineWidth = 2;
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);   // one live animation at a time
+    const axInk = LIGHT ? 'rgba(15,23,42,.18)'  : 'rgba(148,163,184,.22)';
+    const rim   = LIGHT ? 'rgba(37,99,235,.70)' : 'rgba(96,165,250,.80)';
+    const tAxis = LIGHT ? 'rgba(29,78,216,.95)' : 'rgba(147,197,253,.95)';
+    const warm  = LIGHT ? 'rgba(180,83,9,.85)'  : 'rgba(253,224,71,.88)';
+    const cool  = LIGHT ? 'rgba(37,99,235,.90)' : 'rgba(96,165,250,.95)';
+    const frac = v => v - Math.floor(v);
+    function paint(k){                                   // k ∈ [0,1]: build progress
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(320, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const x0 = W*0.26, x1 = W*0.74;
+      const midY = H*0.52, filtX = W*0.50;
+      const rx = H*0.095, ry = H*0.30;                   // filter seen edge-on
+      const aIn = H*0.21, aOut = aIn*0.72;               // segment half-lengths
+      const clamp01 = v => v < 0 ? 0 : (v > 1 ? 1 : v);
+      // how many segments the two zones can carry at this width
+      const nb = Math.max(3, Math.min(11, Math.round((filtX - rx - x0)/28)));
+      const na = Math.max(3, Math.min(11, Math.round((x1 - filtX - rx)/28)));
+      // one orientation per equal-width stratum of [0,π), strata shuffled → isotropic
+      const perm = []; for(let i=0;i<nb;i++) perm.push(i);
+      for(let i=nb-1;i>0;i--){
+        const j = Math.floor(frac(Math.sin((i+3)*12.9898)*43758.5453)*(i+1));
+        const tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
+      }
+      const rots = [];
+      for(let i=0;i<nb;i++) rots.push((perm[i] + frac(Math.sin((i+1)*78.233)*43758.5453))*Math.PI/nb);
+      // horizontal placement: the outermost ink lands exactly on the band edges
+      let bL = x0 + aIn*Math.abs(Math.cos(rots[0]));
+      let bR = filtX - rx - 10 - aIn*Math.abs(Math.cos(rots[nb-1]));
+      if(bR < bL){ const m = (bL + bR)/2; bL = m; bR = m; }
+      const aL = filtX + rx + 10, aR = Math.max(aL, x1 - 1.5);
+      // beam axis — present from the first frame, so the hero is never a blank strip
+      ctx.globalAlpha = clamp01(0.35 + k/0.10);
+      ctx.strokeStyle = axInk; ctx.lineWidth = 1; ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.moveTo(x0, midY); ctx.lineTo(x1, midY); ctx.stroke();
+      // the filter, edge-on, with its transmission axis drawn vertical
+      ctx.globalAlpha = clamp01((k - 0.08)/0.14);
+      ctx.strokeStyle = rim; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(filtX, midY, rx, ry, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = tAxis; ctx.lineWidth = 1; ctx.globalAlpha *= 0.55;
+      [-0.5, 0.5].forEach(f=>{                           // faint companions: the axis fills the filter
+        const dx = rx*f, hy = ry*Math.sqrt(Math.max(0, 1 - f*f))*0.92;
+        ctx.beginPath(); ctx.moveTo(filtX + dx, midY - hy); ctx.lineTo(filtX + dx, midY + hy); ctx.stroke();
+      });
+      ctx.globalAlpha = clamp01((k - 0.08)/0.14);
+      ctx.strokeStyle = tAxis; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(filtX, midY - ry*0.86); ctx.lineTo(filtX, midY + ry*0.86); ctx.stroke();
+      ctx.lineWidth = 1.6;                               // end ticks, so it reads as an axis marker
+      [-1, 1].forEach(s=>{
+        ctx.beginPath(); ctx.moveTo(filtX - 5, midY + s*ry*0.86); ctx.lineTo(filtX + 5, midY + s*ry*0.86); ctx.stroke();
+      });
+      // incoming, unpolarized: every orientation, equally likely
+      const showB = Math.round(clamp01((k - 0.18)/0.36)*nb);
+      ctx.globalAlpha = 1; ctx.strokeStyle = warm; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+      for(let i=0;i<showB;i++){
+        const x = nb > 1 ? bL + (bR - bL)*i/(nb - 1) : (bL + bR)/2;
+        const cth = Math.cos(rots[i]), sth = Math.sin(rots[i]);
         ctx.beginPath();
-        ctx.moveTo(x - a*Math.cos(rot)*0.58, midY - a*Math.sin(rot));
-        ctx.lineTo(x + a*Math.cos(rot)*0.58, midY + a*Math.sin(rot));
+        ctx.moveTo(x - aIn*cth, midY - aIn*sth);
+        ctx.lineTo(x + aIn*cth, midY + aIn*sth);
         ctx.stroke();
       }
-      if(n < N) requestAnimationFrame(batch);
+      // outgoing, polarized: one orientation only, aligned with the marked axis
+      const showA = Math.round(clamp01((k - 0.56)/0.38)*na);
+      ctx.strokeStyle = cool;
+      for(let i=0;i<showA;i++){
+        const x = na > 1 ? aL + (aR - aL)*i/(na - 1) : (aL + aR)/2;
+        ctx.beginPath();
+        ctx.moveTo(x, midY - aOut);
+        ctx.lineTo(x, midY + aOut);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
-    batch();
+    if(reduce){ paint(1); return; }                      // finished frame, no motion
+    let t0 = null;
+    (function loop(ts){
+      if(c.__heroGen !== gen) return;                    // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;        // overlay dismissed: stop
+      const now = (ts === undefined || ts === null)
+        ? ((window.performance && performance.now) ? performance.now() : Date.now())
+        : ts;                                            // ts === 0 is a real timestamp
+      if(t0 === null) t0 = now;
+      // continuous cycle: axis, filter, unpolarized in, polarized out over REVEAL ms,
+      // dwell on the finished picture, then build it again. (One-shot froze at 1.5 s.)
+      const REVEAL = 1500, PERIOD = REVEAL + 1400;
+      const s = (now - t0) % PERIOD;
+      paint(Math.min(1, s/REVEAL));
+      requestAnimationFrame(loop);
+    })();
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

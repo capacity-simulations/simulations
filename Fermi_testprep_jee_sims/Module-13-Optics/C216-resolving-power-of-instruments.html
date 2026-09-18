@@ -3260,37 +3260,103 @@ return {
   /* Hero: a row of source PAIRS, drawn progressively closer together until the
      two blobs merge into one. It poses the phenomenon and nothing else — the
      old hero plotted θ_min against D beside a flat "magnification" line, which
-     is verbatim the answer to the first (gated) inquiry card. */
+     is verbatim the answer to the first (gated) inquiry card.
+     The blob row now sits on a dark rounded "sensor strip" so the additive
+     ('lighter') glow reads in BOTH themes — the previous cream/pale-blue inks
+     composited onto the near-white light-theme overlay and vanished. The seven
+     pairs span 26%–74% measured on the outermost STAR (not the pair centre, or
+     the widest pair's left star would fall off the strip and out of the mask on
+     a narrow viewport), and the blob radius scales with the strip so seven
+     pairs still read as seven at 360 px instead of smearing into each other.
+     Compositing is saved/restored per frame so a theme flip mid-animation
+     can no longer leak
+     a stray 'lighter' state. Spoiler check: gated card 1 asks WHAT would
+     resolve the pair (aperture D) and gated card 3 asks the λ dependence —
+     the strip shows neither an aperture nor a wavelength and carries no
+     annotation, so the merge progression stays a question, not an answer. */
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.clearRect(0,0,W,H);
-    const cy = H*0.5, PAIRS = 7, blob = 16;         // blob = first-zero radius, px
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // one live animation only: theme observers + resize re-enter drawHero
+    const gen = (c.__heroGen = (c.__heroGen || 0) + 1);
+    const PAIRS = 7;
     let n = 0;
-    function drawPair(i){
-      const cx = W*(0.10 + 0.80*(i/(PAIRS-1)));
-      const sep = blob*2.6*(1 - i/(PAIRS-1));        // wide apart → coincident
-      [[-sep/2,'254,243,199'],[sep/2,'147,197,253']].forEach(([off,rgb])=>{
-        const rg = ctx.createRadialGradient(cx+off,cy,0,cx+off,cy,blob*1.9);
-        rg.addColorStop(0,   'rgba('+rgb+',0.95)');
-        rg.addColorStop(0.35,'rgba('+rgb+',0.38)');
-        rg.addColorStop(1,   'rgba('+rgb+',0)');
-        ctx.fillStyle = rg;
-        ctx.beginPath(); ctx.arc(cx+off, cy, blob*1.9, 0, 7); ctx.fill();
-      });
+    function paint(count){
+      // backing store from the CSS box × devicePixelRatio; draw in CSS px
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.save();                                  // frame state: nothing leaks past this
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0,0,W,H);
+      const cy = H*0.5;
+      // blob = first-zero radius, px. It scales with the strip: at 360 px a fixed
+      // 16 px blob made neighbouring pairs overlap into one smear.
+      const blob = Math.max(6, Math.min(16, W*0.0185));
+      // dark "sensor strip": a defined dark field in BOTH themes, so the
+      // additive star glow always has something to add onto
+      const sx0 = W*0.24, sx1 = W*0.76, sy0 = Math.max(4, cy-54), sy1 = Math.min(H-4, cy+54), rad = 16;
+      function stripPath(){
+        ctx.beginPath();
+        ctx.moveTo(sx0+rad, sy0);
+        ctx.arcTo(sx1, sy0, sx1, sy1, rad);
+        ctx.arcTo(sx1, sy1, sx0, sy1, rad);
+        ctx.arcTo(sx0, sy1, sx0, sy0, rad);
+        ctx.arcTo(sx0, sy0, sx1, sy0, rad);
+        ctx.closePath();
+      }
+      stripPath();
+      ctx.fillStyle = '#0B1220';
+      ctx.fill();
+      ctx.strokeStyle = LIGHT ? 'rgba(71,85,105,.55)' : 'rgba(148,163,184,.28)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.save();
+      stripPath();
+      ctx.clip();                                  // glow stays on the strip
+      ctx.globalCompositeOperation = 'lighter';    // incoherent: brightnesses add
+      // centres offset by half the widest separation, so the OUTERMOST STAR of
+      // the first pair — not its centre — starts at 26%; last pair ends at 74%
+      const sepMax = blob*2.6, xL = W*0.26 + sepMax/2, xR = W*0.74;
+      for(let i=0;i<count;i++){
+        const cx = xL + (xR - xL)*(i/(PAIRS-1));
+        const sep = sepMax*(1 - i/(PAIRS-1));      // wide apart → coincident
+        [[-sep/2,'254,243,199'],[sep/2,'147,197,253']].forEach(([off,rgb])=>{
+          const rg = ctx.createRadialGradient(cx+off,cy,0,cx+off,cy,blob*1.9);
+          rg.addColorStop(0,   'rgba('+rgb+',0.95)');
+          rg.addColorStop(0.35,'rgba('+rgb+',0.38)');
+          rg.addColorStop(1,   'rgba('+rgb+',0)');
+          ctx.fillStyle = rg;
+          ctx.beginPath(); ctx.arc(cx+off, cy, blob*1.9, 0, 7); ctx.fill();
+        });
+      }
+      ctx.restore();                               // ends the clip + 'lighter'
+      ctx.restore();                               // frame-level state fully restored
     }
-    ctx.globalCompositeOperation = 'lighter';       // incoherent: brightnesses add
-    function batch(){
-      const per = reduce ? PAIRS : 1;
-      for(let s=0;s<per && n<PAIRS;s++,n++) drawPair(n);
-      if(n < PAIRS) requestAnimationFrame(batch);
-      else ctx.globalCompositeOperation = 'source-over';
+    // TIME-gated, not frame-gated: one pair every STEP ms, a dwell on the full row,
+    // then the reveal runs again. (Frame-gating laid all seven pairs down inside
+    // ~116 ms, so the left→right build was over before anyone could see it.)
+    const STEP = 240, DWELL = 1400;
+    const PERIOD = PAIRS*STEP + DWELL;
+    let t0 = 0;
+    function batch(now){
+      if(c.__heroGen !== gen || ov.classList.contains('hidden')) return;
+      if(!t0) t0 = now;
+      const s = (now - t0) % PERIOD;
+      n = Math.min(PAIRS, 1 + Math.floor(s/STEP));
+      paint(n);                                    // pairs still appear left → right
+      requestAnimationFrame(batch);
     }
-    batch();
+    if(reduce) paint(PAIRS); else requestAnimationFrame(batch);
   }
   drawHero();
+  addEventListener('resize', ()=>{ if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

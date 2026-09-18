@@ -1372,7 +1372,7 @@ Object.freeze(Engine);
     <div class="welcome-card">
         <div class="welcome-hero">
             <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-            <span class="hero-label">Equal-time dots of series vs parallel SHM, same m and x₀</span>
+            <span class="hero-label">Two springs joined end to end and the same two springs mounted side by side, each arrangement carrying an identical 1 kg block at rest on one shared release line</span>
         </div>
         <div class="welcome-body">
             <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Two springs, one mass</span></h2>
@@ -3224,44 +3224,199 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: this sim’s two SHMs, m=1 kg, k1=100, k2=200.
-     k_s = 1/(1/k1+1/k2), k_p = k1+k2, x = −x0 cos(ωt), ω=√(k/m).
-     Equal-time dots — parallel packs more cycles (stiffer). */
+  /* Hero: the two ARRANGEMENTS themselves — the thing this sim is actually
+     about — drawn at rest and side by side. Left: k₁ and k₂ joined END TO END
+     (series) carrying a 1 kg block. Right: the same two springs mounted SIDE
+     BY SIDE (parallel) carrying an identical 1 kg block. Both blocks sit on
+     one shared dashed line: same mass, same starting displacement, released
+     together. Nothing moves, and no period, frequency or trace is drawn.
+
+     SPOILER AUDIT — gated cards read before drawing. Card 1 IS the gated
+     predict, and it asks precisely "which one oscillates faster?" (correct:
+     the parallel mass, because k_p = k₁+k₂ > k_s). So the hero shows the two
+     arrangements AT REST and nothing else: no x(t) traces, no cycle counts,
+     no ω or T, no stiffness comparison, and the two blocks are drawn level so
+     that even the larger static extension of the softer series pair — which a
+     sharp student could read as "softer ⇒ slower" — is not on display. The
+     old hero drew two equal-time traces in which the parallel one visibly
+     packed about twice as many cycles: that is the gated answer, handed over
+     before the question. Because the picture no longer keys any answer, the
+     arrangements can be named and can carry the sim's own legend colours
+     (.dot-ser blue / .dot-par pink), which the old neutral palette had to
+     avoid — the names identify the apparatus, not the winner.
+
+     Differentiation from C120 (SHM defining relation): the two heroes were
+     near-duplicates — both "two cosine dot traces on a midline", same
+     paddings, same amber second ink, indistinguishable to a student. This
+     hero now contains no traces and no midline at all; it is springs, blocks
+     and a ceiling. C120 keeps the traces and adds its ½kx² well.
+
+     Framing: ceiling, springs, blocks, the shared release line and both names
+     lie inside 26%–74% of the DISPLAYED width. The old layout ran the traces
+     8%→92%, so both ends — including the shared release point at t = 0, the
+     "same release" anchor the audio script names — sat in the 22%/78% fade.
+     The k₁/k₂ callouts are the one decorative extra: below 640 CSS px they
+     would crowd the coils and are dropped.
+
+     Sizing: the old hero had NO backing-store sizing at all — the 1280×240 in
+     the markup was stretched into a viewport-wide 140px band, squashing
+     everything ~2:1 and turning round dots into ellipses. The backing store is
+     now taken from the canvas's own CSS box on every paint
+     (getBoundingClientRect × devicePixelRatio, setTransform(dpr,…), drawing in
+     CSS px), with a resize hook, a generation token so the two theme observers
+     cannot stack rAF loops, and a prefers-reduced-motion fast path. The only
+     animation is a neutral reveal: both sets of coils draw downward at the
+     same rate, then the blocks fade in. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, u, LIGHT){
+    const FAM  = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    const ink  = LIGHT ? 'rgba(15,23,42,.85)' : 'rgba(226,232,240,.88)';
+    const soft = LIGHT ? 'rgba(15,23,42,.58)' : 'rgba(203,213,225,.66)';
+    const hair = LIGHT ? 'rgba(15,23,42,.28)' : 'rgba(148,163,184,.34)';
+    // the sim's own legend colours: .dot-ser #60a5fa / #1d4ed8, .dot-par #f472b6 / #be185d
+    const SER  = LIGHT ? 'rgba(29,78,216,.95)'  : 'rgba(96,165,250,.95)';
+    const PAR  = LIGHT ? 'rgba(190,24,93,.95)'  : 'rgba(244,114,182,.95)';
+    const SERf = LIGHT ? 'rgba(29,78,216,.16)'  : 'rgba(96,165,250,.18)';
+    const PARf = LIGHT ? 'rgba(190,24,93,.16)'  : 'rgba(244,114,182,.18)';
+
+    ctx.clearRect(0,0,W,H);
+    const wash = ctx.createLinearGradient(0,0,0,H);
+    wash.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    wash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wash; ctx.fillRect(0,0,W,H);
+
+    const x0 = W*0.26, x1 = W*0.74, inner = x1 - x0;
+    const gap = inner*0.10, pw = (inner-gap)/2;
+    const cA = x0 + pw/2, cB = x1 - pw/2;
+    const ceilY = H*0.13, sTop = H*0.17, blockTop = H*0.62;
+    const blockH = Math.min(22, H*0.16), bw = Math.min(54, pw*0.42);
+    const amp = Math.min(9, pw*0.14), labels = W >= 640;
+    const rev = Math.max(0, Math.min(1, u));
+    const blockA = Math.max(0, Math.min(1, (u-0.72)/0.28));
+
+    // a vertical zig-zag spring, drawn from the top down to a fraction `f`
+    function coil(x, y0, y1, n, a, f){
+      const span = (y1-y0)*Math.max(0, Math.min(1, f)), steps = n*2;
+      ctx.beginPath(); ctx.moveTo(x, y0);
+      for(let i=1;i<=steps;i++){
+        const p = i/steps;
+        if((y1-y0)*p > span) break;
+        ctx.lineTo(x + (i%2 ? a : -a), y0 + (y1-y0)*p);
+      }
+      ctx.lineTo(x, y0 + span);
+      ctx.stroke();
+    }
+    // hatched ceiling over one panel
+    function ceiling(cx){
+      ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - pw*0.40, ceilY); ctx.lineTo(cx + pw*0.40, ceilY); ctx.stroke();
+      ctx.strokeStyle = hair; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for(let i=0;i<7;i++){
+        const hx = cx - pw*0.34 + (pw*0.68)*(i/6);
+        ctx.moveTo(hx, ceilY); ctx.lineTo(hx - 5, ceilY - 6);
+      }
+      ctx.stroke();
+    }
+    function block(cx, col, fill){
+      ctx.save(); ctx.globalAlpha = blockA;
+      ctx.fillStyle = fill; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.fillRect(cx - bw/2, blockTop, bw, blockH);
+      ctx.strokeRect(cx - bw/2, blockTop, bw, blockH);
+      if(bw >= 44){
+        ctx.fillStyle = col; ctx.font = '11px '+FAM;   // 11 px floor for canvas text
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('1 kg', cx, blockTop + blockH/2);
+      }
+      ctx.restore();
+    }
+
+    ceiling(cA); ceiling(cB);
+
+    // SERIES — k₁ above k₂, end to end, one column
+    const midY = sTop + (blockTop-sTop)*0.5;
+    ctx.strokeStyle = SER; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    coil(cA, sTop, midY, 3, amp, rev/0.5);
+    if(rev > 0.5) coil(cA, midY, blockTop, 3, amp, (rev-0.5)/0.5);
+    if(rev >= 0.5){
+      ctx.fillStyle = SER;
+      ctx.beginPath(); ctx.arc(cA, midY, 3, 0, 7); ctx.fill();
+    }
+    block(cA, SER, SERf);
+
+    // PARALLEL — k₁ and k₂ side by side on one block
+    const dx = Math.min(22, pw*0.20);
+    ctx.strokeStyle = PAR; ctx.lineWidth = 2;
+    coil(cB - dx, sTop, blockTop, 6, amp, rev);
+    coil(cB + dx, sTop, blockTop, 6, amp, rev);
+    if(rev >= 1){   // the yoke both parallel springs pull on
+      ctx.beginPath(); ctx.moveTo(cB - dx, blockTop); ctx.lineTo(cB + dx, blockTop); ctx.stroke();
+    }
+    block(cB, PAR, PARf);
+
+    // one shared release line: same mass, same start
+    ctx.save();
+    ctx.strokeStyle = hair; ctx.lineWidth = 1.2; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(x0, blockTop); ctx.lineTo(x1, blockTop); ctx.stroke();
+    ctx.restore();
+    // 11 px floor for canvas text; the label must still clear the two panels, so
+    // it is measured against the gap rather than gated on a px constant tuned
+    // for the old 10 px size.
+    ctx.font = '11px '+FAM;
+    if(ctx.measureText('same start').width + 6 <= gap){
+      ctx.fillStyle = soft;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('same start', (x0+x1)/2, blockTop-4);
+    }
+
+    if(labels){
+      ctx.font = '11px '+FAM; ctx.textBaseline = 'middle';
+      ctx.fillStyle = SER; ctx.textAlign = 'right';
+      ctx.fillText('k₁', cA - amp - 7, (sTop+midY)/2);
+      ctx.fillText('k₂', cA - amp - 7, (midY+blockTop)/2);
+      ctx.fillStyle = PAR;
+      ctx.fillText('k₁', cB - dx - amp - 7, (sTop+blockTop)/2);
+      ctx.textAlign = 'left';
+      ctx.fillText('k₂', cB + dx + amp + 7, (sTop+blockTop)/2);
+    }
+
+    // Long names only where the half-panel can hold them without pushing ink
+    // past the 26%–74% band; otherwise the bare arrangement names.
+    const wide = W >= 900, nmFs = wide ? 12.5 : 11;
+    ctx.font = '600 '+nmFs+'px '+FAM;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = SER; ctx.fillText(wide ? 'SERIES — end to end' : 'SERIES', cA, H*0.96);
+    ctx.fillStyle = PAR; ctx.fillText(wide ? 'PARALLEL — side by side' : 'PARALLEL', cB, H*0.96);
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
-    ctx.clearRect(0,0,W,H);
-    const k1 = 100, k2 = 200, m = 1, x0 = 0.10;
-    const ks = 1 / (1/k1 + 1/k2), kp = k1 + k2;
-    const ws = Math.sqrt(ks/m), wp = Math.sqrt(kp/m);
-    const tmax = 4*Math.PI/ws; // two series periods
-    const padL = W*0.08, padR = W*0.92, padT = H*0.16, padB = H*0.86;
-    const xOf = t => padL + (t/tmax)*(padR-padL);
-    const yOf = x => (padT+padB)/2 - (x/x0)*((padB-padT)/2);
-    ctx.strokeStyle = LIGHT ? 'rgba(15,23,42,.18)' : 'rgba(148,163,184,.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, (padT+padB)/2); ctx.lineTo(padR, (padT+padB)/2); ctx.stroke();
-    // Neutral tones on purpose: the legend's blue/pink would color-key the
-    // answer (which trace is SERIES vs PARALLEL) before the student enters.
-    const inks = LIGHT ? ['rgba(71,85,105,.9)','rgba(180,83,9,.9)'] : ['rgba(148,163,184,.95)','rgba(251,191,36,.95)'];
+    const LIGHT = document.documentElement.getAttribute('data-theme') === 'light'
+               || document.body.classList.contains('light-theme');
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 72; let n = 0;
-    function batch(){
-      const per = reduce ? N : 2;
-      for(let s=0;s<per && n<N;s++,n++){
-        const t = (n/(N-1))*tmax;
-        const xs = [-x0*Math.cos(ws*t), -x0*Math.cos(wp*t)];
-        xs.forEach((x,i)=>{
-          ctx.fillStyle = inks[i];
-          ctx.beginPath(); ctx.arc(xOf(t), yOf(x), 2.5, 0, 7); ctx.fill();
-        });
-      }
-      if(n < N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(u){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width  || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, u, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1); return; }
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      const s = ((typeof now === 'number' ? now : t0) - t0)/1000;
+      paint(Math.min(1, (s % 6.0)/2.4));            // 2.4 s to build, then hold
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })

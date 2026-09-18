@@ -2922,20 +2922,33 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: one monatomic energy bar of equal-share dots (no γ spoilers). */
+  /* Hero: miniature of the sim's own tile scene — one diatomic molecule shown
+     three ways: sliding (translation), spinning (rotation), and a frozen
+     spring (vibration). Deliberately NO ½kT block tallies, NO f-arithmetic
+     and NO γ anywhere: gated card 2 asks the student to predict what γ does
+     when the modes are added (its feedback is where "f goes 3 → 5" and
+     "γ = 1.4 for every diatomic" are first revealed, and the two-block
+     rotation count itself only appears in card 3, after the gate). The
+     blurb invites "count the ways" — the hero poses the counting with the
+     three motion stages and never prints the sum. */
   let heroRAF = 0;
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    // Miniature of the sim's own tile scene: one diatomic molecule shown
-    // three ways — sliding (translation), spinning (rotation), and a frozen
-    // spring (vibration) — with its ½kT blocks filling underneath. This is
-    // exactly what the student is about to explore.
     function frame(tt){
+      /* Sized to the canvas's OWN CSS box every frame (getBoundingClientRect
+         × devicePixelRatio) and drawn in CSS px — the authored 1280×240
+         backing store was being squashed into the viewport-wide 140px band. */
+      const rect = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(rect.width || 1280));
+      const H = Math.max(100, Math.round(rect.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const LIGHT = document.documentElement.getAttribute('data-theme') === 'light' || document.body.classList.contains('light-theme');
       ctx.clearRect(0,0,W,H);
       const font = getComputedStyle(document.body).fontFamily || 'sans-serif';
-      const ink   = LIGHT ? '#0f172a' : '#e2e8f0';
       const mute  = LIGHT ? '#475569' : '#94a3b8';
       const cT    = LIGHT ? '#2563eb' : '#60a5fa';
       const cR    = LIGHT ? '#db2777' : '#f472b6';
@@ -2955,14 +2968,21 @@ return {
         atomFill(-sep, 0, r2); atomFill(sep, 0, r2);
         ctx.restore();
       };
+      /* Stages at ~28 / 46 / 64% of the band, all inside the 24–76% opaque
+         window of the edge mask (the old 15/35/55% put stage 1 at 10.6–19.4%,
+         inside the left fade). The slide extremes of stage 1 reach
+         x − (amp+sep+r2), so clamp its centre against the 24% edge; below
+         ~900px the glyphs scale down so the three stages never collide. */
+      const s = Math.max(0.5, Math.min(1, W/900));
+      const cy = H*0.50, r2 = 13*s, sep = 20*s, amp = 24*s;
+      const ext = amp + sep + r2;
       const stages = [
-        { x: W*0.15, lab: 'moves', col: cT,  n: 3 },
-        { x: W*0.35, lab: 'spins', col: cR,  n: 2 },
-        { x: W*0.55, lab: 'vibrates — frozen ❄', col: mute, n: 0 }
+        { x: Math.max(W*0.28, W*0.24 + ext), lab: 'moves', col: cT },
+        { x: W*0.46, lab: 'spins', col: cR },
+        { x: W*0.64, lab: W < 640 ? 'vibrates ❄' : 'vibrates — frozen ❄', col: mute }
       ];
-      const cy = H*0.42, r2 = 13, sep = 20;
       // TRANSLATION: slides left-right
-      dumbbell(stages[0].x + Math.sin(tt*2.4)*26, cy, sep, r2, 0, 0);
+      dumbbell(stages[0].x + Math.sin(tt*2.4)*amp, cy, sep, r2, 0, 0);
       // ROTATION: spins in place
       dumbbell(stages[1].x, cy, sep, r2, tt*2.6, 0);
       // VIBRATION: spring, static + grey
@@ -2981,46 +3001,13 @@ return {
         atomFill(x - sep, cy, r2*0.85); atomFill(x + sep, cy, r2*0.85);
         ctx.restore();
       }
-      // labels + ½kT blocks under each stage
+      // stage labels only — no ½kT tallies, no f-sum, no γ (gated; see above)
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       stages.forEach(st => {
         ctx.font = '600 12px ' + font;
         ctx.fillStyle = st.col;
         ctx.fillText(st.lab, st.x, cy + 44);
-        /* Blocks sized around a 12px ½kT — the K-12 canvas floor. Widest row is
-           3 blocks = 3*34 + 2*5 = 112, and the stages are 0.20*W = 256 apart, so
-           neighbouring rows stay well clear. */
-        const bw = 34, gap = 5, bh = 17, total = st.n || 0;
-        const x0 = st.x - (Math.max(total,1)*bw + (Math.max(total,1)-1)*gap)/2;
-        for(let i = 0; i < total; i++){
-          // blocks fill one by one over the loop
-          const on = (tt % 6) > (0.8 + i*0.55);
-          ctx.fillStyle = on ? st.col : 'rgba(148,163,184,.15)';
-          ctx.beginPath();
-          if(ctx.roundRect) ctx.roundRect(x0 + i*(bw+gap), cy + 54, bw, bh, 3); else ctx.rect(x0 + i*(bw+gap), cy + 54, bw, bh);
-          ctx.fill();
-          if(on){
-            ctx.fillStyle = LIGHT ? '#fff' : '#0f172a';
-            ctx.font = '600 12px ' + font;
-            ctx.fillText('½kT', x0 + i*(bw+gap) + bw/2, cy + 54 + bh/2 + 4);
-          }
-        }
-        if(total === 0){
-          ctx.font = '600 12px ' + font;
-          ctx.fillStyle = mute;
-          ctx.fillText('counts 0 at 300 K', st.x, cy + 66);
-        }
       });
-      // the payoff, right side
-      ctx.font = '700 15px ' + font;
-      ctx.fillStyle = ink; ctx.textAlign = 'left';
-      ctx.fillText('f = 3 + 2 = 5', W*0.68, cy - 10);
-      ctx.font = '600 12px ' + font;
-      ctx.fillStyle = mute;
-      ctx.fillText('five ½kT slices per molecule', W*0.68, cy + 10);
-      ctx.fillStyle = LIGHT ? '#b45309' : '#fbbf24';
-      ctx.font = '700 13px ' + font;
-      ctx.fillText('→ γ = 1.400 for EVERY diatomic', W*0.68, cy + 30);
     }
     cancelAnimationFrame(heroRAF);
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3035,6 +3022,7 @@ return {
   }
 
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   // Theme can change while the overlay is open (keyboard/system): redraw the hero in the new colours
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });

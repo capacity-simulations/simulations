@@ -527,7 +527,7 @@ Object.freeze(Engine);
         <div class="welcome-card">
             <div class="welcome-hero">
                 <canvas id="welcome-fringes" width="1280" height="240" aria-hidden="true"></canvas>
-                <span class="hero-label">A beam of light quanta, red through violet</span>
+                <span class="hero-label">A lamp shines on a metal plate and electrons leave its surface</span>
             </div>
             <div class="welcome-body">
                 <h2 id="welcome-title"><span class="welcome-kicker">Welcome to</span><span class="welcome-name">Photoelectric effect</span></h2>
@@ -2552,40 +2552,186 @@ return {
     'Controls Guide introduces each control one at a time, so you know what everything does before you experiment.',
     'Free Exploration opens everything from the start, so you can experiment entirely on your own.'
   ];
-  /* Hero: a decorative beam of quanta sweeping red → violet.
-     It deliberately plots NOTHING: the earlier K_max-vs-f hero drew the answer
-     to inquiry cards 1 and 3 (flat at zero below f₀, then rising with slope h)
-     on screen seconds before the student is asked to predict either. */
+  /* Hero — the SCENE of the experiment, not its result: a lamp at the upper
+     left sends a beam of photon packets (all ONE unlabeled colour) onto an
+     angled, hatched metal plate, and two or three electrons leave the polished
+     face with identical short velocity ticks. "Light in, electrons out" is the
+     sim's stated subject (title + blurb ask "brightness or colour?"), so the
+     scene answers nothing the gated cards ask:
+       · card 1 gates whether bright RED (sub-threshold) light ejects — the
+         beam here carries no colour claim, so no frequency verdict leaks;
+       · card 3 gates what sets K_max — one beam colour and one common tick
+         length, so no frequency/speed comparison exists to read off;
+       · card 4 gates the metal / threshold-f₀ dependence — one anonymous
+         plate, no work function named;
+       · card 5's stopping potential — no collector, field or V₀ drawn.
+     The cards do NOT gate "do electrons come out at all" (card 1 asks that
+     only of red light), so showing emission for an unnamed colour spoils
+     nothing. Backing store is re-sized from the canvas's OWN CSS box ×
+     devicePixelRatio at every draw (the authored 1280×240 is 5.3:1 while the
+     box is ~10:1, which smeared the old art) and drawn in CSS px; the loop is
+     token-guarded, stops when the overlay hides, honours reduced-motion, and
+     every element sits inside 26%–74% of the width so the edge mask never
+     eats the lamp or the plate. Light/dark ink pairs throughout. */
+  let heroToken = 0;
+  function paintHero(ctx, W, H, t, LIGHT){
+    const ink    = LIGHT ? 'rgba(15,23,42,.80)'  : 'rgba(226,232,240,.85)';
+    const soft   = LIGHT ? 'rgba(15,23,42,.42)'  : 'rgba(148,163,184,.55)';
+    const metal  = LIGHT ? 'rgba(71,85,105,.80)' : 'rgba(148,163,184,.80)';
+    const mfill  = LIGHT ? 'rgba(71,85,105,.10)' : 'rgba(148,163,184,.10)';
+    const sheen  = LIGHT ? 'rgba(15,23,42,.92)'  : 'rgba(226,232,240,.95)';
+    const phot   = LIGHT ? 'rgba(180,83,9,.90)'  : 'rgba(251,191,36,.90)';
+    const photHi = LIGHT ? 'rgba(180,83,9,1)'    : 'rgba(251,191,36,1)';
+    const glowC  = LIGHT ? '180,83,9'            : '251,191,36';
+    const elec   = LIGHT ? 'rgba(3,105,161,.95)' : 'rgba(56,189,248,.95)';
+
+    ctx.clearRect(0,0,W,H);
+    // a whisper of ground so the strip is never entirely transparent
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, LIGHT ? 'rgba(15,23,42,.05)' : 'rgba(148,163,184,.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    // ---- geometry (all inside 26%–74% of W; overlay mask fades past 22%/78%)
+    const lamp = { x: W*0.29,  y: H*0.22 };
+    const P1   = { x: W*0.435, y: H*0.88 };  // plate face, lower-left end
+    const P2   = { x: W*0.635, y: H*0.58 };  // plate face, upper-right end
+    const vx = P2.x - P1.x, vy = P2.y - P1.y, vlen = Math.hypot(vx, vy);
+    const ux = vx/vlen, uy = vy/vlen;                 // along the face
+    const nx = uy, ny = -ux;                          // outward normal (toward the lamp side)
+    const hit = { x: P1.x + vx*0.45, y: P1.y + vy*0.45 };
+    let dx = hit.x - lamp.x, dy = hit.y - lamp.y;
+    const blen = Math.hypot(dx, dy); dx /= blen; dy /= blen;   // beam direction
+    const px = -dy, py = dx;                                   // beam perpendicular
+
+    // ---- metal plate: hatched slab with a polished face --------------------
+    const th = 15;
+    ctx.beginPath();
+    ctx.moveTo(P1.x, P1.y); ctx.lineTo(P2.x, P2.y);
+    ctx.lineTo(P2.x - nx*th, P2.y - ny*th); ctx.lineTo(P1.x - nx*th, P1.y - ny*th);
+    ctx.closePath();
+    ctx.fillStyle = mfill; ctx.fill();
+    ctx.strokeStyle = metal; ctx.lineWidth = 1.2; ctx.stroke();
+    // hatching inside the slab
+    ctx.strokeStyle = soft; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let s = 8; s < vlen - 2; s += 11){
+      const qx = P1.x + ux*s - nx*3, qy = P1.y + uy*s - ny*3;
+      ctx.moveTo(qx, qy);
+      ctx.lineTo(qx - ux*7 - nx*9, qy - uy*7 - ny*9);
+    }
+    ctx.stroke();
+    // polished face
+    ctx.strokeStyle = sheen; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(P1.x, P1.y); ctx.lineTo(P2.x, P2.y); ctx.stroke();
+
+    // ---- lamp: cone housing + bulb, aimed along the beam -------------------
+    const bx = lamp.x - dx*16, by = lamp.y - dy*16;   // back of the housing
+    ctx.beginPath();
+    ctx.moveTo(lamp.x + px*11, lamp.y + py*11);
+    ctx.lineTo(lamp.x - px*11, lamp.y - py*11);
+    ctx.lineTo(bx - px*5,  by - py*5);
+    ctx.lineTo(bx + px*5,  by + py*5);
+    ctx.closePath();
+    ctx.fillStyle = mfill; ctx.fill();
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.beginPath(); ctx.arc(lamp.x + dx*4, lamp.y + dy*4, 5, 0, 7);
+    ctx.fillStyle = `rgba(${glowC},.30)`; ctx.fill();
+    ctx.strokeStyle = phot; ctx.lineWidth = 1.4; ctx.stroke();
+    // three short rays fanning from the mouth
+    ctx.strokeStyle = phot; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for(const a of [-0.5, 0, 0.5]){
+      const rx = dx*Math.cos(a) - dy*Math.sin(a), ry = dx*Math.sin(a) + dy*Math.cos(a);
+      ctx.moveTo(lamp.x + rx*12, lamp.y + ry*12);
+      ctx.lineTo(lamp.x + rx*19, lamp.y + ry*19);
+    }
+    ctx.stroke();
+
+    // ---- photon packets marching down the beam (ONE colour) ----------------
+    const s0 = 26, s1 = blen - 8, span = s1 - s0, nP = 4, pk = 24;
+    for(let i = 0; i < nP; i++){
+      const s = s0 + ((t*60 + i*span/nP) % span);
+      let a = 1;
+      if(s - s0 < 18) a = (s - s0)/18;
+      if(s1 - s < 14) a = Math.min(a, (s1 - s)/14);
+      ctx.strokeStyle = phot; ctx.globalAlpha = a*0.9; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for(let k = 0; k <= 12; k++){
+        const q = s - pk + (k/12)*pk;
+        const off = Math.sin((k/12)*Math.PI*3)*3.5;
+        const qx = lamp.x + dx*q + px*off, qy = lamp.y + dy*q + py*off;
+        if(k === 0) ctx.moveTo(qx, qy); else ctx.lineTo(qx, qy);
+      }
+      ctx.stroke();
+      ctx.fillStyle = photHi;
+      ctx.beginPath(); ctx.arc(lamp.x + dx*s, lamp.y + dy*s, 2.8, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- soft pulsing glow where the beam lands -----------------------------
+    const gr = 12 + 2*Math.sin(t*2*Math.PI/1.7);
+    const rg = ctx.createRadialGradient(hit.x, hit.y, 0, hit.x, hit.y, gr);
+    rg.addColorStop(0, `rgba(${glowC},.30)`);
+    rg.addColorStop(1, `rgba(${glowC},0)`);
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(hit.x, hit.y, gr, 0, 7); ctx.fill();
+
+    // ---- two or three electrons leaving the face ----------------------------
+    // Identical tick lengths and a common travel speed: motion is implied, but
+    // no electron is faster than another, so nothing invites a K_max reading.
+    const EL = [ { off: -12, ang: -0.32, ph: 0.00 },
+                 { off:   3, ang:  0.06, ph: 0.38 },
+                 { off:  14, ang:  0.36, ph: 0.72 } ];
+    const T = 2.6;
+    for(const e of EL){
+      const p = ((t/T + e.ph) % 1 + 1) % 1;
+      const sx = hit.x + ux*e.off, sy = hit.y + uy*e.off;
+      const ca = Math.cos(e.ang), sa = Math.sin(e.ang);
+      const ex = nx*ca - ny*sa, ey = nx*sa + ny*ca;   // outward, fanned a little
+      const dist = 8 + p*34;
+      const cxp = sx + ex*dist, cyp = sy + ey*dist;
+      let a = 1;
+      if(p < 0.12) a = p/0.12;
+      else if(p > 0.80) a = (1 - p)/0.20;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = elec; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cxp - ex*9, cyp - ey*9); ctx.lineTo(cxp - ex*3, cyp - ey*3);
+      ctx.stroke();
+      ctx.fillStyle = elec;
+      ctx.beginPath(); ctx.arc(cxp, cyp, 2.6, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
   function drawHero(){
     const c = $('welcome-fringes'); if(!c) return;
-    const ctx = c.getContext('2d'), W = c.width, H = c.height;
-    ctx.clearRect(0,0,W,H);
+    const LIGHT = document.body.classList.contains('light-theme')
+               || document.documentElement.getAttribute('data-theme') === 'light';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const N = 64;
-    let k = 0;
-    function batch(){
-      const per = reduce ? N+1 : 1;
-      for(let sN=0; sN<per && k<=N; sN++, k++){
-        const u = k/N;
-        const x = W*0.06 + u*W*0.88;
-        const y = H*0.50 + Math.sin(u*Math.PI*4)*H*0.20;
-        const hue = 15 + 265*u;                       // red → violet
-        ctx.strokeStyle = `hsla(${hue},88%,62%,.55)`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for(let s=0;s<=10;s++){
-          const t=s/10, px=x+t*W*0.012, py=y+Math.sin(t*Math.PI*3)*4;
-          if(s===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-        }
-        ctx.stroke();
-        ctx.fillStyle = `hsla(${hue},90%,66%,.92)`;
-        ctx.beginPath(); ctx.arc(x+W*0.012, y, 3, 0, 7); ctx.fill();
-      }
-      if(k<=N) requestAnimationFrame(batch);
+    const my = ++heroToken;                     // one live animation at a time
+    function paint(t){
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.max(360, Math.round(r.width || 1280));
+      const H = Math.max(100, Math.round(r.height || 140));
+      const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+      if(c.width !== bw || c.height !== bh){ c.width = bw; c.height = bh; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintHero(ctx, W, H, t, LIGHT);
     }
-    batch();
+    if(reduce){ paint(1.35); return; }          // static mid-scene frame
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function frame(now){
+      if(my !== heroToken) return;                  // a newer drawHero took over
+      if(ov.classList.contains('hidden')) return;   // overlay dismissed: stop
+      paint(((typeof now === 'number' ? now : t0) - t0)/1000);
+      requestAnimationFrame(frame);
+    })(t0);
   }
   drawHero();
+  addEventListener('resize', () => { if(!ov.classList.contains('hidden')) drawHero(); });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
     .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme','class'] });
   new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
