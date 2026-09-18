@@ -1,0 +1,132 @@
+---
+description: Generate the USER VERSION of a simulation (welcome overlay + guided inquiry + controls tutorial) from the User_version_sims_skills bundle — where each course's output must be written, and the shell traps that have already cost rework
+globs: ["Fermi_Particle_physics_sims/Sims_v2_lecture_versions/*.html", "Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/*.html", "Fermi_CM_simulations/*.html", "Fermi_QM_simulations/**/*.html", "Fermi_university_sim_lab_sims/**/*.html"]
+alwaysApply: false
+---
+
+# User-version upgrade (welcome overlay + guided inquiry + controls tutorial)
+
+The authoritative instructions are the **skill bundle**, not this file:
+
+```
+User_version_sims_skills/
+  README.md                       ← read first; order of work + gate list
+  guided-inquiry/SKILL.md         + references/implementation.md, references/golden-flows.md
+  controls-tutorial/SKILL.md      + references/implementation.md
+  welcome-overlay/SKILL.md        + references/implementation.md
+  tests/                          kernel-diff · layout-probe · canvas-check · browser-smoke
+  examples/                       validated builds with all three layers applied
+```
+
+This rule exists to record **where output goes** and **what has already gone wrong**, so
+neither is rediscovered per sim. Read the bundle for the how.
+
+## WHERE THE OUTPUT GOES — do not write beside the source
+
+User versions never overwrite the production sim. Each course has one destination:
+
+| Course | Source | **Write the user version to** |
+|---|---|---|
+| **Particle physics** | `Fermi_Particle_physics_sims/Sims_v2_lecture_versions/<sim>.html` | **`Fermi_university_sim_lab_sims/PP_sims/<sim>.html`** |
+| Special relativity | `Fermi_SR_simulations/Capacity_SR_sims_v2_engine/shell-versions/<sim>.html` | `Fermi_university_sim_lab_sims/SR_sims/<sim>.html` |
+| Classical mechanics | `Fermi_CM_simulations/<sim>.html` | `Fermi_university_sim_lab_sims/CM_sims/<sim>.html` |
+| Quantum | `Fermi_QM_simulations/...` | `Fermi_university_sim_lab_sims/QM_sims/<sim>.html` |
+
+Keep the **same filename** as the source. The production sim must end byte-identical —
+verify with an md5 before and after.
+
+## ADDITIVE ONLY
+
+Add the three layers; change nothing in the simulation — not physics, drawing code,
+controls, readouts or layout, and not even a `const`→`let`. Never remove an element id;
+hide what must not show (`display:none`) so `kernel-diff` stays clean.
+
+If a card's answer is already visible in the apparatus and cannot be hidden additively,
+**report it and leave it** — prefer reframing that card as a mechanism/inference question.
+
+## NO SPOILERS — the rule that matters most
+
+The welcome hero must not answer any gated inquiry card. Read the deck first, list every
+gated card with its correct answer, then design around them.
+
+In the SR/CM fleet **28 of 55 heroes were found leaking a gated answer**, and **nine
+asserted in their own code comments that they were safe**. The leaks were almost never
+numeric — "it carries no numbers" is not a defence:
+
+- dot spacing ∝ cos(latitude) → showed a deflection vanishing at the equator
+- phase advancing across a row of identical clocks → the *envelope* traced the answer
+- two rows of marks whose growing gap constructed a velocity difference
+- 26 dots on one leg vs 106 on the other → "four times as long in the slow leg"
+- the sides of a regular polygon → the order of symmetry, countable
+- a card's **wrong** answer drawn, teaching a falsehood
+
+## v2 PP SHELL — traps already verified, handle every time
+
+1. **Retiring Lecture mode un-suppresses things.** `onReset()` runs `for(i) onStep(i)`,
+   populating the library/collectible strip with every scripted card's result. Lecture used
+   to wipe it; removing Lecture un-wipes it, so a cold boot can display a later card's answer.
+   After retiring Lecture, **enumerate everything Lecture was silently suppressing** and
+   confirm with a cold boot that no result glyph is on screen before the student acts.
+2. **Retire 🎓 Lecture and hide Hide Text (`#ht-ctl`)** — `display:none`, ids preserved.
+   An empty Hide-Text registry means touring it would show a control that does nothing, and
+   its boot handler reads the `lecture-mode` class being removed.
+3. **Reset does not re-arm gates** — the shell's choice handler latches `data-answered`
+   forever. Add a re-arm to `__fullReset`: clear `data-answered`/`data-ready`, re-enable every
+   `.choice`, drop `.correct/.wrong/.dim`, empty every `.predict-eval`, return to card 1.
+   Verify by **clicking** Reset, not by calling the hook.
+4. **`data-build` commit latches** — cards that build their own evidence must re-derive from
+   `data-answered` inside `onStep` (not only `__giResume`), or the pager shows an answered
+   card in its pre-commit state.
+5. **`verify.js` counts hidden `.inq-after` text** against the word budget; a card at 80
+   visible words can fail the 90-word limit on hidden copy alone.
+6. **`.cg-nav` geometry** — the layout probe effectively wants `width:284px` (the grid is a
+   fixed `1fr 320px`, so 320 − 2×18) and `right:18px`. Auto width lands ~24–28px off.
+7. **Callout placement** — cap the anchor rect at ~200px tall, or a full-column canvas pushes
+   the callout to `y=8` onto `#btn-gi`/`#btn-cg`; add an obstacle pass over `#btn-gi`,
+   `#btn-cg`, `.cg-nav`.
+
+## HERO BAND
+
+`<canvas id="welcome-fringes">` inside `.welcome-hero`: full viewport width × 140px,
+`opacity:.9`, CSS mask fading the outer 22% each side. `.welcome-body{padding:156px 0 0}`
+puts the title **below**, so the band is its own space, not a backdrop behind type.
+
+- **Never assume the band's y-position** — it varies by viewport *and* by build (the card is
+  vertically centred and its height depends on the subtitle). Measure `getBoundingClientRect()`.
+- Size the backing store from that rect at **1:1**; do **not** apply DPR.
+- **`ma-perturbation-breakdown.opus-5.html` is a useful structural reference, but its hero is
+  wrong** — `<canvas width="1280" height="240">` in a `100vw × 140px` box, stretched
+  0.91 × 1.71. Match its structure, never its sizing.
+- Watch for a stale anisotropic pre-compensation (`SY = SX*k`, `ctx.scale(1/AR,1)`) when
+  adapting existing hero code — four builds carried one and were silently stretching art.
+  A squashed diagram falsifies angles. Measure a known-round element off the bitmap.
+- Draw **statically** in one pass. `drawHero` is re-run by `animationend`, a timer and two
+  MutationObservers, each clearing the canvas — rAF accumulation gets wiped half-built.
+- Feather top/bottom with a `destination-out` wipe. Light theme wants proper **dark** ink on
+  the near-white ground, not mid-tones. No text or digits on the canvas.
+
+## TOKEN DISCIPLINE
+
+These sims are ~310 KB and **~73% is a single base64 font line**. Never open a sim or an
+example whole — `grep -n` for anchors, `sed` narrow ranges, and filter long lines
+(`awk 'length < 2000'`). A bare grep on these files can return 200 KB+ from inside the blob.
+
+## GATES
+
+Run all of: the three `scripts/verify.js` (always `--baseline <original>`),
+`tests/kernel-diff.mjs --allow-script-edits` (0 canvases changed, 0 ids removed, styles
+append-only — its "visible text removed" check *will* fire on replaced card copy: print the
+complete list and confirm every chunk is old card copy, never sim UI/readout/legend text),
+and `tests/layout-probe.mjs`.
+
+Known tooling gaps: `tests/canvas-check.mjs` hardcodes a QM directory and will `ENOENT` —
+measure the backing-store:CSS-box ratio directly instead. `playwright` is not installed, so
+`tests/browser-smoke.js` cannot run — substitute a puppeteer-core walk.
+
+Browser-verify in **both themes at 1400×900 and 1024×768**: overlay cold on every boot and
+three entry cards reaching three distinct modes; every gate blocking Next **walked forward at
+student speed** (not only from a fresh Reset — that is how a cascading gate leak once hid);
+commit marking exactly one correct and disabling the rest; Reset re-arming by real click; the
+controls sidebar opening empty with every step's glow target visible; plus ≥6 cold boots with
+`localStorage` cleared. **Verify the render, not the code** — measure angles and ratios off
+the bitmap where they matter.
