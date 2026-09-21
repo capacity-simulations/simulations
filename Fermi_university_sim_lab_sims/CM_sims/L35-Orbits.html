@@ -871,7 +871,12 @@ const Shell = (function(){
     const tFormal=document.getElementById('toggle-formal');
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); if(window.__fullReset) window.__fullReset(); });
+    /* Mode-local reset: restore the experiment only — never force Guided
+       Inquiry. The user-version layer restarts the current mode's own flow.
+       Boot parity: this sim boots PAUSED in every mode (Shell.init is followed
+       by Shell.setPlaying(false), and card 1's staging pauses too), so Reset
+       must land paused as well — set it synchronously, never on a timeout. */
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(false); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
 
@@ -2398,6 +2403,20 @@ const Shell = (function(){
   };
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
+  /* Mode-local reset: the shell listener already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  const shellReset = $('shell-reset');
+  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    }
+  }, 0); });
   /* Canvas-safety: after load, ask the sim's own resize handler to re-measure,
      so a backing store sized behind the welcome overlay can never ship stretched. */
   window.addEventListener('load', ()=> requestAnimationFrame(()=> requestAnimationFrame(
