@@ -60,10 +60,20 @@ naming the shape, boot parity, any hazard fixes, and the oracle result.
 | Galperins_Billiard | boots paused (already false); H7 ruling origin ("applies on next Reset") |
 | L17-The damped HO | plain B, boots playing |
 
-## Remaining (76)
-- QM_sims: 25 (Shape D; ALWAYS check H3 — both hand-done QM sims had it)
-- SR_sims: 33 (Shape B; watch asymmetric boot play states)
-- CM_sims: 17 tracked shell sims (Shape A or B — check cfg presence per sim)
-  plus any new arrivals (e.g. cm-phase-plane.polished if/when tracked).
-Batch sizes that worked: 3 → 5 → 8 → 15 with parallel agents; always run the
-shipped oracle per sim and report accepted diffs for human review.
+## Remaining: NONE — the rollout is complete (2026-09-22)
+
+All 112 uni-lab sims carry the mode-local Reset: CM 21, Condensed matter 11,
+PP 15, QM 30, SR 35. Verified by an independent full-fleet oracle scan plus a
+change-scope audit against the pre-rollout checkpoint 5643110 (only reset
+wiring changed anywhere).
+
+Scan result: 84 clean; 26 with an `s1`-only diff that is documented per-sim
+design (H7 settings-survive or H9 fresh-entry-inherits) and passes with
+`--allow=s1`. Two defects the scan caught AFTER the batches reported PASS:
+ * particle-detector-headquarters — H2, reset left the scene playing where a
+   fresh entry is paused (arm-to-fire design). Fixed.
+ * Spin-X-measurement-probability — untestable: button id `rsB`. Oracle
+   detection widened to match class and label. Fixed.
+
+Use this skill for NEW sims added to the lab, or to re-verify after any change
+to a sim's reset/mode wiring. Batch sizes that worked: 13-20 agents.
