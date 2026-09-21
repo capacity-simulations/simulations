@@ -39,13 +39,14 @@ naming the shape, boot parity, any hazard fixes, and the oracle result.
 | virtual-cloud-chamber | plain C; ghost tags verified clean |
 | virtual-particle-collider | accepted intra-cycle clock (`__vc.S.cy`) diff |
 
-### QM_sims — 4/30 (Shape D)
+### QM_sims — 5/30 (Shape D)
 | sim | notes |
 |---|---|
 | infinite-potential-well | H3 `inqStep=0` before setGi |
 | Double-slit-experiment | H3 same fix |
 | 2d_wavefunction_collapse_measurement | plain D |
 | A(k)-vs-k-plot | static plot; accepted closed-popup mirror-slider diff |
+| Quantum_Tunneling_Gaussian_Wave | button id `btnReset` (pass it to the oracle); H7 accepted: sliderV0 persists — resetSimulation() reads controls, caption says "Relaunches the wavepacket from its starting position" |
 
 ### SR_sims — 2/35 (Shape B)
 | sim | notes |
@@ -59,8 +60,8 @@ naming the shape, boot parity, any hazard fixes, and the oracle result.
 | Galperins_Billiard | boots paused (already false); H7 ruling origin ("applies on next Reset") |
 | L17-The damped HO | plain B, boots playing |
 
-## Remaining (77)
-- QM_sims: 26 (Shape D; ALWAYS check H3 — both hand-done QM sims had it)
+## Remaining (76)
+- QM_sims: 25 (Shape D; ALWAYS check H3 — both hand-done QM sims had it)
 - SR_sims: 33 (Shape B; watch asymmetric boot play states)
 - CM_sims: 17 tracked shell sims (Shape A or B — check cfg presence per sim)
   plus any new arrivals (e.g. cm-phase-plane.polished if/when tracked).

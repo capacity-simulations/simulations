@@ -56,7 +56,7 @@ SNAP = """(()=>{
           cgNav:nv?(nv.style.display!=='none'):null, probe};})()""" % probe
 
 def find_btn(pg):
-    return pg.evaluate("""(()=>{for(const id of ['shell-reset','reset','reset-btn','resetBtn'])
+    return pg.evaluate("""(()=>{for(const id of ['shell-reset','reset','reset-btn','resetBtn','btnReset'])
         if(document.getElementById(id)) return id; return null;})()""")
 
 fails = 0
