@@ -2019,6 +2019,14 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
     else if(mode === 'free'){ if(cgOn) setCg(false); setGi(false); }
     else setGi(true);
   };
+  /* The experiment restore, shared by EVERY mode's Reset. This sim has no
+     separate shell reset listener — the user-version hook below is the only
+     reset path — so each mode-local branch has to run this itself. */
+  function simRestore(){
+    /* sim defaults: square wave, two terms, sigma 0.10, narration quiet */
+    const np = $('narr-play-pause'); if(np && np.classList.contains('active')) np.click();
+    setWave('square'); setSigma(0.10); setN(2);
+  }
   window.__fullReset = ()=>{
     if(cgAuto) setCgAuto(false);
     if(cgVoice) cgVoice.stop();
@@ -2030,15 +2038,28 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
       const ev=c.querySelector('.predict-eval'); if(ev){ ev.style.display='none'; ev.className='predict-eval'; ev.innerHTML=''; }
       c.querySelectorAll('.choice').forEach(ch=>{ ch.disabled=false; ch.classList.remove('correct','wrong','dim'); });
     });
-    /* sim defaults: square wave, two terms, sigma 0.10, narration quiet */
-    const np = $('narr-play-pause'); if(np && np.classList.contains('active')) np.click();
-    setWave('square'); setSigma(0.10); setN(2);
+    simRestore();
     setGi(true);
     inqShow(0);
   };
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
-  $('reset').addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: restore the experiment, then restart only the CURRENT
+     mode's flow — never switch modes. */
+  $('reset').addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      simRestore();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    } else {
+      simRestore();
+    }
+  }, 0); });
 
   /* The Physics sheet drives the scene through the SAME setters the inquiry
      deck uses (setWave / setSigma / setN) — nothing is recomputed here. Wave
