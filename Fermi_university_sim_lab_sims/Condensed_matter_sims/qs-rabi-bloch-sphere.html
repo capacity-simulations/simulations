@@ -1616,12 +1616,40 @@ return {
     for(let tt=Math.ceil(t0);tt<=t0+WINDOW+1e-6;tt++){ const x=xOf(tt); if(x>=px-1&&x<=px+pw+1){ strokeLine(x,py+ph2,x,py+ph2+4,COL.inkDim,1); if(tt%2===0) label(String(tt),x,py+ph2+11,{align:'center',color:COL.inkDim,font:'600 12px '+SANS,bounds:r}); } }
     label('Excited population  Pₑ(t)',r.x+r.w/2,r.y+9,{align:'center',color:COL.inkDim,font:'600 12px '+SANS,bounds:r});
     label('t (µs)',px+pw,py+ph2+11,{align:'right',color:COL.inkDim,font:'600 12px '+SANS,bounds:r});
-    /* curve sampling: at least 1 px AND at least 10 samples per Ω′ cycle, so peaks never alias below the cap */
-    const nFor=rate=>Math.max(Math.round(pw),Math.ceil(WINDOW*10*Math.max(rate,0.2)));
+    /* Curve sampling, anchored on the extrema.
+       P_e(t) = cap·sin²(πΩ′t), so its turning points sit exactly at t = k/(2Ω′):
+       troughs at even k, peaks at odd k. A uniform grid lets those turning points
+       drift against the samples, so at large Ω′ each peak was caught at a
+       different phase and drawn at a different height — the curve came out
+       ragged and looked broken. Sampling the extrema exactly, plus enough
+       interior points for a smooth join, makes every peak reach the cap and
+       every trough reach zero at any Ω and δ. */
+    const curveTimes=rate=>{
+      const t1=t0+WINDOW;
+      if(!(rate>0)) return [t0,t1];
+      const half=1/(2*rate);                      /* µs between consecutive extrema */
+      const pxPerHalf=(half/WINDOW)*pw;
+      const sub=Math.max(3,Math.min(64,Math.round(pxPerHalf/1.5)));
+      const out=[t0];
+      for(let k=Math.floor(t0/half);;k++){
+        const ta=k*half;
+        if(ta>=t1) break;
+        for(let j=0;j<sub;j++){
+          const t=ta+(j/sub)*half;
+          if(t>t0&&t<t1) out.push(t);
+        }
+      }
+      out.push(t1);
+      return out;
+    };
     /* actual curve */
     ctx.strokeStyle=COL.chartCurve; ctx.lineWidth=2; ctx.beginPath();
-    const Na=nFor(Math.hypot(om,de));
-    for(let i=0;i<=Na;i++){ const t=t0+(i/Na)*WINDOW; const p=physics(om,de,t).pExcited; const X=px+(i/Na)*pw,Y=yOf(p); i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); }
+    const ts=curveTimes(Math.hypot(om,de));
+    for(let i=0;i<ts.length;i++){
+      const t=ts[i], p=physics(om,de,t).pExcited;
+      const X=xOf(t), Y=yOf(p);
+      i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);
+    }
     ctx.stroke();
     /* cap line (only after commit) */
     if(state.reveal.cap){
