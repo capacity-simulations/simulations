@@ -978,7 +978,11 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
+    /* Mode-local reset: restore the experiment only — never force Lecture
+       mode. The user-version layer restarts the current mode's own flow.
+       Boot parity: first load is PAUSED (the sim's onReset even re-asserts it
+       on a timeout); pause synchronously instead of racing that timeout. */
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(false); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -2506,7 +2510,19 @@ window.__physicsHooks = { scene: applyPhysicsScene };
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const rst = $('shell-reset');
-  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the earlier reset listener has already restored the
+     experiment. Restart only the CURRENT mode's flow — never switch modes. */
+  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    }
+  }, 0); });
 
   document.addEventListener('click', e=>{
     const tEl = e.target && e.target.closest ? e.target.closest('#inq-next') : null;

@@ -932,8 +932,9 @@ const Shell = (function(){
     const tFormal=document.getElementById('toggle-formal');
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
-    // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
+    // Reset restores the experiment only; the user-version hook below restarts
+    // the CURRENT mode's flow. Ends paused — first load is EMPTY + PAUSED.
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(false); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -1636,13 +1637,11 @@ function onComplete(){ st.showPlum=true; st.flat=false; st.showPlot=true; st.his
 }
 function onReset(){ st.showPlum=true; st.flat=false; st.showPlot=true; st.histo=true; st.rate=RSLOW;
   applyRun(0.193,0,1); syncUI(); updateCounts(); draw();
-  /* The shared reset handler then re-enters lecture mode (finishInquiry → onComplete:
-     EMPTY) but ends with setPlaying(true) — while first load is EMPTY + PAUSED
-     ("Play prominent"). Re-assert the pause after the handler finishes, or the beam
-     fires into the fresh chamber and Reset comes back with plot entries.
-     Hardened: some browsers can slip one rAF in before the 0ms timer, firing ~10²
-     α into the fresh chamber (enough to pop the histogram band). Re-assert at 0
-     AND 50ms, and wipe any α that leaked so Reset always lands EMPTY + PAUSED. */
+  /* The shared reset handler now ends paused (mode-local reset), but keep the
+     defensive re-assert: if a stray rAF fires ~10² α into the fresh chamber
+     (enough to pop the histogram band) before the mode-restart timers settle,
+     re-assert at 0 AND 50ms and wipe any α that leaked so Reset always lands
+     EMPTY + PAUSED. */
   if(window.Shell&&Shell.setPlaying){
     [0,50].forEach(function(ms){ setTimeout(function(){
       Shell.setPlaying(false);
@@ -1940,8 +1939,7 @@ else{ var last=performance.now();
      lecture-mode class, un-collapses the zone and reopens at card 1.
      Lecture's end-state here is already empty (no collectible strip), so
      a cold boot never shows a later card's 3 M α snapshot. The observer
-     guarantees 'inquiry-collapsed' cannot survive a single frame
-     (Reset re-enters Lecture mode before __fullReset runs).                */
+     guarantees 'inquiry-collapsed' cannot survive a single frame.          */
   function leaveLecture(){ const chip = $('aside-inquiry-restore'); if(chip) chip.click(); }
   if(shellEl){
     new MutationObserver(()=>{
@@ -2205,6 +2203,9 @@ else{ var last=performance.now();
   /* Reset = a fresh page load: gates re-armed, inquiry on at card 1, guide
      off with its session progress cleared. */
   window.__fullReset = ()=>{
+    if(cgAuto) setCgAuto(false);
+    if(cgVoice) cgVoice.stop();
+    if(window.__giVoiceStop) window.__giVoiceStop();
     if(cgOn) setCg(false, true);
     cgStep = 0; cgMax = 0;
     rearmGates();
@@ -2216,7 +2217,20 @@ else{ var last=performance.now();
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const rst = $('shell-reset');
-  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the shell listener has already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    }
+    /* free exploration: experiment reset only, mode untouched */
+  }, 0); });
 
   /* Finish routes to the Guided Inquiry button — the single owner of the
      zone's visibility — instead of the shell's collapse-to-a-chip path.

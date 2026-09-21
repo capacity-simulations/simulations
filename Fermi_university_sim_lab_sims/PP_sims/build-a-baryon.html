@@ -924,7 +924,9 @@ const Shell = (function(){
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
     // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); if(inqCards().length){ inqStep=0; setLectureMode(true); } last=performance.now(); setPlaying(true); });
+    /* Mode-local reset: restore the experiment only — never force Lecture
+       mode. The user-version layer restarts the current mode's own flow. */
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -1550,12 +1552,20 @@ function onStep(i){const s=STEPS[i];if(!s)return;
   finally{ state.suppressLib=false; }
   syncControls();updateReadout();updateFormal();draw();}
 function onComplete(){state.completed=true;draw();}
-function onReset(){state.lib=[];state.libKeys.clear();state.frontI=0;
+function onReset(){state.frontI=0;
   state.toast=null;state.t=0;state.heavy=true;
   for(let i=0;i<STEPS.length;i++)onStep(i);
   /* Re-sync the scene to the ACTIVE card so a mid-inquiry Reset never contradicts
      the card's prose (the loop above ends at the last step's spec). */
   onStep(Shell.step);
+  /* Clear the library AFTER the step replay: each replayed step stages a build
+     and libAdd()s it, so clearing first left every card's particle behind as a
+     pre-discovered entry. (The old forced-lecture reset masked this — lecture
+     entry wiped the library.) Then re-admit ONLY the build standing on the
+     stage right now — the default view shows the proton assembled, and stage
+     and library must agree on it. */
+  state.lib=[];state.libKeys.clear();
+  if(state.resolved) libAdd(state.resolved);
   draw();}
 function onResize(){const cv=stage;const r=cv.getBoundingClientRect();
   const d=window.devicePixelRatio||1;
@@ -1614,6 +1624,12 @@ function readPhysicsState(){
     need:(e&&e.need)||null,note:(e&&e.note)||null};
 }
 window.__physicsHooks={scene:applyPhysicsScene,read:readPhysicsState};
+/* Library resync for the mode-local Reset: empty the library, then re-admit
+   only the build standing on the stage. The GI restart calls this AFTER
+   inqShow(0) has staged card 1's proton, so no departed card's particle can
+   survive as a stray entry. */
+window.__libReset=function(){state.lib=[];state.libKeys.clear();
+  if(state.resolved)libAdd(state.resolved);draw();};
 Shell.init({onFrame,onReset,onResize,onStep,onComplete});
 </script>
 <script>/* dev-only reviewer affordance: link this sim to the refinement studio.
@@ -2109,7 +2125,23 @@ Shell.init({onFrame,onReset,onResize,onStep,onComplete});
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const rst = $('shell-reset');
-  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the shell listener has already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  if(rst) rst.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+      /* onReset's resync ran against the card being LEFT, so its build was
+         re-admitted; now that card 1 is staged, resync the library to it. */
+      if(window.__libReset) window.__libReset();
+    }
+    /* free exploration: experiment reset only, mode untouched */
+  }, 0); });
 
   /* Finish routes to the Guided Inquiry button — the single owner of the
      zone's visibility — instead of the shell's collapse-to-a-chip path.
