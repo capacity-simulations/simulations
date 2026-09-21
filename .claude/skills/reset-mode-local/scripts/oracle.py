@@ -59,8 +59,16 @@ SNAP = """(()=>{
           cgNav:nv?(nv.style.display!=='none'):null, probe};})()""" % probe
 
 def find_btn(pg):
-    return pg.evaluate("""(()=>{for(const id of ['shell-reset','reset','reset-btn','resetBtn','btnReset'])
-        if(document.getElementById(id)) return id; return null;})()""")
+    """Known ids first, then ANY element whose id looks like a reset button.
+    Button ids vary widely across generations (shell-reset, reset, reset-btn,
+    resetBtn, btnReset, btnResetDefault, ...), so fall back to a scan rather
+    than crashing on an unseen one."""
+    return pg.evaluate("""(()=>{
+        for(const id of ['shell-reset','reset','reset-btn','resetBtn','btnReset','btnResetDefault'])
+            if(document.getElementById(id)) return id;
+        const el=[...document.querySelectorAll('button[id],[role=button][id]')]
+            .find(e=>/reset/i.test(e.id));
+        return el?el.id:null;})()""")
 
 fails = 0
 with sync_playwright() as p:
@@ -73,6 +81,9 @@ with sync_playwright() as p:
         pg.evaluate(f"document.querySelector('.welcome-mode[data-mode=\"{mode}\"]').click()")
         pg.wait_for_timeout(900)
         rid = btn or find_btn(pg)
+        if not rid:
+            print(f"{mode:9} FAIL  no reset button found — pass its id as the 2nd argument", flush=True)
+            fails += 1; pg.close(); continue
         # A control the sim animates on its own cannot be compared by value —
         # its reading is an arbitrary sampling phase (collider __vc.S.cy
         # precedent). Detect it and exempt s1 automatically, with a notice.
