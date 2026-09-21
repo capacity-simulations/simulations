@@ -2048,7 +2048,7 @@ function applyPhysicsScene(cfg){
   render();
 }
 window.__physicsHooks = { scene:applyPhysicsScene };
-Shell.init({ onReset:onReset, onResize:onResize, onStep:onStep, onComplete:freeExplore, cfg:{ timeless:true } });
+Shell.init({ onReset:onReset, onResize:onResize, onStep:onStep, onComplete:freeExplore, cfg:{ timeless:true, resumeOnReset:'pause' } });
 })();</script>
 
 <script>
@@ -2465,19 +2465,47 @@ const cgSteps = [
     else if(mode === 'free') { if(cgOn) setCg(false); setGi(false); }
     else setGi(true);
   };
+  /* Re-arm the inquiry gates: a fresh entry has no answered cards, no ready
+     flags, no painted choices, no revealed feedback (build-a-baryon shape). */
+  function rearmGates(){
+    document.querySelectorAll('#inq-cards .inq-step').forEach(c=>{
+      c.removeAttribute('data-answered');
+      c.removeAttribute('data-ready');
+      c.querySelectorAll('.choice').forEach(b=>{ b.disabled = false; b.classList.remove('correct','wrong','dim'); });
+      const ev = c.querySelector('.predict-eval');
+      if(ev){ ev.innerHTML = ''; ev.classList.remove('show','correct','wrong'); }
+    });
+  }
   window.__fullReset = ()=>{
     if(cgAuto) setCgAuto(false);
     if(cgVoice) cgVoice.stop();
     if(window.__giVoiceStop) window.__giVoiceStop();
     if(cgOn) setCg(false, true);
     cgStep = 0; cgMax = 0;
+    rearmGates();
     setGi(true);
     if(typeof Shell !== 'undefined' && Shell.inqShow) Shell.inqShow(0);
   };
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const shellReset = document.getElementById('shell-reset');
-  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the shell listener has already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__freeExplore) window.__freeExplore();   /* fresh CG entry stages via freeExplore first */
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    } else {
+      /* free exploration: re-stage the mode's own scene (fresh-entry parity) */
+      if(window.__freeExplore) window.__freeExplore();
+    }
+  }, 0); });
 })();
 </script>
 
