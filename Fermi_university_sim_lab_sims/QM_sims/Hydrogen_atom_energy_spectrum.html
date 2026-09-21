@@ -2701,6 +2701,19 @@
     else if(mode === 'free'){ if(cgOn) setCg(false); setGi(false); }
     else setGi(true);
   };
+  /* The experiment restore, lifted verbatim out of __fullReset. This sim has
+     no reset listener of its own (the user-version hook below is the whole
+     Reset), so every mode branch needs to be able to restore the scene
+     without dragging the Guided-Inquiry restart along with it.
+     sim defaults: emission, n = 3 → n = 1, full speed, empty strip.
+     nTo is set before nFrom because the sim re-validates the pair on change. */
+  window.__simReset = ()=>{
+    setAbsorption(false);
+    setLevel('nTo', 1); setLevel('nFrom', 3);
+    const sp = $('speedSlider');
+    if(sp && sp.value !== '1'){ sp.value = '1'; sp.dispatchEvent(new Event('input', { bubbles:true })); }
+    const clr = $('btnClear'); if(clr) fireWhenFree(clr, ()=>clr.click());
+  };
   window.__fullReset = ()=>{
     if(cgAuto) setCgAuto(false);
     if(cgVoice) cgVoice.stop();
@@ -2712,19 +2725,29 @@
       const ev=c.querySelector('.predict-eval'); if(ev){ ev.style.display='none'; ev.className='predict-eval'; ev.innerHTML=''; }
       c.querySelectorAll('.choice').forEach(ch=>{ ch.disabled=false; ch.classList.remove('correct','wrong','dim'); });
     });
-    /* sim defaults: emission, n = 3 → n = 1, full speed, empty strip.
-       nTo is set before nFrom because the sim re-validates the pair on change. */
-    setAbsorption(false);
-    setLevel('nTo', 1); setLevel('nFrom', 3);
-    const sp = $('speedSlider');
-    if(sp && sp.value !== '1'){ sp.value = '1'; sp.dispatchEvent(new Event('input', { bubbles:true })); }
-    const clr = $('btnClear'); if(clr) fireWhenFree(clr, ()=>clr.click());
+    window.__simReset();
     setGi(true);
     inqShow(0);
   };
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
-  $('btn-reset').addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: restart only the CURRENT mode's flow — never switch
+     modes. Each branch restores the experiment itself (__simReset), because
+     this sim has no separate shell/sim reset listener to do it. */
+  $('btn-reset').addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      window.__simReset();
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    } else {
+      window.__simReset();
+    }
+  }, 0); });
 
   /* The Physics sheet drives the scene through the SAME setters the inquiry
      deck uses (setAbsorption / setLevel / runSeries / fireWhenFree) — nothing
