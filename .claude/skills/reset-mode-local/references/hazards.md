@@ -90,6 +90,23 @@ READS it (and that no reset path writes it back) before accepting.
 only phys-* ranges; L00-s1 is the genuine H7 case — nothing writes slider-v
 outside the Physics scene hook.)
 
+## H9 — Fresh entry itself inherits boot card-staging (accept; log separately)
+Symptom: free/CG reset restores the sim's DOM default, but the oracle's
+fresh-entry snapshot shows a DIFFERENT value, so the diff looks like a reset
+bug when reset is the CORRECT side.
+Cause: the page boots by staging inquiry card 0 (`inqShow(0)` -> `onStep(0)`,
+which pins controls), and the mode entry (`__freeExplore`) does not re-stage
+that control — so choosing Free Exploration inherits card 0's pinned value.
+Meanwhile the sim's own reset listener restores its documented default.
+Ruling: ACCEPT the diff. Do NOT add a setter to the reset branch to reproduce
+the inherited value — that would encode a mode-entry quirk into the reset path
+and make Reset worse. The H1 mode-local fix still applies and must pass on
+mode/card/tour/play. Log the entry quirk as a SEPARATE finding for the human.
+(Found on QM batch 3: Harmonic_Oscillator_High_Energies — fresh free/CG shows
+n=1 from card-0 staging; btnReset sets `n = 40` under the comment "Restore
+default simulation state from any current configuration"; `__freeExplore` is
+only `applyStepReveals(99); setPlaying(true)` and never touches n.)
+
 ## H8 — Dead/broken pre-existing guards
 Symptom: a boot-parity or reset guard that provably never runs (e.g.
 feynman-sandbox tested `window.Shell` while `Shell` is a top-level const →
