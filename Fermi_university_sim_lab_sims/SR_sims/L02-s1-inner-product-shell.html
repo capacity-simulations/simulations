@@ -1088,8 +1088,9 @@ const Shell = (function(){
     const tFormal=document.getElementById('toggle-formal');
 
     if(play) play.addEventListener('click',()=>setPlaying(!playing));
-    // Reset zeroes state AND ensures the loop is running (replay-from-start).
-    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(true); });
+    // Reset zeroes state and matches the BOOT play state: every card (and the
+    // free/guide opening) boots paused, so Reset pauses too — synchronously.
+    if(reset) reset.addEventListener('click',()=>{ onReset(); last=performance.now(); setPlaying(false); });
     if(spd) spd.addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
 
     if(maxBtn) maxBtn.addEventListener('click',()=>setMaximized(!root.classList.contains('shell-max')));
@@ -1848,10 +1849,11 @@ const Shell = (function(){
   window.__cgPrepare = function(){ stage = 4; applyStage(); syncHeader(); render(); };
   /* Free exploration = the POST-COMPLETION state: every mask lifted, the full
      two-vector apparatus, never a mid-inquiry snapshot. Latched so a second
-     call (both-off, guide closed) cannot undo the student's own choices. */
+     call (both-off, guide closed) cannot undo the student's own choices.
+     force=true is the Reset path: restaging the free opening IS the intent. */
   let feLatched = false;
-  window.__freeExplore = function(){
-    if (feLatched) return;
+  window.__freeExplore = function(force){
+    if (feLatched && !force) return;
     feLatched = true;
     applyStepReveals(99);
     stage = 4; applyStage();
@@ -2365,7 +2367,23 @@ const Shell = (function(){
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const resetBtn = document.getElementById('shell-reset');
-  if(resetBtn) resetBtn.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the shell listener already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      show(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    } else {
+      /* Free exploration stages its own opening (stage 4, masks lifted); the
+         shell's onReset leaves the scene at stage 1, so restage it. */
+      if(window.__freeExplore) window.__freeExplore(true);
+    }
+  }, 0); });
 })();
 </script>
 
