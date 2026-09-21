@@ -59,15 +59,18 @@ SNAP = """(()=>{
           cgNav:nv?(nv.style.display!=='none'):null, probe};})()""" % probe
 
 def find_btn(pg):
-    """Known ids first, then ANY element whose id looks like a reset button.
+    r"""Known ids first, then ANY element whose id looks like a reset button.
     Button ids vary widely across generations (shell-reset, reset, reset-btn,
     resetBtn, btnReset, btnResetDefault, ...), so fall back to a scan rather
     than crashing on an unseen one."""
-    return pg.evaluate("""(()=>{
+    return pg.evaluate(r"""(()=>{
         for(const id of ['shell-reset','reset','reset-btn','resetBtn','btnReset','btnResetDefault'])
             if(document.getElementById(id)) return id;
+        /* then by id, class, or visible LABEL — Spin-X's button is id="rsB"
+           with class "reset" and the text "Reset", so id alone is not enough */
         const el=[...document.querySelectorAll('button[id],[role=button][id]')]
-            .find(e=>/reset/i.test(e.id));
+            .find(e=>/reset/i.test(e.id) || /(^|\s)reset(\s|$)/i.test(e.className||'')
+                  || /^\s*(↻\s*)?reset\b/i.test((e.textContent||'').trim()));
         return el?el.id:null;})()""")
 
 fails = 0
