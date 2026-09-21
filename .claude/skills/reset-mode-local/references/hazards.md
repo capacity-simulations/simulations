@@ -71,6 +71,25 @@ fleet-wide; collider's intra-cycle animation clock phase; A(k)'s mirror
 sliders inside the CLOSED Physics popup, resynced on open; hidden inquiry
 done-dots caused by the oracle's own dirty gesture under gi-off.)
 
+## H7b — s1 noise the oracle now classifies FOR you (do not hand-justify)
+Two `s1` diff sources are NOT per-sim design and need no H7 ruling, because
+the shipped oracle now handles them automatically:
+ * **Physics-sheet mirror sliders** (`id="phys-*"`) — they live inside the
+   CLOSED revision sheet and resync on open. The oracle skips them when
+   choosing the probe (A(k)-vs-k-plot precedent). If a sim's ONLY ranges are
+   `phys-*`, `s1` reads None — that is correct, not a failure.
+ * **Live-animated controls** — sliders the sim drives itself (a rotating
+   angle, a sweep). Their reading is an arbitrary sampling phase, exactly like
+   virtual-particle-collider's `__vc.S.cy`. The oracle samples twice before
+   snapshotting and, if the value moves on its own, exempts `s1` and prints
+   `[s1 auto-exempt: sim animates it]`.
+Consequence: an `s1` diff that SURVIVES the hardened oracle is a real static
+control, so it needs a genuine H7 ruling — check that `onReset`/`resetState`
+READS it (and that no reset path writes it back) before accepting.
+(Found on SR batch 1: L03-s1 and L04-s1 animate their angle slider; L05-s2 has
+only phys-* ranges; L00-s1 is the genuine H7 case — nothing writes slider-v
+outside the Physics scene hook.)
+
 ## H8 — Dead/broken pre-existing guards
 Symptom: a boot-parity or reset guard that provably never runs (e.g.
 feynman-sandbox tested `window.Shell` while `Shell` is a top-level const →

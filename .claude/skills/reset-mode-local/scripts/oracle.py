@@ -45,7 +45,10 @@ SNAP = """(()=>{
   const cards=[...document.querySelectorAll('.inq-step')];
   const act=document.querySelector('.inq-step.active');
   let playing=null; try{ playing=(typeof Shell!=='undefined')?Shell.playing:null; }catch(e){}
-  const r=document.querySelector('input[type=range]');
+  /* the first SIM range: skip The Physics sheet's mirror sliders (id phys-*,
+     they live inside the closed popup and resync on open — A(k) precedent) */
+  const r=[...document.querySelectorAll('input[type=range]')]
+            .find(e=>!/^phys-/.test(e.id||'')) || null;
   let probe=null; try{ probe=(%s); }catch(e){ probe='PROBE_ERR:'+e; }
   const co=document.querySelector('.cg-callout h5');
   const nv=document.querySelector('.cg-nav');
@@ -70,6 +73,13 @@ with sync_playwright() as p:
         pg.evaluate(f"document.querySelector('.welcome-mode[data-mode=\"{mode}\"]').click()")
         pg.wait_for_timeout(900)
         rid = btn or find_btn(pg)
+        # A control the sim animates on its own cannot be compared by value —
+        # its reading is an arbitrary sampling phase (collider __vc.S.cy
+        # precedent). Detect it and exempt s1 automatically, with a notice.
+        v0 = pg.evaluate("(()=>{const e=[...document.querySelectorAll('input[type=range]')].find(x=>!/^phys-/.test(x.id||''));return e?e.value:null})()")
+        pg.wait_for_timeout(700)
+        v1 = pg.evaluate("(()=>{const e=[...document.querySelectorAll('input[type=range]')].find(x=>!/^phys-/.test(x.id||''));return e?e.value:null})()")
+        s1_live = (v0 is not None and v0 != v1)
         fresh = pg.evaluate(SNAP)
         if mode == 'inquiry':
             for _ in range(2):
@@ -86,7 +96,8 @@ with sync_playwright() as p:
         pg.evaluate(f"document.getElementById('{rid}').click()")
         pg.wait_for_timeout(1200)
         after = pg.evaluate(SNAP)
-        diffs = {k:(fresh[k],after[k]) for k in fresh if fresh[k]!=after[k] and k not in allow}
+        skip = set(allow) | ({'s1'} if s1_live else set())
+        diffs = {k:(fresh[k],after[k]) for k in fresh if fresh[k]!=after[k] and k not in skip}
         one_click_ok = (mode!='inquiry') or (after['card']==0)
         ok = not diffs and not errs and one_click_ok
         if not ok: fails += 1
@@ -95,7 +106,8 @@ with sync_playwright() as p:
               + ('' if one_click_ok else '  MID-DECK NEEDS >1 CLICK')
               + (f"  pageerrors={errs[:2]}" if errs else '')
               + (f"  [dirtied: card {mid['card']}, s1 {mid['s1']}]" if mode=='inquiry' else '')
-              + (f"  [tour dirtied to: {mid['cgTitle']}]" if mode=='controls' else ''),
+              + (f"  [tour dirtied to: {mid['cgTitle']}]" if mode=='controls' else '')
+              + ('  [s1 auto-exempt: sim animates it]' if s1_live else ''),
               flush=True)
         pg.close()
     br.close()
