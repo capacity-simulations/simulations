@@ -47,9 +47,13 @@ SNAP = """(()=>{
   let playing=null; try{ playing=(typeof Shell!=='undefined')?Shell.playing:null; }catch(e){}
   const r=document.querySelector('input[type=range]');
   let probe=null; try{ probe=(%s); }catch(e){ probe='PROBE_ERR:'+e; }
+  const co=document.querySelector('.cg-callout h5');
+  const nv=document.querySelector('.cg-nav');
   return {gi:gi?gi.classList.contains('active'):null,
           cg:cg?cg.classList.contains('active'):null,
-          card:act?cards.indexOf(act):-1, playing, s1:r?r.value:null, probe};})()""" % probe
+          card:act?cards.indexOf(act):-1, playing, s1:r?r.value:null,
+          cgTitle:co?co.textContent:null,
+          cgNav:nv?(nv.style.display!=='none'):null, probe};})()""" % probe
 
 def find_btn(pg):
     return pg.evaluate("""(()=>{for(const id of ['shell-reset','reset','reset-btn','resetBtn'])
@@ -70,7 +74,11 @@ with sync_playwright() as p:
         if mode == 'inquiry':
             for _ in range(2):
                 pg.evaluate("document.querySelector('.inq-step.active .choice')?.click()"); pg.wait_for_timeout(250)
-                pg.evaluate("document.querySelector('#inq-pager-next')?.click()"); pg.wait_for_timeout(300)
+                # pager id varies by generation: v2 shell uses inq-pager-next, QM uses inq-pgnext
+                pg.evaluate("(document.querySelector('#inq-pager-next')||document.querySelector('#inq-pgnext'))?.click()"); pg.wait_for_timeout(300)
+        if mode == 'controls':
+            for _ in range(2):
+                pg.evaluate("(document.getElementById('cg-pgnext')||document.getElementById('cg-fwd')||document.getElementById('cg-next'))?.click()"); pg.wait_for_timeout(250)
         pg.evaluate("const r=document.querySelector('input[type=range]'); if(r){r.value=r.max; r.dispatchEvent(new Event('input',{bubbles:true}))}")
         pg.evaluate("try{if(typeof Shell!=='undefined')Shell.setPlaying(true)}catch(e){}")
         pg.wait_for_timeout(450)
@@ -86,7 +94,8 @@ with sync_playwright() as p:
               + (f"  diffs={diffs}" if diffs else '')
               + ('' if one_click_ok else '  MID-DECK NEEDS >1 CLICK')
               + (f"  pageerrors={errs[:2]}" if errs else '')
-              + (f"  [dirtied: card {mid['card']}, s1 {mid['s1']}]" if mode=='inquiry' else ''),
+              + (f"  [dirtied: card {mid['card']}, s1 {mid['s1']}]" if mode=='inquiry' else '')
+              + (f"  [tour dirtied to: {mid['cgTitle']}]" if mode=='controls' else ''),
               flush=True)
         pg.close()
     br.close()
