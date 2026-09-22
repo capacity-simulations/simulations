@@ -1522,6 +1522,17 @@ html[data-theme="light"] .cg-nav #cg-next, body.light-theme .cg-nav #cg-next{bac
 .cg-row-nav{border-top:1px solid rgba(139,92,246,.28);padding-top:7px;}
 html[data-theme="light"] .cg-row-nav, body.light-theme .cg-row-nav{border-top-color:rgba(124,58,237,.22);}
 .cg-flex{flex:1;}
+/* --- draggable tour box: grip + drag affordances --- */
+.cg-nav{touch-action:none;user-select:none;-webkit-user-select:none;
+  /* the grip widens the transport row; never let a hard-coded width clip it */
+  min-width:max-content;}
+.cg-grip{display:grid;place-items:center;flex:none;width:16px;height:22px;margin-right:2px;border-radius:4px;
+  cursor:grab;color:#6d7689;font-size:13px;line-height:1;user-select:none;transition:color .15s,background .15s;}
+.cg-grip:hover{color:#a78bfa;background:rgba(139,92,246,.14);}
+.cg-nav.cg-dragging{box-shadow:0 16px 38px rgba(0,0,0,.55);}
+.cg-nav.cg-dragging .cg-grip{cursor:grabbing;color:#a78bfa;}
+html[data-theme="light"] .cg-grip, body.light-theme .cg-grip{color:#94a3b8;}
+html[data-theme="light"] .cg-grip:hover, body.light-theme .cg-grip:hover{color:#7c3aed;background:rgba(124,58,237,.12);}
 .cg-listen-lab{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a7;margin-right:2px;}
 html[data-theme="light"] .cg-listen-lab, body.light-theme .cg-listen-lab{color:#64748b;}
 .cg-nav .cg-voice{width:26px;height:26px;min-width:26px;padding:0;border:none !important;background:transparent;
@@ -2049,6 +2060,7 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
     nav = document.createElement('div');
     nav.className = 'cg-nav';
     nav.innerHTML = '<div class="cg-nav-row cg-row-voice">'+
+                      '<span class="cg-grip" title="Drag to move \u00b7 double-click to return it to the corner">\u283f</span>'+
                       '<span class="cg-listen-lab">Listen</span>'+
                       '<button id="cg-rew" class="cg-voice" title="Restart narration" aria-label="Restart narration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5L9 12l10 7z"/></svg></button>'+
                       '<button id="cg-voice-play" class="cg-voice" data-vstate="idle" title="Read this step aloud" aria-label="Read this step aloud">'+
@@ -2068,6 +2080,68 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
                     '</div>';
     document.body.appendChild(callout);
     document.body.appendChild(nav);
+    /* Draggable tour box. It is position:fixed in the bottom-right corner, where
+       it can cover a sim's own controls or readouts. Drag it by the grip (or any
+       bare spot on the box) to park it anywhere; double-click the grip to send it
+       home. Buttons keep their clicks — a drag never starts on one. */
+    (function makeNavDraggable(){
+      const M = 6;                       /* gap kept from every viewport edge */
+      let drag = null;
+      function placeAt(x, y){
+        const r = nav.getBoundingClientRect();
+        /* Never let it slide under the shell header: in some sims the header's
+           stacking context sits ABOVE this box, which would make it ungrabbable. */
+        const hdr = document.querySelector('.shell-header');
+        const hb  = hdr ? hdr.getBoundingClientRect() : null;
+        const T   = (hb && hb.height > 0 && hb.bottom > 0) ? hb.bottom + 4 : M;
+        nav.style.left   = Math.min(Math.max(x, M), Math.max(M, innerWidth  - r.width  - M)) + 'px';
+        nav.style.top    = Math.min(Math.max(y, T), Math.max(T, innerHeight - r.height - M)) + 'px';
+        nav.style.right  = 'auto';
+        nav.style.bottom = 'auto';
+        nav.dataset.dragged = '1';       /* sims that pin the box to their sidebar stand down */
+      }
+      /* back to the stylesheet's home corner — the double-tap gesture and Reset */
+      function goHome(){
+        delete nav.dataset.dragged;
+        nav.style.left = nav.style.top = nav.style.right = nav.style.bottom = '';
+        /* hand layout back to whichever positioner this sim owns, if any */
+        if(typeof placeNav    === 'function') placeNav();
+        if(typeof positionNav === 'function') positionNav();
+        if(typeof dockNav     === 'function') dockNav();
+      }
+      nav.__cgHome = goHome;
+      let tapT = 0, tapX = 0, tapY = 0;
+      nav.addEventListener('pointerdown', e => {
+        if(e.button !== 0) return;
+        if(e.target.closest('button, input, select, a')) return;
+        /* Double-tap the grip to send the box home. Detected by hand rather than
+           with a dblclick listener: the pointer capture below retargets the
+           compatibility click events to nav, so the grip never receives them. */
+        const onGrip = !!e.target.closest('.cg-grip');
+        if(onGrip && e.timeStamp - tapT < 420 && Math.abs(e.clientX-tapX) < 6 && Math.abs(e.clientY-tapY) < 6){
+          goHome(); tapT = 0; return;
+        }
+        tapT = onGrip ? e.timeStamp : 0; tapX = e.clientX; tapY = e.clientY;
+        const r = nav.getBoundingClientRect();
+        drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+        placeAt(r.left, r.top);          /* hand off from right/bottom to left/top */
+        nav.classList.add('cg-dragging');
+        try{ nav.setPointerCapture(e.pointerId); }catch(_){}
+      });
+      nav.addEventListener('pointermove', e => {
+        if(drag) placeAt(e.clientX - drag.dx, e.clientY - drag.dy);
+      });
+      function endDrag(e){
+        if(!drag) return;
+        drag = null; nav.classList.remove('cg-dragging');
+        try{ nav.releasePointerCapture(e.pointerId); }catch(_){}
+      }
+      nav.addEventListener('pointerup', endDrag);
+      nav.addEventListener('pointercancel', endDrag);
+      /* a resized (or reopened) window must never strand it off-screen */
+      nav.__cgReclamp = ()=>{ if(nav.dataset.dragged) placeAt(parseFloat(nav.style.left)||M, parseFloat(nav.style.top)||M); };
+      addEventListener('resize', ()=>{ if(nav.style.display !== 'none') nav.__cgReclamp(); });
+    })();
     if(window.__makeCardVoice){
       cgVoice = window.__makeCardVoice(nav.querySelector('#cg-voice-play'),
         () => [steps[cgStep].title, steps[cgStep].text],
@@ -2190,7 +2264,7 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
       ensureUi();
       if(window.__cgReveals) window.__cgReveals(99);
       if(window.__cgPrepare) window.__cgPrepare();
-      callout.style.display = 'block'; nav.style.display = 'flex';
+      callout.style.display = 'block'; nav.style.display = 'flex'; if(nav.__cgReclamp) nav.__cgReclamp();
       show(cgStep);
     } else {
       if(cgAuto) setCgAuto(false);
@@ -2240,6 +2314,7 @@ html[data-theme="light"] .welcome-seg i.cur, body.light-theme .welcome-seg i.cur
     if(cgOn){
       if(cgAuto) setCgAuto(false);
       if(cgVoice) cgVoice.stop();
+      if(nav && nav.__cgHome) nav.__cgHome();   /* a dragged tour box returns to its corner */
       cgStep = 0; cgMax = 0;
       if(window.__cgPrepare) window.__cgPrepare();
       show(0);
@@ -4543,6 +4618,25 @@ requestAnimationFrame(function(){var b=document.getElementById('shell-lecture'),
   </div>
 </div>
 <div id="phys-toast"></div>
+<script>
+/* Seat the revision sheet below the sim's header. The header outranks the
+   sheet's backdrop in stacking order and grows taller when it wraps on a
+   narrow window, so a fixed top inset lets it cover the sheet's title.
+   Additive: observes the backdrop instead of altering the open/close code. */
+(function(){
+  var b=document.getElementById('phys-backdrop'); if(!b) return;
+  function seat(){
+    if(!b.classList.contains('open')) return;
+    var h=document.querySelector('.shell-header,.top-bar,.title-bar');
+    var t=h?Math.max(64,Math.round(h.getBoundingClientRect().bottom)+8):64;
+    b.style.paddingTop=t+'px';
+    var m=b.querySelector('.phys-modal');
+    if(m) m.style.maxHeight='calc(100vh - '+(t+40)+'px)';
+  }
+  new MutationObserver(seat).observe(b,{attributes:true,attributeFilter:['class']});
+  window.addEventListener('resize',seat);
+})();
+</script>
 
 <script>
 (function(){
