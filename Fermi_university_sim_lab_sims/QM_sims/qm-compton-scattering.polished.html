@@ -472,7 +472,7 @@ body.light-theme .legend, html[data-theme="light"] .legend{background:rgba(248,2
 
 <div class="inq-step" data-gate>
   <h4>2 · What comes out?</h4>
-  <p>The detector is back at Θ = 0, with λ = <span class="c-lam">0.071 nm</span>. Before turning it round to 90°, predict how the scattered wavelength will compare with the wavelength that went in.</p>
+  <p>The detector is back at Θ = 0, with λ = <span class="c-lam">0.071 nm</span>. How does the scattered wavelength compare to the wavelength that went in?</p>
   <button class="choice" data-fb="No — the electron gains energy and momentum, so the photon leaves with LESS energy, not more; less energy means a longer wave, not a shorter one.">Shorter — the photon is pushed along by the electron</button>
   <button class="choice" data-fb="That is the classical driven-oscillator picture, which predicts NO shift. A free electron recoils and carries energy away, so the wave must lengthen.">The same — the electron re-radiates at the driving frequency</button>
   <button class="choice" data-correct data-fb="Right — E = hc/λ, so losing energy to the recoiling electron means a longer wavelength. The readouts are open now: turn the detector and watch λ′ climb.">Longer — the photon gives up energy to the recoiling electron</button>
@@ -482,7 +482,7 @@ body.light-theme .legend, html[data-theme="light"] .legend{background:rgba(248,2
 
 <div class="inq-step" data-gate>
   <h4>3 · Where is the shift largest?</h4>
-  <p>Still at λ = <span class="c-lam">0.071 nm</span>, detector at Θ = 0. Before turning it through its whole range, predict the angle at which the ADDED wavelength is largest.</p>
+  <p>Still at λ = <span class="c-lam">0.071 nm</span>, detector at Θ = 0. At which angle is the added wavelength largest?</p>
   <button class="choice" data-fb="At Θ = 0 the photon passes on unchanged, with ZERO shift. The shift only grows as you turn away from the forward direction.">Θ = 0, straight into the electron</button>
   <button class="choice" data-fb="Nothing is special about 45°. The shift follows 1 − cos Θ, which keeps climbing all the way to 180°.">Θ = 45°, where momentum is shared evenly</button>
   <button class="choice" data-fb="90° gives a real shift (one Compton wavelength) but not the biggest — 1 − cos Θ is only 1 there and rises to 2 at 180°.">Θ = 90°, no forward momentum for the photon</button>
@@ -1407,18 +1407,53 @@ function setup(cv){
 }
 
 /* ================= drawing helpers ================= */
+/* Head size scales with the shaft. At a fixed 11 px the head half-width was
+   11·sin 0.4 = 4.3 px against the 6 px recoil shaft — barely 1.3 px of overhang
+   each side, so that arrow read as a line that simply stopped, with no visible
+   point (SME review). Tying hs to w keeps every head clearly wider than its
+   own shaft at any line weight. */
+function headSize(w,len){ return Math.min(Math.max(11, w*3.2), len*0.9); }
+function arrowHead(ctx,x2,y2,a,hs){
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hs*Math.cos(a-0.4), y2-hs*Math.sin(a-0.4));
+  ctx.lineTo(x2-hs*Math.cos(a+0.4), y2-hs*Math.sin(a+0.4));
+  ctx.closePath(); ctx.fill();
+}
 function arrow(ctx,x1,y1,x2,y2,color,w,head){
   const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
   ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=w;
   ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-  if (head && len>1.5){
-    const a=Math.atan2(dy,dx), hs=Math.min(11, len*0.9);
-    ctx.beginPath();
-    ctx.moveTo(x2,y2);
-    ctx.lineTo(x2-hs*Math.cos(a-0.4), y2-hs*Math.sin(a-0.4));
-    ctx.lineTo(x2-hs*Math.cos(a+0.4), y2-hs*Math.sin(a+0.4));
-    ctx.closePath(); ctx.fill();
+  if (head && len>1.5) arrowHead(ctx,x2,y2,Math.atan2(dy,dx),headSize(w,len));
+}
+/* The photon drawn as a photon: a sinusoid along the line of travel, with a
+   straight stub at the tip so the head sits on a clean shaft. The amplitude is
+   tapered to zero at both ends, so the wave leaves the vertex and meets the
+   head without starting or stopping mid-swing. Used for the photon PATHS in
+   the collision panel only — in the momentum triangle the same quantities are
+   vectors, where a wiggle would fight the head-to-tail closure that panel is
+   there to show. */
+function wavyArrow(ctx,x1,y1,x2,y2,color,w,head){
+  const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+  if (len<1.5){ return; }
+  const a=Math.atan2(dy,dx), ca=Math.cos(a), sa=Math.sin(a);
+  const hs=headSize(w,len), stub=Math.min(hs+3, len*0.35), body=len-stub;
+  const AMP=4.0, LAM=12;
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=w;
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1);
+  if (body>4){
+    const n=Math.max(8, Math.round(body));
+    for(let i=1;i<=n;i++){
+      const s=body*i/n, t=s/body;
+      const env=Math.sin(Math.PI*t);                 // 0 at both ends
+      const o=AMP*env*Math.sin(2*Math.PI*s/LAM);
+      ctx.lineTo(x1+ca*s - sa*o, y1+sa*s + ca*o);
+    }
   }
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+  if (head) arrowHead(ctx,x2,y2,a,hs);
 }
 function makeLabeler(ctx,W,H){
   const placed=[];
@@ -1505,14 +1540,17 @@ function drawScene(){
   ctx.save(); ctx.setLineDash([6,5]); ctx.strokeStyle=MUTE(); ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.moveTo(dotX,dotY); ctx.lineTo(dotX+2*L,dotY); ctx.stroke(); ctx.restore();
 
-  // pₑ goes down FIRST and wider: at Θ = 180° all three are collinear, and drawn
-  // last the recoil arrow painted clean over the two photon arrows card 6 asks
-  // the student to compare. Underneath, it stays a violet band around them.
+  // pₑ is laid down FIRST so the photon paths sit over it rather than under.
+  // It used to be drawn at double width as well, to stay a violet band behind
+  // the photons where they run together — but at Θ = 180° the recoil leaves on
+  // the OPPOSITE side of the electron from both photons, so it never actually
+  // overlapped them, and the extra width only swallowed its own arrowhead. All
+  // three now share one weight; the photons are told apart by being drawn wavy.
   const ex=dotX+L*re*Math.cos(phi), ey=dotY+L*re*Math.sin(phi);
-  arrow(ctx, dotX, dotY, ex, ey, PAL.electron, 6, re>1e-9);              // recoil pₑ
-  arrow(ctx, dotX-L, dotY, dotX, dotY, PAL.photon, 3, true);            // incident p
+  arrow(ctx, dotX, dotY, ex, ey, PAL.electron, 3, re>1e-9);                  // recoil pₑ
+  wavyArrow(ctx, dotX-L, dotY, dotX, dotY, PAL.photon, 3, true);            // incident p
   const sx=dotX+L*r*Math.cos(th), sy=dotY-L*r*Math.sin(th);
-  arrow(ctx, dotX, dotY, sx, sy, PAL.photon, 3, r>1e-9);                // scattered p′
+  wavyArrow(ctx, dotX, dotY, sx, sy, PAL.photon, 3, r>1e-9);                // scattered p′
   arc(ctx, dotX, dotY, arcR, th, INK());
   if (showPhi){ ctx.strokeStyle=INK(); ctx.lineWidth=1.2;
     ctx.beginPath(); ctx.arc(dotX,dotY,arcR,0,phi,false); ctx.stroke(); }
@@ -1540,7 +1578,7 @@ function drawScene(){
     lab('the momentum triangle — the three arrows must close', capX, capY, 'left', MUTE(), 12);
   }
 
-  arrow(ctx, Cx, Cy, Bx, By, PAL.electron, 6, re>1e-9);       // pₑ = p − p′, underneath
+  arrow(ctx, Cx, Cy, Bx, By, PAL.electron, 3, re>1e-9);       // pₑ = p − p′, underneath
   arrow(ctx, Ax, Ay, Bx, By, PAL.photon, 3, true);            // p
   arrow(ctx, Ax, Ay, Cx, Cy, PAL.photon, 3, r>1e-9);          // p′
   arc(ctx, Ax, Ay, arcT, th, INK());
@@ -2040,13 +2078,13 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(()=>draw()
 //   All labels live inside their own boxes and hide with them, so every
 //   sidebar step uses also:[].
 const cgSteps = [
-  { sel:'#shell-maximize', mode:'veil', title:'Maximize', text:'Expands the sim to fill the whole window.' },
+  { sel:'#shell-maximize', mode:'veil', title:'Maximize', text:'Expands the sim to fill the window — more room for the scattering diagram.' },
   { sel:'#toggle-formal', mode:'veil', title:'The Physics', text:'Opens the revision sheet holding the equations behind this sim.' },
-  { sel:'#shell-reset', mode:'veil', title:'Reset', text:'Returns the detector to ninety degrees and the wavelength to its default.' },
-  { sel:'#box-theta', mode:'hide', title:'Scattering angle Θ', text:'Sets the scattering angle Θ, from zero to one hundred eighty degrees.', also:[] },
-  { sel:'#box-lambda', mode:'hide', title:'Incident wavelength λ', text:'Sets the incident wavelength λ, logarithmically, from 0.005 to 500 nm.', also:[] },
-  { sel:'#panel-readouts', mode:'hide', title:'Readouts', text:'Reports the scattered λ′ and the added wavelength λ′−λ, in nanometres and as a percentage of λ.', also:[] },
-  { sel:null, title:'That\'s every control', text:'Explore freely — reopen either guide from the top bar.' }
+  { sel:'#shell-reset', mode:'veil', title:'Reset', text:'Returns the detector to 90° and λ to 0.071 nm, restarting this mode.' },
+  { sel:'#box-theta', mode:'hide', title:'Scattering angle Θ', text:'Swings the detector from 0° to 180° — the shift is largest straight backwards.', also:[] },
+  { sel:'#box-lambda', mode:'hide', title:'Incident wavelength λ', text:'Sets λ logarithmically from 0.005 to 500 nm — the added shift never changes with it.', also:[] },
+  { sel:'#panel-readouts', mode:'hide', title:'Readouts', text:'The scattered λ′ and the added shift — the percentage is what makes short λ dramatic.', also:[] },
+  { sel:null, title:'That\'s every control', text:'Now set Θ to 180° and watch the shift reach its maximum.' }
 ];  const cel = sel => sel ? document.querySelector(sel) : null;
   function ensureUi(){
     if(callout) return;
