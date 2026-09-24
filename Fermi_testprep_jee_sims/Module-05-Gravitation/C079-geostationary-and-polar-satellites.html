@@ -115,9 +115,17 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);overflow
 .plot-title{position:absolute;top:12px;left:16px;font-size:11px;font-weight:600;color:var(--muted);
   letter-spacing:1.2px;text-transform:uppercase;z-index:2;pointer-events:none;}
 .plot-title .plot-inline{font-size:11px;font-weight:600;letter-spacing:0;color:var(--text);text-transform:none;margin-left:6px;}
-.legend{position:absolute;top:42px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;
-  font-size:11px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.72);
-  border:1px solid var(--border);border-radius:999px;padding:8px 12px;backdrop-filter:blur(6px);}
+.legend{position:absolute;top:12px;right:12px;max-width:min(460px,62%);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px 14px;
+  font-size:12px;font-weight:600;color:var(--text);z-index:2;pointer-events:none;background:rgba(6,14,17,.78);
+  border:1px solid rgba(226,232,240,.4);border-radius:999px;padding:7px 12px;backdrop-filter:blur(6px);}
+.scene-status{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:2;pointer-events:none;
+  text-align:center;background:rgba(6,14,17,.82);border:1px solid rgba(226,232,240,.4);border-radius:12px;padding:6px 14px;
+  box-shadow:0 8px 22px rgba(0,0,0,.28);}
+.scene-status b{display:block;font-size:13px;font-weight:700;color:#f8fafc;letter-spacing:.01em;}
+.scene-status span{display:block;margin-top:1px;font-size:11px;font-weight:600;color:#cbd5e1;}
+body.light-theme .scene-status,html[data-theme="light"] .scene-status{background:rgba(248,250,252,.94);border-color:#0f172a;}
+body.light-theme .scene-status b,html[data-theme="light"] .scene-status b{color:#0f172a;}
+body.light-theme .scene-status span,html[data-theme="light"] .scene-status span{color:#334155;}
 /* The pill's plate is a fixed dark tint, so in light theme the --text ink lands
    dark-on-dark and the key is unreadable. Flip the plate with the theme. */
 body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,250,252,.92);color:#0f172a;}
@@ -153,6 +161,8 @@ body.light-theme .legend,html[data-theme="light"] .legend{background:rgba(248,25
 .stat-value.highlight{font-size:18px;}
 .divider{height:1px;background:var(--border);}
 .note-text{font-size:13px;line-height:1.6;color:var(--muted);font-family:var(--font-sans);}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;}
+.chk input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
 .shell-aside .katex,.shell-formal .katex{color:inherit;font-weight:600;}
 
 .choice{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);
@@ -1990,11 +2000,13 @@ Object.freeze(Engine);
       <div class="plot-title">Earth &amp; orbit <span class="plot-inline">— to scale</span></div>
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:#60a5fa;"></span>Satellite</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#34d399;"></span>Sub-satellite point</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#34d399;"></span>Ground point</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#fbbf24;"></span>Home spot</div>
       </div>
+      <div class="scene-status" id="scene-status"><b>Hanging still</b><span>locked over the home spot</span></div>
       <canvas id="scene"></canvas>
     </div>
-    <div class="plot-box" style="flex:0.9;">
+    <div class="plot-box" id="map-wrap" style="flex:0.9;display:none;">
       <div class="plot-title">Ground track <span class="plot-inline">— longitude drift accumulates</span></div>
       <canvas id="map"></canvas>
     </div>
@@ -2094,6 +2106,12 @@ Object.freeze(Engine);
               <input type="range" id="inc" min="0" max="90" step="1" value="0">
             </div>
             <div class="control-range"><span>0°</span><span>90° (polar)</span></div>
+          </div>
+
+          <div class="ctrl-box" id="box-map">
+            <label class="chk" title="Show or hide the ground-track map under the Earth">
+              <input type="checkbox" id="show-map" data-no-reset> Ground track
+            </label>
           </div>
 
         </div>
@@ -2935,7 +2953,17 @@ function fitCanvas(canvas, ctx){
   return { w: r.width, h: r.height };
 }
 
+function plotWanted(){
+  const el = document.getElementById('show-map');
+  return !!(el && el.checked);
+}
+function setMapVisible(on){
+  const box = document.getElementById('map-wrap');
+  if(!box) return;
+  box.style.display = on ? '' : 'none';
+}
 function onResize(){
+  setMapVisible(plotWanted());
   sceneSize = fitCanvas(sceneCanvas, sceneCtx);
   mapSize = fitCanvas(mapCanvas, mapCtx);
   drawScene();
@@ -2951,14 +2979,26 @@ function updateReadouts(){
   statDrift.textContent = driftStr;
 
   let note = '';
-  if(p.isGeostationaryFlag === 1){
+  let statusTitle = 'Drifting east';
+  let statusSub = 'slower than the spinning Earth';
+  if(Math.abs(state.inclination) >= 60){
+    statusTitle = 'Polar sweep';
+    statusSub = 'a new strip of Earth each lap';
+    note = '<strong style="color:#7dd3fc">POLAR.</strong> The ground track runs from high north to high south and walks west each lap — it covers the whole Earth, one strip at a time.';
+  } else if(p.isGeostationaryFlag === 1 && Math.abs(state.inclination) < 1){
+    statusTitle = 'Hanging still';
+    statusSub = 'locked over the home spot';
     note = '<strong style="color:#34d399">GEOSTATIONARY.</strong> Period matches one sidereal day; the ground track collapses to a single point.';
   } else if(drift < 0){
+    statusTitle = 'Drifting west';
+    statusSub = 'outrunning the spinning Earth';
     note = '<strong style="color:#fbbf24">Below GEO.</strong> Period &lt; 1 sidereal day — the satellite <em>outruns</em> Earth, so the track marches <strong>westward</strong> (' + Math.abs(drift).toFixed(1) + '°/orbit).';
   } else {
     note = '<strong style="color:#fbbf24">Above GEO.</strong> Period &gt; 1 sidereal day — the satellite <em>lags</em> Earth, so the track drifts <strong>eastward</strong> (' + drift.toFixed(1) + '°/orbit).';
   }
   regimeNote.innerHTML = note;
+  const statusEl = document.getElementById('scene-status');
+  if(statusEl) statusEl.innerHTML = '<b>' + statusTitle + '</b><span>' + statusSub + '</span>';
 }
 
 // ---- Compute satellite position ----
@@ -3001,6 +3041,17 @@ function satellitePosition(simTimeSeconds){
   };
 }
 
+// Stylised continent outlines, shared by the globe and the ground-track map.
+// [longitude, latitude] in degrees. Rough on purpose — readable, not a chart.
+const LAND = [
+  [[-18,35],[10,37],[32,31],[43,12],[51,-2],[42,-18],[32,-34],[18,-34],[12,-8],[-8,5],[-16,14],[-18,35]],
+  [[-10,36],[0,44],[8,52],[28,70],[60,70],[100,72],[140,68],[160,66],[145,50],[130,32],[110,12],[78,8],[60,22],[42,36],[28,32],[12,36],[-6,36],[-10,36]],
+  [[-168,66],[-140,70],[-128,54],[-124,48],[-105,32],[-97,26],[-82,25],[-80,31],[-70,42],[-64,46],[-56,52],[-68,60],[-88,68],[-110,72],[-140,70],[-166,68]],
+  [[-80,10],[-70,12],[-60,8],[-50,2],[-38,-8],[-36,-22],[-48,-28],[-62,-40],[-72,-52],[-74,-18],[-78,-4],[-80,10]],
+  [[113,-12],[128,-14],[142,-12],[153,-26],[150,-38],[140,-38],[128,-32],[115,-34],[113,-22]],
+  [[-62,82],[-48,83],[-22,80],[-18,70],[-30,62],[-46,60],[-56,66],[-62,74]]
+];
+
 // ============================================================================
 // SCENE (left panel): Earth + orbit, to scale, viewed from above (equatorial
 // view when i=0, tilted view otherwise). We show a 2D projection: x horizontal,
@@ -3020,7 +3071,17 @@ function drawScene(){
   const textCol = cs.getPropertyValue('--text').trim() || '#e2e8f0';
   const mutedCol = cs.getPropertyValue('--muted').trim() || '#cbd5e1';
 
-  sceneCtx.fillStyle = bg;
+  const light = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
+  const sky = sceneCtx.createLinearGradient(0, 0, 0, h);
+  if(light){
+    sky.addColorStop(0, '#d5e4f5');
+    sky.addColorStop(1, '#f8fafc');
+  } else {
+    sky.addColorStop(0, '#1a3a58');
+    sky.addColorStop(0.45, '#0d1c30');
+    sky.addColorStop(1, '#070d16');
+  }
+  sceneCtx.fillStyle = sky;
   sceneCtx.fillRect(0, 0, w, h);
 
   // Fit Earth + orbit to canvas.
@@ -3033,12 +3094,20 @@ function drawScene(){
   // Scale: orbit fills the frame
   const scale = maxRadius / r_orbit_km; // px per km
 
-  // Draw stars (fixed pseudo-random)
-  sceneCtx.fillStyle = 'rgba(255,255,255,0.12)';
-  for(let i=0; i<40; i++){
-    const sx = (i * 137.5) % w;
-    const sy = (i * 89.3) % h;
-    sceneCtx.fillRect(sx, sy, 1, 1);
+  // Stars twinkle in place. Positions stay fixed so the field does not crawl.
+  const now = performance.now() / 1000;
+  if(!light){
+    for(let i = 0; i < 64; i++){
+      const sx = (i * 137.508) % w;
+      const sy = (i * 89.321) % h;
+      const tw = 0.5 + 0.5 * Math.sin(now * (0.55 + (i % 5) * 0.28) + i);
+      sceneCtx.globalAlpha = 0.2 + 0.7 * tw * ((i % 3 === 0) ? 1 : 0.45);
+      sceneCtx.fillStyle = (i % 11 === 0) ? '#fde68a' : '#ffffff';
+      sceneCtx.beginPath();
+      sceneCtx.arc(sx, sy, (i % 8 === 0) ? 1.7 : 1, 0, Math.PI * 2);
+      sceneCtx.fill();
+    }
+    sceneCtx.globalAlpha = 1;
   }
 
   // ---- Tilted-camera 3D view ----------------------------------------------
@@ -3082,28 +3151,96 @@ function drawScene(){
   }
   const orbCurve = f => orbPt(f * 2 * Math.PI);
 
+  // Faint orbital-plane disc. The globe is painted next and hides the middle,
+  // so the near and far arcs read as one ring around the Earth.
+  sceneCtx.beginPath();
+  for(let k = 0; k <= 180; k++){
+    const p = orbCurve(k / 180);
+    if(k === 0) sceneCtx.moveTo(p.x, p.y); else sceneCtx.lineTo(p.x, p.y);
+  }
+  sceneCtx.closePath();
+  sceneCtx.fillStyle = light ? 'rgba(37,99,235,0.07)' : 'rgba(96,165,250,0.08)';
+  sceneCtx.fill();
+
   // Far half of the orbit — drawn first so the globe occludes it
-  sceneCtx.strokeStyle = 'rgba(96, 165, 250, 0.20)';
-  sceneCtx.lineWidth = 1.2;
-  sceneCtx.setLineDash([3, 5]);
+  sceneCtx.strokeStyle = light ? 'rgba(37,99,235,0.32)' : 'rgba(147,197,253,0.32)';
+  sceneCtx.lineWidth = 1.5;
+  sceneCtx.setLineDash([4, 6]);
   strokeCurve(orbCurve, 240, false);
   sceneCtx.setLineDash([]);
 
   // Globe
-  const earthGrad = sceneCtx.createRadialGradient(cx - earthPx*0.35, cy - earthPx*0.35, earthPx*0.1, cx, cy, earthPx);
-  earthGrad.addColorStop(0, '#5b8cb8');
-  earthGrad.addColorStop(0.55, '#2a4a6e');
-  earthGrad.addColorStop(1, '#16243a');
+  const earthGrad = sceneCtx.createRadialGradient(cx - earthPx*0.38, cy - earthPx*0.42, earthPx*0.08, cx, cy, earthPx);
+  earthGrad.addColorStop(0, light ? '#b7dff6' : '#9ed0ee');
+  earthGrad.addColorStop(0.42, light ? '#3f8fc4' : '#2f74a3');
+  earthGrad.addColorStop(1, light ? '#1a5278' : '#123048');
   sceneCtx.fillStyle = earthGrad;
   sceneCtx.beginPath();
   sceneCtx.arc(cx, cy, earthPx, 0, Math.PI*2);
   sceneCtx.fill();
-  // thin atmosphere rim
-  sceneCtx.strokeStyle = 'rgba(125, 211, 252, 0.30)';
-  sceneCtx.lineWidth = 1.5;
+
+  // Land and ice, clipped to the disc and carried around by the Earth's spin.
+  // Each patch is a stylised blob at a real lon/lat, shown only on the near side.
+  sceneCtx.save();
   sceneCtx.beginPath();
-  sceneCtx.arc(cx, cy, earthPx + 1.5, 0, Math.PI*2);
-  sceneCtx.stroke();
+  sceneCtx.arc(cx, cy, Math.max(1, earthPx - 0.5), 0, Math.PI*2);
+  sceneCtx.clip();
+  sceneCtx.fillStyle = light ? 'rgba(22,140,86,0.88)' : 'rgba(52,168,112,0.9)';
+  LAND.forEach(function(pts){
+    sceneCtx.beginPath();
+    let pen = false, any = false;
+    const n = pts.length;
+    for(let i = 0; i < n; i++){
+      const a = pts[i], b = pts[(i + 1) % n];
+      for(let s = 0; s < 5; s++){
+        const f = s / 5;
+        const lon = (a[0] + (b[0] - a[0]) * f) * Math.PI / 180;
+        const lat = (a[1] + (b[1] - a[1]) * f) * Math.PI / 180;
+        const cpt = proj(
+          r_earth_km * Math.cos(lat) * Math.cos(lon + earthAngle),
+          r_earth_km * Math.cos(lat) * Math.sin(lon + earthAngle),
+          r_earth_km * Math.sin(lat)
+        );
+        if(cpt.d < r_earth_km * 0.02){ pen = false; continue; }
+        if(!pen){ sceneCtx.moveTo(cpt.x, cpt.y); pen = true; }
+        else sceneCtx.lineTo(cpt.x, cpt.y);
+        any = true;
+      }
+    }
+    if(any){ sceneCtx.closePath(); sceneCtx.fill(); }
+  });
+  [[0.93], [-0.88]].forEach(function(pz){
+    const cap = proj(0, 0, r_earth_km * pz[0]);
+    if(cap.d < r_earth_km * 0.02) return;
+    sceneCtx.fillStyle = 'rgba(248,250,252,0.9)';
+    sceneCtx.beginPath();
+    sceneCtx.ellipse(cap.x, cap.y, Math.max(2, earthPx * 0.2), Math.max(1.5, earthPx * 0.075), 0, 0, Math.PI * 2);
+    sceneCtx.fill();
+  });
+  const glint = sceneCtx.createRadialGradient(cx - earthPx*0.36, cy - earthPx*0.4, 0, cx - earthPx*0.1, cy - earthPx*0.15, earthPx*0.75);
+  glint.addColorStop(0, 'rgba(255,255,255,0.32)');
+  glint.addColorStop(1, 'rgba(255,255,255,0)');
+  sceneCtx.fillStyle = glint;
+  sceneCtx.fillRect(cx - earthPx, cy - earthPx, earthPx * 2, earthPx * 2);
+  const night = sceneCtx.createLinearGradient(cx - earthPx * 0.15, cy - earthPx, cx + earthPx, cy + earthPx * 0.25);
+  night.addColorStop(0, 'rgba(3,10,22,0)');
+  night.addColorStop(0.5, 'rgba(3,10,22,0)');
+  night.addColorStop(1, light ? 'rgba(15,23,42,0.30)' : 'rgba(2,6,16,0.55)');
+  sceneCtx.fillStyle = night;
+  sceneCtx.fillRect(cx - earthPx, cy - earthPx, earthPx * 2, earthPx * 2);
+  sceneCtx.restore();
+
+  // Soft atmosphere, wider than a hairline so the limb reads at a glance.
+  const atmR = earthPx + Math.max(7, earthPx * 0.14);
+  const atm = sceneCtx.createRadialGradient(cx, cy, Math.max(1, earthPx * 0.9), cx, cy, atmR);
+  atm.addColorStop(0, 'rgba(125,211,252,0)');
+  atm.addColorStop(0.55, light ? 'rgba(14,165,233,0.38)' : 'rgba(125,211,252,0.5)');
+  atm.addColorStop(1, 'rgba(125,211,252,0)');
+  sceneCtx.fillStyle = atm;
+  sceneCtx.beginPath();
+  sceneCtx.arc(cx, cy, atmR, 0, Math.PI * 2);
+  sceneCtx.arc(cx, cy, Math.max(1, earthPx - 0.5), 0, Math.PI * 2, true);
+  sceneCtx.fill();
 
   // Spin axis stub + N label (north pole tips toward the viewer's upper edge)
   const poleTop = proj(0, 0, r_earth_km * 1.18);
@@ -3150,81 +3287,160 @@ function drawScene(){
     }
   }
 
-  // Prime-meridian marker on the equator (rotates with the Earth)
-  const pm = proj(r_earth_km * Math.cos(earthAngle), r_earth_km * Math.sin(earthAngle), 0);
-  if(pm.d >= 0){
-    sceneCtx.fillStyle = '#34d399';
-    sceneCtx.beginPath();
-    sceneCtx.arc(pm.x, pm.y, 3, 0, Math.PI*2);
-    sceneCtx.fill();
-  }
+  // Home spot: the place the satellite starts above (lon 0°, equator).
+  // It spins with the Earth. At GEO the ground point stays on it.
+  const home = proj(r_earth_km * Math.cos(earthAngle), r_earth_km * Math.sin(earthAngle), 0);
 
-  // Sub-satellite point + connector (front hemisphere only)
+  // Sub-satellite point + tether (front hemisphere only). The pulse is
+  // wall-clock, so it stays readable at every time-lapse.
   const rKm = Math.sqrt(satKmX*satKmX + satKmY*satKmY + satKmZ*satKmZ);
   const subP = proj(satKmX / rKm * r_earth_km, satKmY / rKm * r_earth_km, satKmZ / rKm * r_earth_km);
   if(subP.d >= 0 && satP.d >= 0){
-    sceneCtx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
-    sceneCtx.lineWidth = 1;
-    sceneCtx.setLineDash([2, 3]);
+    sceneCtx.strokeStyle = light ? 'rgba(5,150,105,0.75)' : 'rgba(110,231,183,0.8)';
+    sceneCtx.lineWidth = 1.5;
+    sceneCtx.setLineDash([3, 4]);
     sceneCtx.beginPath();
     sceneCtx.moveTo(subP.x, subP.y);
     sceneCtx.lineTo(satP.x, satP.y);
     sceneCtx.stroke();
     sceneCtx.setLineDash([]);
-    sceneCtx.fillStyle = '#34d399';
+    const pulse = 0.5 + 0.5 * Math.sin(now * 3.1);
+    sceneCtx.strokeStyle = 'rgba(52,211,153,' + (0.25 + 0.55 * (1 - pulse)).toFixed(3) + ')';
+    sceneCtx.lineWidth = 1.6;
     sceneCtx.beginPath();
-    sceneCtx.arc(subP.x, subP.y, 2.5, 0, Math.PI*2);
+    sceneCtx.arc(subP.x, subP.y, 4.5 + 6 * pulse, 0, Math.PI * 2);
+    sceneCtx.stroke();
+    sceneCtx.fillStyle = '#ecfdf5';
+    sceneCtx.beginPath();
+    sceneCtx.arc(subP.x, subP.y, 4.2, 0, Math.PI * 2);
+    sceneCtx.fill();
+    sceneCtx.fillStyle = '#10b981';
+    sceneCtx.beginPath();
+    sceneCtx.arc(subP.x, subP.y, 2.4, 0, Math.PI * 2);
     sceneCtx.fill();
   }
+  if(home.d >= 0){
+    const locked = subP.d >= 0 && Math.hypot(home.x - subP.x, home.y - subP.y) < 8;
+    sceneCtx.fillStyle = '#fbbf24';
+    sceneCtx.beginPath();
+    sceneCtx.arc(home.x, home.y, locked ? 2.2 : 3.4, 0, Math.PI * 2);
+    sceneCtx.fill();
+    if(!locked && earthPx > 36){
+      sceneCtx.font = '600 11px ' + (cs.getPropertyValue('--font-sans').trim() || 'sans-serif');
+      sceneCtx.fillStyle = '#fde68a';
+      sceneCtx.textAlign = 'left';
+      sceneCtx.fillText('home', home.x + 6, home.y - 6);
+    }
+  }
 
-  // Near half of the orbit — over the globe
-  sceneCtx.strokeStyle = 'rgba(96, 165, 250, 0.55)';
-  sceneCtx.lineWidth = 1.5;
+  // Near half of the orbit — a soft ribbon, then a crisp edge, over the globe
+  sceneCtx.strokeStyle = light ? 'rgba(37,99,235,0.16)' : 'rgba(96,165,250,0.22)';
+  sceneCtx.lineWidth = 8;
   strokeCurve(orbCurve, 240, true);
+  sceneCtx.strokeStyle = light ? '#1d4ed8' : '#bfdbfe';
+  sceneCtx.lineWidth = 2.1;
+  strokeCurve(orbCurve, 240, true);
+  // Motion chevrons crawl along the near arc so the direction stays obvious
+  // even when the satellite itself is a small mark on a huge orbit.
+  {
+    const phase = (now * 0.22) % 1;
+    sceneCtx.fillStyle = light ? '#1d4ed8' : '#e0f2fe';
+    for(let i = 0; i < 5; i++){
+      const f = (phase + i / 5) % 1;
+      const p = orbCurve(f);
+      if(p.d < 0) continue;
+      if(Math.hypot(p.x - cx, p.y - cy) < earthPx + 6) continue;
+      const p2 = orbCurve((f + 0.01) % 1);
+      const ang = Math.atan2(p2.y - p.y, p2.x - p.x);
+      sceneCtx.beginPath();
+      sceneCtx.moveTo(p.x + 7 * Math.cos(ang), p.y + 7 * Math.sin(ang));
+      sceneCtx.lineTo(p.x + 7 * Math.cos(ang + 2.5), p.y + 7 * Math.sin(ang + 2.5));
+      sceneCtx.lineTo(p.x + 7 * Math.cos(ang - 2.5), p.y + 7 * Math.sin(ang - 2.5));
+      sceneCtx.closePath();
+      sceneCtx.fill();
+    }
+  }
 
   // Fading trail behind the satellite (skips the stretch hidden by the globe)
   const hiddenPt = p => p.d < 0 && Math.hypot(p.x - cx, p.y - cy) < earthPx;
-  for(let k = 1; k <= 34; k++){
-    const pA = orbPt(uNow - k * 0.022), pB = orbPt(uNow - (k - 1) * 0.022);
-    if(hiddenPt(pA) || hiddenPt(pB)) continue;
-    sceneCtx.strokeStyle = 'rgba(96, 165, 250, ' + (0.55 * (1 - k / 34)).toFixed(3) + ')';
-    sceneCtx.lineWidth = 2.5;
-    sceneCtx.beginPath();
-    sceneCtx.moveTo(pA.x, pA.y);
-    sceneCtx.lineTo(pB.x, pB.y);
-    sceneCtx.stroke();
+  for(let pass = 0; pass < 2; pass++){
+    for(let k = 1; k <= 42; k++){
+      const pA = orbPt(uNow - k * 0.02), pB = orbPt(uNow - (k - 1) * 0.02);
+      if(hiddenPt(pA) || hiddenPt(pB)) continue;
+      const fade = 1 - k / 42;
+      sceneCtx.strokeStyle = pass === 0
+        ? 'rgba(96,165,250,' + (0.16 * fade).toFixed(3) + ')'
+        : 'rgba(224,242,254,' + (0.85 * fade).toFixed(3) + ')';
+      sceneCtx.lineWidth = pass === 0 ? 7 : 2.2;
+      sceneCtx.beginPath();
+      sceneCtx.moveTo(pA.x, pA.y);
+      sceneCtx.lineTo(pB.x, pB.y);
+      sceneCtx.stroke();
+    }
   }
 
-  // Satellite — dimmed (no glow) while it passes behind the globe
+  // Satellite — a small body with panels, nose along the velocity.
+  // Dimmed to a dot while it passes behind the globe.
   const satHidden = hiddenPt(satP);
-  sceneCtx.fillStyle = satHidden ? 'rgba(96, 165, 250, 0.45)' : '#60a5fa';
-  if(!satHidden){ sceneCtx.shadowColor = '#60a5fa'; sceneCtx.shadowBlur = 8; }
-  sceneCtx.beginPath();
-  sceneCtx.arc(satPxX, satPxY, satHidden ? 4 : 5, 0, Math.PI*2);
-  sceneCtx.fill();
-  sceneCtx.shadowBlur = 0;
-  // Direction-of-motion arrowhead just ahead of the satellite
-  if(!satHidden){
-    const ahead = orbPt(uNow + 0.05);
-    const ang = Math.atan2(ahead.y - satPxY, ahead.x - satPxX);
-    const tipX = satPxX + 14 * Math.cos(ang), tipY = satPxY + 14 * Math.sin(ang);
-    sceneCtx.fillStyle = '#93c5fd';
+  if(satHidden){
+    sceneCtx.fillStyle = 'rgba(96,165,250,0.4)';
     sceneCtx.beginPath();
-    sceneCtx.moveTo(tipX, tipY);
-    sceneCtx.lineTo(tipX - 8*Math.cos(ang - 0.45), tipY - 8*Math.sin(ang - 0.45));
-    sceneCtx.lineTo(tipX - 8*Math.cos(ang + 0.45), tipY - 8*Math.sin(ang + 0.45));
-    sceneCtx.closePath(); sceneCtx.fill();
+    sceneCtx.arc(satPxX, satPxY, 3.5, 0, Math.PI * 2);
+    sceneCtx.fill();
+  } else {
+    const ahead = orbPt(uNow + 0.04);
+    const ang = Math.atan2(ahead.y - satPxY, ahead.x - satPxX);
+    sceneCtx.save();
+    sceneCtx.translate(satPxX, satPxY);
+    sceneCtx.rotate(ang);
+    sceneCtx.shadowColor = '#60a5fa';
+    sceneCtx.shadowBlur = 14;
+    sceneCtx.fillStyle = light ? '#1e40af' : '#dbeafe';
+    sceneCtx.fillRect(-19, -3, 11, 6);
+    sceneCtx.fillRect(8, -3, 11, 6);
+    sceneCtx.shadowBlur = 0;
+    sceneCtx.fillStyle = '#3b82f6';
+    sceneCtx.beginPath();
+    sceneCtx.roundRect ? sceneCtx.roundRect(-6.5, -5.5, 13, 11, 2) : sceneCtx.rect(-6.5, -5.5, 13, 11);
+    sceneCtx.fill();
+    sceneCtx.fillStyle = '#eff6ff';
+    sceneCtx.fillRect(-2, -2.2, 4, 4.4);
+    sceneCtx.fillStyle = '#bfdbfe';
+    sceneCtx.beginPath();
+    sceneCtx.moveTo(17, 0);
+    sceneCtx.lineTo(9, -4.2);
+    sceneCtx.lineTo(9, 4.2);
+    sceneCtx.closePath();
+    sceneCtx.fill();
+    sceneCtx.restore();
   }
 
   // Altitude label near satellite (clamped inside canvas)
-  sceneCtx.font = '12px ' + (cs.getPropertyValue('--font-nums').trim() || 'monospace');
-  sceneCtx.fillStyle = textCol;
+  const fontNums = cs.getPropertyValue('--font-nums').trim() || 'monospace';
+  sceneCtx.font = '600 12px ' + fontNums;
   const lbl = 'h = ' + state.altitude.toLocaleString() + ' km';
   const lblW = sceneCtx.measureText(lbl).width;
-  let lblX = satPxX + 10;
-  let lblY = satPxY - 8;
-  if(lblX + lblW > w - 8) lblX = satPxX - lblW - 10;
-  if(lblY < 20) lblY = satPxY + 16;
+  // Sit the pill just outside the satellite, away from the Earth, so it
+  // does not cover the craft when the orbit skims the limb.
+  const rdx = satPxX - cx, rdy = satPxY - cy;
+  const rlen = Math.hypot(rdx, rdy) || 1;
+  const ux = rdx / rlen, uy = rdy / rlen;
+  let lblX = satPxX + ux * 22 + (ux >= 0 ? 6 : -(lblW + 6));
+  let lblY = satPxY + uy * 18 + 4;
+  lblX = Math.max(8, Math.min(w - lblW - 10, lblX));
+  lblY = Math.max(26, Math.min(h - 14, lblY));
+  if(lblX < satPxX + 20 && lblX + lblW > satPxX - 20 && Math.abs(lblY - satPxY) < 16){
+    lblY = Math.min(h - 14, satPxY + 26);
+  }
+  sceneCtx.fillStyle = light ? 'rgba(248,250,252,0.92)' : 'rgba(6,14,17,0.78)';
+  sceneCtx.strokeStyle = light ? 'rgba(15,23,42,0.35)' : 'rgba(226,232,240,0.45)';
+  sceneCtx.lineWidth = 1;
+  sceneCtx.beginPath();
+  if(sceneCtx.roundRect) sceneCtx.roundRect(lblX - 6, lblY - 13, lblW + 12, 18, 8);
+  else sceneCtx.rect(lblX - 6, lblY - 13, lblW + 12, 18);
+  sceneCtx.fill();
+  sceneCtx.stroke();
+  sceneCtx.fillStyle = textCol;
   sceneCtx.fillText(lbl, lblX, lblY);
 
   // Scale bar bottom-left
@@ -3266,6 +3482,7 @@ function drawMap(){
   // on dark. Body first; never documentElement-first, whose value always
   // resolves and would leave a body fallback dead.
   const cs = getComputedStyle(document.body) || getComputedStyle(document.documentElement);
+  const light = document.body.classList.contains('light-theme') || document.documentElement.getAttribute('data-theme') === 'light';
   const bg = cs.getPropertyValue('--surface').trim() || '#060E11';
   const textCol = cs.getPropertyValue('--text').trim() || '#e2e8f0';
   const mutedCol = cs.getPropertyValue('--muted').trim() || '#cbd5e1';
@@ -3282,14 +3499,22 @@ function drawMap(){
   const mapH = h - marginT - marginB;
 
   // Draw ocean background
-  mapCtx.fillStyle = '#0f2337';
+  const ocean = mapCtx.createLinearGradient(0, marginT, 0, marginT + mapH);
+  if(light){
+    ocean.addColorStop(0, '#d7ebf8');
+    ocean.addColorStop(1, '#b9d7ee');
+  } else {
+    ocean.addColorStop(0, '#1a4468');
+    ocean.addColorStop(1, '#0c243c');
+  }
+  mapCtx.fillStyle = ocean;
   mapCtx.fillRect(marginL, marginT, mapW, mapH);
 
   // Draw a very simplified world map (continents as rough polygons)
-  drawContinents(marginL, marginT, mapW, mapH);
+  drawContinents(marginL, marginT, mapW, mapH, light);
 
   // Grid: longitudes every 60°, latitudes every 30°
-  mapCtx.strokeStyle = 'rgba(255,255,255,0.10)';
+  mapCtx.strokeStyle = light ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.12)';
   mapCtx.lineWidth = 1;
   for(let lon = -180; lon <= 180; lon += 60){
     const x = marginL + ((lon + 180) / 360) * mapW;
@@ -3307,15 +3532,15 @@ function drawMap(){
   }
   // Equator brighter
   const eqY = marginT + (90 / 180) * mapH;
-  mapCtx.strokeStyle = 'rgba(255,255,255,0.22)';
-  mapCtx.lineWidth = 1;
+  mapCtx.strokeStyle = light ? 'rgba(180,83,9,0.55)' : 'rgba(251,191,36,0.55)';
+  mapCtx.lineWidth = 1.4;
   mapCtx.beginPath();
   mapCtx.moveTo(marginL, eqY);
   mapCtx.lineTo(marginL + mapW, eqY);
   mapCtx.stroke();
 
   // Border
-  mapCtx.strokeStyle = 'rgba(255,255,255,0.25)';
+  mapCtx.strokeStyle = light ? 'rgba(15,23,42,0.35)' : 'rgba(226,232,240,0.35)';
   mapCtx.lineWidth = 1;
   mapCtx.strokeRect(marginL, marginT, mapW, mapH);
 
@@ -3323,13 +3548,13 @@ function drawMap(){
   mapCtx.font = '12px ' + (cs.getPropertyValue('--font-nums').trim() || 'monospace');
   mapCtx.fillStyle = mutedCol;
   mapCtx.textAlign = 'center';
-  mapCtx.fillText('180°W', marginL, marginT + mapH + 12);
-  mapCtx.fillText('0°', marginL + mapW/2, marginT + mapH + 12);
-  mapCtx.fillText('180°E', marginL + mapW, marginT + mapH + 12);
+  mapCtx.fillText('180°W', marginL + 8, marginT + mapH + 14);
+  mapCtx.fillText('0°', marginL + mapW/2, marginT + mapH + 14);
+  mapCtx.fillText('180°E', marginL + mapW - 8, marginT + mapH + 14);
   mapCtx.textAlign = 'right';
-  mapCtx.fillText('90°N', marginL - 4, marginT + 4);
-  mapCtx.fillText('0°', marginL - 4, eqY + 3);
-  mapCtx.fillText('90°S', marginL - 4, marginT + mapH);
+  mapCtx.fillText('90°N', marginL - 4, marginT + 11);
+  mapCtx.fillText('0°', marginL - 4, eqY + 4);
+  mapCtx.fillText('90°S', marginL - 4, marginT + mapH - 6);
   mapCtx.textAlign = 'left';
 
   // Draw track (with fading age)
@@ -3338,16 +3563,24 @@ function drawMap(){
   if(N > 1){
     for(let i = 1; i < N; i++){
       const a = track[i-1], b = track[i];
-      // Handle longitude wrap-around: skip drawing segments that cross ±180
-      if(Math.abs(a.lonDeg - b.lonDeg) > 180) continue;
+      // A polar pass flips longitude by ~180° at the pole, and the dateline
+      // wraps by ~360°. Neither is motion across the map. Real samples,
+      // 60 s apart, shift longitude by only a few degrees.
+      if(Math.abs(a.lonDeg - b.lonDeg) > 30) continue;
       const ax = marginL + ((a.lonDeg + 180) / 360) * mapW;
       const ay = marginT + ((90 - a.latDeg) / 180) * mapH;
       const bx = marginL + ((b.lonDeg + 180) / 360) * mapW;
       const by = marginT + ((90 - b.latDeg) / 180) * mapH;
       const ageFrac = i / N; // 1 = newest
-      const alpha = 0.15 + 0.75 * ageFrac;
-      mapCtx.strokeStyle = 'rgba(96, 165, 250, ' + alpha + ')';
-      mapCtx.lineWidth = 1.6;
+      const alpha = 0.12 + 0.85 * ageFrac;
+      mapCtx.strokeStyle = 'rgba(16,185,129,' + (0.22 * alpha).toFixed(3) + ')';
+      mapCtx.lineWidth = 5;
+      mapCtx.beginPath();
+      mapCtx.moveTo(ax, ay);
+      mapCtx.lineTo(bx, by);
+      mapCtx.stroke();
+      mapCtx.strokeStyle = 'rgba(167,243,208,' + alpha.toFixed(3) + ')';
+      mapCtx.lineWidth = 1.8;
       mapCtx.beginPath();
       mapCtx.moveTo(ax, ay);
       mapCtx.lineTo(bx, by);
@@ -3355,25 +3588,63 @@ function drawMap(){
     }
   }
 
-  // Current sub-satellite point
+  // Current sub-satellite point. A gold ring appears only while the
+  // period matches a sidereal day AND the orbit is equatorial — the case
+  // where the point truly hangs still, so a lone dot does not look frozen.
   const sat = satellitePosition(state.simTime);
   const sx = marginL + ((sat.lonDeg + 180) / 360) * mapW;
   const sy = marginT + ((90 - sat.latDeg) / 180) * mapH;
-  mapCtx.fillStyle = '#34d399';
-  mapCtx.shadowColor = '#34d399';
-  mapCtx.shadowBlur = 10;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 280);
+  const hanging = physicsAt(state.altitude).isGeostationaryFlag === 1 && Math.abs(state.inclination) < 1;
+  if(hanging){
+    mapCtx.strokeStyle = 'rgba(251,191,36,' + (0.4 + 0.45 * (1 - pulse)).toFixed(3) + ')';
+    mapCtx.lineWidth = 1.6;
+    mapCtx.setLineDash([3, 3]);
+    mapCtx.beginPath();
+    mapCtx.arc(sx, sy, 11 + 5 * pulse, 0, Math.PI * 2);
+    mapCtx.stroke();
+    mapCtx.setLineDash([]);
+  } else {
+    mapCtx.strokeStyle = 'rgba(52,211,153,' + (0.25 + 0.45 * (1 - pulse)).toFixed(3) + ')';
+    mapCtx.lineWidth = 1.5;
+    mapCtx.beginPath();
+    mapCtx.arc(sx, sy, 8 + 6 * pulse, 0, Math.PI * 2);
+    mapCtx.stroke();
+  }
+  mapCtx.fillStyle = '#ecfdf5';
   mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 5, 0, Math.PI*2);
+  mapCtx.arc(sx, sy, 5.5, 0, Math.PI * 2);
   mapCtx.fill();
-  mapCtx.shadowBlur = 0;
+  mapCtx.fillStyle = '#059669';
+  mapCtx.beginPath();
+  mapCtx.arc(sx, sy, 3.2, 0, Math.PI * 2);
+  mapCtx.fill();
+
+  // Home spot stays at lon 0°, equator — the ground point leaves it when
+  // the period is not one sidereal day.
+  const hx = marginL + (180 / 360) * mapW;
+  const hy = marginT + (90 / 180) * mapH;
+  mapCtx.fillStyle = '#fbbf24';
+  mapCtx.beginPath();
+  mapCtx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+  mapCtx.fill();
+  mapCtx.strokeStyle = light ? '#92400e' : '#fef3c7';
+  mapCtx.lineWidth = 1.2;
+  mapCtx.stroke();
+  mapCtx.font = '600 12px ' + (cs.getPropertyValue('--font-sans').trim() || 'sans-serif');
+  mapCtx.fillStyle = light ? '#92400e' : '#fde68a';
+  mapCtx.textAlign = 'left';
+  mapCtx.fillText('home', hx + 8, hy - 6);
 
   // (No numeric λ/φ overlay: at some widths it collided with the plot title,
   // and the green sub-satellite dot already carries the position visually.)
 }
 
 // Very rough continent outlines for context (equirectangular projection)
-function drawContinents(mL, mT, mW, mH){
-  mapCtx.fillStyle = 'rgba(74, 122, 158, 0.5)';
+function drawContinents(mL, mT, mW, mH, light){
+  mapCtx.fillStyle = light ? 'rgba(22,140,86,0.72)' : 'rgba(52,168,112,0.78)';
+  mapCtx.strokeStyle = light ? 'rgba(6,78,59,0.45)' : 'rgba(209,250,229,0.4)';
+  mapCtx.lineWidth = 1;
   // Longitude -180..180 -> x = mL + ((lon+180)/360)*mW
   // Latitude 90..-90 -> y = mT + ((90-lat)/180)*mH
   function pt(lon, lat){ return [mL + ((lon+180)/360)*mW, mT + ((90-lat)/180)*mH]; }
@@ -3382,6 +3653,7 @@ function drawContinents(mL, mT, mW, mH){
     pts.forEach((p, i)=>{ const [x,y] = pt(p[0], p[1]); if(i===0) mapCtx.moveTo(x,y); else mapCtx.lineTo(x,y); });
     mapCtx.closePath();
     mapCtx.fill();
+    mapCtx.stroke();
   }
   // Africa
   poly([[-18,35],[10,37],[35,32],[45,12],[50,-5],[40,-20],[20,-35],[15,-25],[10,-5],[-15,10],[-18,35]]);
@@ -3393,8 +3665,6 @@ function drawContinents(mL, mT, mW, mH){
   poly([[-80,10],[-55,5],[-40,-10],[-45,-35],[-70,-45],[-75,-25],[-80,10]]);
   // Australia
   poly([[115,-15],[145,-15],[150,-35],[115,-35],[115,-15]]);
-  // Antarctica strip
-  mapCtx.fillRect(mL, mT + (mH*160/180), mW, mH*20/180);
   // Greenland
   poly([[-50,72],[-25,72],[-20,60],[-45,60],[-50,72]]);
 }
@@ -3472,6 +3742,11 @@ presetGeoBtn.addEventListener('click', ()=>{
   updatePresetButtons();
   updateReadouts();
 });
+document.getElementById('show-map').addEventListener('change', ()=>{
+  setMapVisible(plotWanted());
+  onResize();
+});
+
 presetPolarBtn.addEventListener('click', ()=>{
   state.altitude = 800;
   state.inclination = 90;
@@ -3783,9 +4058,9 @@ Shell.init({
     { sel:'#box-presets',    mode:'hide', title:'Presets',         text:'Jumps to geostationary or polar orbit.' },
     { sel:'#box-alt',        mode:'hide', title:'Altitude h',      text:'Sets height. Only 35,786 km hangs still.' },
     { sel:'#box-inc',        mode:'hide', title:'Inclination i',   text:'Tilts the orbit from equatorial to polar.' },
+    { sel:'#box-map',        mode:'hide', title:'Ground track',    text:'Shows the map. A point if GEO; a drifting stripe if not.' },
     { sel:'#panel-readouts', mode:'hide', title:'Readouts',        text:'Live period T and ground-track drift per orbit.' },
     { sel:'#scene',          mode:'hide', title:'Earth and orbit', text:'Earth and the satellite orbit, drawn to scale.' },
-    { sel:'#map',            mode:'hide', title:'Ground track',    text:'A point if GEO; a drifting stripe if not.' },
     { sel:null, title:'That’s every control', text:'Explore freely — reopen either guide from the top bar.' }
   ];
   const cel = sel => sel ? document.querySelector(sel) : null;
@@ -3927,7 +4202,19 @@ Shell.init({
   giBtn.addEventListener('click', ()=> setGi(!giBtn.classList.contains('active')));
   cgBtn.addEventListener('click', ()=> setCg(!cgOn));
   const shellReset = document.getElementById('shell-reset');
-  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{ if(window.__fullReset) window.__fullReset(); }, 0); });
+  /* Mode-local reset: the shell listener already restored the experiment.
+     Restart only the CURRENT mode's flow — never switch modes. */
+  if(shellReset) shellReset.addEventListener('click', ()=>{ setTimeout(()=>{
+    if(cgOn){
+      if(cgAuto) setCgAuto(false);
+      if(cgVoice) cgVoice.stop();
+      cgStep = 0; cgMax = 0;
+      if(window.__cgPrepare) window.__cgPrepare();
+      cgShow(0);
+    } else if(giBtn.classList.contains('active')){
+      if(window.__fullReset) window.__fullReset();
+    }
+  }, 0); });
 })();
 </script>
 
@@ -4006,6 +4293,19 @@ Shell.init({
       g.addColorStop(0.72,'#24466e'); g.addColorStop(1,'#101d33');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(gx, gy, Re, 0, Math.PI*2); ctx.fill();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(gx, gy, Re, 0, Math.PI*2); ctx.clip();
+      [[20,8,16,18],[78,38,22,12],[-100,44,18,12],[-60,-14,10,16],[134,-22,12,8]].forEach(function(b){
+        const lon = b[0]*Math.PI/180, lat = b[1]*Math.PI/180;
+        const cpt = P(Re*Math.cos(lat)*Math.cos(lon+a), Re*Math.cos(lat)*Math.sin(lon+a), Re*Math.sin(lat));
+        if(cpt.d < Re*0.05) return;
+        const vis = Math.min(1, cpt.d/Re);
+        ctx.fillStyle = 'rgba(52,168,112,' + (0.35+0.55*vis) + ')';
+        ctx.beginPath();
+        ctx.ellipse(cpt.x, cpt.y, Math.max(2, b[2]*vis), Math.max(2, b[3]*vis), 0, 0, Math.PI*2);
+        ctx.fill();
+      });
+      ctx.restore();
       const shade = ctx.createRadialGradient(gx+Re*0.55, gy+Re*0.15, Re*0.2, gx, gy, Re*1.02);
       shade.addColorStop(0,'rgba(4,10,20,0)'); shade.addColorStop(0.75,'rgba(4,10,20,0)');
       shade.addColorStop(1,'rgba(4,10,20,.45)');
@@ -4298,6 +4598,20 @@ Shell.init({
 (function(){
   var FEEDBACK_URL="https://script.google.com/macros/s/AKfycbwxBcHhN-7GirEIJ3_CSSWGRo6R73CL_CRIaFrMCXY1Zgv7NGUsRfRSsm-ef0oZPPC5fg/exec";
   var COURSE="JEE", SIM="C079-geostationary-and-polar-satellites";
+  /* The pill belongs to the in-depth viewer, which loads a sim inside an
+     <iframe>. A top-level document is therefore a standalone copy — someone
+     opened the shared HTML directly — and it must not carry a reporting
+     channel back to our sheet. ?feedback=1 forces it on for direct testing. */
+  var QFB_SHOW = (function(){
+    try { if (/[?&]feedback=1(&|$)/.test(location.search)) return true; } catch(e){}
+    try { return window.self !== window.top; } catch(e){ return true; }
+  })();
+  if (!QFB_SHOW) {
+    var _qp = document.getElementById('qfbPill'), _qb = document.getElementById('qfbBackdrop');
+    if (_qp) _qp.remove();
+    if (_qb) _qb.remove();
+    return;
+  }
   var pill=document.getElementById('qfbPill'),bd=document.getElementById('qfbBackdrop'),
       txt=document.getElementById('qfbText'),hp=document.getElementById('qfbHp'),
       msg=document.getElementById('qfbMsg'),sub=document.getElementById('qfbSubmit'),
