@@ -5357,6 +5357,7 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
           <ul class="pts">
             <li>Double the gradient and you <b>double every force and every gap</b> &mdash; the pattern is linear in &part;B/&part;z, never squared.</li>
             <li>The <b>outermost</b> band always feels the biggest force, |F<sub>z</sub>| = g<sub>J</sub>&thinsp;j&thinsp;&mu;<sub>B</sub>&thinsp;&part;B/&part;z, so the pattern's half-width is j&zeta;.</li>
+            <li>The sim's screen is drawn in <b>pixels, not millimetres</b>: its magnet, drift and atom speed are scaled to fit the window, so &zeta; has no real size here and only the <b>ratios</b> are physical. For a real gap see ch 05: Gerlach's 3.5&nbsp;cm magnet at 1000&nbsp;T/m gives 0.21&nbsp;mm, so at the sim's 3&nbsp;T/m the same magnet would open only about <b>0.6&nbsp;&micro;m</b>.</li>
             <li>The sim's source is <b>unpolarised</b>: it deals each atom one of the 2j+1 values with <b>equal probability</b>, which is why the Beam Legend counts stay level as they grow.</li>
             <li id="phys-worked"></li>
           </ul>
@@ -5748,8 +5749,8 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 </svg>
 <div class="cap">The magnet ties <i>where the atom is</i> to <i>what m<sub>J</sub> is</i> &mdash; that link is what makes it a measurement.</div></div>
           <ul class="pts">
-            <li>Before the magnet the spin state is a <b>superposition</b> over m<sub>J</sub>. The magnet gives each term a different deflection, so by the screen the <b>position carries the answer</b> and reading the spot reads m<sub>J</sub>.</li>
-            <li>The probability of landing in band m<sub>J</sub> is <b>|c<sub>m</sub>|&sup2;</b>. A hot oven emits an <b>unpolarised mixture</b> &mdash; every m<sub>J</sub> equally likely &mdash; so for this sim <b>P = 1/(2j+1)</b> for every band.</li>
+            <li>Each atom arrives in some spin state |&chi;&rang;, a <b>superposition</b> over m<sub>J</sub>. The magnet gives each term a different deflection, so by the screen the <b>position carries the answer</b> and reading the spot reads m<sub>J</sub>.</li>
+            <li>For that atom, the probability of landing in band m<sub>J</sub> is <b>|c<sub>m</sub>|&sup2;</b>. But an oven does not send one state: it sends a <b>random mix</b> of them, pointing every which way &mdash; an <b>unpolarised mixture</b>, not one superposition. Averaged over the beam every |c<sub>m</sub>|&sup2; is 1/(2j+1), so for this sim <b>P = 1/(2j+1)</b> for every band.</li>
             <li>What the sim actually computes: it <b>draws one m<sub>J</sub> at random</b> from the allowed set and then integrates the classical force for that value. The coloured dots are <b>individual detections</b> &mdash; the sheet plots no wavefunction anywhere, and neither does the sim.</li>
             <li>What it deliberately leaves out: no Larmor precession, no second magnet along another axis, no partial measurement. It reproduces the <b>outcome statistics</b> of one z measurement, nothing more.</li>
           </ul>
@@ -6580,10 +6581,11 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
           +fmt(2*j,1)+'ζ wide. Against the default 3 T/m that is <b>'+fmt(b/B_DEF,2)+'×</b> the spacing.'
           +' The source is unpolarised, so at '+r+' atom'+(r===1?'':'s')+'/s each band collects about <b>'
           +fmt(r/N,1)+' count'+(r/N===1?'':'s')+'/s</b>: after 100 detections a band holds '+fmt(100/N,0)
-          +' ± '+fmt(Math.sqrt(100/N),0)+' of them.';
+          +' ± '+fmt(Math.sqrt(100*(1/N)*(1-1/N)),0)+' of them.';
       }
       txt+=' <i>(&mu;<sub>B</sub> = 9.274 &times; 10<sup>&minus;24</sup> J/T; this sim sets g<sub>J</sub> = 1,'
-        +' so a real silver atom with g<sub>J</sub> = 2 feels twice this force. The ± is the √N counting estimate.)</i>';
+        +' so a real silver atom with g<sub>J</sub> = 2 feels twice this force.'
+        +(N>1?' The ± is the binomial spread √(np(1−p)) for n = 100 detections and p = 1/(2j+1).':'')+')</i>';
       w.innerHTML=txt;
     }
   }
@@ -6771,5 +6773,46 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 })();
 </script>
 
+<script>
+/* Physics sheet — Guided Inquiry pause (part of the sheet layer; touches nothing else).
+   While a Guided Inquiry is in progress, the "See it in the sim" buttons would drive the sim
+   to states the inquiry has not reached yet, and their toasts would state gated answers.
+   So while the inquiry panel is showing, the buttons are paused and a note says why. In Free
+   Exploration, the Controls Guide, or once the inquiry is finished, the sheet works as before. */
+(function(){
+  'use strict';
+  var backdrop = document.getElementById('phys-backdrop');
+  var art = document.getElementById('phys-art');
+  if (!backdrop || !art) return;
+  function giActive(){ var c = document.getElementById('inq-cards'); return !!(c && c.offsetParent); }
+  var note = document.createElement('div');
+  note.className = 'phys-gi-note';
+  note.setAttribute('role', 'note');
+  note.hidden = true;
+  note.innerHTML = '<b>You’re partway through the Guided Inquiry.</b> This sheet talks through the answers, '
+    + 'so the “See it in the sim” buttons are paused until you finish the inquiry or switch to Free Exploration.';
+  note.style.cssText = 'margin:0 0 16px;padding:10px 14px;border:1px solid rgba(127,127,127,.38);'
+    + 'border-radius:10px;background:rgba(127,127,127,.09);font-size:13.5px;line-height:1.5;color:inherit;';
+  art.parentNode.insertBefore(note, art);
+  function sync(){
+    var on = giActive() && backdrop.classList.contains('open');
+    note.hidden = !on;
+    Array.prototype.forEach.call(art.querySelectorAll('.seesim'), function(b){
+      b.setAttribute('aria-disabled', on ? 'true' : 'false');
+      b.style.opacity = on ? '0.45' : '';
+      b.style.cursor = on ? 'not-allowed' : '';
+      if (on) b.title = 'Paused during the Guided Inquiry'; else if (b.title === 'Paused during the Guided Inquiry') b.removeAttribute('title');
+    });
+  }
+  new MutationObserver(sync).observe(backdrop, { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('#phys-art .seesim') : null;
+    if (!b || !giActive()) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    sync(); note.scrollIntoView({ block: 'nearest' });
+  }, true);
+  sync();
+})();
+</script>
 </body>
 </html>

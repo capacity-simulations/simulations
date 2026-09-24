@@ -4988,7 +4988,7 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
             <li id="phys-worked"></li>
           </ul>
           <button class="shell-btn seesim" data-show="replay">▶ Replay this run in the sim</button>
-          <button class="shell-btn seesim" data-show="close">▶ Close the band — set m<sub>B</sub> = m<sub>A</sub></button>
+          <button class="shell-btn seesim" data-show="close"><span>▶ Close the band — set m<sub>B</sub> = m<sub>A</sub></span></button>
         </div></div>
 
         <div class="ch"><div class="no">04</div><div>
@@ -5382,11 +5382,11 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
 <div class="cap">The gap solution: k picks up an imaginary part, and the pattern decays instead of travelling. This is the κ the sim's envelope readout reports.</div></div>
           <ul class="pts">
             <li>Put ω between the branches and the relation demands sin²(ka/2) &gt; 1. <b>No real k solves it</b> — so there is no travelling wave available to be weak.</li>
-            <li>The algebra returns k = π/a + iκ instead: neighbouring cells still alternate, but the amplitude falls by e<sup>−κa</sup> every cell. At the sim's default 8 THz that is <b>×0.35 per cell</b> — ten cells in, about 3×10⁻⁵ of the drive.</li>
-            <li>The chain's equations are <b>linear</b>, so the decay rate cannot depend on how hard you shake. Turning the amplitude up moves the dead point by nothing — which is exactly the prediction the guided inquiry asks you to commit to.</li>
+            <li>The algebra returns k = π/a + iκ instead: neighbouring cells still alternate, but the amplitude falls by e<sup>−κa</sup> every cell. At 8 THz (where the guided inquiry drives, inside the default 6.18&ndash;10.70 THz band) that is <b>×0.35 per cell</b> — ten cells in, about 3×10⁻⁵ of the drive.</li>
+            <li>The chain's equations are <b>linear</b>, so the decay per cell cannot depend on how hard you shake. That is why the sim needs <b>no amplitude control</b>: no drive strength turns &ldquo;dies within a few cells&rdquo; into &ldquo;travels, just weaker&rdquo;.</li>
             <li>Above the optical maximum the same thing happens for a different reason: there is no mode there either, so k = iκ near <b>k = 0</b> rather than the zone edge, and the sim labels that trace <i>evanescent — above both branches</i>.</li>
           </ul>
-          <button class="shell-btn seesim" data-show="gap">▶ See it in the sim — drive into the middle of the band</button>
+          <button class="shell-btn seesim" data-show="gap">▶ See it in the sim — drive into the band at 8 THz</button>
         </div></div>
 
         <div class="ch"><div class="no">05</div><div>
@@ -6232,9 +6232,11 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
      (pitfalls #6). The hook re-uses the sim's own setters. */
   function targetF(key,f,Kv,mb){
     var b=bandsOf(Kv,mb);
-    if(key==='ripple') return Math.max(0.2,Math.min(14,0.32*b.min));
+    /* at the sim's default chain the ripple is the default 2 THz drive, as in the ch 01 figure and the worked run */
+    if(key==='ripple') return (Math.abs(mb-12)<1e-9&&Math.abs(Kv-15)<1e-9)?2:Math.max(0.2,Math.min(14,0.32*b.min));
     if(key==='optical') return Math.max(0.2,Math.min(14,0.5*(b.max+b.opt0)));
-    if(key==='gap')     return Math.max(0.2,Math.min(14,0.5*(b.min+b.max)));
+    /* 8 THz (where the guided inquiry drives and ch 04 quotes) whenever it lies inside the band; else the band centre */
+    if(key==='gap')     return (8>b.min&&8<b.max)?8:Math.max(0.2,Math.min(14,0.5*(b.min+b.max)));
     return f;
   }
   Array.prototype.forEach.call(document.querySelectorAll('.seesim'),function(btn){
@@ -6249,9 +6251,11 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
         toast('<b>Contrast gone.</b> m<sub>B</sub> = m<sub>A</sub> = 4 u — the branches now touch at k = π/a and the width readout should read 0.00 THz.');
         return;
       }
+      var pre='';
       if(key==='gap'&&!b.open){
-        toast('<b>There is no band to enter.</b> Your masses are equal, so the width is 0.00 THz — move m<sub>B</sub> off 4 u first.');
-        return;
+        /* equal masses leave no band: restore the default m_B = 12 u so there is a band to enter */
+        mb=12; b=bandsOf(Kv,mb);
+        pre='<b>m<sub>B</sub> back to 12 u</b> — with equal masses there was no band to enter. ';
       }
       var nf=targetF(key,f,Kv,mb);
       if(key==='ripple'){
@@ -6275,7 +6279,7 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
       }
       closePhys(true);
       H.scene({freq:nf, massB:mb, springK:Kv, launch:true, playing:true});
-      toast(msg);
+      toast(pre+msg);
     });
   });
 
@@ -6377,5 +6381,46 @@ new MutationObserver(()=>{ if(!ov.classList.contains('hidden')) drawHero(); })
 })();
 </script>
 
+<script>
+/* Physics sheet — Guided Inquiry pause (part of the sheet layer; touches nothing else).
+   While a Guided Inquiry is in progress, the "See it in the sim" buttons would drive the sim
+   to states the inquiry has not reached yet, and their toasts would state gated answers.
+   So while the inquiry panel is showing, the buttons are paused and a note says why. In Free
+   Exploration, the Controls Guide, or once the inquiry is finished, the sheet works as before. */
+(function(){
+  'use strict';
+  var backdrop = document.getElementById('phys-backdrop');
+  var art = document.getElementById('phys-art');
+  if (!backdrop || !art) return;
+  function giActive(){ var c = document.getElementById('inq-cards'); return !!(c && c.offsetParent); }
+  var note = document.createElement('div');
+  note.className = 'phys-gi-note';
+  note.setAttribute('role', 'note');
+  note.hidden = true;
+  note.innerHTML = '<b>You’re partway through the Guided Inquiry.</b> This sheet talks through the answers, '
+    + 'so the “See it in the sim” buttons are paused until you finish the inquiry or switch to Free Exploration.';
+  note.style.cssText = 'margin:0 0 16px;padding:10px 14px;border:1px solid rgba(127,127,127,.38);'
+    + 'border-radius:10px;background:rgba(127,127,127,.09);font-size:13.5px;line-height:1.5;color:inherit;';
+  art.parentNode.insertBefore(note, art);
+  function sync(){
+    var on = giActive() && backdrop.classList.contains('open');
+    note.hidden = !on;
+    Array.prototype.forEach.call(art.querySelectorAll('.seesim'), function(b){
+      b.setAttribute('aria-disabled', on ? 'true' : 'false');
+      b.style.opacity = on ? '0.45' : '';
+      b.style.cursor = on ? 'not-allowed' : '';
+      if (on) b.title = 'Paused during the Guided Inquiry'; else if (b.title === 'Paused during the Guided Inquiry') b.removeAttribute('title');
+    });
+  }
+  new MutationObserver(sync).observe(backdrop, { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('#phys-art .seesim') : null;
+    if (!b || !giActive()) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    sync(); note.scrollIntoView({ block: 'nearest' });
+  }, true);
+  sync();
+})();
+</script>
 </body>
 </html>
