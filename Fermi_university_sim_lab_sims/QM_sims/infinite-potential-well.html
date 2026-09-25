@@ -1763,32 +1763,7 @@
         animate();
     </script>
 
-<!-- Feedback pill: posts to the Sims_Feedback sheet (QM tab) via the shared Apps Script endpoint.
-     Same payload/endpoint as Sims_user_versions/viewer.html — keep FEEDBACK_URL in sync. -->
 <style>
-  .qfb-pill{position:fixed;right:18px;bottom:18px;z-index:99990;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(34,211,238,.92);color:rgba(7,9,20,.94);font:700 13px/1 ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;border:0;cursor:pointer;box-shadow:0 14px 28px rgba(0,0,0,.35);user-select:none}
-  .qfb-pill:hover{filter:brightness(1.06) saturate(1.06)}
-  .qfb-pill:active{transform:translateY(1px) scale(.99)}
-  /* The pill is z-index 99990 against the welcome overlay's 5000, so it painted
-     over — and swallowed the clicks of — the overlay's controls at narrow widths. */
-  #welcome-overlay:not(.hidden) ~ .qfb-pill{display:none}
-  body:has(#welcome-overlay:not(.hidden)) .qfb-pill{display:none}
-  .qfb-backdrop{position:fixed;inset:0;background:rgba(3,5,15,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:99991;padding:20px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;color:#eef2ff}
-  .qfb-backdrop.show{display:flex}
-  .qfb-modal{width:100%;max-width:520px;background:linear-gradient(180deg,#101430 0%,#0a0d22 100%);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55)}
-  .qfb-modal h3{margin:0 0 4px;font-size:1.05rem}
-  .qfb-sub{color:rgba(203,213,255,.72);font-size:.85rem;margin:0 0 14px}
-  .qfb-modal textarea{width:100%;min-height:140px;padding:11px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.32);color:#eef2ff;font:inherit;font-size:.95rem;resize:vertical;outline:none;box-sizing:border-box}
-  .qfb-modal textarea:focus{border-color:rgba(34,211,238,.55)}
-  .qfb-hp{position:absolute;left:-9999px;opacity:0;pointer-events:none}
-  .qfb-row{margin-top:14px;display:flex;gap:10px;justify-content:flex-end;align-items:center}
-  .qfb-msg{flex:1;font-size:.85rem;color:rgba(203,213,255,.72)}
-  .qfb-msg.ok{color:rgba(163,255,189,.95)}
-  .qfb-msg.err{color:#ff9a9a}
-  .qfb-btn2{background:transparent;color:rgba(203,213,255,.72);border:1px solid rgba(255,255,255,.16);padding:9px 14px;border-radius:999px;cursor:pointer;font-weight:600}
-  .qfb-btn2:hover{color:#eef2ff;border-color:#eef2ff}
-  .qfb-btn1{background:#22d3ee;color:rgba(7,9,20,.92);border:0;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:800}
-  .qfb-btn1:disabled{opacity:.55;cursor:not-allowed}
 
         /* ===== template variable bridge — map the template's names onto this sim's ===== */
         :root{
@@ -2024,7 +1999,6 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
            feedback-pill overlap is accepted — reviewer-only chrome; never
            raise the nav to dodge it (it would collide with real controls). */
         .cg-nav{ right:18px; width:304px; box-sizing:border-box; }
-        body:has(#welcome-overlay:not(.hidden)) .qfb-pill{ display:none; }
 
     
         /* LAYOUT CONTRACT: the inquiry zone is the FIRST block in the right
@@ -2033,64 +2007,6 @@ body.light-theme #inq-auto.active, html[data-theme="light"] #inq-auto.active{col
            bar, nothing between, controls below). */
         .sidebar > .inq-zone{padding:14px 20px 16px;border-bottom:1px solid var(--border-color);flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
     </style>
-<button class="qfb-pill" id="qfbPill" type="button" title="Report a bug or leave feedback"><span>💬</span><span>Feedback</span></button>
-<div class="qfb-backdrop" id="qfbBackdrop" role="dialog" aria-modal="true" aria-labelledby="qfbTitle">
-  <div class="qfb-modal">
-    <h3 id="qfbTitle">Feedback</h3>
-    <p class="qfb-sub">infinite-potential-well</p>
-    <textarea id="qfbText" placeholder="Describe the issue or suggestion. Include steps to reproduce if it is a bug."></textarea>
-    <input class="qfb-hp" id="qfbHp" tabindex="-1" autocomplete="off" aria-hidden="true" />
-    <div class="qfb-row">
-      <span class="qfb-msg" id="qfbMsg"></span>
-      <button class="qfb-btn2" id="qfbCancel" type="button">Cancel</button>
-      <button class="qfb-btn1" id="qfbSubmit" type="button">Submit</button>
-    </div>
-  </div>
-</div>
-<script>
-(function(){
-  var FEEDBACK_URL="https://script.google.com/macros/s/AKfycbwxBcHhN-7GirEIJ3_CSSWGRo6R73CL_CRIaFrMCXY1Zgv7NGUsRfRSsm-ef0oZPPC5fg/exec";
-  var COURSE="QM", SIM="infinite-potential-well";
-  /* The pill belongs to the in-depth viewer, which loads a sim inside an
-     <iframe>. A top-level document is therefore a standalone copy — someone
-     opened the shared HTML directly — and it must not carry a reporting
-     channel back to our sheet. ?feedback=1 forces it on for direct testing. */
-  var QFB_SHOW = (function(){
-    try { if (/[?&]feedback=1(&|$)/.test(location.search)) return true; } catch(e){}
-    try { return window.self !== window.top; } catch(e){ return true; }
-  })();
-  if (!QFB_SHOW) {
-    var _qp = document.getElementById('qfbPill'), _qb = document.getElementById('qfbBackdrop');
-    if (_qp) _qp.remove();
-    if (_qb) _qb.remove();
-    return;
-  }
-  var pill=document.getElementById('qfbPill'),bd=document.getElementById('qfbBackdrop'),
-      txt=document.getElementById('qfbText'),hp=document.getElementById('qfbHp'),
-      msg=document.getElementById('qfbMsg'),sub=document.getElementById('qfbSubmit'),
-      can=document.getElementById('qfbCancel');
-  function open(){txt.value="";hp.value="";msg.textContent="";msg.className="qfb-msg";sub.disabled=false;bd.classList.add('show');setTimeout(function(){txt.focus();},30);}
-  function close(){bd.classList.remove('show');}
-  pill.addEventListener('click',open);
-  can.addEventListener('click',close);
-  bd.addEventListener('click',function(e){if(e.target===bd)close();});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&bd.classList.contains('show'))close();});
-  function send(){
-    var message=txt.value.trim();
-    if(!message){msg.textContent="Please type your feedback first.";msg.className="qfb-msg err";return;}
-    sub.disabled=true;msg.textContent="Sending…";msg.className="qfb-msg";
-    var fd=new FormData();
-    fd.append('course',COURSE);fd.append('sim',SIM);fd.append('message',message);fd.append('hp',hp.value);
-    fetch(FEEDBACK_URL,{method:'POST',body:fd}).then(function(r){return r.json().catch(function(){return null;});}).then(function(data){
-      if(data&&data.ok){msg.textContent="Recorded as "+data.version+". Thanks!";msg.className="qfb-msg ok";setTimeout(close,1100);}
-      else if(data&&data.err){msg.textContent="Error: "+data.err;msg.className="qfb-msg err";sub.disabled=false;}
-      else{msg.textContent="Sent. Check the sheet.";msg.className="qfb-msg ok";setTimeout(close,1100);}
-    }).catch(function(){msg.textContent="Network error. Try again.";msg.className="qfb-msg err";sub.disabled=false;});
-  }
-  sub.addEventListener('click',send);
-  txt.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter')send();});
-})();
-</script>
 
 <script>
 /* ===== Card voiceover engine (shared by both flows) ===== */
@@ -4824,11 +4740,11 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 <div class="cap">What the green dots are sampling — and why ⟨x⟩ never moves off centre.</div></div>
           <ul class="pts">
             <li>Double n → <b>four times</b> the energy, half the wavelength, twice the momentum. Box length L is fixed at 1 in this sim; it is a readout, not a slider.</li>
-            <li>⟨p⟩ = 0 for every n: a standing wave is <b>equal parts left- and right-moving</b>. The energy is real, the average momentum is not.</li>
+            <li>⟨p⟩ = 0 for every n: a standing wave is <b>equal parts left- and right-moving</b>. The kinetic energy is non-zero, yet the average momentum is zero.</li>
             <li id="phys-worked"></li>
           </ul>
           <button class="phys-btn seesim" data-show="measure">▶ Run this state with the histogram on</button>
-          <button class="phys-btn seesim" data-show="defaults">▶ Replay this run in the sim</button>
+          <button class="phys-btn seesim" data-show="fast">▶ Run it at 25 /s and time it</button>
         </div></div>
 
         <div class="ch"><div class="no">04</div><div>
@@ -5410,8 +5326,9 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 </svg>
 </div>
           <ul class="pts">
-            <li>An electron confined to <b>0.5 nm</b> — a dye molecule, a small quantum dot — has E₁ ≈ <b>1.5 eV</b>. That is a visible photon: confinement sets the colour.</li>
-            <li>Because <b>E₁ ∝ 1/L²</b>, a bigger dot glows redder. Grow a CdSe dot from 2 nm to 6 nm and its emission walks from blue to red — the first-order explanation is this box.</li>
+            <li><b>A photon carries a jump, not a rung.</b> An electron confined to <b>0.5 nm</b> has E₁ ≈ 1.5 eV, but its first jump, E₂ − E₁ = 3E₁ ≈ <b>4.5 eV</b>, is an ultraviolet photon (≈ 275 nm). Stretch the box to 1 nm and the same jump drops to ≈ 1.1 eV, near-infrared (≈ 1100 nm).</li>
+            <li><b>Real dyes fill the ladder, two electrons per rung</b>, and light lifts one off the top. Six electrons in a 1 nm chain fill n = 1–3, so the first jump is 3 → 4 = 7E₁ ≈ <b>2.6 eV</b>: blue light, ≈ 470 nm. Confinement sets the colour (a first-order, free-electron estimate).</li>
+            <li>Because <b>E₁ ∝ 1/L²</b>, a bigger dot glows redder. Grow a CdSe dot from 2 nm to 6 nm and its emission walks from blue to red. The <b>trend</b> is this box; the size of the shift is not: in CdSe the electron's effective mass is ≈ 0.13 mₑ and the dot confines it in all three directions, so the real shifts are tens of times larger than the free-electron line in the figure below.</li>
             <li>For a <b>1 g bead in a 10 cm box</b>, E₁ ≈ 3×10⁻⁴⁴ eV and a 1 mm/s drift sits at n ≈ 3×10²⁶. The rungs are still there; nothing could ever resolve them.</li>
             <li>The same E₁ is <b>confinement energy</b>: squeeze a particle and it fights back. That cost is why matter has a size.</li>
           </ul>
@@ -5916,7 +5833,7 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 <use xlink:href="#d3-glyph-0-24" x="126.969269" y="72.320036"/>
 </g>
 </svg>
-<div class="cap">One electron, computed: E₁ against box width, straight on log axes with slope −2.</div></div>
+<div class="cap">One free electron in a 1D box, computed: E₁ against box width, straight on log axes with slope −2.</div></div>
         </div></div>
 
         <div class="ch"><div class="no">06</div><div>
@@ -5926,13 +5843,15 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
             <li><b>"Triple n, triple the energy."</b> Momentum triples; energy is p²/2m, so it goes up <b>nine</b> times. The sim's readout says 9.00 E₁.</li>
             <li><b>"At a node the particle is just moving through quickly."</b> A node is not a fast point on a trajectory — it is a place with <b>zero probability</b>. There is no trajectory here.</li>
             <li><b>"The smeared-out wave <i>is</i> the particle."</b> Every measurement returns <b>one</b> position. The smear is the pattern in the ensemble — which is exactly what the histogram builds.</li>
+            <li><b>"The quantum particle prefers the middle, just like a classical one."</b> A classical particle bouncing at constant speed is found <b>equally often anywhere</b>: P(x) = 1/L, flat. At n = 1 the quantum one piles up in the centre and is never at the walls; raise n and the humps crowd together until, averaged over a few humps, the histogram is back to the flat 1/L. That is the <b>classical limit</b>.</li>
           </ul>
+          <button class="phys-btn seesim" data-show="classical">▶ See it in the sim — n = 10 with the histogram on</button>
         </div></div>
 
         <div class="ch"><div class="no">07</div><div>
           <h3>Ninety-second self-test</h3>
-          <details class="phys-q"><summary>What would the n = 0 state look like?</summary>
-            <p class="ans">It would not exist. ψ₀ = √(2/L) sin(0) = 0 at every x, so the probability of finding the particle anywhere is zero. The lowest allowed state is n = 1 with E₁ = π²ħ²/2mL² — the zero-point energy a confined particle can never give up.</p></details>
+          <details class="phys-q"><summary>Where in the box is an n = 2 particle never found — and where is its average position ⟨x⟩?</summary>
+            <p class="ans">Never at the centre: ψ₂ = √(2/L) sin(2πx/L) crosses zero at x = L/2, so |ψ₂|² = 0 there. Yet ⟨x⟩ = L/2 exactly, because the two humps are mirror images about the centre. The average position is a place the particle is never found — set n = 2 with the histogram on and the two middle bins stay all but empty while the sim's Position ⟨x⟩ readout sits at 0.50 L.</p></details>
           <details class="phys-q"><summary>Double the box length and double n. What happens to the energy?</summary>
             <p class="ans">Nothing — E<sub>n</sub> = n²π²ħ²/2mL² depends on n²/L², and doubling both leaves it unchanged (the wavelength λ = 2L/n is also unchanged). This sim fixes L = 1, so you can only test the n half of it.</p></details>
           <details class="phys-q"><summary>The top plot moves and the bottom one doesn't. Why?</summary>
@@ -6045,7 +5964,7 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
     var w=$('phys-worked');
     if(w){
       w.innerHTML='<b>Worked run — your settings, end to end:</b> n = '+n
-        +' → λ'+sn+' = 2L/'+n+' = '+fmt(lam,3)+' L → p'+sn+' = '+n+'πħ/L'
+        +' → λ'+sn+' = 2L/'+n+' = '+fmt(lam,3)+' L → p'+sn+' = '+(n===1?'':n)+'πħ/L'
         +' → E'+sn+' = '+n+'² E₁ = <b>'+fmt(n*n,2)+' E₁</b>, with E₁ = π²ħ²/2mL².'
         +' The wave carries '+(n-1)+' node'+(n-1===1?'':'s')+' and |ψ'+sn+'|² shows '+n+' peak'+(n===1?'':'s')+'; the spread is Δx = '+fmt(dx,3)+' L.'
         +' At '+r+' measurement'+(r===1?'':'s')+'/s the tallest of the 50 bins takes ≈ '+fmt(100*p,1)+'% of the dots,'
@@ -6106,15 +6025,24 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
     ground: {n:1, msg:'<b>One half-wave, no nodes.</b> ψ₁ arcs from wall to wall without ever crossing zero inside, so |ψ₁|² is a single hump and the measured dots pile up at the centre.'},
     nodes:  {n:3, msg:'<b>Three half-waves, two nodes.</b> The red dots on ψ₃ mark where the particle is never found — the histogram grows three humps with two gaps, and the energy readout jumps to 9.00 E₁.'},
     measure:{msg:''},
-    defaults:{msg:''}
+    fast:{rate:25, msg:''},
+    classical:{n:10, msg:''}
   };
   Array.prototype.forEach.call(document.querySelectorAll('.seesim'),function(btn){
     btn.addEventListener('click',function(){
       var key=btn.getAttribute('data-show'), s=SHOW[key], H=hooks();
       if(!s||!H||typeof H.scene!=='function') return;
-      var n=(s.n!==undefined)?s.n:curN(), r=curRate();
+      var n=(s.n!==undefined)?s.n:curN(), r0=curRate(), r=(s.rate!==undefined)?s.rate:r0;
       var msg=s.msg;
-      if(key==='measure'||key==='defaults'){
+      if(key==='fast'){
+        var pf=peakBinP(n);
+        msg='<b>Same state, top rate.</b> n = '+n+' at 25 /s: the tallest bin should reach ≈ 100 counts in about '+dur(100/(pf*25))
+          +(r0!==25?(', against about '+dur(100/(pf*r0))+' at your '+r0+' /s. The shape it builds is the same |ψ'+sub(n)+'|²; only the wait changes.'):'.');
+      }
+      if(key==='classical'){
+        msg='<b>Ten humps, one flat average.</b> n = 10 at '+r+' /s: the histogram grows ten humps with nine empty nodes between them, yet any stretch a whole number of humps wide holds exactly its fair share of dots: the flat classical 1/L.';
+      }
+      if(key==='measure'){
         var p=peakBinP(n);
         msg='<b>Your worked run.</b> n = '+n+' at '+r+' /s → E = '+fmt(n*n,2)+' E₁, '+(n-1)+' node'+(n-1===1?'':'s')
           +', Δx = '+fmt(dxOf(n),3)+' L. The tallest bin should reach ≈ 100 counts in about '+dur(100/(p*r))+'.';
@@ -6219,5 +6147,76 @@ html[data-theme="light"] .phys-btn.primary{color:#fff;}
 })();
 </script>
 
+<script>
+/* Physics sheet — Guided Inquiry pause (part of the sheet layer; touches nothing else).
+   While a Guided Inquiry is in progress, the "See it in the sim" buttons would drive the sim
+   to states the inquiry has not reached yet, and their toasts would state gated answers.
+   So while the inquiry panel is showing, the buttons are paused and a note says why. In Free
+   Exploration, the Controls Guide, or once the inquiry is finished, the sheet works as before. */
+(function(){
+  'use strict';
+  var backdrop = document.getElementById('phys-backdrop');
+  var art = document.getElementById('phys-art');
+  if (!backdrop || !art) return;
+  function giActive(){ var c = document.getElementById('inq-cards'); return !!(c && c.offsetParent); }
+  var note = document.createElement('div');
+  note.className = 'phys-gi-note';
+  note.setAttribute('role', 'note');
+  note.hidden = true;
+  note.innerHTML = '<b>You’re partway through the Guided Inquiry.</b> This sheet talks through the answers, '
+    + 'so the “See it in the sim” buttons are paused until you finish the inquiry or switch to Free Exploration.';
+  note.style.cssText = 'margin:0 0 16px;padding:10px 14px;border:1px solid rgba(127,127,127,.38);'
+    + 'border-radius:10px;background:rgba(127,127,127,.09);font-size:13.5px;line-height:1.5;color:inherit;';
+  art.parentNode.insertBefore(note, art);
+  function sync(){
+    var on = giActive() && backdrop.classList.contains('open');
+    note.hidden = !on;
+    if (!on && typeof hideHint === 'function') hideHint();
+    Array.prototype.forEach.call(art.querySelectorAll('.seesim'), function(b){
+      b.setAttribute('aria-disabled', on ? 'true' : 'false');
+      b.style.opacity = on ? '0.45' : '';
+      b.style.cursor = on ? 'not-allowed' : '';
+      if (on) b.title = 'Paused during the Guided Inquiry'; else if (b.title === 'Paused during the Guided Inquiry') b.removeAttribute('title');
+    });
+  }
+  new MutationObserver(sync).observe(backdrop, { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('#phys-art .seesim') : null;
+    if (!b || !giActive()) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    sync(); hint(b);   // tell the student right where they clicked; never scroll the sheet
+  }, true);
+  // A small floating hint beside the pressed button. It lives on <body> (outside the sheet's
+  // article, so the downloadable copy never includes it), takes no layout space and ignores the
+  // pointer. It follows its button if the sheet scrolls, and fades after a moment, when the
+  // button leaves the view, or when the sheet closes.
+  var hintEl = null, hintT = 0, hintBtn = null;
+  function hideHint(){ if (hintEl) hintEl.style.opacity = '0'; hintBtn = null; }
+  function place(btn){
+    var r = btn.getBoundingClientRect(), h = hintEl.offsetHeight || 52;
+    if (r.bottom < 0 || r.top > window.innerHeight) { hideHint(); return; }
+    var top = r.bottom + 8; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - 8 - h);
+    hintEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 296)) + 'px';
+    hintEl.style.top = top + 'px';
+  }
+  function hint(btn){
+    if (!hintEl) {
+      hintEl = document.createElement('div');
+      hintEl.className = 'phys-gi-hint';
+      hintEl.setAttribute('role', 'status');
+      hintEl.style.cssText = 'position:fixed;z-index:2147483000;max-width:280px;padding:7px 11px;border-radius:8px;'
+        + 'font-size:12.5px;line-height:1.4;background:rgba(20,24,28,.95);color:#f1f5f4;'
+        + 'box-shadow:0 6px 18px rgba(0,0,0,.3);pointer-events:none;opacity:0;transition:opacity .18s;';
+      hintEl.textContent = 'Paused during the Guided Inquiry. Finish the inquiry or switch to Free Exploration to use this.';
+      document.body.appendChild(hintEl);
+    }
+    hintBtn = btn; place(btn);
+    if (hintBtn) hintEl.style.opacity = '1';
+    clearTimeout(hintT); hintT = setTimeout(hideHint, 2600);
+  }
+  document.addEventListener('scroll', function(){ if (hintBtn) place(hintBtn); }, true);
+  sync();
+})();
+</script>
 </body>
 </html>
