@@ -309,6 +309,9 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
 .sim-btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
 .sim-btn{flex:1 1 auto;min-width:118px;padding:7px 10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;font-size:14px;cursor:pointer;box-sizing:border-box;overflow-wrap:anywhere;}
 .sim-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:700;}
+.sim-btn:disabled{opacity:.45;cursor:not-allowed;border-style:dashed;}
+.sim-progress{height:5px;margin-top:6px;border-radius:3px;background:var(--border);overflow:hidden;}
+.sim-progress>div{height:100%;width:0;background:var(--accent);transition:width .1s linear;}
 .sim-note{margin-top:8px;font-size:13px;line-height:1.55;color:var(--muted);}
 .sim-tbl{width:100%;border-collapse:collapse;font-size:14px;color:var(--text);}
 .sim-tbl td{padding:5px 2px;border-bottom:1px solid var(--border);overflow-wrap:anywhere;}
@@ -534,6 +537,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
               <button id="runBtn" class="sim-btn">❄ Cool &amp; count</button>
               <button id="flipBtn" class="sim-btn">Flip B (now ↑)</button>
             </div>
+            <div id="runProg" class="sim-progress" hidden><div id="runProgFill"></div></div>
             <div class="sim-note ht-hide">Each run represents 18 minutes. The source loses most of its spin alignment during the first 6 minutes and then remains warm.</div>
             <div class="sim-note ht-hide">Temperature controls the degree of spin alignment. During a recorded run, the temperature changes automatically; the magnetic field remains fixed.</div>
           </div>
@@ -1121,31 +1125,49 @@ function buildSpinSites(){
   }
   return sites.slice(0, NSPIN);
 }
-function resampleSpins(){
+/* Drawn spins: each precesses about B on a cone (Larmor picture, schematic
+   rate). The cone angle changes only at thermal-relaxation events, and then
+   eases smoothly to the new value instead of jumping. cosT is measured from
+   the +B direction; the cone-angle distribution is the same Langevin sampler
+   used for the decays, so the drawn ensemble still has mean alignment P. */
+function spinVectorFromCone(spin){
+  const sinT = Math.sqrt(Math.max(0, 1 - spin.cosT * spin.cosT));
+  spin.sx = sinT * Math.cos(spin.phi);
+  spin.sy = sinT * Math.sin(spin.phi);
+  spin.sz = S.Bdir * spin.cosT;
+}
+function resampleSpins(hard){
   if(!S.spins.length){
-    S.spins = buildSpinSites().map(site => ({
-      x:site.x, z:site.z, sx:0, sy:0, sz:1, clock:Math.random()
+    S.spins = buildSpinSites().map((site, index) => ({
+      x:site.x, z:site.z, sx:0, sy:0, sz:1,
+      cosT:1, cosTarget:1,
+      phi:2 * Math.PI * Math.random(),
+      omega:1.6 + 0.4 * Math.sin(index * 2.399),
+      clock:Math.random()
     }));
   }
   for(const spin of S.spins){
-    const vector = sampleSpinVector(S.P, S.Bdir);
-    spin.sx = vector.x;
-    spin.sy = vector.y;
-    spin.sz = vector.z;
-    spin.clock = Math.random();
+    spin.cosTarget = sampleSpinVector(S.P, 1).z;
+    if(hard){
+      spin.cosT = spin.cosTarget;
+      spin.phi = 2 * Math.PI * Math.random();
+    }
+    spin.clock = 0.4 + 1.2 * Math.random();
+    spinVectorFromCone(spin);
   }
 }
 function stepSpins(dt){
-  const rate = Math.max(0.4, 6 * (1 - S.P));
+  const rate = Math.max(0.25, 2.5 * (1 - S.P));
+  const ease = Math.min(1, 4 * dt);
   for(const spin of S.spins){
+    spin.phi -= S.Bdir * spin.omega * dt;
     spin.clock -= dt * rate;
     if(spin.clock <= 0){
-      const vector = sampleSpinVector(S.P, S.Bdir);
-      spin.sx = vector.x;
-      spin.sy = vector.y;
-      spin.sz = vector.z;
-      spin.clock = 0.15 + 0.85 * Math.random();
+      spin.cosTarget = sampleSpinVector(S.P, 1).z;
+      spin.clock = 0.4 + 1.2 * Math.random();
     }
+    spin.cosT += (spin.cosTarget - spin.cosT) * ease;
+    spinVectorFromCone(spin);
   }
 }
 
@@ -1299,10 +1321,10 @@ function advanceRun(dt){
   }
 }
 function flipB(){
-  if(S.run) endRun(false);
+  if(S.run) return;  /* the field is locked during a recorded run */
   S.Bdir *= -1;
   clearCurrentCounts();
-  resampleSpins();
+  resampleSpins(true);
   syncControls();
   updateReadouts();
   drawAll();
@@ -1384,7 +1406,22 @@ function syncControls(){
   const flipButton = document.getElementById('flipBtn');
   if(flipButton){
     flipButton.textContent = 'Flip B (now ' + (S.Bdir > 0 ? '↑' : '↓') + ')';
+    flipButton.disabled = !!S.run;
   }
+  const progress = document.getElementById('runProg');
+  const progressFill = document.getElementById('runProgFill');
+  if(progress && progressFill){
+    progress.hidden = !S.run;
+    progressFill.style.width = S.run ?
+      (100 * Math.min(1, S.run.t / RUN_SECONDS)).toFixed(1) + '%' : '0%';
+  }
+  /* Inquiry run buttons lock while a run records; a card already observed
+     stays locked (unlockObservation disabled it on completion). */
+  document.querySelectorAll('.inq-action[data-action^="run-"]').forEach(button => {
+    const card = button.closest('.inq-step');
+    if(card && card.dataset.observed) return;
+    button.disabled = !!S.run;
+  });
   mirrorBtn.textContent = 'Mirror image: ' + (S.mirror ? 'ON' : 'OFF');
   mirrorBtn.setAttribute('aria-pressed', S.mirror ? 'true' : 'false');
   const coil = document.getElementById('coilChk');
@@ -1473,9 +1510,11 @@ function wireControls(){
     button.addEventListener('click', () => {
       const action = button.dataset.action;
       if(action === 'run-up'){
+        if(S.run) return;
         if(S.Bdir < 0) flipB();
         startRun();
       }else if(action === 'run-down'){
+        if(S.run) return;
         if(S.Bdir > 0) flipB();
         startRun();
       }else if(action === 'show-mirror'){
@@ -1950,6 +1989,32 @@ function drawRate(){
   rctx.font=fSans(10,600);
   rctx.fillText('warm rate',left+5,y(1)-5);
 
+  if(!S.run && !S.runs.up && !S.runs.dn){
+    text(rctx,left+plotWidth/2,top+plotHeight/2,
+      'Press Cool & count to record data',fSans(13,700),TH.muted,'center','middle');
+    rctx.textBaseline='alphabetic';
+  }
+  if(S.run){
+    const minuteNow=S.run.t/RUN_SECONDS*HISTORICAL_MINUTES;
+    const cursorX=x(Math.min(HISTORICAL_MINUTES,minuteNow));
+    const runColor=S.run.dir>0?'#3b82f6':'#e0653a';
+    rctx.save();
+    rctx.strokeStyle=runColor;
+    rctx.globalAlpha=.6;
+    rctx.lineWidth=1.5;
+    rctx.beginPath();
+    rctx.moveTo(cursorX,top);
+    rctx.lineTo(cursorX,top+plotHeight);
+    rctx.stroke();
+    rctx.restore();
+    rctx.globalAlpha=1;
+    rctx.fillStyle=runColor;
+    rctx.font=fSans(10,700);
+    rctx.textAlign=minuteNow>HISTORICAL_MINUTES*0.7?'right':'left';
+    rctx.fillText('recording · minute '+Math.floor(minuteNow),
+      cursorX+(minuteNow>HISTORICAL_MINUTES*0.7?-5:5),top+24);
+  }
+
   rctx.save();
   rctx.setLineDash([5,4]);
   rctx.strokeStyle=TH.muted;
@@ -2030,7 +2095,7 @@ function onReset(){
   S.mirror=false;
   setT(TBATH);
   clearCurrentCounts();
-  resampleSpins();
+  resampleSpins(true);
   resetInquiry();
   syncInquiryActions();
   syncControls();
@@ -2079,7 +2144,7 @@ themeRefresh();
 fitCanvas(stage);
 fitCanvas(rateCv);
 fitCanvas(distCv);
-resampleSpins();
+resampleSpins(true);
 syncControls();
 updateReadouts();
 syncInquiryActions();
