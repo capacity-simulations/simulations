@@ -518,7 +518,7 @@ body.light-theme .predict-eval .answer,body.light-theme .predict-eval strong,htm
     <div id="fmD" class="sim-eq-sm">Dμ = ∂μ − igs Gμ − ig Wμ − ig′ Bμ</div>
     <div id="fmV" class="sim-eq-sm">V(φ) = −μ² φ†φ + λ(φ†φ)²</div>
   </div>
-  <p class="sim-eq-note">Condensed form — indices, h.c. and gauge fixing suppressed.</p>
+  <p class="sim-eq-note">Condensed form — indices, representation generators and gauge-fixing/ghost terms suppressed.</p>
 </div>
   </section>
 
@@ -771,6 +771,10 @@ window.__audit = {
   function P(name, sym, ssub, fam, gen, q, qs, spin, m, ms, year, fact, col, row) {
     return { name, sym, ssub, fam, gen, q, qs, spin, m, ms, year, fact, col, row };
   }
+  /* Display masses follow the PDG 2024 summary tables at the precision shown.
+     The light u/d/s values are MS-bar running masses at 2 GeV; c/b are
+     MS-bar masses at their self-scales; the top value is the direct
+     kinematic mass. Keep this provenance in source/audits, not the UI. */
   const CAT = [
     P('electron', 'e', '', 'l', 1, -1, '−1', 0.5, 5.10999e-4, '0.511 MeV', 1897, 'The first elementary particle ever found — and the one flowing through every wire around you.', 0, 2),
     P('muon', 'μ', '', 'l', 2, -1, '−1', 0.5, 0.105658, '105.66 MeV', 1936, 'A heavier copy of the electron, raining down in cosmic rays. It was so unexpected a physicist asked, “Who ordered that?”', 1, 2),
@@ -800,8 +804,8 @@ window.__audit = {
     2:  { name: 'anti-up', fact: "The up quark's antimatter twin — same mass, opposite charge." },
     4:  { name: 'anti-tau', fact: "The tau's antimatter twin — same mass, opposite charge." },
     5:  { name: 'e antineutrino', year: 1956, fact: "What Reines and Cowan actually caught in 1956 were antineutrinos streaming from a reactor." },
-    6:  { name: 'μ antineutrino', fact: "The muon neutrino's antimatter twin — same mass, opposite charge." },
-    7:  { name: 'τ antineutrino', fact: "The tau neutrino's antimatter twin — same mass, opposite charge." },
+    6:  { name: 'μ antineutrino', fact: "The muon neutrino's antimatter partner — same mass, and both have zero electric charge." },
+    7:  { name: 'τ antineutrino', fact: "The tau neutrino's antimatter partner — same mass, and both have zero electric charge." },
     8:  { name: 'anti-down', fact: "The down quark's antimatter twin — same mass, opposite charge." },
     9:  { name: 'anti-charm', fact: "The charm quark's antimatter twin — same mass, opposite charge." },
     10: { name: 'anti-strange', fact: "The strange quark's antimatter twin — same mass, opposite charge." },
@@ -977,12 +981,13 @@ window.__audit = {
     if (!antiOn(p)) return p.fact;
     const a = antiRec(p); return (a && a.fact) ? a.fact : p.fact;
   }
-  /* Weak quantum numbers, Q = T₃ + Y/2 convention. L = doublet, R = singlet. */
+  /* Weak quantum numbers, Q = T₃ + Y/2 convention. Numeric values keep
+     the physics testable; formatting into fractions happens only at display. */
   const WEAK = {
-    uType: { L: { T: '½', T3: '+½', Y: '+⅓' }, R: { T: '0', T3: '0', Y: '+4⁄3' } },
-    dType: { L: { T: '½', T3: '−½', Y: '+⅓' }, R: { T: '0', T3: '0', Y: '−⅔' } },
-    nu:    { L: { T: '½', T3: '+½', Y: '−1' }, R: null },  /* no ν_R in the SM */
-    eType: { L: { T: '½', T3: '−½', Y: '−1' }, R: { T: '0', T3: '0', Y: '−2' } }
+    uType: { L: { T: 1 / 2, T3: 1 / 2, Y: 1 / 3 }, R: { T: 0, T3: 0, Y: 4 / 3 } },
+    dType: { L: { T: 1 / 2, T3: -1 / 2, Y: 1 / 3 }, R: { T: 0, T3: 0, Y: -2 / 3 } },
+    nu:    { L: { T: 1 / 2, T3: 1 / 2, Y: -1 }, R: null },  /* no independent ν_R in the minimal SM */
+    eType: { L: { T: 1 / 2, T3: -1 / 2, Y: -1 }, R: { T: 0, T3: 0, Y: -2 } }
   };
   const COLC = ['#d64545', '#3fa34d', '#4a7fe0'];  /* r, g, b color-charge dots */
   function weakCat(p) {
@@ -990,24 +995,84 @@ window.__audit = {
     if (p.fam === 'l') return p.q === 0 ? 'nu' : 'eType';
     return null;
   }
-  function flipSign(s) {
-    if (s.charAt(0) === '+') return '−' + s.slice(1);
-    if (s.charAt(0) === '−') return '+' + s.slice(1);
-    return s;
+  function weakFrac(v, signed) {
+    const a = Math.abs(v);
+    let body;
+    if (Math.abs(a - 1 / 3) < 1e-9) body = '⅓';
+    else if (Math.abs(a - 1 / 2) < 1e-9) body = '½';
+    else if (Math.abs(a - 2 / 3) < 1e-9) body = '⅔';
+    else if (Math.abs(a - 4 / 3) < 1e-9) body = '4⁄3';
+    else body = String(a);
+    if (v < 0) return '−' + body;
+    return signed && v > 0 ? '+' + body : body;
+  }
+  function weakRecord(p, chirality, antimatter) {
+    const cat = weakCat(p);
+    if (!cat) return null;
+    const sourceChirality = antimatter ? (chirality === 'L' ? 'R' : 'L') : chirality;
+    const rec = WEAK[cat][sourceChirality];
+    if (!rec) return null;
+    return antimatter ? { T: rec.T, T3: -rec.T3, Y: -rec.Y } : { T: rec.T, T3: rec.T3, Y: rec.Y };
+  }
+  function chiralityAllowed(p, chirality, antimatter) {
+    return isFermion(p) && !!weakRecord(p, chirality, antimatter);
+  }
+  function normalizeChirality() {
+    const p = CAT[state.sel];
+    if (!isFermion(p) || chiralityAllowed(p, state.chir, state.antimatter)) return;
+    state.chir = chiralityAllowed(p, 'L', state.antimatter) ? 'L' : 'R';
   }
   function weakDisp(p) {
     if (p.fam === 'g') {
       if (p.sym === 'W') return { iso: 'T = 1, T₃ = ±1', Y: '0' };
       if (p.sym === 'g') return { iso: 'T = 0, T₃ = 0', Y: '0' };
-      return { iso: '0 (W³–B mix)', Y: '0' };  /* photon, Z */
+      return { iso: 'W³–B mix; no definite T', Y: '—' };  /* physical photon, Z */
     }
-    if (p.fam === 'h') return { iso: 'T = ½, T₃ = −½', Y: '+1' };
-    const rec = WEAK[weakCat(p)][state.chir];
-    if (!rec) return { iso: state.antimatter ? 'no ν̄_R in the SM' : 'no ν_R in the SM', Y: '—' };
-    const t3 = antiOn(p) ? flipSign(rec.T3) : rec.T3;
-    const yy = antiOn(p) ? flipSign(rec.Y) : rec.Y;
-    return { iso: 'T = ' + rec.T + ', T₃ = ' + t3, Y: yy };
+    if (p.fam === 'h') return { iso: 'neutral doublet: T = ½, T₃ = −½', Y: '+1 before symmetry breaking' };
+    const rec = weakRecord(p, state.chir, antiOn(p));
+    if (!rec) return { iso: state.antimatter ? 'no ν̄_L in minimal SM' : 'no ν_R in minimal SM', Y: '—' };
+    return { iso: 'T = ' + weakFrac(rec.T, false) + ', T₃ = ' + weakFrac(rec.T3, true), Y: weakFrac(rec.Y, true) };
   }
+
+  /* Development-only data access used by physics regression checks. */
+  window.__audit.catalog = function () {
+    return CAT.map(function (p, index) {
+      const a = ANTI[index];
+      return { index, name: p.name, symbol: p.sym, symbolSubscript: p.ssub, family: p.fam,
+        generation: p.gen, charge: p.q, chargeLabel: p.qs, spin: p.spin,
+        massGeV: p.m, massLabel: p.ms, discoveryYear: p.year, fact: p.fact,
+        antiparticle: a ? { name: a.name, discoveryYear: a.year == null ? p.year : a.year,
+          charge: -p.q, chargeLabel: QFLIP[p.qs] || p.qs, fact: a.fact } : null };
+    });
+  };
+  window.__audit.weakState = function (index, options) {
+    const i = Math.max(0, Math.min(CAT.length - 1, Math.round(Number(index) || 0)));
+    const p = CAT[i], o = options || {};
+    const antimatter = !!o.antimatter && isFermion(p);
+    const chirality = o.chirality === 'R' ? 'R' : 'L';
+    const rec = isFermion(p) ? weakRecord(p, chirality, antimatter) : null;
+    const a = antimatter ? ANTI[i] : null;
+    return { index: i, name: a && a.name ? a.name : p.name, antimatter, chirality,
+      allowed: isFermion(p) ? !!rec : null, charge: antimatter ? -p.q : p.q,
+      T: rec ? rec.T : null, T3: rec ? rec.T3 : null, Y: rec ? rec.Y : null };
+  };
+  window.__audit.currentState = function () {
+    const p = CAT[state.sel];
+    return { index: state.sel, name: dispName(p), antimatter: antiOn(p),
+      chirality: isFermion(p) ? state.chir : null,
+      chiralityAllowed: isFermion(p) ? chiralityAllowed(p, state.chir, state.antimatter) : null,
+      massLabel: p.ms, charge: dispQ(p), chargeLabel: dispQs(p), fact: dispFact(p),
+      mode: state.mode, massLadderVisible: state.showLadder };
+  };
+  window.__audit.layout = function () {
+    return { tiles: tileRects.map(function (r, index) {
+        return r ? { index, x: r.x, y: r.y, width: r.w, height: r.h } : null;
+      }),
+      chiralityButtons: lrRects.map(function (r) {
+        return { chirality: r.chir, x: r.x, y: r.y, width: r.w, height: r.h };
+      }),
+      lagrangianSectors: chipRects.map(function (r) { return r.i; }) };
+  };
   function colorKind(p) {
     if (p.fam === 'q') return 'rgb';
     if (p.sym === 'g') return 'pair';
@@ -1057,19 +1122,23 @@ window.__audit = {
   /* ---------------- particles mode ---------------- */
   function drawParticles(th) {
     const m = Math.max(12, Math.min(24, W * 0.02));
+    const compact = W < 620;
     const capY = m + 12;
     ctx.font = uf(15, 700); ctx.fillStyle = th.muted; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if (!HT()) ctx.fillText(state.antimatter ? '12 antifermions — bosons shown unchanged' : '17 fundamental particles', m + 2, capY);
     ctx.font = uf(14, 600); ctx.textAlign = 'right';
     ctx.fillText('click a tile', W - m - 2, capY);
 
-    const ladderH = state.showLadder ? Math.max(84, Math.min(190, H * 0.24)) : 0;
+    const ladderH = state.showLadder ? (compact ? 84 : Math.max(84, Math.min(190, H * 0.24))) : 0;
     const ladderY = H - m - ladderH;
-    let legendH = 24;
-    const gridAX = m, gridAW = (W - 3 * m) * 0.62;
+    let legendH = compact ? 0 : 24;
+    const gridAX = m, gridAW = compact ? W - 2 * m : (W - 3 * m) * 0.62;
     const headH = 20;
     const gridTop = capY + 12 + headH;
-    let gridRegH = ladderY - 10 - legendH - gridTop;
+    let gridRegH = compact
+      ? Math.max(96, Math.min(state.showLadder ? 120 : 190,
+          (ladderY - m - gridTop) * (state.showLadder ? 0.38 : 0.46)))
+      : ladderY - 10 - legendH - gridTop;
     const gap = Math.max(6, Math.min(12, W * 0.008));
     let tile = Math.min((gridAW - 4 * gap) / 5, (gridRegH - 3 * gap) / 4);
     if (tile < 24) {
@@ -1081,9 +1150,10 @@ window.__audit = {
     }
     tile = Math.max(18, tile);
     const gridW = 5 * tile + 4 * gap, gridH = 4 * tile + 3 * gap;
-    const gx = gridAX + (gridAW - gridW) / 2, gy = gridTop + (gridRegH - gridH) / 2;
+    const gx = gridAX + (gridAW - gridW) / 2;
+    const gy = compact ? gridTop : gridTop + (gridRegH - gridH) / 2;
 
-    ctx.font = uf(14, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'center';
+    ctx.font = uf(compact ? 11 : 14, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'center';
     const heads = ['I', 'II', 'III', 'gauge', 'scalar'];
     for (let c = 0; c < 5; c++) ctx.fillText(heads[c], gx + c * (tile + gap) + tile / 2, gy - 8);
 
@@ -1127,7 +1197,12 @@ window.__audit = {
     }
 
     if (legendH) drawLegend(th, gridAX + gridAW / 2, ladderY - 10 - legendH / 2);
-    drawDetail(th, gridAX + gridAW + m, gy, W - m - (gridAX + gridAW + m), gridH); /* top flush with tile grid, not the column headers */
+    if (compact) {
+      const detailY = gy + gridH + 12;
+      drawDetail(th, m, detailY, W - 2 * m, Math.max(100, ladderY - m - detailY));
+    } else {
+      drawDetail(th, gridAX + gridAW + m, gy, W - m - (gridAX + gridAW + m), gridH); /* top flush with tile grid, not the column headers */
+    }
     if (state.showLadder) drawLadder(th, m, ladderY, W - 2 * m, ladderH);
   }
 
@@ -1164,12 +1239,13 @@ window.__audit = {
   function drawDetail(th, x, y, w, h) {
     const p = CAT[state.sel];
     const col = FAMC[p.fam];
+    const compactCard = W < 620;
     ctx.fillStyle = th.surface; ctx.strokeStyle = alphaCol(col, 0.9); ctx.lineWidth = 2;
     rr(x, y, w, h, 14); ctx.fill(); rr(x, y, w, h, 14); ctx.stroke();
     ctx.save();
     rr(x, y, w, h, 14); ctx.clip();
-    const pad = Math.min(18, w * 0.06);
-    const r = Math.min(24, Math.max(16, w * 0.085));
+    const pad = compactCard ? 12 : Math.min(18, w * 0.06);
+    const r = compactCard ? 18 : Math.min(24, Math.max(16, w * 0.085));
     const mx = x + pad + r, my = y + pad + r;
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, my, r, 0, 7); ctx.fill();
     const ssz = r * 1.05, stoks = dispToks(p), sw = toksW(ssz, stoks);
@@ -1182,22 +1258,24 @@ window.__audit = {
       cap += p.sym === 'W' ? ' — antiparticle: W∓' : ' — its own antiparticle';
     }
     ctx.fillText(cap, mx + r + 12, my + 14);
-    /* L | R chirality chip — fermions only */
+    /* L | R field-chirality chip — fermions only */
     if (isFermion(p)) {
       const bw = 20, bh = 18, gpx = 4;
       const bx = x + w - pad - 2 * bw - gpx, by = my - 4;
       ctx.font = uf(11, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'right';
-      ctx.fillText('chirality', x + w - pad, by - 6);
+      ctx.fillText('field chirality', x + w - pad, by - 6);
       ['L', 'R'].forEach(function (cLab, k) {
-        const rx = bx + k * (bw + gpx), on = state.chir === cLab;
+        const rx = bx + k * (bw + gpx);
+        const allowed = chiralityAllowed(p, cLab, state.antimatter);
+        const on = allowed && state.chir === cLab;
         ctx.fillStyle = on ? col : th.surface;
-        ctx.strokeStyle = on ? col : th.border; ctx.lineWidth = 1.5;
+        ctx.strokeStyle = on ? col : (allowed ? th.border : alphaCol(th.muted, 0.3)); ctx.lineWidth = 1.5;
         rr(rx, by, bw, bh, 5); ctx.fill(); rr(rx, by, bw, bh, 5); ctx.stroke();
-        ctx.font = uf(12, 700); ctx.fillStyle = on ? '#ffffff' : th.muted;
+        ctx.font = uf(12, 700); ctx.fillStyle = on ? '#ffffff' : (allowed ? th.muted : alphaCol(th.muted, 0.3));
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(cLab, rx + bw / 2, by + bh / 2 + 1);
         ctx.textBaseline = 'alphabetic';
-        lrRects.push({ x: rx, y: by, w: bw, h: bh, chir: cLab });
+        if (allowed) lrRects.push({ x: rx, y: by, w: bw, h: bh, chir: cLab });
       });
     }
     const dqs = dispQs(p);
@@ -1211,15 +1289,20 @@ window.__audit = {
       ['Hypercharge', wk.Y],
       ['Found', String(dispYear(p))]
     ];
-    let ry = my + r + 24;
-    const rh = Math.max(20, Math.min(30, (h - (ry - y) - 90) / rows.length));
+    let ry = my + r + (compactCard ? 14 : 24);
+    const rh = Math.max(compactCard ? 17 : 20, Math.min(30, (h - (ry - y) - (compactCard ? 12 : 90)) / rows.length));
     for (const row of rows) {
-      ctx.font = uf(14, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'left';
+      ctx.font = uf(compactCard ? 12 : 14, 600); ctx.fillStyle = th.muted; ctx.textAlign = 'left';
       ctx.fillText(row[0], x + pad, ry);
       if (row[2] === 'color' && row[1] !== '0') {
         drawColorCell(th, row[1], x + w - pad, ry);
       } else {
-        ctx.font = uf(16, 700); ctx.fillStyle = th.text; ctx.textAlign = 'right';
+        const labelW = ctx.measureText(row[0]).width;
+        const valueW = Math.max(42, w - 2 * pad - labelW - 12);
+        let valueSize = compactCard ? 14 : 16;
+        do { ctx.font = uf(valueSize, 700); valueSize -= 0.5; }
+        while (valueSize >= 11 && ctx.measureText(row[1]).width > valueW);
+        ctx.fillStyle = th.text; ctx.textAlign = 'right';
         ctx.fillText(row[1], x + w - pad, ry);
       }
       ctx.strokeStyle = alphaCol(th.border, 0.7); ctx.lineWidth = 1.5;
@@ -1507,7 +1590,7 @@ window.__audit = {
       const lr = hitLR(p);
       if (lr) { state.chir = lr; draw(); return; }
       const hit = hitParticle(p);
-      if (hit >= 0) { state.sel = hit; state.chir = 'L'; syncDom(); draw(); }
+      if (hit >= 0) { state.sel = hit; normalizeChirality(); syncDom(); draw(); }
     } else {
       const hit = hitChip(p);
       if (hit >= 0) { state.term = hit; draw(); }
@@ -1520,7 +1603,7 @@ window.__audit = {
     state.colorBy = b.dataset.color; state.mode = 'particles'; syncDom(); draw();
   }));
   document.querySelectorAll('#antiSeg .sim-segbtn').forEach(b => b.addEventListener('click', function () {
-    state.antimatter = (b.dataset.anti === 'anti'); state.mode = 'particles'; syncDom(); draw();
+    state.antimatter = (b.dataset.anti === 'anti'); state.mode = 'particles'; normalizeChirality(); syncDom(); draw();
   }));
   (function () {
     const ladderBox = document.getElementById('ladderTgl');
