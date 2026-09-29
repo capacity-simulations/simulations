@@ -855,8 +855,13 @@ const TBATH = 1.0;
 const RUN_SECONDS = 26;
 const HISTORICAL_MINUTES = 18;
 const ALIGNMENT_LOSS_MINUTES = 6;
-const SOURCE_RATE_RUN = 2400;
-const SOURCE_RATE_FREE = 120;
+/* Counted source activity (decays per sim second). Every decay is Monte-Carlo
+   sampled and counted; only a fixed-rate thinning (VISUAL_RATE per second) is
+   drawn, so raising the source rate sharpens the counting statistics without
+   adding electrons to the scene. At 24 000/s a one-minute bin records about
+   1700 warm counts, i.e. ~2.4 % per-point noise, close to Wu et al.'s figure. */
+const SOURCE_RATE_RUN = 24000;
+const SOURCE_RATE_FREE = 1200;
 const VISUAL_RATE = 12;
 const DETECTOR_RADIUS_CM = 0.9525;
 const DETECTOR_DISTANCE_CM = 2.0;
@@ -1018,9 +1023,16 @@ function langevin(kappa){
   if(kappa < 1e-4) return kappa / 3;
   return coth(kappa) - 1 / kappa;
 }
+/* Called once per decay; P only changes via setT, so a one-entry cache
+   avoids re-running the bisection for every event. */
+let kappaCacheP = NaN;
+let kappaCacheValue = 0;
 function kappaForMean(P){
   if(P < 1e-5) return 0;
-  return solveMonotonic(Math.min(0.999, P), langevin, 1000);
+  if(P === kappaCacheP) return kappaCacheValue;
+  kappaCacheP = P;
+  kappaCacheValue = solveMonotonic(Math.min(0.999, P), langevin, 1000);
+  return kappaCacheValue;
 }
 function sampleSpinVector(P, fieldDirection){
   const kappa = kappaForMean(P);
