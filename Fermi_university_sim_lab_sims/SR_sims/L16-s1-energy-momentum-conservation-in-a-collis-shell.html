@@ -43,16 +43,6 @@
    ========================================================================== */
 
 /* ---- FONT FACES (swap src for base64 data-URIs to make a sim self-contained) ---- */
-@font-face{
-  font-family:'DMSansUser';
-  src:url('DMSans-SemiBold.ttf') format('truetype');
-  font-weight:600; font-style:normal; font-display:swap;
-}
-@font-face{
-  font-family:'JetBrainsMonoNums';
-  src:url('JetBrainsMono-SemiBold.ttf') format('truetype');
-  font-weight:600; font-style:normal; font-display:swap;
-}
 
 /* ============================================================================
    SHELL CSS — the design system, layout, dynamic sidebar, stepper, components.
@@ -1676,7 +1666,10 @@ document.querySelectorAll('#inq-cards .choice').forEach(btn=>{
 
 /* ---- shell hooks ---- */
 function onFrame(dt){
+  const wasRunning=S.progress<2;
   if(S.progress<2) S.progress=Math.min(2, S.progress+dt*RATE);
+  /* Free Exploration: park on the resolved collision with the button on "Play" (Play replays). */
+  if(wasRunning && S.progress>=2 && typeof inGuidedMode==='function' && !inGuidedMode()) Shell.setPlaying(false);
   render();
 }
 function onReset(){
@@ -1839,7 +1832,22 @@ window.__freeExplore = function(){
   Shell.setPlaying(false);
   applyStep();
   refresh();
+  /* Genuine Free Exploration (not the Controls Guide hand-over) plays the
+     collision through to that resolved state instead of opening on a frozen one. */
+  if(!inGuidedMode()) replayCollision();
 };
+function inGuidedMode(){
+  const gi=document.getElementById('btn-gi'), cg=document.getElementById('btn-cg');
+  return !!((gi && gi.classList.contains('active')) || (cg && cg.classList.contains('active')));
+}
+/* Free Exploration: pressing Play on a finished collision replays it (the shell's
+   own toggle listener runs first, so Shell.playing is already the new state). */
+(function(){
+  const playBtn=document.getElementById('shell-play');
+  if(playBtn) playBtn.addEventListener('click',()=>{
+    if(Shell.playing && S.progress>=2 && !inGuidedMode()) replayCollision();
+  });
+})();
 /* Entering the Controls Guide must show every readout it describes. The mask
    already stands down while the inquiry is hidden (`gi-off`); this repaints so
    the panels refill immediately. */
@@ -2466,7 +2474,7 @@ window.__physicsHooks = { scene:applyPhysicsScene };
       show(0);
     } else if(giBtn.classList.contains('active')){
       if(window.__fullReset) window.__fullReset();
-    }
+    } else if(window.__freeExplore) window.__freeExplore();   /* free: back to the fresh-entry view (collision replays) */
   }, 0); });
 })();
 </script>

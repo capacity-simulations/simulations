@@ -3232,7 +3232,18 @@ function applyPhysicsScene(cfg){
   }
   if (cfg.playing) play();
 }
-window.__physicsHooks = { scene:applyPhysicsScene };
+/* Free-exploration auto-tour (same sweep onComplete starts), callable from the mode layer. */
+function startTour(){
+  S.ghost=null; S.view=LMIN; S.logd=LMAX; S.autoTour=true;
+  updateUI(); draw(); play();
+}
+/* Leaving Free Exploration: halt the tour; GI re-syncs to its active card's scene. */
+function stopTour(resync){
+  if (!S.autoTour) return;
+  S.autoTour=false; S.logd=S.view;
+  if (resync) onStep(Shell.step); else { updateUI(); draw(); }
+}
+window.__physicsHooks = { scene:applyPhysicsScene, tour:startTour, stopTour:stopTour };
 })();
 </script>
 <script>/* dev-only reviewer affordance: link this sim to the refinement studio.
@@ -3550,7 +3561,13 @@ window.__physicsHooks = { scene:applyPhysicsScene };
     applyReveals(99);
     showScalePanel();
     if(shellEl) shellEl.classList.remove('inquiry-collapsed');
+    startFreeTour();
   };
+  /* Genuine Free Exploration (neither GI nor Controls Guide active) runs the auto-tour. */
+  function startFreeTour(){
+    if(cgOn || giBtn.classList.contains('active')) return;
+    const h = window.__physicsHooks; if(h && h.tour) h.tour();
+  }
   window.__giResume = function(){ applyCard(step()); };
 
   let cgOn = false, cgStep = 0, cgMax = 0;
@@ -3777,6 +3794,7 @@ window.__physicsHooks = { scene:applyPhysicsScene };
     giBtn.classList.toggle('active', on);
     if(on){
       if(cgOn) setCg(false, true);
+      const h = window.__physicsHooks; if(h && h.stopTour) h.stopTour(true);
       if(shellEl) shellEl.classList.remove('inquiry-collapsed');
       if(window.__giResume) window.__giResume();
     } else {
@@ -3789,6 +3807,7 @@ window.__physicsHooks = { scene:applyPhysicsScene };
     cgBtn.classList.toggle('active', on);
     if(on){
       if(!keepGiState) setGi(false);
+      const h = window.__physicsHooks; if(h && h.stopTour) h.stopTour(false);
       if(window.__cgPrepare) window.__cgPrepare();
       ensureUi();
       if(window.__cgReveals) window.__cgReveals(99);
@@ -3836,8 +3855,7 @@ window.__physicsHooks = { scene:applyPhysicsScene };
       cgShow(0);
     } else if(giBtn.classList.contains('active')){
       if(window.__fullReset) window.__fullReset();
-    }
-    /* free exploration: experiment reset only, mode untouched */
+    } else startFreeTour();   /* free exploration: back to the fresh-entry view (the tour) */
   }, 0); });
 
   document.addEventListener('click', e=>{
