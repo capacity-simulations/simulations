@@ -1240,14 +1240,35 @@ const Shell = (function(){
 
   // ---- draw helpers ----
   function rr(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  /* Label placement: a tag tries its candidate spots and takes the one that covers the least of
+     what is already on the diagram (other tags, markers, tick numbers, the drawn lines). */
+  let PLACED=[], AVOID=[]; const TAGBOX={}; window.__tagBoxes=TAGBOX;
+  function phRect(x0,y0,x1,y1){ PLACED.push({x0,y0,x1,y1}); }
+  function phScore(b){ let s=0; for(const p of PLACED){ const ox=Math.min(b.x1,p.x1)-Math.max(b.x0,p.x0), oy=Math.min(b.y1,p.y1)-Math.max(b.y0,p.y0); if(ox>0&&oy>0) s+=ox*oy; }
+    for(const q of AVOID){ if(q[0]>b.x0&&q[0]<b.x1&&q[1]>b.y0&&q[1]<b.y1) s+=q[2]; } return s; }
+  function phAvoidLine(a,b,wt){ const n=Math.max(1,Math.ceil(Math.hypot(b.sx-a.sx,b.sy-a.sy)/10)); for(let i=0;i<=n;i++) AVOID.push([a.sx+(b.sx-a.sx)*i/n, a.sy+(b.sy-a.sy)*i/n, wt]); }
+  function phAlong(a,b,ts){ const out=[]; for(const t of ts||[0.5,0.4,0.6,0.3,0.7,0.2,0.8]) for(const c of ['ne','sw','se','nw','e','w','n','s']) out.push({c, at:[a.sx+(b.sx-a.sx)*t, a.sy+(b.sy-a.sy)*t]}); return out; }
+  function phPlace(sx,sy,bw,bh,o){
+    const cl=(bx,by)=>[Math.max(2,Math.min(W-bw-2,bx)), Math.max(2,Math.min(H-bh-2,by))];
+    if(!o.place){ let bx=sx+(o.dx==null?9:o.dx), by=sy+(o.dy==null?-bh/2:o.dy); if(o.anchor==='center') bx=sx-bw/2; return cl(bx,by); }
+    const r=o.gap||10, k=0.72; let best=null;
+    o.place.forEach((p,i)=>{ const isS=typeof p==='string', c=isS?p:p.c, ax=isS?sx:p.at[0], ay=isS?sy:p.at[1]; let bx,by;
+      switch(c){ case 'e': bx=ax+r; by=ay-bh/2; break; case 'w': bx=ax-r-bw; by=ay-bh/2; break;
+        case 'n': bx=ax-bw/2; by=ay-r-bh; break; case 's': bx=ax-bw/2; by=ay+r; break;
+        case 'ne': bx=ax+r*k; by=ay-r*k-bh; break; case 'se': bx=ax+r*k; by=ay+r*k; break;
+        case 'nw': bx=ax-r*k-bw; by=ay-r*k-bh; break; default: bx=ax-r*k-bw; by=ay+r*k; }
+      [bx,by]=cl(bx,by);
+      const sc=phScore({x0:bx,y0:by,x1:bx+bw,y1:by+bh})+i*0.5;
+      if(!best||sc<best.sc) best={bx,by,sc}; });
+    return [best.bx,best.by];
+  }
   function tag(text,sx,sy,fg,o){
     o=o||{}; const size=o.size||12,pad=o.pad||4;
     ctx.font=(o.weight||'600')+' '+size+'px Inter, system-ui, sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     const tw=ctx.measureText(text).width, bw=tw+pad*2, bh=size+pad*2;
-    let bx=sx+(o.dx==null?9:o.dx), by=sy+(o.dy==null?-bh/2:o.dy);
-    if(o.anchor==='center') bx=sx-bw/2;
-    bx=Math.max(2,Math.min(W-bw-2,bx)); by=Math.max(2,Math.min(H-bh-2,by));
+    const [bx,by]=phPlace(sx,sy,bw,bh,o);
+    phRect(bx,by,bx+bw,by+bh); if(o.key) TAGBOX[o.key]={bx,by,bw,bh};
     if(o.bg!==false){ctx.fillStyle=o.bg||'rgba(8,10,14,0.85)';rr(bx,by,bw,bh,5);ctx.fill();
       if(o.border){ctx.strokeStyle=o.border;ctx.lineWidth=1.2;ctx.stroke();}}
     ctx.fillStyle=fg; ctx.textBaseline='middle'; ctx.fillText(text,bx+pad,by+bh/2);
@@ -1273,7 +1294,7 @@ const Shell = (function(){
     if(shape==='triangle'){ ctx.beginPath(); ctx.moveTo(c.sx,c.sy-8); ctx.lineTo(c.sx-7.5,c.sy+6); ctx.lineTo(c.sx+7.5,c.sy+6); ctx.closePath(); ctx.fill(); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(c.sx,c.sy,6.5,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
     ctx.globalAlpha=1; ctx.restore();
-    tag(label, c.sx, c.sy, '#08090c', {bg:color, size:12.5, weight:'700', dx:10, dy:-9});
+    tag(label, c.sx, c.sy, '#08090c', {bg:color, size:12.5, weight:'700', dx:10, dy:-9, key:'m'+label.slice(0,2), place:['ne','se','nw','sw','e','w','n','s']});
   }
   function drawTracer(D){
     const ph=S.phase;
@@ -1389,28 +1410,7 @@ const Shell = (function(){
     ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText((fr?'ct′':'ct')+' (light-seconds)',0,0); ctx.restore();
 
-    // cone label
-    { const lp=w2s(D.e1.x+RANGE*0.78, D.e1.ct+RANGE*0.78);
-      tag('light cone (v=c)', lp.sx, lp.sy, '#1a1300', {bg:'rgba(253,230,138,0.88)',size:11,weight:'700',dx:6,dy:-8}); }
-    // observer label
-    { const op=toFrame(0,RANGE*0.85,D.b); const s=clamp(w2s(op.x,op.ct));
-      tag('Alice (x = 0)', s.sx, s.sy, '#00292f', {bg:'rgba(34,211,238,0.82)',size:11,weight:'700',dx:6,dy:-6}); }
-
-    // outgoing speed label
-    { const mid=w2s((D.e1.x+D.e2.x)/2,(D.e1.ct+D.e2.ct)/2);
-      const c=D.cls==='spacelike'?COL.spacelike:(D.cls==='timelike'?COL.timelike:COL.light);
-      const vt=(D.v1===Infinity?'v₁ = ∞':'v₁ = '+D.v1.toFixed(2)+'c')+' ('+(fr?'S′':'S')+')';
-      tag(vt, mid.sx, mid.sy, '#0a0c11', {bg:c, size:11.5, weight:'700', dx:10, dy:-7}); }
-    // return speed label — show speed in the displayed frame
-    if(S.returnOn){ const mid=w2s((D.e2.x+D.e3.x)/2,(D.e2.ct+D.e3.ct)/2);
-      const v2t=(D.v2disp===Infinity?'v₂ = ∞':'v₂ = '+D.v2disp.toFixed(2)+'c')+' ('+(fr?'S′':'S')+')';
-      tag(v2t, mid.sx, mid.sy, '#0a0c11', {bg:COL.ret,size:11.5,weight:'700',dx:-80,dy:8}); }
-
-    // markers
-    drawMarker(D.e1,COL.e1,'E₁ · Alice sends','circle',S.step===1,pulse);
-    drawMarker(D.e2,COL.e2,'E₂ · Bella replies','circle',S.step===1,pulse);
-    if(S.returnOn) drawMarker(D.e3,COL.e3,'E₃ · Alice receives','triangle',S.step===3,pulse);
-
+    PLACED=[]; AVOID=[]; for(const kk in TAGBOX) delete TAGBOX[kk];
     // top-left info badges
     const clsCol=D.cls==='spacelike'?'rgba(244,63,94,0.85)':(D.cls==='timelike'?'rgba(56,189,248,0.85)':'rgba(253,230,138,0.85)');
     const clsFg=D.cls==='lightlike'?'#1a1300':'#fff';
@@ -1430,6 +1430,38 @@ const Shell = (function(){
         {bg:'rgba(190,18,60,0.94)',border:'#fda4af',size:13,weight:'700',anchor:'center',dy:0});
       ctx.globalAlpha=1;
     }
+
+    // ===== tag placement: register what movable tags must not cover =====
+    for(const e of [D.e1,D.e2].concat(S.returnOn?[D.e3]:[])){ const c=clamp(w2s(e.x,e.ct)); phRect(c.sx-10,c.sy-10,c.sx+10,c.sy+10); }
+    phAvoidLine(w2s(D.e1.x,D.e1.ct),w2s(D.e2.x,D.e2.ct),30);
+    if(S.returnOn) phAvoidLine(w2s(D.e2.x,D.e2.ct),w2s(D.e3.x,D.e3.ct),30);
+    [1,-1].forEach(sg=>phAvoidLine(w2s(D.e1.x-RANGE, D.e1.ct-sg*RANGE), w2s(D.e1.x+RANGE, D.e1.ct+sg*RANGE), 12));
+    { const o1=toFrame(0,-RANGE,D.b), o2=toFrame(0,RANGE,D.b); phAvoidLine(w2s(o1.x,o1.ct),w2s(o2.x,o2.ct),10); }
+    phAvoidLine(w2s(-RANGE,0),w2s(RANGE,0),8); phAvoidLine(w2s(0,-RANGE),w2s(0,RANGE),8);
+    [-6,-4,-2,2,4,6].forEach(t=>{ const a=w2s(t,0), b=w2s(0,t); AVOID.push([a.sx-6,oy+11,30],[a.sx+6,oy+11,30],[ox-12,b.sy,30]); });
+    // markers
+    drawMarker(D.e1,COL.e1,'E₁ · Alice sends','circle',S.step===1,pulse);
+    drawMarker(D.e2,COL.e2,'E₂ · Bella replies','circle',S.step===1,pulse);
+    if(S.returnOn) drawMarker(D.e3,COL.e3,'E₃ · Alice receives','triangle',S.step===3,pulse);
+
+    // cone label
+    { const lp=w2s(D.e1.x+RANGE*0.78, D.e1.ct+RANGE*0.78), l0=w2s(D.e1.x,D.e1.ct);
+      tag('light cone (v=c)', lp.sx, lp.sy, '#1a1300', {bg:'rgba(253,230,138,0.88)',size:11,weight:'700',dx:6,dy:-8, key:'cone', gap:6,
+        place:[0.78,0.7,0.86,0.6,0.5].flatMap(t=>['se','nw'].map(c=>({c, at:[l0.sx+(lp.sx-l0.sx)*t/0.78, l0.sy+(lp.sy-l0.sy)*t/0.78]})))}); }
+    // observer label
+    { const op=toFrame(0,RANGE*0.85,D.b); const s=clamp(w2s(op.x,op.ct)); const o0=clamp(w2s(toFrame(0,0,D.b).x,toFrame(0,0,D.b).ct));
+      tag('Alice (x = 0)', s.sx, s.sy, '#00292f', {bg:'rgba(34,211,238,0.82)',size:11,weight:'700',dx:6,dy:-6, key:'alice', gap:6,
+        place:[1,0.85,0.7,0.55,0.4,-0.4,-0.7].flatMap(t=>['e','w'].map(c=>({c, at:[o0.sx+(s.sx-o0.sx)*t, o0.sy+(s.sy-o0.sy)*t]})))}); }
+
+    // outgoing speed label
+    { const mid=w2s((D.e1.x+D.e2.x)/2,(D.e1.ct+D.e2.ct)/2);
+      const c=D.cls==='spacelike'?COL.spacelike:(D.cls==='timelike'?COL.timelike:COL.light);
+      const vt=(D.v1===Infinity?'v₁ = ∞':'v₁ = '+D.v1.toFixed(2)+'c')+' ('+(fr?'S′':'S')+')';
+      tag(vt, mid.sx, mid.sy, '#0a0c11', {bg:c, size:11.5, weight:'700', dx:10, dy:-7, key:'v1', place:phAlong(w2s(D.e1.x,D.e1.ct),w2s(D.e2.x,D.e2.ct))}); }
+    // return speed label — show speed in the displayed frame
+    if(S.returnOn){ const mid=w2s((D.e2.x+D.e3.x)/2,(D.e2.ct+D.e3.ct)/2);
+      const v2t=(D.v2disp===Infinity?'v₂ = ∞':'v₂ = '+D.v2disp.toFixed(2)+'c')+' ('+(fr?'S′':'S')+')';
+      tag(v2t, mid.sx, mid.sy, '#0a0c11', {bg:COL.ret,size:11.5,weight:'700',dx:-80,dy:8, key:'v2', place:phAlong(w2s(D.e2.x,D.e2.ct),w2s(D.e3.x,D.e3.ct))}); }
 
     updateReadouts(D);
   }
@@ -2028,17 +2060,20 @@ const Shell = (function(){
     bx = Math.max(2, Math.min(g.W - bw - 2, bx)); by = Math.max(2, Math.min(g.H - bh - 2, by));
     return { left:r.left + bx, top:r.top + by, width:bw, height:bh }; };
   const cgFr = g => Math.abs(g.D.b) > 1e-6;
+  /* the box render() really painted for tag k (tags now move to stay clear of each other); falls back to the fixed offsets */
+  const cgRec = (k, fb) => { const r = cgCvR(), q = window.__tagBoxes && window.__tagBoxes[k];
+    return r && q ? { left:r.left + q.bx, top:r.top + q.by, width:q.bw, height:q.bh } : fb(); };
   /* drawn markers (clamped like drawMarker) and every label render() paints */
   const cgMk = (g, e) => { const c = g.clamp(g.w2s(e.x, e.ct)), r = cgCvR(); return { x:r.left + c.sx, y:r.top + c.sy, cx:c.sx, cy:c.sy }; };
   const cgBoxes = g => { const D = g.D, fr = cgFr(g), b = [], r = cgCvR();
-    const lab = (e, t) => { const m = cgMk(g, e); b.push({ left:m.x - 9, top:m.y - 9, width:18, height:18 }, cgTag(g, t, m.cx, m.cy, { w:700, s:12.5, dx:10, dy:-9 })); };
+    const lab = (e, t) => { const m = cgMk(g, e); b.push({ left:m.x - 9, top:m.y - 9, width:18, height:18 }, cgRec('m' + t.slice(0, 2), () => cgTag(g, t, m.cx, m.cy, { w:700, s:12.5, dx:10, dy:-9 }))); };
     lab(D.e1, 'E₁ · Alice sends'); lab(D.e2, 'E₂ · Bella replies'); if(g.returnOn) lab(D.e3, 'E₃ · Alice receives');
     const m1 = g.w2s((D.e1.x + D.e2.x)/2, (D.e1.ct + D.e2.ct)/2);
-    b.push(cgTag(g, (D.v1 === Infinity ? 'v₁ = ∞' : 'v₁ = ' + D.v1.toFixed(2) + 'c') + ' (' + (fr ? 'S′' : 'S') + ')', m1.sx, m1.sy, { w:700, s:11.5, dx:10, dy:-7 }));
+    b.push(cgRec('v1', () => cgTag(g, (D.v1 === Infinity ? 'v₁ = ∞' : 'v₁ = ' + D.v1.toFixed(2) + 'c') + ' (' + (fr ? 'S′' : 'S') + ')', m1.sx, m1.sy, { w:700, s:11.5, dx:10, dy:-7 })));
     if(g.returnOn){ const m2 = g.w2s((D.e2.x + D.e3.x)/2, (D.e2.ct + D.e3.ct)/2);
-      b.push(cgTag(g, (D.v2disp === Infinity ? 'v₂ = ∞' : 'v₂ = ' + D.v2disp.toFixed(2) + 'c') + ' (' + (fr ? 'S′' : 'S') + ')', m2.sx, m2.sy, { w:700, s:11.5, dx:-80, dy:8 })); }
-    const lp = g.w2s(D.e1.x + 6*0.78, D.e1.ct + 6*0.78); b.push(cgTag(g, 'light cone (v=c)', lp.sx, lp.sy, { w:700, s:11, dx:6, dy:-8 }));
-    const op = g.toFrame(0, 6*0.85, D.b), oc = g.clamp(g.w2s(op.x, op.ct)); b.push(cgTag(g, 'Alice (x = 0)', oc.sx, oc.sy, { w:700, s:11, dx:6, dy:-6 }));
+      b.push(cgRec('v2', () => cgTag(g, (D.v2disp === Infinity ? 'v₂ = ∞' : 'v₂ = ' + D.v2disp.toFixed(2) + 'c') + ' (' + (fr ? 'S′' : 'S') + ')', m2.sx, m2.sy, { w:700, s:11.5, dx:-80, dy:8 }))); }
+    const lp = g.w2s(D.e1.x + 6*0.78, D.e1.ct + 6*0.78); b.push(cgRec('cone', () => cgTag(g, 'light cone (v=c)', lp.sx, lp.sy, { w:700, s:11, dx:6, dy:-8 })));
+    const op = g.toFrame(0, 6*0.85, D.b), oc = g.clamp(g.w2s(op.x, op.ct)); b.push(cgRec('alice', () => cgTag(g, 'Alice (x = 0)', oc.sx, oc.sy, { w:700, s:11, dx:6, dy:-6 })));
     b.push(...cgBadges(g));
     if(g.returnOn && D.loop) b.push(cgTag(g, '⚠ CAUSAL LOOP — E₃ precedes E₁  (ct₃ = ' + D.ct3.toFixed(2) + ' ls)', g.plot.x + g.plot.w/2, g.plot.y + g.plot.h - 30, { w:700, s:13, c:true, dy:0 }));
     return b.filter(Boolean); };
